@@ -11,6 +11,7 @@ use gpui_component::{
     ActiveTheme as _, Root, StyledExt as _,
     button::Button,
     h_flex,
+    scroll::ScrollableElement as _,
     theme::{Theme, ThemeMode, ThemeRegistry},
     v_flex,
 };
@@ -181,6 +182,7 @@ impl Gallery {
         }
 
         v_flex()
+            .debug_selector(move || format!("story-{}", story.slug()))
             .gap_3()
             .child(
                 div()
@@ -201,7 +203,7 @@ impl Render for Gallery {
         div()
             .id("gallery-scroll")
             .size_full()
-            .overflow_y_scroll()
+            .overflow_y_scrollbar()
             .bg(cx.theme().background)
             .flex()
             .justify_center()
@@ -563,12 +565,63 @@ fn open_gallery_window(
 
 #[cfg(test)]
 mod tests {
-    use super::GalleryTheme;
+    use super::{Gallery, GalleryTheme};
+    use crate::StoryId;
+    use gpui::{
+        AppContext as _, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point,
+        px,
+    };
+    use gpui_component::Root;
+
+    fn all_stories(cx: &mut TestAppContext) -> &mut VisualTestContext {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
+            Root::new(gallery, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx
+    }
+
+    fn scroll(cx: &mut VisualTestContext, dy: f32) {
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
+            ..Default::default()
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
 
     #[test]
     fn gallery_theme_cycle_covers_all_review_presets() {
         assert_eq!(GalleryTheme::Light.next(), GalleryTheme::Dark);
         assert_eq!(GalleryTheme::Dark.next(), GalleryTheme::Contrast);
         assert_eq!(GalleryTheme::Contrast.next(), GalleryTheme::Light);
+    }
+
+    #[gpui::test]
+    fn all_stories_exposes_a_vertical_scrollbar(cx: &mut TestAppContext) {
+        let cx = all_stories(cx);
+
+        assert!(cx.debug_bounds("scrollbar-overlay").is_some());
+    }
+
+    #[gpui::test]
+    fn all_stories_scrolls_the_final_story_into_view(cx: &mut TestAppContext) {
+        let cx = all_stories(cx);
+        let viewport_height = cx.update(|window, _| window.viewport_size().height);
+        let initial = cx
+            .debug_bounds("story-context")
+            .expect("context story should be rendered");
+
+        scroll(cx, -10_000.);
+
+        let scrolled = cx
+            .debug_bounds("story-context")
+            .expect("context story should remain rendered");
+        assert!(scrolled.top() < initial.top());
+        assert!(scrolled.top() < viewport_height);
     }
 }
