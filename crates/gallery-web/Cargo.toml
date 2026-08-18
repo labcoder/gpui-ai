@@ -1,0 +1,22 @@
+[package]
+name = "gallery-web"
+description = "WebAssembly adapter for the mighty-gpui component gallery."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+console_error_panic_hook.workspace = true
+gallery = { path = "../gallery" }
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

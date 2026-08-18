@@ -1,0 +1,13 @@
+# Rust
+/target
+
+# Site / web tooling (used from Phase 5)
+node_modules/
+dist/
+
+# Local development decisions, specifications, and implementation plans
+/docs/internal/
+/crates/gallery-web/www/src/wasm/
+
+# OS noise
+.DS_Store

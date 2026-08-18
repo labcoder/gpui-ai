@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mighty-gpui",
+    "crates/gallery",
+    "crates/gallery-web",
+]
+default-members = ["crates/mighty-gpui", "crates/gallery", "crates/gallery-web"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+mighty-gpui = { path = "crates/mighty-gpui" }
+
+# GPUI must come from the Zed repository (the crates.io release is outdated).
+# Do NOT add a `rev` field here: gpui-component declares this dependency
+# without one, and differing git specs make Cargo duplicate the crate.
+# The commit is pinned via Cargo.lock — see "Dependency policy" in AGENTS.md.
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
+    "font-kit",
+    "x11",
+    "wayland",
+    "runtime_shaders",
+] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "9e3a29dcbdebc318632bf68203f26c33e9f0e902" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "9e3a29dcbdebc318632bf68203f26c33e9f0e902" }
+
+anyhow = "1"
+console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2.113"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unwrap_used = "deny"

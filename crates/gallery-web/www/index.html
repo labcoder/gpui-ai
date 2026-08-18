@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>mighty-gpui WASM proof</title>
+  </head>
+  <body data-page="index">
+    <main class="showcase">
+      <header>
+        <div><h1>mighty-gpui</h1><p>One compiled GPUI gallery artifact, embedded as isolated component stories inside a plain web page.</p></div>
+        <button type="button" data-theme-toggle aria-pressed="false">Use dark theme</button>
+      </header>
+      <section class="demo-grid" aria-label="Live component examples">
+        <article class="demo"><h2>Streaming text</h2><iframe loading="lazy" title="Streaming text example" src="./embed.html?story=streaming-text&theme=system"></iframe></article>
+        <article class="demo"><h2>Thinking trace</h2><iframe loading="lazy" title="Thinking trace example" src="./embed.html?story=thinking&theme=system"></iframe></article>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

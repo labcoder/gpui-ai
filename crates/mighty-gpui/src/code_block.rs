@@ -1,0 +1,169 @@
+//! Syntax-highlighted code blocks with streaming reveal.
+
+use crate::stream::{ProgressState, StreamedContent};
+use crate::theme::SemanticStyledExt as _;
+use gpui::{
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+};
+use gpui_component::{
+    ActiveTheme as _, StyledExt as _, clipboard::Clipboard, h_flex, text::TextView, v_flex,
+};
+
+/// A code block with a language header, copy button, and syntax highlighting
+/// (via gpui-component's markdown/highlighter pipeline).
+///
+/// For streaming code, pass a [`StreamedContent`] with [`Self::streamed`]; a
+/// cursor glyph marks the insertion point while content arrives.
+///
+/// # Example
+///
+/// ```ignore
+/// CodeBlock::new("example", "fn main() {\n    println!(\"hi\");\n}")
+///     .language("rust")
+/// ```
+#[derive(IntoElement)]
+pub struct CodeBlock {
+    id: ElementId,
+    style: StyleRefinement,
+    code: SharedString,
+    language: Option<SharedString>,
+    streaming: bool,
+    failed: Option<SharedString>,
+    copyable: bool,
+}
+
+impl CodeBlock {
+    /// Creates a block from complete code.
+    pub fn new(id: impl Into<ElementId>, code: impl Into<SharedString>) -> Self {
+        Self {
+            id: id.into(),
+            style: StyleRefinement::default(),
+            code: code.into(),
+            language: None,
+            streaming: false,
+            failed: None,
+            copyable: true,
+        }
+    }
+
+    /// Creates a block from streamed content, deriving the streaming/failed
+    /// presentation from its state.
+    pub fn streamed(id: impl Into<ElementId>, content: &StreamedContent) -> Self {
+        let mut this = Self::new(id, content.text().to_string());
+        match content.state() {
+            ProgressState::Running => this.streaming = true,
+            ProgressState::Pending | ProgressState::Complete => {}
+            ProgressState::Failed(reason) => this.failed = Some(reason.clone()),
+        }
+        this
+    }
+
+    /// Sets the language used for the header label and syntax highlighting.
+    pub fn language(mut self, language: impl Into<SharedString>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+
+    /// Hides the copy button.
+    pub fn not_copyable(mut self) -> Self {
+        self.copyable = false;
+        self
+    }
+}
+
+impl Styled for CodeBlock {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for CodeBlock {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let language = self.language.unwrap_or_else(|| "text".into());
+
+        // Build a fenced markdown block, using a fence longer than any
+        // backtick run inside the code so the content cannot break out.
+        let longest_run = self
+            .code
+            .split(|c| c != '`')
+            .map(str::len)
+            .max()
+            .unwrap_or(0);
+        let fence = "`".repeat((longest_run + 1).max(3));
+        let cursor = if self.streaming { "▌" } else { "" };
+        let source = format!("{fence}{language}\n{}{cursor}\n{fence}", self.code);
+
+        v_flex()
+            .id(self.id)
+            .bg(cx.theme().secondary.opacity(0.5))
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(tokens.radius.md)
+            .overflow_hidden()
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .px(tokens.spacing.md)
+                    .py(tokens.spacing.xs)
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        div()
+                            .text_token(tokens.typography.xs)
+                            .font_family(cx.theme().mono_font_family.clone())
+                            .text_color(cx.theme().muted_foreground)
+                            .child(language.clone()),
+                    )
+                    .when(self.copyable, |this| {
+                        this.child(Clipboard::new("copy").value(self.code.clone()))
+                    }),
+            )
+            .child(
+                div()
+                    .px(tokens.spacing.md)
+                    .py(tokens.spacing.sm)
+                    .text_token(tokens.typography.sm)
+                    .child(TextView::markdown("code", source)),
+            )
+            .when_some(self.failed, |this, reason| {
+                this.child(
+                    div()
+                        .px(tokens.spacing.md)
+                        .py(tokens.spacing.xs)
+                        .border_t_1()
+                        .border_color(cx.theme().border)
+                        .text_token(tokens.typography.xs)
+                        .text_color(cx.theme().danger)
+                        .child(reason),
+                )
+            })
+            .refine_style(&self.style)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::Progressive;
+
+    #[test]
+    fn maps_all_shared_lifecycle_states() {
+        assert!(
+            !CodeBlock::streamed("pending", &Progressive::pending("code".to_owned())).streaming
+        );
+        assert!(CodeBlock::streamed("running", &Progressive::running("code".to_owned())).streaming);
+        assert!(
+            CodeBlock::streamed("complete", &Progressive::complete("code".to_owned()))
+                .failed
+                .is_none()
+        );
+        assert_eq!(
+            CodeBlock::streamed("failed", &Progressive::failed("code".to_owned(), "stopped"))
+                .failed,
+            Some("stopped".into())
+        );
+    }
+}

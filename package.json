@@ -1,0 +1,23 @@
+{
+  "name": "mighty-gpui",
+  "private": true,
+  "description": "Task runner for the mighty-gpui workspace. Rust does the real work; these scripts are the front door.",
+  "scripts": {
+    "dev": "cargo run -p gallery",
+    "build": "cargo build --workspace --release",
+    "build:wasm": "node script/run-bash.mjs crates/gallery-web/scripts/build-wasm.sh --release",
+    "build:web": "npm --prefix crates/gallery-web/www run build",
+    "check": "npm run check:format && npm run check:clippy && npm run check:scripts && npm run test && npm run check:docs",
+    "check:format": "cargo fmt --all -- --check",
+    "check:clippy": "cargo clippy --workspace -- --deny warnings",
+    "check:docs": "cargo rustdoc -p mighty-gpui --lib -- -D warnings",
+    "check:native": "cargo check --workspace",
+    "check:scripts": "node script/test-run-bash.mjs",
+    "check:web": "npm --prefix crates/gallery-web/www test",
+    "test": "cargo test --workspace",
+    "dev:web": "npm --prefix crates/gallery-web/www run dev",
+    "report:wasm": "node crates/gallery-web/scripts/report-size.mjs",
+    "check:upstream": "node script/run-bash.mjs script/update-upstream.sh --check",
+    "update:upstream": "node script/run-bash.mjs script/update-upstream.sh"
+  }
+}

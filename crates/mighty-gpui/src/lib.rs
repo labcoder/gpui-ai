@@ -1,0 +1,76 @@
+//! AI-native UI components for GPUI applications.
+//!
+//! `mighty-gpui` sits on top of [`gpui_component`] the way Beautiful UI sits on
+//! top of shadcn/ui: opinionated, composed components for AI applications —
+//! streaming text, thinking traces, tool calls, approval gates — that inherit
+//! gpui-component's semantic-token theming. Every component resolves all of
+//! its presentation through the active theme, so light/dark modes, bundled
+//! themes, and custom JSON themes work without extra wiring.
+//!
+//! # Design rules
+//!
+//! - Stateless components are fluent [`gpui::RenderOnce`] builders; stateful
+//!   composites are entities. Callbacks use `on_*` methods.
+//! - Progressive output flows through one model: [`stream::StreamedContent`].
+//!   Components render snapshots; applications own the state and the clock.
+//! - No component holds a timer or fixture data.
+//!
+//! Further components land phase by phase; see the repository roadmap.
+
+#![deny(missing_docs)]
+
+pub mod approval;
+pub mod chip;
+pub mod code_block;
+pub mod context_card;
+pub mod image_generation;
+pub mod loading;
+pub mod orbs;
+pub mod recommendation;
+pub mod search_results;
+pub mod stream;
+pub mod streaming_text;
+pub mod task;
+mod theme;
+pub mod thinking;
+pub mod todo_list;
+
+/// Convenient single-import surface: `use mighty_gpui::prelude::*;`.
+pub mod prelude {
+    pub use crate::approval::{ApprovalCard, ApprovalEvent};
+    pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
+    pub use crate::code_block::CodeBlock;
+    pub use crate::context_card::{ContextCard, ContextCardEvent};
+    pub use crate::image_generation::ImageGeneration;
+    pub use crate::loading::LoadingState;
+    pub use crate::orbs::Orbs;
+    pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
+    pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
+    pub use crate::stream::{ProgressState, Progressive, StreamedContent};
+    pub use crate::streaming_text::{FollowUp, SourceRef, StreamingText, StreamingTextEvent};
+    pub use crate::task::{TaskRow, TaskSnapshot};
+    pub use crate::thinking::{StepStatus, Thinking, ThinkingEvent, ThinkingStep, ThinkingTrace};
+    pub use crate::todo_list::{TodoItem, TodoList, TodoListEvent, TodoStatus};
+}
+
+pub(crate) mod handlers {
+    use gpui::{App, Window};
+    use std::rc::Rc;
+
+    /// Boxed event handler stored by builder components.
+    pub(crate) type Handler<E> = Box<dyn Fn(&E, &mut Window, &mut App)>;
+    /// Ref-counted event handler for components that clone handlers per child.
+    pub(crate) type SharedHandler<E> = Rc<dyn Fn(&E, &mut Window, &mut App)>;
+}
+
+use gpui::App;
+
+/// Initializes mighty-gpui.
+///
+/// Call once at application startup, before creating any windows that use
+/// these components. This also initializes the underlying [`gpui_component`]
+/// state (theme, global settings), so applications do not need to call
+/// `gpui_component::init` separately.
+pub fn init(cx: &mut App) {
+    gpui_component::init(cx);
+}

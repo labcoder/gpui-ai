@@ -1,0 +1,15 @@
+[package]
+name = "gallery"
+description = "Component gallery for mighty-gpui — one story per component."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+mighty-gpui.workspace = true

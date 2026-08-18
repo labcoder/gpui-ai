@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# This source is intentionally written before the helper exists: the first
+# TDD run proves the updater contract is absent.
+source "$ROOT/script/upstream-lib.sh"
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+assert_eq() {
+  local expected="$1"
+  local actual="$2"
+  local message="$3"
+  if [[ "$expected" != "$actual" ]]; then
+    printf 'FAIL: %s\nexpected: %s\nactual:   %s\n' "$message" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+write_manifest() {
+  local ui_rev="$1"
+  local assets_rev="$2"
+  cat > "$TMP_DIR/Cargo.toml" <<EOF
+[workspace.dependencies]
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "$ui_rev" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "$assets_rev" }
+EOF
+}
+
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+mapfile -t manifest_revs < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
+assert_eq "2" "${#manifest_revs[@]}" "both component dependencies must be parsed"
+assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[0]}" "ui revision must be returned"
+assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[1]}" "assets revision must be returned"
+
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+if check_manifest_pair "$TMP_DIR/Cargo.toml" >/dev/null 2>&1; then
+  printf 'FAIL: mismatched component revisions were accepted\n' >&2
+  exit 1
+fi
+
+cat > "$TMP_DIR/Cargo.lock" <<'EOF'
+[[package]]
+name = "gpui"
+version = "0.2.2"
+source = "git+https://github.com/zed-industries/zed#cccccccccccccccccccccccccccccccccccccccc"
+EOF
+
+assert_eq \
+  "cccccccccccccccccccccccccccccccccccccccc" \
+  "$(zed_rev_from_lock "$TMP_DIR/Cargo.lock")" \
+  "the complete GPUI source revision must be parsed"
+
+mkdir -p "$TMP_DIR/bin"
+cat > "$TMP_DIR/bin/curl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+destination=""
+while [[ "\$#" -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then
+    destination="\$2"
+    shift 2
+  else
+    shift
+  fi
+done
+cp "$ROOT/Cargo.lock" "\$destination"
+EOF
+chmod +x "$TMP_DIR/bin/curl"
+
+check_output="$(PATH="$TMP_DIR/bin:$PATH" bash "$ROOT/script/update-upstream.sh" --check)"
+if [[ "$check_output" != *"upstream revisions are synchronized"* ]]; then
+  printf 'FAIL: read-only check did not report synchronized revisions\n' >&2
+  exit 1
+fi
+
+printf 'upstream script tests passed\n'
