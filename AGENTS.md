@@ -44,20 +44,34 @@ GPUI's crates.io release is outdated; the real work lives in the Zed repository.
 - Every component gets a story in `crates/gallery` in the same change that adds the component.
 - Clippy runs clean under `--deny warnings`; run `cargo fmt` before committing.
 
+## Accessibility and usability
+
+- Raw `SharedString`, `String`, and `&str` children are visual-only in GPUI. Put meaningful static text behind a named semantic parent, or use an identified text element. User-readable prose, markdown, and code that a person would reasonably copy must use gpui-component's selectable text behavior.
+- Compose custom controls from `gpui-base` or gpui-component behaviors. Every interactive element needs a stable ID, the correct AccessKit role/name/state, keyboard activation, and a visible theme-token focus treatment. Do not render a focusable control without a handler.
+- Color, icons, and motion may reinforce state but cannot be its only carrier. Expose pending/running/success/failure, checked/expanded, progress, and error information semantically.
+- Repeating animation must use GPUI's animation facilities so reduced-motion mode produces a useful static frame. Essential meaning or controls must never depend on animation.
+- Any gallery, list, trace, or composite whose content can exceed its bounds must have an intentional overflow strategy and a regression test that proves the final content remains reachable.
+- Add direct AccessKit regression tests for component roles, names, descriptions, values, and actions. Pointer-only tests are insufficient for interactive controls.
+
 ## Definition of done for a component
 
 1. Compiles natively and for `wasm32-unknown-unknown`.
 2. Has a gallery story exercising its real states (loading, streaming, error, done — whichever apply).
 3. Verified against at least three themes including light and dark — no hardcoded-color leaks.
 4. Visually compared side-by-side with its beautifului.dev reference; deliberate differences noted in the story.
-5. Public API documented; `cargo doc` builds without warnings.
+5. Readable content can be selected/copied where expected; every control is keyboard-operable with visible focus, and semantic state is covered by an AccessKit regression test.
+6. Reduced-motion behavior is useful, and constrained layouts keep all content reachable by scrolling or another explicit overflow design.
+7. Public API documented; `cargo doc` builds without warnings.
 
 ## Verification commands
 
 ```sh
 npm run check               # fmt + clippy --deny warnings + script tests + Rust tests + docs
 npm run check:native        # native workspace build check
+npm run build:wasm          # compile and bind the shared gallery for the browser
+npm run check:web           # web host tests
 npm run dev                 # look at it — visual review is part of done
+npm run dev:web             # inspect the real WASM gallery in a browser
 ```
 
 The root `package.json` is a task runner only (no JavaScript dependencies); the scripts shell out to cargo. Add new workflows there so they stay discoverable.
