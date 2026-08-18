@@ -3,8 +3,9 @@
 use crate::stream::{ProgressState, Progressive};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
@@ -112,9 +113,22 @@ impl RenderOnce for TaskRow {
             ProgressState::Failed(reason) => Some(reason.clone()),
             _ => None,
         };
+        let state_label = match &self.state {
+            ProgressState::Pending => "pending",
+            ProgressState::Running => "in progress",
+            ProgressState::Complete => "complete",
+            ProgressState::Failed(_) => "failed",
+        };
+        let accessibility_label = format!("{}, {state_label}", self.task.title);
+        let accessibility_description = failed_reason.clone().or_else(|| self.task.detail.clone());
 
         h_flex()
             .id(self.task.id.clone())
+            .role(Role::ListItem)
+            .aria_label(accessibility_label)
+            .when_some(accessibility_description, |this, description| {
+                this.aria_description(description)
+            })
             .w_full()
             .items_center()
             .gap(tokens.spacing.sm)

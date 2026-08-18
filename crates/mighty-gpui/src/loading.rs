@@ -2,10 +2,12 @@
 
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    Animation, AnimationExt as _, App, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    Animation, AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
+use std::panic::Location;
 use std::time::Duration;
 
 /// Grid dimensions of the loader.
@@ -30,6 +32,7 @@ const SWEEP: Duration = Duration::from_millis(1400);
 /// ```
 #[derive(IntoElement)]
 pub struct LoadingState {
+    id: ElementId,
     style: StyleRefinement,
     label: SharedString,
     elapsed: Option<Duration>,
@@ -37,8 +40,10 @@ pub struct LoadingState {
 
 impl LoadingState {
     /// Creates a loader with the default label.
+    #[track_caller]
     pub fn new() -> Self {
         Self {
+            id: ElementId::CodeLocation(*Location::caller()),
             style: StyleRefinement::default(),
             label: "Working…".into(),
             elapsed: None,
@@ -59,6 +64,7 @@ impl LoadingState {
 }
 
 impl Default for LoadingState {
+    #[track_caller]
     fn default() -> Self {
         Self::new()
     }
@@ -96,6 +102,9 @@ impl RenderOnce for LoadingState {
             }));
 
         h_flex()
+            .id(self.id)
+            .role(Role::ProgressIndicator)
+            .aria_label(self.label.clone())
             .items_center()
             .gap(tokens.spacing.md)
             .child(grid)

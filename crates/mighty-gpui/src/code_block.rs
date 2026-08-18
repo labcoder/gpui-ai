@@ -3,8 +3,9 @@
 use crate::stream::{ProgressState, StreamedContent};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, StyledExt as _, clipboard::Clipboard, h_flex, text::TextView, v_flex,
@@ -94,9 +95,16 @@ impl RenderOnce for CodeBlock {
         let fence = "`".repeat((longest_run + 1).max(3));
         let cursor = if self.streaming { "▌" } else { "" };
         let source = format!("{fence}{language}\n{}{cursor}\n{fence}", self.code);
+        let accessibility_label: SharedString = format!("{language} code").into();
+        let accessibility_description = self.failed.clone();
 
         v_flex()
             .id(self.id)
+            .role(Role::Code)
+            .aria_label(accessibility_label)
+            .when_some(accessibility_description, |this, description| {
+                this.aria_description(description)
+            })
             .bg(cx.theme().secondary.opacity(0.5))
             .border_1()
             .border_color(cx.theme().border)

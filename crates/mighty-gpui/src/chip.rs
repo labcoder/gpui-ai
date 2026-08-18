@@ -1,17 +1,14 @@
 //! Compact chips representing tool calls and code edits.
 
+use crate::control::composed_button;
 use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _,
+    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    ActiveTheme as _, Sizable as _, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    spinner::Spinner,
-};
+use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, spinner::Spinner};
 use std::rc::Rc;
 
 /// The lifecycle status of the tool call a [`ToolChip`] represents.
@@ -81,6 +78,30 @@ impl ToolChip {
         self.on_event = Some(Rc::new(handler));
         self
     }
+
+    fn accessibility_label(&self) -> SharedString {
+        match &self.detail {
+            Some(detail) => format!(
+                "{}, {}, {}",
+                self.label,
+                self.status.accessibility_label(),
+                detail
+            )
+            .into(),
+            None => format!("{}, {}", self.label, self.status.accessibility_label()).into(),
+        }
+    }
+}
+
+impl ToolStatus {
+    fn accessibility_label(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Success => "completed",
+            Self::Failed => "failed",
+        }
+    }
 }
 
 impl Styled for ToolChip {
@@ -102,18 +123,13 @@ impl RenderOnce for ToolChip {
         let event = ToolChipEvent::Activated {
             id: self.id.clone(),
         };
+        let accessibility_label = self.accessibility_label();
         let content = h_flex()
             .items_center()
             .gap(tokens.spacing.xs)
-            .px(tokens.spacing.sm)
-            .py(tokens.spacing.xxs)
             .text_token(tokens.typography.xs)
             .font_family(cx.theme().mono_font_family.clone())
             .text_color(cx.theme().foreground)
-            .bg(cx.theme().secondary)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.full)
             .child(match self.status {
                 ToolStatus::Running => Spinner::new()
                     .xsmall()
@@ -132,16 +148,54 @@ impl RenderOnce for ToolChip {
             .refine_style(&self.style);
 
         if let Some(handler) = self.on_event {
-            Button::new(self.id.clone())
-                .ghost()
-                .compact()
-                .accessibility_id(format!("tool-chip-{}", self.id))
+            composed_button(self.id.clone(), accessibility_label)
+                .px(tokens.spacing.sm)
+                .py(tokens.spacing.xxs)
+                .bg(cx.theme().secondary)
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.full)
+                .hover(|style| style.bg(cx.theme().accent))
+                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .focus_visible(|style| style.border_color(cx.theme().ring))
                 .child(content)
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                 .into_any_element()
         } else {
-            content.into_any_element()
+            content
+                .id(self.id)
+                .role(Role::Status)
+                .aria_label(accessibility_label)
+                .px(tokens.spacing.sm)
+                .py(tokens.spacing.xxs)
+                .bg(cx.theme().secondary)
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.full)
+                .into_any_element()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accessibility_name_carries_status_and_detail() {
+        assert_eq!(
+            ToolChip::new("read", "read pricing.md")
+                .status(ToolStatus::Running)
+                .detail("12 files")
+                .accessibility_label(),
+            "read pricing.md, running, 12 files"
+        );
+        assert_eq!(
+            ToolChip::new("save", "save changes")
+                .status(ToolStatus::Success)
+                .accessibility_label(),
+            "save changes, completed"
+        );
     }
 }
 /// An interaction emitted by [`ToolChip`].

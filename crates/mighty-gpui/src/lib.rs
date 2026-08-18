@@ -23,6 +23,7 @@ pub mod approval;
 pub mod chip;
 pub mod code_block;
 pub mod context_card;
+mod control;
 pub mod image_generation;
 pub mod loading;
 pub mod orbs;

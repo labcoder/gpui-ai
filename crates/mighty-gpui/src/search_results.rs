@@ -1,16 +1,15 @@
 //! Web-search tool output: a query and its results with sources.
 
+use crate::control::composed_button;
 use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    spinner::Spinner,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
     v_flex,
 };
 
@@ -139,6 +138,8 @@ impl RenderOnce for SearchResults {
 
         v_flex()
             .id(self.id)
+            .role(Role::Search)
+            .aria_label(header.clone())
             .bg(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)
@@ -173,6 +174,9 @@ impl RenderOnce for SearchResults {
                         .py(tokens.spacing.xs)
                         .children(self.results.into_iter().map(|result| {
                             let event = result.opened_event();
+                            let result_id = result.id.clone();
+                            let accessibility_label = result.title.clone();
+                            let accessibility_description = result.domain.clone();
                             let row = h_flex()
                                 .w_full()
                                 .items_center()
@@ -202,17 +206,32 @@ impl RenderOnce for SearchResults {
                                 });
 
                             match handler.clone() {
-                                Some(handler) => Button::new(result.id.clone())
-                                    .ghost()
-                                    .compact()
-                                    .w_full()
-                                    .accessibility_id(format!("search-result-{}", result.id))
-                                    .child(row)
-                                    .on_click(move |_: &ClickEvent, window, cx| {
-                                        handler(&event, window, cx)
-                                    })
-                                    .into_any_element(),
+                                Some(handler) => {
+                                    composed_button(result.id.clone(), accessibility_label)
+                                        .w_full()
+                                        .px(tokens.spacing.md)
+                                        .py(tokens.spacing.xs)
+                                        .rounded(tokens.radius.sm)
+                                        .hover(|style| style.bg(cx.theme().accent))
+                                        .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                                        .focus_visible(|style| style.bg(cx.theme().accent))
+                                        .when_some(
+                                            accessibility_description,
+                                            |this, description| this.aria_description(description),
+                                        )
+                                        .child(row)
+                                        .on_click(move |_: &ClickEvent, window, cx| {
+                                            handler(&event, window, cx)
+                                        })
+                                        .into_any_element()
+                                }
                                 None => div()
+                                    .id(result_id)
+                                    .role(Role::ListItem)
+                                    .aria_label(accessibility_label)
+                                    .when_some(accessibility_description, |this, description| {
+                                        this.aria_description(description)
+                                    })
                                     .w_full()
                                     .px(tokens.spacing.md)
                                     .py(tokens.spacing.xs)

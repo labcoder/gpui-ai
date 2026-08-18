@@ -1,15 +1,15 @@
 //! Cards for retrieved knowledge chunks with source attribution.
 
+use crate::control::composed_button;
 use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _,
+    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, v_flex,
 };
 use std::rc::Rc;
 
@@ -68,6 +68,15 @@ impl ContextCard {
         self.on_event = Some(Rc::new(handler));
         self
     }
+
+    fn accessibility_label(&self) -> SharedString {
+        match self.relevance {
+            Some(relevance) => {
+                format!("{}, {:.0}% relevance", self.source, relevance * 100.0).into()
+            }
+            None => self.source.clone(),
+        }
+    }
 }
 
 impl Styled for ContextCard {
@@ -83,14 +92,11 @@ impl RenderOnce for ContextCard {
         let event = ContextCardEvent::Opened {
             id: self.id.clone(),
         };
+        let accessibility_label = self.accessibility_label();
+        let accessibility_description = self.snippet.clone();
 
         let content = v_flex()
             .gap(tokens.spacing.xs)
-            .p(tokens.spacing.md)
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
             .child(
                 h_flex()
                     .items_center()
@@ -134,20 +140,41 @@ impl RenderOnce for ContextCard {
                         .line_clamp(3)
                         .child(snippet),
                 )
-            })
-            .refine_style(&self.style);
+            });
 
         if let Some(handler) = self.on_event {
-            Button::new(self.id.clone())
-                .ghost()
-                .compact()
+            composed_button(self.id.clone(), accessibility_label)
                 .w_full()
-                .accessibility_id(format!("context-card-{}", self.id))
+                .p(tokens.spacing.md)
+                .bg(cx.theme().background)
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.md)
+                .hover(|style| style.bg(cx.theme().accent))
+                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .focus_visible(|style| style.border_color(cx.theme().ring))
+                .when_some(accessibility_description, |this, description| {
+                    this.aria_description(description)
+                })
                 .child(content)
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                .refine_style(&self.style)
                 .into_any_element()
         } else {
-            content.into_any_element()
+            content
+                .id(self.id)
+                .role(Role::Group)
+                .aria_label(accessibility_label)
+                .when_some(accessibility_description, |this, description| {
+                    this.aria_description(description)
+                })
+                .p(tokens.spacing.md)
+                .bg(cx.theme().background)
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.md)
+                .refine_style(&self.style)
+                .into_any_element()
         }
     }
 }
@@ -159,4 +186,23 @@ pub enum ContextCardEvent {
         /// Stable context identifier.
         id: SharedString,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accessibility_name_includes_source_and_relevance() {
+        assert_eq!(
+            ContextCard::new("ctx", "pricing.md")
+                .relevance(0.923)
+                .accessibility_label(),
+            "pricing.md, 92% relevance"
+        );
+        assert_eq!(
+            ContextCard::new("ctx", "pricing.md").accessibility_label(),
+            "pricing.md"
+        );
+    }
 }

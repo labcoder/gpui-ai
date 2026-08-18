@@ -4,8 +4,8 @@ use crate::handlers::Handler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
-    relative,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, relative,
 };
 
 /// An interaction emitted by [`RecommendationCard`].
@@ -113,8 +113,15 @@ impl RenderOnce for RecommendationCard {
         let event = RecommendationEvent::Accepted {
             id: self.id.clone(),
         };
+        let accessibility_label = self.title.clone();
+        let accessibility_description = self.description.clone();
         v_flex()
             .id(self.id.clone())
+            .role(Role::Group)
+            .aria_label(accessibility_label)
+            .when_some(accessibility_description, |this, description| {
+                this.aria_description(description)
+            })
             .gap(tokens.spacing.md)
             .p(tokens.spacing.lg)
             .bg(cx.theme().background)
@@ -146,6 +153,12 @@ impl RenderOnce for RecommendationCard {
                 };
                 this.child(
                     h_flex()
+                        .id(format!("{}-confidence", self.id))
+                        .role(Role::Meter)
+                        .aria_label("Confidence")
+                        .aria_min_numeric_value(0.)
+                        .aria_max_numeric_value(100.)
+                        .aria_numeric_value((confidence * 100.0) as f64)
                         .items_center()
                         .gap(tokens.spacing.sm)
                         .child(
@@ -175,6 +188,9 @@ impl RenderOnce for RecommendationCard {
             .when(!self.alternatives.is_empty(), |this| {
                 this.child(
                     v_flex()
+                        .id(format!("{}-alternatives", self.id))
+                        .role(Role::List)
+                        .aria_label("Also considered")
                         .gap(tokens.spacing.xs)
                         .child(
                             div()
@@ -182,8 +198,12 @@ impl RenderOnce for RecommendationCard {
                                 .text_color(cx.theme().muted_foreground)
                                 .child("Also considered"),
                         )
-                        .children(self.alternatives.into_iter().map(|alt| {
+                        .children(self.alternatives.into_iter().enumerate().map(|(ix, alt)| {
+                            let accessibility_label = alt.clone();
                             h_flex()
+                                .id(format!("{}-alternative-{ix}", self.id))
+                                .role(Role::ListItem)
+                                .aria_label(accessibility_label)
                                 .items_center()
                                 .gap(tokens.spacing.xs)
                                 .text_token(tokens.typography.sm)

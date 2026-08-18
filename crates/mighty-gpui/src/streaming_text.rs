@@ -5,7 +5,8 @@ use crate::stream::{ProgressState, StreamedContent};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, button::Button, h_flex,
@@ -149,9 +150,19 @@ impl RenderOnce for StreamingText {
         } else {
             self.text.to_string()
         };
+        let root_id = self.id.clone();
+        let failure = match &self.state {
+            ProgressState::Failed(reason) => Some(reason.clone()),
+            _ => None,
+        };
 
         v_flex()
             .id(self.id)
+            .role(Role::Article)
+            .aria_label("Answer")
+            .when_some(failure.clone(), |this, reason| {
+                this.aria_description(reason)
+            })
             .gap(tokens.spacing.md)
             .child(
                 div()
@@ -159,59 +170,69 @@ impl RenderOnce for StreamingText {
                     .text_color(cx.theme().foreground)
                     .child(TextView::markdown("answer", source).selectable(true)),
             )
-            .when_some(
-                match self.state {
-                    ProgressState::Failed(reason) => Some(reason),
-                    _ => None,
-                },
-                |this, reason| {
-                    this.child(
-                        h_flex()
-                            .items_center()
-                            .gap(tokens.spacing.xs)
-                            .text_token(tokens.typography.xs)
-                            .text_color(cx.theme().danger)
-                            .child(Icon::new(IconName::CircleX).xsmall())
-                            .child(reason),
-                    )
-                },
-            )
+            .when_some(failure, |this, reason| {
+                this.child(
+                    h_flex()
+                        .items_center()
+                        .gap(tokens.spacing.xs)
+                        .text_token(tokens.typography.xs)
+                        .text_color(cx.theme().danger)
+                        .child(Icon::new(IconName::CircleX).xsmall())
+                        .child(reason),
+                )
+            })
             .when(settled && !self.sources.is_empty(), |this| {
-                this.child(h_flex().flex_wrap().gap(tokens.spacing.xs).children(
-                    self.sources.into_iter().map(|source| {
-                        h_flex()
-                            .items_center()
-                            .gap(tokens.spacing.xs)
-                            .px(tokens.spacing.sm)
-                            .py(tokens.spacing.xxs)
-                            .text_token(tokens.typography.xs)
-                            .text_color(cx.theme().muted_foreground)
-                            .bg(cx.theme().secondary)
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .rounded(tokens.radius.full)
-                            .child(Icon::new(IconName::File).xsmall())
-                            .child(source.title)
-                    }),
-                ))
+                this.child(
+                    h_flex()
+                        .id((root_id.clone(), "sources"))
+                        .role(Role::List)
+                        .aria_label("Sources")
+                        .flex_wrap()
+                        .gap(tokens.spacing.xs)
+                        .children(self.sources.into_iter().enumerate().map(|(ix, source)| {
+                            let accessibility_label = source.title.clone();
+                            h_flex()
+                                .id((root_id.clone(), ix.to_string()))
+                                .role(Role::ListItem)
+                                .aria_label(accessibility_label)
+                                .items_center()
+                                .gap(tokens.spacing.xs)
+                                .px(tokens.spacing.sm)
+                                .py(tokens.spacing.xxs)
+                                .text_token(tokens.typography.xs)
+                                .text_color(cx.theme().muted_foreground)
+                                .bg(cx.theme().secondary)
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(tokens.radius.full)
+                                .child(Icon::new(IconName::File).xsmall())
+                                .child(source.title)
+                        })),
+                )
             })
             .when(settled && !self.follow_ups.is_empty(), |this| {
                 let handler = self.on_event.clone();
-                this.child(h_flex().flex_wrap().gap(tokens.spacing.xs).children(
-                    self.follow_ups.into_iter().map(|follow_up| {
-                        let event = follow_up.selected_event();
-                        Button::new(follow_up.id.clone())
-                            .outline()
-                            .small()
-                            .accessibility_id(format!("follow-up-{}", follow_up.id))
-                            .label(follow_up.label)
-                            .when_some(handler.clone(), |this, handler| {
-                                this.on_click(move |_: &ClickEvent, window, cx| {
-                                    handler(&event, window, cx)
+                this.child(
+                    h_flex()
+                        .id((root_id, "follow-ups"))
+                        .role(Role::Group)
+                        .aria_label("Follow-up suggestions")
+                        .flex_wrap()
+                        .gap(tokens.spacing.xs)
+                        .children(self.follow_ups.into_iter().map(|follow_up| {
+                            let event = follow_up.selected_event();
+                            Button::new(follow_up.id.clone())
+                                .outline()
+                                .small()
+                                .accessibility_id(format!("follow-up-{}", follow_up.id))
+                                .label(follow_up.label)
+                                .when_some(handler.clone(), |this, handler| {
+                                    this.on_click(move |_: &ClickEvent, window, cx| {
+                                        handler(&event, window, cx)
+                                    })
                                 })
-                            })
-                    }),
-                ))
+                        })),
+                )
             })
             .refine_style(&self.style)
     }

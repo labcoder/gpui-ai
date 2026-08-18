@@ -1,21 +1,19 @@
 //! Expandable progressive reasoning traces.
 
 use crate::{
+    control::composed_button,
     handlers::Handler,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    spinner::Spinner,
-    text::TextView,
-    v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
+    text::TextView, v_flex,
 };
 use std::time::Duration;
 
@@ -174,33 +172,39 @@ impl RenderOnce for Thinking {
             ProgressState::Failed(reason) => Some(reason.clone()),
             _ => None,
         };
+        let trace_id = self.id.clone();
+        let interactive = self.on_event.is_some();
+        let header = h_flex()
+            .items_center()
+            .gap(tokens.spacing.xs)
+            .text_color(cx.theme().muted_foreground)
+            .when(interactive, |this| this.child(Icon::new(chevron).xsmall()))
+            .child(title.clone())
+            .when(live, |this| {
+                this.child(Spinner::new().xsmall().color(cx.theme().muted_foreground))
+            });
+        let toggle = match self.on_event {
+            Some(handler) => composed_button(format!("{}-toggle", self.id), title.clone())
+                .aria_expanded(self.open)
+                .px(tokens.spacing.xs)
+                .py(tokens.spacing.xxs)
+                .rounded(tokens.radius.sm)
+                .hover(|style| style.bg(cx.theme().accent))
+                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .focus_visible(|style| style.bg(cx.theme().accent))
+                .child(header)
+                .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                .into_any_element(),
+            None => header.into_any_element(),
+        };
 
         v_flex()
             .id(self.id.clone())
+            .role(Role::Group)
+            .aria_label(title)
+            .when_some(failed.clone(), |this, reason| this.aria_description(reason))
             .gap(tokens.spacing.xs)
-            .child(
-                Button::new(self.id.clone())
-                    .ghost()
-                    .compact()
-                    .small()
-                    .accessibility_id(format!("{}-toggle", self.id))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap(tokens.spacing.xs)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(Icon::new(chevron).xsmall())
-                            .child(title)
-                            .when(live, |this| {
-                                this.child(
-                                    Spinner::new().xsmall().color(cx.theme().muted_foreground),
-                                )
-                            }),
-                    )
-                    .when_some(self.on_event, |this, handler| {
-                        this.on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
-                    }),
-            )
+            .child(toggle)
             .when(self.open, |this| {
                 this.child(
                     v_flex()
@@ -218,7 +222,19 @@ impl RenderOnce for Thinking {
                             )
                         })
                         .children(self.trace.steps.into_iter().enumerate().map(|(ix, step)| {
+                            let accessibility_label: SharedString = format!(
+                                "{}, {}",
+                                step.title,
+                                match step.status {
+                                    StepStatus::Running => "in progress",
+                                    StepStatus::Done => "complete",
+                                }
+                            )
+                            .into();
                             v_flex()
+                                .id((trace_id.clone(), ix))
+                                .role(Role::ListItem)
+                                .aria_label(accessibility_label)
                                 .gap(tokens.spacing.xxs)
                                 .child(
                                     h_flex()

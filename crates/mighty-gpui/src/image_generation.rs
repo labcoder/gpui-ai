@@ -3,8 +3,8 @@
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{ActiveTheme as _, Icon, IconName, StyledExt as _, h_flex, v_flex};
 use std::time::Duration;
@@ -92,9 +92,18 @@ impl RenderOnce for ImageGeneration {
         let generating = self.progress < 1.0;
         let veil_height = self.height * (1.0 - self.progress);
         let has_image = self.image.is_some();
+        let accessibility_label = self
+            .label
+            .clone()
+            .unwrap_or_else(|| "Image generation".into());
 
         v_flex()
             .id(self.id)
+            .role(Role::ProgressIndicator)
+            .aria_label(accessibility_label)
+            .aria_min_numeric_value(0.)
+            .aria_max_numeric_value(100.)
+            .aria_numeric_value((self.progress * 100.0) as f64)
             .gap(tokens.spacing.xs)
             .child(
                 div()

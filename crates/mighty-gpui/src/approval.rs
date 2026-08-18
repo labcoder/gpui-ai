@@ -4,7 +4,8 @@ use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     AnyElement, App, ClickEvent, FontWeight, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
@@ -107,9 +108,16 @@ impl RenderOnce for ApprovalCard {
         let reject_event = ApprovalEvent::Rejected {
             id: self.id.clone(),
         };
+        let accessibility_label = self.title.clone();
+        let accessibility_description = self.description.clone();
 
         v_flex()
             .id(self.id.clone())
+            .role(Role::Group)
+            .aria_label(accessibility_label)
+            .when_some(accessibility_description, |this, description| {
+                this.aria_description(description)
+            })
             .gap(tokens.spacing.md)
             .p(tokens.spacing.lg)
             .bg(cx.theme().background)

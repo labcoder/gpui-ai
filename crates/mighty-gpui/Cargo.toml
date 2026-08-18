@@ -8,11 +8,11 @@ publish.workspace = true
 
 [dependencies]
 gpui.workspace = true
+gpui-base.workspace = true
 gpui-component.workspace = true
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
-gpui-base.workspace = true
 
 [lints]
 workspace = true
