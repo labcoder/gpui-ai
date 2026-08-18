@@ -157,7 +157,7 @@ impl RenderOnce for StreamingText {
                 div()
                     .text_token(tokens.typography.sm)
                     .text_color(cx.theme().foreground)
-                    .child(TextView::markdown("answer", source)),
+                    .child(TextView::markdown("answer", source).selectable(true)),
             )
             .when_some(
                 match self.state {

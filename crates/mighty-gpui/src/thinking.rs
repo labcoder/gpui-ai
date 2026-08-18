@@ -214,7 +214,7 @@ impl RenderOnce for Thinking {
                                 div()
                                     .text_token(tokens.typography.sm)
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(TextView::markdown("prose", prose)),
+                                    .child(TextView::markdown("prose", prose).selectable(true)),
                             )
                         })
                         .children(self.trace.steps.into_iter().enumerate().map(|(ix, step)| {
@@ -245,7 +245,10 @@ impl RenderOnce for Thinking {
                                             .pl(tokens.spacing.md)
                                             .text_token(tokens.typography.sm)
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(TextView::markdown(("step-detail", ix), detail)),
+                                            .child(
+                                                TextView::markdown(("step-detail", ix), detail)
+                                                    .selectable(true),
+                                            ),
                                     )
                                 })
                         }))

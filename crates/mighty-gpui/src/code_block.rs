@@ -126,7 +126,7 @@ impl RenderOnce for CodeBlock {
                     .px(tokens.spacing.md)
                     .py(tokens.spacing.sm)
                     .text_token(tokens.typography.sm)
-                    .child(TextView::markdown("code", source)),
+                    .child(TextView::markdown("code", source).selectable(true)),
             )
             .when_some(self.failed, |this, reason| {
                 this.child(
