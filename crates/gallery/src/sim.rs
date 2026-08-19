@@ -29,6 +29,37 @@ const CHARS_PER_TICK: usize = 3;
 /// Ticks to pause after both streams finish before restarting.
 const RESTART_AFTER: usize = 60;
 
+/// Visible categories changed by one simulation tick.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SimulationDelta {
+    answer_content: bool,
+    answer_phase: bool,
+    code_content: bool,
+    code_phase: bool,
+}
+
+impl SimulationDelta {
+    /// Whether the streamed answer text changed.
+    pub fn answer_content_changed(self) -> bool {
+        self.answer_content
+    }
+
+    /// Whether the answer entered or left its streaming phase.
+    pub fn answer_phase_changed(self) -> bool {
+        self.answer_phase
+    }
+
+    /// Whether the streamed code text changed.
+    pub fn code_content_changed(self) -> bool {
+        self.code_content
+    }
+
+    /// Whether the code entered or left its streaming phase.
+    pub fn code_phase_changed(self) -> bool {
+        self.code_phase
+    }
+}
+
 /// The gallery's fake agent: two token streams that loop forever.
 pub struct Simulation {
     /// The streamed markdown answer.
@@ -66,7 +97,11 @@ impl Simulation {
     }
 
     /// Advances the simulation by one tick.
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> SimulationDelta {
+        let answer_pos_before = self.answer_pos;
+        let code_pos_before = self.code_pos;
+        let answer_streaming_before = self.answer.is_streaming();
+        let code_streaming_before = self.code.is_streaming();
         self.elapsed = self.elapsed.saturating_add(TICK_INTERVAL);
         let answer_done = advance(ANSWER, &mut self.answer_pos, &mut self.answer);
         // The code stream starts once the answer is halfway through.
@@ -83,6 +118,13 @@ impl Simulation {
                 *self = Self::new();
                 self.elapsed = elapsed;
             }
+        }
+
+        SimulationDelta {
+            answer_content: self.answer_pos != answer_pos_before,
+            answer_phase: self.answer.is_streaming() != answer_streaming_before,
+            code_content: self.code_pos != code_pos_before,
+            code_phase: self.code.is_streaming() != code_streaming_before,
         }
     }
 }
@@ -120,8 +162,23 @@ mod tests {
         let mut simulation = Simulation::new();
         assert_eq!(simulation.elapsed(), Duration::ZERO);
 
-        simulation.tick();
+        let delta = simulation.tick();
 
         assert_eq!(simulation.elapsed(), Duration::from_millis(60));
+        assert!(delta.answer_content_changed());
+        assert!(!delta.answer_phase_changed());
+        assert!(!delta.code_content_changed());
+    }
+
+    #[test]
+    fn completing_the_answer_reports_a_phase_change() {
+        let mut simulation = Simulation::new();
+        let mut completion_reported = false;
+
+        while simulation.answer.is_streaming() {
+            completion_reported |= simulation.tick().answer_phase_changed();
+        }
+
+        assert!(completion_reported);
     }
 }

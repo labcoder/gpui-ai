@@ -16,7 +16,7 @@ use gpui_component::{
     v_flex,
 };
 use mighty_gpui::prelude::*;
-use std::time::Duration;
+use std::{ops::Range, time::Duration};
 
 const CONTRAST_THEME: &str = r##"{
   "name": "mighty-gpui gallery themes",
@@ -67,6 +67,41 @@ fn story_frame(story: StoryId, in_catalog: bool) -> Stateful<Div> {
         frame.role(Role::ListItem)
     } else {
         frame.role(Role::Group)
+    }
+}
+
+fn story_needs_simulation(story: StoryId) -> bool {
+    matches!(
+        story,
+        StoryId::Loading
+            | StoryId::Tasks
+            | StoryId::Thinking
+            | StoryId::Search
+            | StoryId::ImageGeneration
+            | StoryId::StreamingText
+            | StoryId::CodeBlock
+    )
+}
+
+fn visible_range_needs_simulation(range: Range<usize>) -> bool {
+    StoryId::ALL
+        .get(range)
+        .is_some_and(|stories| stories.iter().copied().any(story_needs_simulation))
+}
+
+fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
+    match story {
+        StoryId::Loading | StoryId::Tasks => true,
+        StoryId::Thinking | StoryId::Search => delta.answer_phase_changed(),
+        StoryId::ImageGeneration | StoryId::StreamingText => delta.answer_content_changed(),
+        StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
+        StoryId::All
+        | StoryId::ToolChips
+        | StoryId::Orbs
+        | StoryId::Todos
+        | StoryId::Approval
+        | StoryId::Recommendation
+        | StoryId::Context => false,
     }
 }
 
@@ -134,6 +169,8 @@ fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) 
 pub struct Gallery {
     selected: StoryId,
     catalog_list: ListState,
+    visible_range: Range<usize>,
+    simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
     trace_open: bool,
     theme: GalleryTheme,
@@ -150,24 +187,29 @@ impl Gallery {
         theme: Option<GalleryTheme>,
         cx: &mut Context<Self>,
     ) -> Self {
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(sim::TICK_INTERVAL).await;
-                let alive = this.update(cx, |this, cx| {
-                    this.sim.tick();
-                    cx.notify();
-                });
-                if alive.is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
+        let catalog_list = ListState::new(StoryId::ALL.len(), ListAlignment::Top, px(320.))
+            .with_uniform_item_height(px(320.));
+        let gallery = cx.weak_entity();
+        catalog_list.set_scroll_handler(move |event, _, cx| {
+            gallery
+                .update(cx, |gallery, cx| {
+                    gallery.update_visible_range(event.visible_range.clone(), cx);
+                })
+                .ok();
+        });
+
+        let visible_range = 0..1;
+        let simulation_needed = if selected == StoryId::All {
+            visible_range_needs_simulation(visible_range.clone())
+        } else {
+            story_needs_simulation(selected)
+        };
 
         Self {
             selected,
-            catalog_list: ListState::new(StoryId::ALL.len(), ListAlignment::Top, px(320.))
-                .with_uniform_item_height(px(320.)),
+            catalog_list,
+            visible_range,
+            simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
             trace_open: true,
             theme: theme.unwrap_or_else(|| {
@@ -177,6 +219,69 @@ impl Gallery {
                     GalleryTheme::Light
                 }
             }),
+        }
+    }
+
+    fn spawn_simulation(cx: &Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(sim::TICK_INTERVAL).await;
+                let alive = this.update(cx, |this, cx| {
+                    let delta = this.sim.tick();
+                    if this.visible_stories_changed(delta) {
+                        this.remeasure_visible_stories(delta);
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        })
+    }
+
+    fn update_visible_range(&mut self, visible_range: Range<usize>, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+
+        self.visible_range = visible_range;
+        let simulation_needed = visible_range_needs_simulation(self.visible_range.clone());
+        match (simulation_needed, self.simulation_task.is_some()) {
+            (true, false) => self.simulation_task = Some(Self::spawn_simulation(cx)),
+            (false, true) => self.simulation_task = None,
+            _ => {}
+        }
+    }
+
+    fn visible_stories_changed(&self, delta: sim::SimulationDelta) -> bool {
+        if self.selected != StoryId::All {
+            return story_changed_by_delta(self.selected, delta);
+        }
+
+        StoryId::ALL
+            .get(self.visible_range.clone())
+            .is_some_and(|stories| {
+                stories
+                    .iter()
+                    .copied()
+                    .any(|story| story_changed_by_delta(story, delta))
+            })
+    }
+
+    fn remeasure_visible_stories(&self, delta: sim::SimulationDelta) {
+        if self.selected != StoryId::All {
+            return;
+        }
+
+        for index in self.visible_range.clone() {
+            if StoryId::ALL
+                .get(index)
+                .copied()
+                .is_some_and(|story| story_changed_by_delta(story, delta))
+            {
+                self.catalog_list.remeasure_items(index..index + 1);
+            }
         }
     }
 
@@ -643,20 +748,28 @@ mod tests {
     use crate::StoryId;
     use gpui::{
         AppContext as _, Element as _, IntoElement as _, Role, ScrollDelta, ScrollWheelEvent,
-        TestAppContext, VisualTestContext, accesskit, point, px,
+        TestAppContext, VisualTestContext, accesskit, point, px, size,
     };
     use gpui_component::Root;
+    use std::{cell::RefCell, rc::Rc};
 
-    fn all_stories(cx: &mut TestAppContext) -> &mut VisualTestContext {
+    fn all_stories(cx: &mut TestAppContext) -> (gpui::Entity<Gallery>, &mut VisualTestContext) {
         cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
         let (_, cx) = cx.add_window_view(|window, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
             Root::new(gallery, window, cx)
         });
         let cx: &mut VisualTestContext = cx;
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        (gallery, cx)
     }
 
     fn scroll(cx: &mut VisualTestContext, dy: f32) {
@@ -677,14 +790,14 @@ mod tests {
 
     #[gpui::test]
     fn all_stories_exposes_a_vertical_scrollbar(cx: &mut TestAppContext) {
-        let cx = all_stories(cx);
+        let (_, cx) = all_stories(cx);
 
         assert!(cx.debug_bounds("scrollbar-overlay").is_some());
     }
 
     #[gpui::test]
     fn all_stories_virtualizes_distant_rows_until_they_enter_view(cx: &mut TestAppContext) {
-        let cx = all_stories(cx);
+        let (_, cx) = all_stories(cx);
         let viewport_height = cx.update(|window, _| window.viewport_size().height);
         assert!(cx.debug_bounds("story-loading").is_some());
         assert!(
@@ -731,5 +844,87 @@ mod tests {
 
         let direct = super::story_frame(StoryId::Context, false).into_element();
         assert_eq!(direct.a11y_role(), Some(Role::Group));
+    }
+
+    #[gpui::test]
+    fn static_direct_story_does_not_advance_simulation(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery = cx.new(|cx| Gallery::new(StoryId::Approval, cx));
+        cx.run_until_parked();
+
+        cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+        cx.run_until_parked();
+
+        assert_eq!(
+            gallery.read_with(cx, |gallery, _| gallery.sim.elapsed()),
+            std::time::Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn simulation_ticks_only_invalidate_stories_with_visible_changes() {
+        let mut simulation = super::sim::Simulation::new();
+        let first_tick = simulation.tick();
+
+        assert!(super::story_changed_by_delta(StoryId::Loading, first_tick));
+        assert!(super::story_changed_by_delta(StoryId::Tasks, first_tick));
+        assert!(super::story_changed_by_delta(
+            StoryId::ImageGeneration,
+            first_tick
+        ));
+        assert!(super::story_changed_by_delta(
+            StoryId::StreamingText,
+            first_tick
+        ));
+        assert!(!super::story_changed_by_delta(StoryId::Search, first_tick));
+        assert!(!super::story_changed_by_delta(
+            StoryId::Thinking,
+            first_tick
+        ));
+        assert!(!super::story_changed_by_delta(
+            StoryId::CodeBlock,
+            first_tick
+        ));
+        assert!(!super::story_changed_by_delta(
+            StoryId::Approval,
+            first_tick
+        ));
+    }
+
+    #[gpui::test]
+    fn static_catalog_viewport_suspends_and_resumes_one_simulation(cx: &mut TestAppContext) {
+        let (gallery, cx) = all_stories(cx);
+        cx.simulate_resize(size(px(800.), px(360.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        for _ in StoryId::ALL {
+            scroll(cx, -10_000.);
+        }
+        assert!(cx.debug_bounds("story-context").is_some());
+
+        let (paused_at, task_running) = gallery.read_with(cx, |gallery, _| {
+            (gallery.sim.elapsed(), gallery.simulation_task.is_some())
+        });
+        assert!(!task_running, "static rows should release the owned task");
+        cx.executor().advance_clock(super::sim::TICK_INTERVAL * 3);
+        cx.run_until_parked();
+        assert_eq!(
+            gallery.read_with(cx, |gallery, _| gallery.sim.elapsed()),
+            paused_at,
+            "static rows should not keep the simulation timer alive"
+        );
+
+        for _ in StoryId::ALL {
+            scroll(cx, 10_000.);
+        }
+        assert!(cx.debug_bounds("story-loading").is_some());
+
+        cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+        cx.run_until_parked();
+        assert_eq!(
+            gallery.read_with(cx, |gallery, _| gallery.sim.elapsed()),
+            paused_at + super::sim::TICK_INTERVAL,
+            "returning to dynamic rows should start exactly one simulation task"
+        );
     }
 }
