@@ -1,6 +1,8 @@
 //! Shared story catalog and gallery view used by native and WebAssembly hosts.
 
 mod gallery;
+#[cfg(any(test, feature = "performance"))]
+pub mod performance;
 mod sim;
 mod story;
 

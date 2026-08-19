@@ -49,6 +49,14 @@ Use the optimized profile for visual and performance review:
 npm run prod
 ```
 
+Run the hardware-dependent native frame-budget check separately from the portable test suite:
+
+```sh
+npm run test:perf
+```
+
+It samples three virtualized catalog regions in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
+
 Expected output: a native window opens showing every component with live simulated agent activity — a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
 
 In your own app, components are fluent builders that render wherever an element fits:

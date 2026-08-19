@@ -5,6 +5,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+default-run = "gallery"
+
+[[bin]]
+name = "gallery-performance"
+path = "src/performance_main.rs"
+required-features = ["performance"]
+
+[features]
+performance = ["gpui/profiler"]
 
 [dependencies]
 anyhow.workspace = true

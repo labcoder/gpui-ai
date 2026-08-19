@@ -42,6 +42,8 @@ GPUI's crates.io release is outdated; the real work lives in the Zed repository.
 - `#![deny(missing_docs)]` holds on the library crate; public items get doc comments with runnable examples where practical.
 - No `unwrap` in library code (`clippy::unwrap_used` is denied); `expect` with a meaningful message is acceptable in the gallery binary only.
 - Every component gets a story in `crates/gallery` in the same change that adds the component.
+- Store every repeating async job in the entity or application state that owns its lifecycle, capture entities weakly across waits, and suspend work when its output is offscreen. Detached tasks require a deliberate process-lifetime reason.
+- Virtualize unbounded or growing collections by stable domain identity. Keep visible animations uncapped; optimize by reducing construction, layout, notifications, and background work outside the viewport.
 - Clippy runs clean under `--deny warnings`; run `cargo fmt` before committing.
 
 ## Accessibility and usability
@@ -72,10 +74,11 @@ npm run build:wasm          # compile and bind the shared gallery for the browse
 npm run check:web           # web host tests
 npm run dev                 # look at it — visual review is part of done
 npm run prod                # optimized native gallery for performance review
+npm run test:perf           # hardware-dependent optimized native frame-budget gate
 npm run dev:web             # inspect the real WASM gallery in a browser
 ```
 
-The root `package.json` is a task runner only (no JavaScript dependencies); the scripts shell out to cargo. Add new workflows there so they stay discoverable.
+The root `package.json` is a task runner only (no JavaScript dependencies); the scripts shell out to cargo. Add new workflows there so they stay discoverable. Keep hardware-dependent performance gates outside `npm run check`, and make performance claims from optimized builds rather than debug runs.
 
 ## Durable vs. temporary
 

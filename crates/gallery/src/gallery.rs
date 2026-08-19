@@ -291,6 +291,30 @@ impl Gallery {
         cx.notify();
     }
 
+    /// Moves the complete catalog to a representative story.
+    ///
+    /// Native performance tooling uses this to measure different catalog
+    /// regions without relying on platform-specific synthetic wheel input.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn scroll_catalog_to(&mut self, story: StoryId, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        let Some(index) = StoryId::ALL
+            .iter()
+            .position(|candidate| *candidate == story)
+        else {
+            return;
+        };
+
+        self.catalog_list.scroll_to(ListOffset {
+            item_ix: index,
+            offset_in_item: px(0.),
+        });
+        self.update_visible_range(index..(index + 3).min(StoryId::ALL.len()), cx);
+        cx.notify();
+    }
+
     fn shows(&self, story: StoryId) -> bool {
         self.selected == StoryId::All || self.selected == story
     }
@@ -926,5 +950,21 @@ mod tests {
             paused_at + super::sim::TICK_INTERVAL,
             "returning to dynamic rows should start exactly one simulation task"
         );
+    }
+
+    #[gpui::test]
+    fn performance_viewport_control_uses_story_identity(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.scroll_catalog_to(StoryId::Approval, cx);
+        });
+
+        gallery.read_with(cx, |gallery, _| {
+            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 10);
+            assert_eq!(gallery.visible_range, 10..13);
+            assert!(gallery.simulation_task.is_none());
+        });
     }
 }
