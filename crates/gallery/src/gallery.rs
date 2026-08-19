@@ -103,7 +103,178 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Approval
         | StoryId::Recommendation
         | StoryId::Context
-        | StoryId::Insights => false,
+        | StoryId::Insights
+        | StoryId::PromptBar => false,
+    }
+}
+
+struct PromptBarStory {
+    ready: Entity<PromptBar>,
+    running: Entity<PromptBar>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl PromptBarStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let ready = cx.new(|cx| {
+            Self::configured_prompt(
+                "gallery-prompt-ready",
+                "Compare @cr",
+                ProgressState::Pending,
+                true,
+                window,
+                cx,
+            )
+        });
+        let running = cx.new(|cx| {
+            Self::configured_prompt(
+                "gallery-prompt-running",
+                "Prepare the supplier comparison",
+                ProgressState::Running,
+                false,
+                window,
+                cx,
+            )
+        });
+        let ready_subscription = cx.subscribe_in(
+            &ready,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
+        let running_subscription = cx.subscribe_in(
+            &running,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
+
+        Self {
+            ready,
+            running,
+            last_event: "Interact with either composer to inspect its typed event.".into(),
+            _subscriptions: vec![ready_subscription, running_subscription],
+        }
+    }
+
+    fn configured_prompt(
+        id: &'static str,
+        draft: &'static str,
+        progress: ProgressState,
+        with_attachment: bool,
+        window: &mut Window,
+        cx: &mut Context<PromptBar>,
+    ) -> PromptBar {
+        let mut prompt = PromptBar::new(id, window, cx);
+        prompt.set_models(
+            [
+                PromptModel::new("balanced", "Balanced"),
+                PromptModel::new("fast", "Fast"),
+                PromptModel::new("offline", "Offline").disabled(true),
+            ],
+            cx,
+        );
+        prompt.set_selected_model("balanced", cx);
+        prompt.set_mentions(
+            [
+                PromptMention::new("creamery", "Creamery"),
+                PromptMention::new("suppliers", "Suppliers"),
+            ],
+            cx,
+        );
+        prompt.set_commands(
+            [
+                PromptCommand::new("compare", "compare")
+                    .description("Compare the selected records"),
+                PromptCommand::new("summarize", "summarize")
+                    .description("Summarize current context"),
+            ],
+            cx,
+        );
+        if with_attachment {
+            prompt.set_attachments([PromptAttachment::new("pricing", "pricing.md")], cx);
+        }
+        prompt.set_progress(progress, cx);
+        prompt.set_draft(draft, window, cx);
+        prompt
+    }
+
+    fn on_event(
+        &mut self,
+        prompt: &Entity<PromptBar>,
+        event: &PromptBarEvent,
+        cx: &mut Context<Self>,
+    ) {
+        self.last_event = format!("{event:?}").into();
+        match event {
+            PromptBarEvent::ModelChanged { model_id, .. } => {
+                prompt.update(cx, |prompt, cx| {
+                    prompt.set_selected_model(model_id.clone(), cx);
+                });
+            }
+            PromptBarEvent::Submit { .. } => {
+                prompt.update(cx, |prompt, cx| {
+                    prompt.set_progress(ProgressState::Running, cx);
+                });
+            }
+            PromptBarEvent::CancelRequested { .. } => {
+                prompt.update(cx, |prompt, cx| {
+                    prompt.set_progress(ProgressState::Complete, cx);
+                });
+            }
+            PromptBarEvent::DraftChanged { .. }
+            | PromptBarEvent::MentionSelected { .. }
+            | PromptBarEvent::CommandSelected { .. }
+            | PromptBarEvent::AttachRequested { .. }
+            | PromptBarEvent::AttachmentRemoved { .. }
+            | PromptBarEvent::EnhanceRequested { .. } => {}
+        }
+        cx.notify();
+    }
+}
+
+impl Render for PromptBarStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(
+                div()
+                    .id("prompt-bar-ready-heading")
+                    .role(Role::Heading)
+                    .aria_label("Ready prompt with mention suggestions")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("READY WITH MENTION SUGGESTIONS"),
+            )
+            .child(self.ready.clone())
+            .child(
+                div()
+                    .id("prompt-bar-running-heading")
+                    .role(Role::Heading)
+                    .aria_label("Running prompt with cancellation")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("RUNNING WITH CANCELLATION"),
+            )
+            .child(self.running.clone())
+            .child(
+                TextView::markdown(
+                    "prompt-bar-event-log",
+                    format!("**Last typed event.** {}", self.last_event),
+                )
+                .selectable(true),
+            )
+            .child(
+                TextView::markdown(
+                    "prompt-bar-reference-note",
+                    "**Reference comparison.** Beautiful UI places its compact `Prompt or tag a flavor with @` composer inside Chat. This GPUI implementation deliberately makes the composer reusable on its own, retains the upstream native textarea for IME and selection, and adds typed model, attachment, command, enhancement, submission, and cancellation events without owning application async work.",
+                )
+                .selectable(true),
+            )
     }
 }
 
@@ -172,6 +343,7 @@ pub struct Gallery {
     selected: StoryId,
     catalog_list: ListState,
     insight_scroll: ScrollHandle,
+    prompt_bar_scroll: ScrollHandle,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -212,6 +384,7 @@ impl Gallery {
             selected,
             catalog_list,
             insight_scroll: ScrollHandle::new(),
+            prompt_bar_scroll: ScrollHandle::new(),
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -370,7 +543,7 @@ impl Gallery {
     fn render_story(
         &mut self,
         story: StoryId,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let elapsed = self.sim.elapsed();
@@ -736,6 +909,35 @@ impl Gallery {
                 },
                 cx,
             ),
+            StoryId::PromptBar => {
+                let prompt_story = window.use_keyed_state(
+                    "prompt-bar-story-state",
+                    cx,
+                    PromptBarStory::new,
+                );
+                self.section(
+                    story,
+                    "PROMPT BAR",
+                    || {
+                        v_flex()
+                            .id("prompt-bar-story-scroll")
+                            .debug_selector(|| "prompt-bar-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .gap_2()
+                            .track_scroll(&self.prompt_bar_scroll)
+                            .overflow_y_scrollbar()
+                            .child(prompt_story)
+                            .child(
+                                div()
+                                    .debug_selector(|| "prompt-bar-story-end".into())
+                                    .h(px(1.)),
+                            )
+                    },
+                    cx,
+                )
+            }
         }
     }
 }
@@ -894,20 +1096,20 @@ mod tests {
         let viewport_height = cx.update(|window, _| window.viewport_size().height);
         assert!(cx.debug_bounds("story-loading").is_some());
         assert!(
-            cx.debug_bounds("story-insights").is_none(),
+            cx.debug_bounds("story-prompt-bar").is_none(),
             "the final story should not be constructed before it nears the viewport"
         );
 
         for _ in StoryId::ALL {
-            if cx.debug_bounds("story-insights").is_some() {
+            if cx.debug_bounds("story-prompt-bar").is_some() {
                 break;
             }
             scroll(cx, -10_000.);
         }
 
         let scrolled = cx
-            .debug_bounds("story-insights")
-            .expect("insight story should render after scrolling to it");
+            .debug_bounds("story-prompt-bar")
+            .expect("prompt bar story should render after scrolling to it");
         assert!(scrolled.top() < viewport_height);
         assert!(
             cx.debug_bounds("story-loading").is_none(),
@@ -975,6 +1177,70 @@ mod tests {
         assert!(
             end.bottom() <= story.bottom(),
             "{end:?} must fit in {story:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn constrained_direct_prompt_bar_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::PromptBar, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            Root::new(gallery, window, cx)
+        });
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.prompt_bar_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let story = cx
+            .debug_bounds("prompt-bar-story-scroll")
+            .expect("the prompt bar story should expose its overflow region");
+        let end = cx
+            .debug_bounds("prompt-bar-story-end")
+            .expect("the prompt bar story end marker should remain rendered");
+        assert!(
+            end.bottom() <= story.bottom(),
+            "{end:?} must fit in {story:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn constrained_catalog_keeps_the_end_of_the_prompt_bar_story_reachable(
+        cx: &mut TestAppContext,
+    ) {
+        let (gallery, cx) = all_stories(cx);
+        cx.simulate_resize(size(px(900.), px(560.)));
+        gallery.update(cx, |gallery, cx| {
+            gallery.scroll_catalog_to(StoryId::PromptBar, cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let scroll = cx
+            .debug_bounds("prompt-bar-story-scroll")
+            .expect("the catalog prompt bar story should expose its overflow region");
+        gallery.update(cx, |gallery, cx| {
+            gallery.prompt_bar_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("prompt-bar-story-end")
+            .expect("the prompt bar story end marker should remain rendered");
+        assert!(
+            end.bottom() <= scroll.bottom(),
+            "{end:?} must fit in {scroll:?}"
         );
     }
 
@@ -1056,7 +1322,7 @@ mod tests {
         for _ in StoryId::ALL {
             scroll(cx, -10_000.);
         }
-        assert!(cx.debug_bounds("story-insights").is_some());
+        assert!(cx.debug_bounds("story-prompt-bar").is_some());
 
         let (paused_at, task_running) = gallery.read_with(cx, |gallery, _| {
             (gallery.sim.elapsed(), gallery.simulation_task.is_some())

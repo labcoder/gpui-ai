@@ -35,6 +35,8 @@ pub enum StoryId {
     Context,
     /// Paged analytical insight card.
     Insights,
+    /// Hybrid-controlled prompt composer.
+    PromptBar,
 }
 
 impl StoryId {
@@ -54,6 +56,7 @@ impl StoryId {
         Self::Recommendation,
         Self::Context,
         Self::Insights,
+        Self::PromptBar,
     ];
 
     /// Stable URL slug for this selection.
@@ -74,6 +77,7 @@ impl StoryId {
             Self::Recommendation => "recommendation",
             Self::Context => "context",
             Self::Insights => "insights",
+            Self::PromptBar => "prompt-bar",
         }
     }
 
@@ -95,6 +99,7 @@ impl StoryId {
             Self::Recommendation => "Recommendation card",
             Self::Context => "Context cards",
             Self::Insights => "Insight card",
+            Self::PromptBar => "Prompt bar",
         }
     }
 }

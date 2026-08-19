@@ -28,6 +28,7 @@ pub mod image_generation;
 pub mod insight;
 pub mod loading;
 pub mod orbs;
+pub mod prompt_bar;
 pub mod recommendation;
 pub mod search_results;
 pub mod stream;
@@ -49,6 +50,10 @@ pub mod prelude {
     };
     pub use crate::loading::LoadingState;
     pub use crate::orbs::Orbs;
+    pub use crate::prompt_bar::{
+        PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
+        PromptSubmission,
+    };
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};

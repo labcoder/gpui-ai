@@ -23,3 +23,11 @@ fn unknown_story_preserves_the_requested_slug() {
     assert_eq!(error.slug(), "not-a-story");
     assert_eq!(error.to_string(), "unknown story: not-a-story");
 }
+
+#[test]
+fn prompt_bar_has_a_stable_consumer_route() {
+    let story = StoryId::from_str("prompt-bar").expect("prompt bar route should be registered");
+
+    assert_eq!(story.slug(), "prompt-bar");
+    assert_eq!(story.title(), "Prompt bar");
+}
