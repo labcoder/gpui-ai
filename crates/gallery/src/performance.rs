@@ -1,7 +1,12 @@
 //! Native gallery frame-budget reporting.
 
+use crate::StoryId;
+
 /// Minimum number of measured draws required by the performance gate.
 pub const MIN_DRAW_SAMPLES: usize = 300;
+/// Representative catalog viewports measured by the native frame-budget gate.
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 3] =
+    [StoryId::Loading, StoryId::StreamingText, StoryId::Approval];
 /// Maximum accepted 99th-percentile draw time for a 120 Hz frame budget.
 pub const MAX_P99_DRAW_NANOS: u64 = 8_333_333;
 /// Threshold used to identify frames longer than a 60 Hz frame budget.
@@ -143,7 +148,17 @@ fn nanos_to_ms(nanos: u64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::StoryId;
+
     use super::{MAX_P99_DRAW_NANOS, MIN_DRAW_SAMPLES, PerformanceReport};
+
+    #[test]
+    fn performance_viewports_cover_animation_streaming_and_idle_work() {
+        assert_eq!(
+            super::PERFORMANCE_VIEWPORTS,
+            [StoryId::Loading, StoryId::StreamingText, StoryId::Approval]
+        );
+    }
 
     #[test]
     fn representative_draw_samples_pass_the_120_hz_gate() {

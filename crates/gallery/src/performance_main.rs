@@ -1,6 +1,6 @@
 use gallery::{
     Gallery, GalleryTheme, StoryId, init, open_gallery_with_theme,
-    performance::{MIN_DRAW_SAMPLES, PerformanceReport},
+    performance::{MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport},
 };
 use gpui::{
     AsyncApp, Entity, Global, Task,
@@ -77,20 +77,12 @@ async fn run_performance_measurement(
             }
         }
 
-        let next_phase = match draw_samples.len() {
-            0..100 => 0,
-            100..200 => 1,
-            _ => 2,
-        };
+        let next_phase = (draw_samples.len() / (MIN_DRAW_SAMPLES / PERFORMANCE_VIEWPORTS.len()))
+            .min(PERFORMANCE_VIEWPORTS.len() - 1);
         gallery.update(cx, |gallery, cx| {
             if viewport_phase != next_phase {
                 viewport_phase = next_phase;
-                let story = match viewport_phase {
-                    1 => StoryId::Search,
-                    2 => StoryId::Approval,
-                    _ => StoryId::Loading,
-                };
-                gallery.scroll_catalog_to(story, cx);
+                gallery.scroll_catalog_to(PERFORMANCE_VIEWPORTS[viewport_phase], cx);
             } else {
                 cx.notify();
             }
@@ -100,7 +92,12 @@ async fn run_performance_measurement(
     set_trace_enabled(false);
     let report = PerformanceReport::from_samples(draw_samples, present_samples);
     report.print();
-    eprintln!("  viewports: loading/live, search/mixed, approval/static");
+    let viewports = PERFORMANCE_VIEWPORTS
+        .iter()
+        .map(|story| story.title())
+        .collect::<Vec<_>>()
+        .join(", ");
+    eprintln!("  viewports: {viewports}");
 
     let failures = report.gate_failures();
     if started_at.elapsed() >= RUN_TIMEOUT && report.draw.samples < MIN_DRAW_SAMPLES {

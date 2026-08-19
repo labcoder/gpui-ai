@@ -958,13 +958,13 @@ mod tests {
         let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
 
         gallery.update(cx, |gallery, cx| {
-            gallery.scroll_catalog_to(StoryId::Approval, cx);
+            gallery.scroll_catalog_to(StoryId::StreamingText, cx);
         });
 
         gallery.read_with(cx, |gallery, _| {
-            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 10);
-            assert_eq!(gallery.visible_range, 10..13);
-            assert!(gallery.simulation_task.is_none());
+            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 8);
+            assert_eq!(gallery.visible_range, 8..11);
+            assert!(gallery.simulation_task.is_some());
         });
     }
 }
