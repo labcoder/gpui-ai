@@ -1,19 +1,16 @@
 //! Paged analytical insight cards with metrics and a time series.
 
+use crate::control::composed_button;
 use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, Role, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _,
 };
+use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
-    button::{Button, ButtonVariants as _},
-    chart::LineChart,
-    h_flex,
-    text::TextView,
-    v_flex,
+    ActiveTheme as _, StyledExt as _, chart::LineChart, h_flex, text::TextView, v_flex,
 };
 
 /// The direction communicated by an insight metric.
@@ -130,6 +127,78 @@ pub enum InsightEvent {
         /// Prompt selected by the user.
         prompt: SharedString,
     },
+}
+
+#[derive(Clone, Copy)]
+enum InsightControlStyle {
+    Paging,
+    FollowUp,
+}
+
+struct InsightControl {
+    card_id: SharedString,
+    local_id: &'static str,
+    label: SharedString,
+    disabled: bool,
+    event: InsightEvent,
+    style: InsightControlStyle,
+}
+
+impl InsightControl {
+    fn styled_button(self, handler: Option<SharedHandler<InsightEvent>>, cx: &mut App) -> Button {
+        let tokens = cx.theme().semantic_tokens();
+        let (background, foreground, border, hover, active) = match self.style {
+            InsightControlStyle::Paging => (
+                cx.theme().transparent,
+                cx.theme().foreground,
+                cx.theme().transparent,
+                cx.theme().button_hover,
+                cx.theme().button_active,
+            ),
+            InsightControlStyle::FollowUp => (
+                cx.theme().button_primary,
+                cx.theme().button_primary_foreground,
+                cx.theme().primary,
+                cx.theme().button_primary_hover,
+                cx.theme().button_primary_active,
+            ),
+        };
+        let disabled = self.disabled;
+        let label = self.label.clone();
+        composed_button((ElementId::from(self.card_id), self.local_id), self.label)
+            .disabled(disabled)
+            .flex()
+            .items_center()
+            .justify_center()
+            .px(tokens.spacing.sm)
+            .py(tokens.spacing.xxs)
+            .border_1()
+            .border_color(border)
+            .rounded(tokens.radius.sm)
+            .bg(background)
+            .text_token(tokens.typography.xs)
+            .text_color(foreground)
+            .when(!disabled, |button| {
+                button
+                    .hover(|style| style.bg(hover))
+                    .active(|style| style.bg(active))
+            })
+            .focus(|style| style.border_color(cx.theme().ring))
+            .focus_visible(|style| style.border_color(cx.theme().ring))
+            .styles(|styles| {
+                styles.disabled(|style| {
+                    style
+                        .bg(cx.theme().muted)
+                        .text_color(cx.theme().muted_foreground)
+                        .border_color(cx.theme().border)
+                })
+            })
+            .child(div().child(label))
+            .when_some(handler, |button, handler| {
+                let event = self.event;
+                button.on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+            })
+    }
 }
 
 /// A caller-controlled analytical card with metrics, a chart, and paging.
@@ -257,6 +326,155 @@ impl InsightCard {
             prompt,
         })
     }
+
+    fn resolved_chart_summary(&self) -> Option<SharedString> {
+        self.chart_summary.clone().or_else(|| {
+            if self.points.is_empty() {
+                return None;
+            }
+
+            let values = self
+                .points
+                .iter()
+                .map(|point| format!("{} {}", point.label, point.value))
+                .collect::<Vec<_>>()
+                .join(", ");
+            Some(format!("{}: {values}.", self.series_name).into())
+        })
+    }
+
+    fn previous_control(&self) -> InsightControl {
+        InsightControl {
+            card_id: self.id.clone(),
+            local_id: "previous",
+            label: "Previous".into(),
+            disabled: self.current_page == 1 || self.on_event.is_none(),
+            event: self.previous_event(),
+            style: InsightControlStyle::Paging,
+        }
+    }
+
+    fn previous_button(&self, cx: &mut App) -> Button {
+        self.previous_control()
+            .styled_button(self.on_event.clone(), cx)
+    }
+
+    fn next_control(&self) -> InsightControl {
+        InsightControl {
+            card_id: self.id.clone(),
+            local_id: "next",
+            label: "Next".into(),
+            disabled: self.current_page == self.total_pages || self.on_event.is_none(),
+            event: self.next_event(),
+            style: InsightControlStyle::Paging,
+        }
+    }
+
+    fn next_button(&self, cx: &mut App) -> Button {
+        self.next_control().styled_button(self.on_event.clone(), cx)
+    }
+
+    fn follow_up_control(&self) -> Option<InsightControl> {
+        self.follow_up_event().map(|event| InsightControl {
+            card_id: self.id.clone(),
+            local_id: "follow-up",
+            label: self
+                .follow_up
+                .clone()
+                .expect("a follow-up event always preserves its prompt"),
+            disabled: self.on_event.is_none(),
+            event,
+            style: InsightControlStyle::FollowUp,
+        })
+    }
+
+    fn follow_up_button(&self, cx: &mut App) -> Option<Button> {
+        self.follow_up_control()
+            .map(|control| control.styled_button(self.on_event.clone(), cx))
+    }
+}
+
+fn metrics_group(card_id: &SharedString, cx: &mut App) -> Stateful<Div> {
+    let tokens = cx.theme().semantic_tokens();
+    h_flex()
+        .id(format!("{card_id}-metrics"))
+        .role(Role::List)
+        .aria_label("Insight metrics")
+        .flex_wrap()
+        .gap(tokens.spacing.sm)
+}
+
+fn metric_item(card_id: &SharedString, metric: InsightMetric, cx: &mut App) -> Stateful<Div> {
+    let tokens = cx.theme().semantic_tokens();
+    let accessibility_name = metric.accessibility_name();
+    let trend = metric.trend;
+    let trend_color = match trend {
+        InsightTrend::Up => cx.theme().success,
+        InsightTrend::Down => cx.theme().danger,
+        InsightTrend::Flat => cx.theme().muted_foreground,
+    };
+
+    v_flex()
+        .id((
+            ElementId::from((ElementId::from(card_id.clone()), "metric")),
+            metric.id.clone(),
+        ))
+        .role(Role::ListItem)
+        .aria_label(accessibility_name)
+        .flex_1()
+        .gap(tokens.spacing.xxs)
+        .p(tokens.spacing.sm)
+        .bg(cx.theme().muted)
+        .rounded(tokens.radius.sm)
+        .child(
+            div()
+                .text_token(tokens.typography.xs)
+                .text_color(cx.theme().muted_foreground)
+                .child(metric.label),
+        )
+        .child(
+            div()
+                .text_token(tokens.typography.md)
+                .text_color(cx.theme().foreground)
+                .child(metric.value),
+        )
+        .when_some(metric.change, |this, change| {
+            this.child(
+                h_flex()
+                    .gap(tokens.spacing.xs)
+                    .text_token(tokens.typography.xs)
+                    .text_color(trend_color)
+                    .child(change)
+                    .child(trend.visible_label()),
+            )
+        })
+}
+
+fn chart_group(
+    card_id: &SharedString,
+    label: SharedString,
+    summary: SharedString,
+    points: Vec<InsightPoint>,
+    cx: &mut App,
+) -> Stateful<Div> {
+    let tokens = cx.theme().semantic_tokens();
+    v_flex()
+        .id((ElementId::from(card_id.clone()), "chart-group"))
+        .role(Role::Group)
+        .aria_label(label.clone())
+        .aria_description(summary)
+        .h(tokens.spacing.xxl + tokens.spacing.xxl + tokens.spacing.xxl + tokens.spacing.xxl)
+        .child(
+            LineChart::new(points)
+                .x(|point| point.label.clone())
+                .y(|point| point.value)
+                .natural()
+                .grid(false)
+                .x_axis(false)
+                .stroke(cx.theme().chart_2)
+                .name(label)
+                .id((ElementId::from(card_id.clone()), "chart")),
+        )
 }
 
 impl Styled for InsightCard {
@@ -270,17 +488,14 @@ impl RenderOnce for InsightCard {
         let tokens = cx.theme().semantic_tokens();
         let page_label = self.page_label();
         let page_text: SharedString = format!("Insights · {page_label}").into();
-        let accessibility_description: SharedString = match &self.chart_summary {
+        let resolved_chart_summary = self.resolved_chart_summary();
+        let accessibility_description: SharedString = match &resolved_chart_summary {
             Some(summary) => format!("{page_text}. {summary}").into(),
             None => page_text.clone(),
         };
-        let previous_event = self.previous_event();
-        let next_event = self.next_event();
-        let follow_up_event = self.follow_up_event();
-        let follow_up_prompt = self.follow_up.clone();
-        let previous_disabled = self.current_page == 1;
-        let next_disabled = self.current_page == self.total_pages;
-        let chart_summary = self.chart_summary.clone();
+        let previous_button = (self.total_pages > 1).then(|| self.previous_button(cx));
+        let next_button = (self.total_pages > 1).then(|| self.next_button(cx));
+        let follow_up_button = self.follow_up_button(cx);
         let chart_label = self.series_name.clone();
         let card_id = self.id.clone();
 
@@ -301,14 +516,12 @@ impl RenderOnce for InsightCard {
                     .child(
                         div()
                             .text_token(tokens.typography.xs)
-                            .font_weight(FontWeight::SEMIBOLD)
                             .text_color(cx.theme().muted_foreground)
                             .child(page_text),
                     )
                     .child(
                         div()
                             .text_token(tokens.typography.lg)
-                            .font_weight(FontWeight::SEMIBOLD)
                             .text_color(cx.theme().foreground)
                             .child(self.title),
                     ),
@@ -321,82 +534,22 @@ impl RenderOnce for InsightCard {
             })
             .when(!self.metrics.is_empty(), |this| {
                 this.child(
-                    h_flex()
-                        .id(format!("{}-metrics", self.id))
-                        .role(Role::List)
-                        .aria_label("Insight metrics")
-                        .flex_wrap()
-                        .gap(tokens.spacing.sm)
-                        .children(self.metrics.into_iter().map(|metric| {
-                            let accessibility_name = metric.accessibility_name();
-                            let trend_color = match metric.trend {
-                                InsightTrend::Up => cx.theme().success,
-                                InsightTrend::Down => cx.theme().danger,
-                                InsightTrend::Flat => cx.theme().muted_foreground,
-                            };
-                            v_flex()
-                                .id((
-                                    ElementId::from((ElementId::from(card_id.clone()), "metric")),
-                                    metric.id.clone(),
-                                ))
-                                .role(Role::ListItem)
-                                .aria_label(accessibility_name)
-                                .flex_1()
-                                .gap(tokens.spacing.xxs)
-                                .p(tokens.spacing.sm)
-                                .bg(cx.theme().muted)
-                                .rounded(tokens.radius.sm)
-                                .child(
-                                    div()
-                                        .text_token(tokens.typography.xs)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(metric.label),
-                                )
-                                .child(
-                                    div()
-                                        .text_token(tokens.typography.md)
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(cx.theme().foreground)
-                                        .child(metric.value),
-                                )
-                                .when_some(metric.change, |this, change| {
-                                    this.child(
-                                        h_flex()
-                                            .gap(tokens.spacing.xs)
-                                            .text_token(tokens.typography.xs)
-                                            .text_color(trend_color)
-                                            .child(change)
-                                            .child(metric.trend.visible_label()),
-                                    )
-                                })
-                        })),
+                    metrics_group(&card_id, cx).children(
+                        self.metrics
+                            .into_iter()
+                            .map(|metric| metric_item(&card_id, metric, cx)),
+                    ),
                 )
             })
             .when(!self.points.is_empty(), |this| {
-                this.child(
-                    v_flex()
-                        .id((ElementId::from(card_id.clone()), "chart-group"))
-                        .role(Role::Group)
-                        .aria_label(chart_label.clone())
-                        .when_some(chart_summary, |this, summary| {
-                            this.aria_description(summary)
-                        })
-                        .h(tokens.spacing.xxl
-                            + tokens.spacing.xxl
-                            + tokens.spacing.xxl
-                            + tokens.spacing.xxl)
-                        .child(
-                            LineChart::new(self.points)
-                                .x(|point| point.label.clone())
-                                .y(|point| point.value)
-                                .natural()
-                                .grid(false)
-                                .x_axis(false)
-                                .stroke(cx.theme().chart_2)
-                                .name(chart_label)
-                                .id((ElementId::from(card_id.clone()), "chart")),
-                        ),
-                )
+                this.child(chart_group(
+                    &card_id,
+                    chart_label,
+                    resolved_chart_summary
+                        .expect("non-empty chart points always resolve a summary"),
+                    self.points,
+                    cx,
+                ))
             })
             .when(self.total_pages > 1 || self.follow_up.is_some(), |this| {
                 this.child(
@@ -410,62 +563,17 @@ impl RenderOnce for InsightCard {
                                     h_flex()
                                         .gap(tokens.spacing.xs)
                                         .child(
-                                            Button::new((
-                                                ElementId::from(card_id.clone()),
-                                                "previous",
-                                            ))
-                                            .small()
-                                            .ghost()
-                                            .disabled(previous_disabled || self.on_event.is_none())
-                                            .accessibility_id(format!("{}-previous", card_id))
-                                            .label("Previous")
-                                            .when_some(self.on_event.clone(), |button, handler| {
-                                                button.on_click(
-                                                    move |_: &ClickEvent, window, cx| {
-                                                        handler(&previous_event, window, cx)
-                                                    },
-                                                )
-                                            }),
+                                            previous_button
+                                                .expect("multi-page cards have a previous button"),
                                         )
                                         .child(
-                                            Button::new((ElementId::from(card_id.clone()), "next"))
-                                                .small()
-                                                .ghost()
-                                                .disabled(next_disabled || self.on_event.is_none())
-                                                .accessibility_id(format!("{}-next", card_id))
-                                                .label("Next")
-                                                .when_some(
-                                                    self.on_event.clone(),
-                                                    |button, handler| {
-                                                        button.on_click(
-                                                            move |_: &ClickEvent, window, cx| {
-                                                                handler(&next_event, window, cx)
-                                                            },
-                                                        )
-                                                    },
-                                                ),
+                                            next_button
+                                                .expect("multi-page cards have a next button"),
                                         ),
                                 ),
                             )
                         })
-                        .when_some(
-                            follow_up_prompt.zip(follow_up_event),
-                            |this, (prompt, event)| {
-                                this.child(
-                                    Button::new((ElementId::from(card_id.clone()), "follow-up"))
-                                        .small()
-                                        .primary()
-                                        .disabled(self.on_event.is_none())
-                                        .accessibility_id(format!("{}-follow-up", card_id))
-                                        .label(prompt)
-                                        .when_some(self.on_event.clone(), |button, handler| {
-                                            button.on_click(move |_: &ClickEvent, window, cx| {
-                                                handler(&event, window, cx)
-                                            })
-                                        }),
-                                )
-                            },
-                        ),
+                        .when_some(follow_up_button, |this, button| this.child(button)),
                 )
             })
             .refine_style(&self.style)
@@ -474,7 +582,122 @@ impl RenderOnce for InsightCard {
 
 #[cfg(test)]
 mod tests {
-    use super::{InsightCard, InsightEvent, InsightMetric, InsightTrend};
+    use super::{
+        InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend, chart_group,
+        metric_item, metrics_group,
+    };
+    use gpui::{
+        Element as _, IntoElement as _, Render, RenderOnce as _, Role, TestAppContext, Window,
+        accesskit, canvas,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Copy)]
+    enum ChildProbeKind {
+        Metrics,
+        Metric,
+        Chart,
+        Previous,
+        Next,
+        FollowUp,
+    }
+
+    struct CapturedChild {
+        role: Option<Role>,
+        node: accesskit::Node,
+    }
+
+    struct ChildProbe {
+        kind: ChildProbeKind,
+        captured: Arc<Mutex<Option<CapturedChild>>>,
+    }
+
+    impl Render for ChildProbe {
+        fn render(
+            &mut self,
+            _: &mut Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            let kind = self.kind;
+            let captured = self.captured.clone();
+            canvas(
+                move |_, window, cx| {
+                    let card_id: gpui::SharedString = "insight".into();
+                    let mut card = Some(
+                        InsightCard::new(card_id.clone(), "Demand changed")
+                            .page(1, 3)
+                            .follow_up("Should I rebalance flavors?")
+                            .on_event(|_, _, _| {}),
+                    );
+                    macro_rules! capture_element {
+                        ($element:expr) => {{
+                            let element = $element.into_element();
+                            let role = element.a11y_role();
+                            let mut node = accesskit::Node::new(role.unwrap_or(Role::Unknown));
+                            element.write_a11y_info(&mut node);
+                            CapturedChild { role, node }
+                        }};
+                    }
+                    let child = match kind {
+                        ChildProbeKind::Metrics => {
+                            capture_element!(metrics_group(&card_id, cx))
+                        }
+                        ChildProbeKind::Metric => capture_element!(metric_item(
+                            &card_id,
+                            InsightMetric::new("mint", "Mint Chip", "$2,377.66")
+                                .change("down 4.41%", InsightTrend::Down),
+                            cx,
+                        )),
+                        ChildProbeKind::Chart => capture_element!(chart_group(
+                            &card_id,
+                            "Trend snapshot".into(),
+                            "Trend snapshot: Week 1 18, Week 2 24.".into(),
+                            vec![
+                                InsightPoint::new("Week 1", 18.0),
+                                InsightPoint::new("Week 2", 24.0),
+                            ],
+                            cx,
+                        )),
+                        ChildProbeKind::Previous => capture_element!(
+                            card.take()
+                                .expect("probe card should be available")
+                                .previous_button(cx)
+                                .render(window, cx)
+                        ),
+                        ChildProbeKind::Next => capture_element!(
+                            card.take()
+                                .expect("probe card should be available")
+                                .next_button(cx)
+                                .render(window, cx)
+                        ),
+                        ChildProbeKind::FollowUp => capture_element!(
+                            card.take()
+                                .expect("probe card should be available")
+                                .follow_up_button(cx)
+                                .expect("probe card should have a follow-up")
+                                .render(window, cx)
+                        ),
+                    };
+                    *captured.lock().expect("capture mutex should be available") = Some(child);
+                },
+                |_, _, _, _| {},
+            )
+        }
+    }
+
+    fn capture_child(kind: ChildProbeKind, cx: &mut TestAppContext) -> CapturedChild {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(None));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ChildProbe { kind, captured });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let child = result
+            .lock()
+            .expect("capture mutex should be available")
+            .take()
+            .expect("semantic child should be captured");
+        child
+    }
 
     #[test]
     fn page_position_is_one_based_and_clamped() {
@@ -530,5 +753,66 @@ mod tests {
                 prompt: "Rebalance flavors".into(),
             })
         );
+    }
+
+    #[test]
+    fn chart_summary_falls_back_to_series_and_labeled_values() {
+        let card = InsightCard::new("insight", "Demand changed").series(
+            "Trend snapshot",
+            [
+                InsightPoint::new("Week 1", 18.0),
+                InsightPoint::new("Week 2", 24.0),
+            ],
+        );
+
+        assert_eq!(
+            card.resolved_chart_summary(),
+            Some("Trend snapshot: Week 1 18, Week 2 24.".into())
+        );
+        assert_eq!(
+            card.chart_summary("Demand grew overall")
+                .resolved_chart_summary(),
+            Some("Demand grew overall".into())
+        );
+    }
+
+    #[gpui::test]
+    fn metric_and_chart_children_expose_direct_semantics(cx: &mut TestAppContext) {
+        let metrics = capture_child(ChildProbeKind::Metrics, cx);
+        assert_eq!(metrics.role, Some(Role::List));
+        assert_eq!(metrics.node.label(), Some("Insight metrics"));
+
+        let metric = capture_child(ChildProbeKind::Metric, cx);
+        assert_eq!(metric.role, Some(Role::ListItem));
+        assert_eq!(
+            metric.node.label(),
+            Some("Mint Chip, $2,377.66, down 4.41%, decreasing")
+        );
+
+        let chart = capture_child(ChildProbeKind::Chart, cx);
+        assert_eq!(chart.role, Some(Role::Group));
+        assert_eq!(chart.node.label(), Some("Trend snapshot"));
+        assert_eq!(
+            chart.node.description(),
+            Some("Trend snapshot: Week 1 18, Week 2 24.")
+        );
+    }
+
+    #[gpui::test]
+    fn insight_controls_expose_click_actions_and_disabled_boundaries(cx: &mut TestAppContext) {
+        let previous = capture_child(ChildProbeKind::Previous, cx);
+        let next = capture_child(ChildProbeKind::Next, cx);
+        let follow_up = capture_child(ChildProbeKind::FollowUp, cx);
+        assert_eq!(previous.role, Some(Role::Button));
+        assert_eq!(previous.node.label(), Some("Previous"));
+        assert!(!previous.node.supports_action(accesskit::Action::Click));
+
+        assert_eq!(next.role, Some(Role::Button));
+        assert_eq!(next.node.label(), Some("Next"));
+        assert!(next.node.supports_action(accesskit::Action::Click));
+
+        assert_eq!(follow_up.role, Some(Role::Button));
+        assert_eq!(follow_up.node.label(), Some("Should I rebalance flavors?"));
+        assert!(follow_up.node.supports_action(accesskit::Action::Click));
     }
 }
