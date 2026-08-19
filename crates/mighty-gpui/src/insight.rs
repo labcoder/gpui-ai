@@ -320,13 +320,6 @@ impl InsightCard {
         }
     }
 
-    fn follow_up_event(&self) -> Option<InsightEvent> {
-        self.follow_up.clone().map(|prompt| InsightEvent::FollowUp {
-            id: self.id.clone(),
-            prompt,
-        })
-    }
-
     fn resolved_chart_summary(&self) -> Option<SharedString> {
         self.chart_summary.clone().or_else(|| {
             if self.points.is_empty() {
@@ -375,15 +368,15 @@ impl InsightCard {
     }
 
     fn follow_up_control(&self) -> Option<InsightControl> {
-        self.follow_up_event().map(|event| InsightControl {
+        self.follow_up.clone().map(|prompt| InsightControl {
             card_id: self.id.clone(),
             local_id: "follow-up",
-            label: self
-                .follow_up
-                .clone()
-                .expect("a follow-up event always preserves its prompt"),
+            label: prompt.clone(),
             disabled: self.on_event.is_none(),
-            event,
+            event: InsightEvent::FollowUp {
+                id: self.id.clone(),
+                prompt,
+            },
             style: InsightControlStyle::FollowUp,
         })
     }
@@ -493,11 +486,17 @@ impl RenderOnce for InsightCard {
             Some(summary) => format!("{page_text}. {summary}").into(),
             None => page_text.clone(),
         };
-        let previous_button = (self.total_pages > 1).then(|| self.previous_button(cx));
-        let next_button = (self.total_pages > 1).then(|| self.next_button(cx));
+        let paging_buttons =
+            (self.total_pages > 1).then(|| (self.previous_button(cx), self.next_button(cx)));
         let follow_up_button = self.follow_up_button(cx);
         let chart_label = self.series_name.clone();
         let card_id = self.id.clone();
+        let chart = if self.points.is_empty() {
+            None
+        } else {
+            resolved_chart_summary
+                .map(|summary| chart_group(&card_id, chart_label, summary, self.points, cx))
+        };
 
         v_flex()
             .id(self.id.clone())
@@ -541,35 +540,17 @@ impl RenderOnce for InsightCard {
                     ),
                 )
             })
-            .when(!self.points.is_empty(), |this| {
-                this.child(chart_group(
-                    &card_id,
-                    chart_label,
-                    resolved_chart_summary
-                        .expect("non-empty chart points always resolve a summary"),
-                    self.points,
-                    cx,
-                ))
-            })
+            .when_some(chart, |this, chart| this.child(chart))
             .when(self.total_pages > 1 || self.follow_up.is_some(), |this| {
                 this.child(
                     h_flex()
                         .flex_wrap()
                         .items_center()
                         .gap(tokens.spacing.sm)
-                        .when(self.total_pages > 1, |this| {
+                        .when_some(paging_buttons, |this, (previous, next)| {
                             this.child(
                                 div().flex_1().child(
-                                    h_flex()
-                                        .gap(tokens.spacing.xs)
-                                        .child(
-                                            previous_button
-                                                .expect("multi-page cards have a previous button"),
-                                        )
-                                        .child(
-                                            next_button
-                                                .expect("multi-page cards have a next button"),
-                                        ),
+                                    h_flex().gap(tokens.spacing.xs).child(previous).child(next),
                                 ),
                             )
                         })
@@ -691,12 +672,11 @@ mod tests {
         let result = captured.clone();
         let (_, cx) = cx.add_window_view(move |_, _| ChildProbe { kind, captured });
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        let child = result
+        result
             .lock()
             .expect("capture mutex should be available")
             .take()
-            .expect("semantic child should be captured");
-        child
+            .expect("semantic child should be captured")
     }
 
     #[test]
@@ -747,7 +727,7 @@ mod tests {
             }
         );
         assert_eq!(
-            card.follow_up_event(),
+            card.follow_up_control().map(|control| control.event),
             Some(InsightEvent::FollowUp {
                 id: "insight-17".into(),
                 prompt: "Rebalance flavors".into(),

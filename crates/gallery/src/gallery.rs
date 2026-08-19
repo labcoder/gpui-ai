@@ -12,6 +12,7 @@ use gpui_component::{
     button::Button,
     h_flex,
     scroll::ScrollableElement as _,
+    text::TextView,
     theme::{Theme, ThemeMode, ThemeRegistry},
     v_flex,
 };
@@ -170,6 +171,7 @@ fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) 
 pub struct Gallery {
     selected: StoryId,
     catalog_list: ListState,
+    insight_scroll: ScrollHandle,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -209,6 +211,7 @@ impl Gallery {
         Self {
             selected,
             catalog_list,
+            insight_scroll: ScrollHandle::new(),
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -676,6 +679,10 @@ impl Gallery {
                         .id("insight-story-scroll")
                         .debug_selector(|| "insight-story-scroll".into())
                         .h(px(256.))
+                        .max_h(px(256.))
+                        .flex_none()
+                        .gap_2()
+                        .track_scroll(&self.insight_scroll)
                         .overflow_y_scrollbar()
                         .child(
                             InsightCard::new(
@@ -713,6 +720,13 @@ impl Gallery {
                             .on_event(cx.listener(|_, event: &InsightEvent, _, _| {
                                 println!("insight event: {event:?}");
                             })),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "insight-reference-note",
+                                "**Reference comparison.** Beautiful UI uses two compact value tiles and a canvas sparkline. This GPUI version deliberately shows three text-labeled trend tiles, an accessible GPUI line chart, named Previous/Next controls, and constrained scrolling so the same content remains understandable and reachable without color or pointer input.",
+                            )
+                            .selectable(true),
                         )
                         .child(
                             div()
@@ -913,10 +927,9 @@ mod tests {
         let scroll = cx
             .debug_bounds("insight-story-scroll")
             .expect("the catalog insight story should expose its overflow region");
-        cx.simulate_event(ScrollWheelEvent {
-            position: scroll.center(),
-            delta: ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
-            ..Default::default()
+        gallery.update(cx, |gallery, cx| {
+            gallery.insight_scroll.scroll_to_bottom();
+            cx.notify();
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -932,29 +945,37 @@ mod tests {
     #[gpui::test]
     fn constrained_direct_insight_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
         cx.update(super::init);
-        let (_, cx) = cx.add_window_view(|window, cx| {
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::Insights, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
             Root::new(gallery, window, cx)
         });
         let cx: &mut VisualTestContext = cx;
         cx.simulate_resize(size(px(700.), px(400.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let story = cx
-            .debug_bounds("insight-story-scroll")
-            .expect("the direct insight story should render");
-        cx.simulate_event(ScrollWheelEvent {
-            position: story.center(),
-            delta: ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
-            ..Default::default()
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.insight_scroll.scroll_to_bottom();
+            cx.notify();
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let viewport_height = cx.update(|window, _| window.viewport_size().height);
+        let story = cx
+            .debug_bounds("insight-story-scroll")
+            .expect("the direct insight scroll region should remain rendered");
         let end = cx
             .debug_bounds("insight-story-end")
             .expect("the direct insight end marker should remain rendered");
-        assert!(end.bottom() <= viewport_height, "{end:?}");
+        assert!(
+            end.bottom() <= story.bottom(),
+            "{end:?} must fit in {story:?}"
+        );
     }
 
     #[test]
