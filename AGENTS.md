@@ -71,6 +71,7 @@ npm run check:native        # native workspace build check
 npm run build:wasm          # compile and bind the shared gallery for the browser
 npm run check:web           # web host tests
 npm run dev                 # look at it — visual review is part of done
+npm run prod                # optimized native gallery for performance review
 npm run dev:web             # inspect the real WASM gallery in a browser
 ```
 

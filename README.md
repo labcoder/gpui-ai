@@ -37,10 +37,16 @@ GPUI is consumed as a git dependency from the Zed repository — the crates.io r
 
 ## Usage
 
-Run the component gallery (directly, or through the npm task runner):
+Run the component gallery in the normal debug profile while developing:
 
 ```sh
 cargo run -p gallery   # or: npm run dev
+```
+
+Use the optimized profile for visual and performance review:
+
+```sh
+npm run prod
 ```
 
 Expected output: a native window opens showing every component with live simulated agent activity — a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
