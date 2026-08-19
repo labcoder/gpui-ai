@@ -50,6 +50,26 @@ const CONTRAST_THEME: &str = r##"{
 
 const CONTRAST_THEME_NAME: &str = "Mighty Contrast";
 
+fn story_list_frame() -> Stateful<Div> {
+    div()
+        .id("gallery-story-list")
+        .accessibility_id("gallery.story-list")
+        .role(Role::List)
+        .aria_label("Component stories")
+}
+
+fn story_frame(story: StoryId, in_catalog: bool) -> Stateful<Div> {
+    let frame = v_flex()
+        .id(format!("gallery-story-{}", story.slug()))
+        .accessibility_id(format!("gallery.story.{}", story.slug()))
+        .aria_label(story.title());
+    if in_catalog {
+        frame.role(Role::ListItem)
+    } else {
+        frame.role(Role::Group)
+    }
+}
+
 /// Theme presets available to native and web gallery hosts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GalleryTheme {
@@ -113,6 +133,7 @@ fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) 
 /// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
+    catalog_list: ListState,
     sim: sim::Simulation,
     trace_open: bool,
     theme: GalleryTheme,
@@ -145,6 +166,8 @@ impl Gallery {
 
         Self {
             selected,
+            catalog_list: ListState::new(StoryId::ALL.len(), ListAlignment::Top, px(320.))
+                .with_uniform_item_height(px(320.)),
             sim: sim::Simulation::new(),
             trace_open: true,
             theme: theme.unwrap_or_else(|| {
@@ -181,8 +204,12 @@ impl Gallery {
             return div().hidden().into_any_element();
         }
 
-        v_flex()
+        story_frame(story, self.selected == StoryId::All)
             .debug_selector(move || format!("story-{}", story.slug()))
+            .w_full()
+            .max_w(px(640.))
+            .px_6()
+            .py_4()
             .gap_3()
             .child(
                 div()
@@ -194,333 +221,380 @@ impl Gallery {
             .child(content())
             .into_any_element()
     }
-}
 
-impl Render for Gallery {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_catalog_story(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(story) = StoryId::ALL.get(index).copied() else {
+            return div().hidden().into_any_element();
+        };
+        self.render_story(story, window, cx)
+    }
+
+    fn render_story(
+        &mut self,
+        story: StoryId,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let elapsed = self.sim.elapsed();
 
-        div()
-            .id("gallery-scroll")
-            .size_full()
-            .overflow_y_scrollbar()
-            .bg(cx.theme().background)
-            .flex()
-            .justify_center()
-            .child(
-                v_flex()
-                    .w_full()
-                    .max_w(px(640.))
-                    .p_6()
-                    .gap_8()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .child(div().font_semibold().child(self.selected.title()))
-                            .child(
-                                Button::new("theme")
-                                    .outline()
-                                    .label(format!("Theme: {}", self.theme.label()))
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.theme = this.theme.next();
-                                        apply_gallery_theme(this.theme, window, cx);
+        match story {
+            StoryId::All => div().hidden().into_any_element(),
+            StoryId::Loading => self.section(
+                story,
+                "LOADING STATE",
+                || {
+                    LoadingState::new()
+                        .label("Reasoning about supplier pricing")
+                        .elapsed(elapsed)
+                },
+                cx,
+            ),
+            StoryId::ToolChips => self.section(
+                story,
+                "TOOL CHIPS",
+                || {
+                    h_flex()
+                        .flex_wrap()
+                        .gap_2()
+                        .child(
+                            ToolChip::new("chip-1", "read pricing.md").status(ToolStatus::Success),
+                        )
+                        .child(
+                            ToolChip::new("chip-2", "edit suppliers.rs")
+                                .status(ToolStatus::Running)
+                                .detail("+12 −3"),
+                        )
+                        .child(
+                            ToolChip::new("chip-3", "run cargo test").status(ToolStatus::Pending),
+                        )
+                        .child(
+                            ToolChip::new("chip-4", "query prices-db")
+                                .status(ToolStatus::Failed)
+                                .detail("timeout"),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Tasks => self.section(
+                story,
+                "TASK ROWS",
+                || {
+                    v_flex()
+                        .child(TaskRow::new(&Progressive::complete(
+                            TaskSnapshot::new("index-catalog", "Index supplier catalog")
+                                .detail("3,214 rows"),
+                        )))
+                        .child(TaskRow::new(&Progressive::running(
+                            TaskSnapshot::new("compare-prices", "Compare unit prices")
+                                .elapsed(elapsed),
+                        )))
+                        .child(TaskRow::new(&Progressive::pending(TaskSnapshot::new(
+                            "draft-emails",
+                            "Draft supplier emails",
+                        ))))
+                        .child(TaskRow::new(&Progressive::failed(
+                            TaskSnapshot::new("sync-history", "Sync order history"),
+                            "auth expired",
+                        )))
+                },
+                cx,
+            ),
+            StoryId::Thinking => self.section(
+                story,
+                "THINKING",
+                || {
+                    let trace = ThinkingTrace::new()
+                        .thought_for(Duration::from_secs(9))
+                        .steps([
+                            ThinkingStep::new("Reading the supplier schema")
+                                .status(StepStatus::Done),
+                            ThinkingStep::new("Comparing unit prices")
+                                .detail("Alpenrose is **7% cheaper** at equal volume.")
+                                .status(StepStatus::Done),
+                            ThinkingStep::new("Checking delivery constraints"),
+                        ]);
+                    let trace = if self.sim.answer.is_streaming() {
+                        Progressive::running(trace)
+                    } else {
+                        Progressive::complete(trace)
+                    };
+                    v_flex()
+                        .gap_8()
+                        .child(
+                            Thinking::new("trace", &trace)
+                                .open(self.trace_open)
+                                .on_event(cx.listener(
+                                    |this, event: &ThinkingEvent, _, cx| {
+                                        let ThinkingEvent::Toggled { open, .. } = event;
+                                        this.trace_open = *open;
                                         cx.notify();
-                                    })),
-                            ),
-                    )
-                    .child(self.section(
-                        StoryId::Loading,
-                        "LOADING STATE",
-                        || {
-                            LoadingState::new()
-                                .label("Reasoning about supplier pricing")
-                                .elapsed(elapsed)
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::ToolChips,
-                        "TOOL CHIPS",
-                        || {
+                                    },
+                                )),
+                        )
+                        .child(
+                            v_flex()
+                                .gap_3()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_semibold()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("THINKING — PROSE"),
+                                )
+                                .child(Thinking::new(
+                                    "trace-prose",
+                                    &Progressive::complete(
+                                        ThinkingTrace::new()
+                                            .thought_for(Duration::from_secs(4))
+                                            .prose(
+                                                "The March sheet supersedes prior quotes, so the \
+                                                 comparison should use *current* volume tiers. \
+                                                 Delivery windows match, which removes the main \
+                                                 switching risk.",
+                                            ),
+                                    ),
+                                )
+                                .open(true)),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Orbs => self.section(
+                story,
+                "ORBS",
+                || {
+                    h_flex()
+                        .items_center()
+                        .gap_6()
+                        .child(Orbs::new())
+                        .child(Orbs::new().diameter(px(64.)))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("ambient thinking indicator"),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Search => self.section(
+                story,
+                "WEB SEARCH",
+                || {
+                    SearchResults::new("search", "alpenrose wholesale pricing")
+                        .searching(self.sim.answer.is_streaming())
+                        .results(if self.sim.answer.is_streaming() {
+                            Vec::new()
+                        } else {
+                            vec![
+                                SearchResult::new(
+                                    "alpenrose-wholesale",
+                                    "Alpenrose Dairy — Wholesale Programs",
+                                )
+                                .domain("alpenrose.com"),
+                                SearchResult::new(
+                                    "dairy-price-index",
+                                    "2026 Dairy Supplier Price Index",
+                                )
+                                .domain("dairyreport.org"),
+                                SearchResult::new(
+                                    "portland-distributors",
+                                    "Portland-area distributors compared",
+                                )
+                                .domain("nwfoodtrade.com"),
+                            ]
+                        })
+                        .on_event(cx.listener(|_, event: &SearchResultsEvent, _, _| {
+                            println!("search event: {event:?}");
+                        }))
+                },
+                cx,
+            ),
+            StoryId::Todos => self.section(
+                story,
+                "TO-DO LIST",
+                || {
+                    TodoList::new("plan")
+                        .title("Supplier switch plan")
+                        .items([
+                            TodoItem::new("contract-terms", "Pull current contract terms").done(),
+                            TodoItem::new("compare-prices", "Compare Q3 unit prices").done(),
+                            TodoItem::new("draft-timeline", "Draft transition timeline")
+                                .status(TodoStatus::Active),
+                            TodoItem::new("cold-chain", "Confirm cold-chain capacity"),
+                            TodoItem::new("confirm-orders", "Send order confirmations"),
+                        ])
+                        .on_event(cx.listener(|_, event: &TodoListEvent, _, _| {
+                            println!("todo event: {event:?}");
+                        }))
+                },
+                cx,
+            ),
+            StoryId::ImageGeneration => self.section(
+                story,
+                "IMAGE GENERATION",
+                || {
+                    ImageGeneration::new("gen")
+                        .label("Label sketch: alpine meadow, morning light")
+                        .progress(self.sim.progress())
+                        .image(
+                            v_flex()
+                                .size_full()
+                                .child(div().flex_1().bg(cx.theme().info.opacity(0.35)))
+                                .child(div().flex_1().bg(cx.theme().cyan.opacity(0.35)))
+                                .child(div().flex_1().bg(cx.theme().success.opacity(0.25))),
+                        )
+                },
+                cx,
+            ),
+            StoryId::StreamingText => self.section(
+                story,
+                "STREAMING TEXT",
+                || {
+                    StreamingText::new("answer", &self.sim.answer)
+                        .sources(["pricing.md", "suppliers.csv", "orders 2026"])
+                        .follow_ups([
+                            FollowUp::new("compare-delivery", "Compare delivery times"),
+                            FollowUp::new("price-history", "Show price history"),
+                        ])
+                        .on_event(cx.listener(|_, event: &StreamingTextEvent, _, _| {
+                            println!("streaming-text event: {event:?}");
+                        }))
+                },
+                cx,
+            ),
+            StoryId::CodeBlock => self.section(
+                story,
+                "CODE BLOCK",
+                || CodeBlock::streamed("code", &self.sim.code).language("rust"),
+                cx,
+            ),
+            StoryId::Approval => self.section(
+                story,
+                "APPROVAL CARD",
+                || {
+                    ApprovalCard::new("gate", "Send order confirmation to 3 suppliers?")
+                        .description("Emails will go out immediately and cannot be recalled.")
+                        .child(
                             h_flex()
                                 .flex_wrap()
-                                .gap_2()
+                                .gap_1p5()
                                 .child(
-                                    ToolChip::new("chip-1", "read pricing.md")
-                                        .status(ToolStatus::Success),
-                                )
-                                .child(
-                                    ToolChip::new("chip-2", "edit suppliers.rs")
-                                        .status(ToolStatus::Running)
-                                        .detail("+12 −3"),
-                                )
-                                .child(
-                                    ToolChip::new("chip-3", "run cargo test")
+                                    ToolChip::new("gate-chip-1", "email alpenrose")
                                         .status(ToolStatus::Pending),
                                 )
                                 .child(
-                                    ToolChip::new("chip-4", "query prices-db")
-                                        .status(ToolStatus::Failed)
-                                        .detail("timeout"),
+                                    ToolChip::new("gate-chip-2", "email tillamook")
+                                        .status(ToolStatus::Pending),
+                                ),
+                        )
+                        .on_event(cx.listener(|_, event: &ApprovalEvent, _, _| {
+                            println!("approval event: {event:?}");
+                        }))
+                },
+                cx,
+            ),
+            StoryId::Recommendation => self.section(
+                story,
+                "RECOMMENDATION CARD",
+                || {
+                    RecommendationCard::new("rec", "Switch supplier to Alpenrose Dairy")
+                        .description("Lower unit cost at equal volume; delivery risk unchanged.")
+                        .confidence(0.87)
+                        .alternatives(["Keep current supplier", "Split volume 60/40"])
+                        .on_event(cx.listener(|_, event: &RecommendationEvent, _, _| {
+                            println!("recommendation event: {event:?}");
+                        }))
+                },
+                cx,
+            ),
+            StoryId::Context => self.section(
+                story,
+                "CONTEXT CARDS",
+                || {
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            ContextCard::new("ctx-1", "pricing.md")
+                                .snippet(
+                                    "Enterprise volume pricing is renegotiated quarterly; \
+                                     the March sheet supersedes all prior quotes.",
                                 )
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Tasks,
-                        "TASK ROWS",
-                        || {
-                            v_flex()
-                                .child(TaskRow::new(&Progressive::complete(
-                                    TaskSnapshot::new("index-catalog", "Index supplier catalog")
-                                        .detail("3,214 rows"),
-                                )))
-                                .child(TaskRow::new(&Progressive::running(
-                                    TaskSnapshot::new("compare-prices", "Compare unit prices")
-                                        .elapsed(elapsed),
-                                )))
-                                .child(TaskRow::new(&Progressive::pending(TaskSnapshot::new(
-                                    "draft-emails",
-                                    "Draft supplier emails",
-                                ))))
-                                .child(TaskRow::new(&Progressive::failed(
-                                    TaskSnapshot::new("sync-history", "Sync order history"),
-                                    "auth expired",
-                                )))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Thinking,
-                        "THINKING",
-                        || {
-                            let trace = ThinkingTrace::new()
-                                .thought_for(Duration::from_secs(9))
-                                .steps([
-                                    ThinkingStep::new("Reading the supplier schema")
-                                        .status(StepStatus::Done),
-                                    ThinkingStep::new("Comparing unit prices")
-                                        .detail("Alpenrose is **7% cheaper** at equal volume.")
-                                        .status(StepStatus::Done),
-                                    ThinkingStep::new("Checking delivery constraints"),
-                                ]);
-                            let trace = if self.sim.answer.is_streaming() {
-                                Progressive::running(trace)
-                            } else {
-                                Progressive::complete(trace)
-                            };
-                            Thinking::new("trace", &trace)
-                                .open(self.trace_open)
-                                .on_event(cx.listener(|this, event: &ThinkingEvent, _, cx| {
-                                    let ThinkingEvent::Toggled { open, .. } = event;
-                                    this.trace_open = *open;
-                                    cx.notify();
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Thinking,
-                        "THINKING — PROSE",
-                        || {
-                            let trace = Progressive::complete(
-                                ThinkingTrace::new()
-                                    .thought_for(Duration::from_secs(4))
-                                    .prose(
-                                        "The March sheet supersedes prior quotes, so the \
-                                     comparison should use *current* volume tiers. \
-                                     Delivery windows match, which removes the main \
-                                     switching risk.",
-                                    ),
-                            );
-                            Thinking::new("trace-prose", &trace).open(true)
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Orbs,
-                        "ORBS",
-                        || {
-                            h_flex()
-                                .items_center()
-                                .gap_6()
-                                .child(Orbs::new())
-                                .child(Orbs::new().diameter(px(64.)))
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child("ambient thinking indicator"),
-                                )
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Search,
-                        "WEB SEARCH",
-                        || {
-                            SearchResults::new("search", "alpenrose wholesale pricing")
-                                .searching(self.sim.answer.is_streaming())
-                                .results(if self.sim.answer.is_streaming() {
-                                    Vec::new()
-                                } else {
-                                    vec![
-                                        SearchResult::new(
-                                            "alpenrose-wholesale",
-                                            "Alpenrose Dairy — Wholesale Programs",
-                                        )
-                                        .domain("alpenrose.com"),
-                                        SearchResult::new(
-                                            "dairy-price-index",
-                                            "2026 Dairy Supplier Price Index",
-                                        )
-                                        .domain("dairyreport.org"),
-                                        SearchResult::new(
-                                            "portland-distributors",
-                                            "Portland-area distributors compared",
-                                        )
-                                        .domain("nwfoodtrade.com"),
-                                    ]
-                                })
-                                .on_event(cx.listener(|_, event: &SearchResultsEvent, _, _| {
-                                    println!("search event: {event:?}");
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Todos,
-                        "TO-DO LIST",
-                        || {
-                            TodoList::new("plan")
-                                .title("Supplier switch plan")
-                                .items([
-                                    TodoItem::new("contract-terms", "Pull current contract terms")
-                                        .done(),
-                                    TodoItem::new("compare-prices", "Compare Q3 unit prices")
-                                        .done(),
-                                    TodoItem::new("draft-timeline", "Draft transition timeline")
-                                        .status(TodoStatus::Active),
-                                    TodoItem::new("cold-chain", "Confirm cold-chain capacity"),
-                                    TodoItem::new("confirm-orders", "Send order confirmations"),
-                                ])
-                                .on_event(cx.listener(|_, event: &TodoListEvent, _, _| {
-                                    println!("todo event: {event:?}");
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::ImageGeneration,
-                        "IMAGE GENERATION",
-                        || {
-                            ImageGeneration::new("gen")
-                                .label("Label sketch: alpine meadow, morning light")
-                                .progress(self.sim.progress())
-                                .image(
-                                    v_flex()
-                                        .size_full()
-                                        .child(div().flex_1().bg(cx.theme().info.opacity(0.35)))
-                                        .child(div().flex_1().bg(cx.theme().cyan.opacity(0.35)))
-                                        .child(div().flex_1().bg(cx.theme().success.opacity(0.25))),
-                                )
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::StreamingText,
-                        "STREAMING TEXT",
-                        || {
-                            StreamingText::new("answer", &self.sim.answer)
-                                .sources(["pricing.md", "suppliers.csv", "orders 2026"])
-                                .follow_ups([
-                                    FollowUp::new("compare-delivery", "Compare delivery times"),
-                                    FollowUp::new("price-history", "Show price history"),
-                                ])
-                                .on_event(cx.listener(|_, event: &StreamingTextEvent, _, _| {
-                                    println!("streaming-text event: {event:?}");
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::CodeBlock,
-                        "CODE BLOCK",
-                        || CodeBlock::streamed("code", &self.sim.code).language("rust"),
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Approval,
-                        "APPROVAL CARD",
-                        || {
-                            ApprovalCard::new("gate", "Send order confirmation to 3 suppliers?")
-                                .description(
-                                    "Emails will go out immediately and cannot be recalled.",
-                                )
-                                .child(
-                                    h_flex()
-                                        .flex_wrap()
-                                        .gap_1p5()
-                                        .child(
-                                            ToolChip::new("gate-chip-1", "email alpenrose")
-                                                .status(ToolStatus::Pending),
-                                        )
-                                        .child(
-                                            ToolChip::new("gate-chip-2", "email tillamook")
-                                                .status(ToolStatus::Pending),
-                                        ),
-                                )
-                                .on_event(cx.listener(|_, event: &ApprovalEvent, _, _| {
-                                    println!("approval event: {event:?}");
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Recommendation,
-                        "RECOMMENDATION CARD",
-                        || {
-                            RecommendationCard::new("rec", "Switch supplier to Alpenrose Dairy")
-                                .description(
-                                    "Lower unit cost at equal volume; delivery risk unchanged.",
-                                )
-                                .confidence(0.87)
-                                .alternatives(["Keep current supplier", "Split volume 60/40"])
-                                .on_event(cx.listener(|_, event: &RecommendationEvent, _, _| {
-                                    println!("recommendation event: {event:?}");
-                                }))
-                        },
-                        cx,
-                    ))
-                    .child(self.section(
-                        StoryId::Context,
-                        "CONTEXT CARDS",
-                        || {
-                            v_flex()
-                                .gap_2()
-                                .child(
-                                    ContextCard::new("ctx-1", "pricing.md")
-                                        .snippet(
-                                            "Enterprise volume pricing is renegotiated quarterly; \
-                                         the March sheet supersedes all prior quotes.",
-                                        )
-                                        .relevance(0.92)
-                                        .on_event(cx.listener(
-                                            |_, event: &ContextCardEvent, _, _| {
-                                                println!("context event: {event:?}");
-                                            },
-                                        )),
-                                )
-                                .child(
-                                    ContextCard::new("ctx-2", "suppliers.csv")
-                                        .snippet("Alpenrose Dairy, Portland OR, net-30, 4.8 rating")
-                                        .relevance(0.81),
-                                )
-                        },
-                        cx,
-                    )),
+                                .relevance(0.92)
+                                .on_event(cx.listener(|_, event: &ContextCardEvent, _, _| {
+                                    println!("context event: {event:?}");
+                                })),
+                        )
+                        .child(
+                            ContextCard::new("ctx-2", "suppliers.csv")
+                                .snippet("Alpenrose Dairy, Portland OR, net-30, 4.8 rating")
+                                .relevance(0.81),
+                        )
+                },
+                cx,
+            ),
+        }
+    }
+}
+
+impl Render for Gallery {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content = if self.selected == StoryId::All {
+            div()
+                .id("gallery-scroll")
+                .flex_1()
+                .overflow_hidden()
+                .child(
+                    story_list_frame()
+                        .size_full()
+                        .child(
+                            list(
+                                self.catalog_list.clone(),
+                                cx.processor(Self::render_catalog_story),
+                            )
+                            .size_full(),
+                        )
+                        .vertical_scrollbar(&self.catalog_list),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .id("gallery-scroll")
+                .flex_1()
+                .overflow_y_scrollbar()
+                .child(self.render_story(self.selected, window, cx))
+                .into_any_element()
+        };
+
+        v_flex()
+            .size_full()
+            .bg(cx.theme().background)
+            .child(
+                h_flex()
+                    .w_full()
+                    .max_w(px(640.))
+                    .mx_auto()
+                    .p_6()
+                    .items_center()
+                    .justify_between()
+                    .child(div().font_semibold().child(self.selected.title()))
+                    .child(
+                        Button::new("theme")
+                            .outline()
+                            .label(format!("Theme: {}", self.theme.label()))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.theme = this.theme.next();
+                                apply_gallery_theme(this.theme, window, cx);
+                                cx.notify();
+                            })),
+                    ),
             )
+            .child(content)
     }
 }
 
@@ -568,8 +642,8 @@ mod tests {
     use super::{Gallery, GalleryTheme};
     use crate::StoryId;
     use gpui::{
-        AppContext as _, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point,
-        px,
+        AppContext as _, Element as _, IntoElement as _, Role, ScrollDelta, ScrollWheelEvent,
+        TestAppContext, VisualTestContext, accesskit, point, px,
     };
     use gpui_component::Root;
 
@@ -587,7 +661,7 @@ mod tests {
 
     fn scroll(cx: &mut VisualTestContext, dy: f32) {
         cx.simulate_event(ScrollWheelEvent {
-            position: point(px(10.), px(10.)),
+            position: point(px(100.), px(200.)),
             delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
             ..Default::default()
         });
@@ -609,19 +683,53 @@ mod tests {
     }
 
     #[gpui::test]
-    fn all_stories_scrolls_the_final_story_into_view(cx: &mut TestAppContext) {
+    fn all_stories_virtualizes_distant_rows_until_they_enter_view(cx: &mut TestAppContext) {
         let cx = all_stories(cx);
         let viewport_height = cx.update(|window, _| window.viewport_size().height);
-        let initial = cx
-            .debug_bounds("story-context")
-            .expect("context story should be rendered");
+        assert!(cx.debug_bounds("story-loading").is_some());
+        assert!(
+            cx.debug_bounds("story-context").is_none(),
+            "the final story should not be constructed before it nears the viewport"
+        );
 
-        scroll(cx, -10_000.);
+        for _ in StoryId::ALL {
+            if cx.debug_bounds("story-context").is_some() {
+                break;
+            }
+            scroll(cx, -10_000.);
+        }
 
         let scrolled = cx
             .debug_bounds("story-context")
-            .expect("context story should remain rendered");
-        assert!(scrolled.top() < initial.top());
+            .expect("context story should render after scrolling to it");
         assert!(scrolled.top() < viewport_height);
+        assert!(
+            cx.debug_bounds("story-loading").is_none(),
+            "the first animated story should leave the render tree when it is distant"
+        );
+    }
+
+    #[test]
+    fn virtualized_story_semantics_use_stable_domain_identity() {
+        let list = super::story_list_frame().into_element();
+        let mut list_node = accesskit::Node::new(Role::Unknown);
+        let list_role = list.a11y_role();
+        list.write_a11y_info(&mut list_node);
+
+        assert_eq!(list_role, Some(Role::List));
+        assert_eq!(list_node.author_id(), Some("gallery.story-list"));
+        assert_eq!(list_node.label(), Some("Component stories"));
+
+        let row = super::story_frame(StoryId::Context, true).into_element();
+        let mut row_node = accesskit::Node::new(Role::Unknown);
+        let row_role = row.a11y_role();
+        row.write_a11y_info(&mut row_node);
+
+        assert_eq!(row_role, Some(Role::ListItem));
+        assert_eq!(row_node.author_id(), Some("gallery.story.context"));
+        assert_eq!(row_node.label(), Some("Context cards"));
+
+        let direct = super::story_frame(StoryId::Context, false).into_element();
+        assert_eq!(direct.a11y_role(), Some(Role::Group));
     }
 }
