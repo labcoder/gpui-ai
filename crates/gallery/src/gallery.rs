@@ -101,7 +101,8 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Todos
         | StoryId::Approval
         | StoryId::Recommendation
-        | StoryId::Context => false,
+        | StoryId::Context
+        | StoryId::Insights => false,
     }
 }
 
@@ -667,6 +668,60 @@ impl Gallery {
                 },
                 cx,
             ),
+            StoryId::Insights => self.section(
+                story,
+                "INSIGHT CARD",
+                || {
+                    v_flex()
+                        .id("insight-story-scroll")
+                        .debug_selector(|| "insight-story-scroll".into())
+                        .h(px(256.))
+                        .overflow_y_scrollbar()
+                        .child(
+                            InsightCard::new(
+                                "demand-insight",
+                                "Demand changed across top flavors",
+                            )
+                            .body(
+                                "Mint Chip softened this week while Vanilla and Strawberry gained. \
+                                 The mix has shifted enough to review the next production run.",
+                            )
+                            .page(1, 3)
+                            .metrics([
+                                InsightMetric::new("mint", "Mint Chip", "$2,377.66")
+                                    .change("down 4.41%", InsightTrend::Down),
+                                InsightMetric::new("vanilla", "Vanilla", "$3,104.20")
+                                    .change("up 8.17%", InsightTrend::Up),
+                                InsightMetric::new("strawberry", "Strawberry", "$1,842.50")
+                                    .change("flat 0.08%", InsightTrend::Flat),
+                            ])
+                            .series(
+                                "Weekly flavor demand",
+                                [
+                                    InsightPoint::new("Mon", 18.0),
+                                    InsightPoint::new("Tue", 22.0),
+                                    InsightPoint::new("Wed", 20.0),
+                                    InsightPoint::new("Thu", 27.0),
+                                    InsightPoint::new("Fri", 25.0),
+                                    InsightPoint::new("Sat", 31.0),
+                                ],
+                            )
+                            .chart_summary(
+                                "Weekly flavor demand rose overall from 18 orders on Monday to 31 on Saturday, with a midweek dip.",
+                            )
+                            .follow_up("Rebalance the next flavor run")
+                            .on_event(cx.listener(|_, event: &InsightEvent, _, _| {
+                                println!("insight event: {event:?}");
+                            })),
+                        )
+                        .child(
+                            div()
+                                .debug_selector(|| "insight-story-end".into())
+                                .h(px(1.)),
+                        )
+                },
+                cx,
+            ),
         }
     }
 }
@@ -825,25 +880,81 @@ mod tests {
         let viewport_height = cx.update(|window, _| window.viewport_size().height);
         assert!(cx.debug_bounds("story-loading").is_some());
         assert!(
-            cx.debug_bounds("story-context").is_none(),
+            cx.debug_bounds("story-insights").is_none(),
             "the final story should not be constructed before it nears the viewport"
         );
 
         for _ in StoryId::ALL {
-            if cx.debug_bounds("story-context").is_some() {
+            if cx.debug_bounds("story-insights").is_some() {
                 break;
             }
             scroll(cx, -10_000.);
         }
 
         let scrolled = cx
-            .debug_bounds("story-context")
-            .expect("context story should render after scrolling to it");
+            .debug_bounds("story-insights")
+            .expect("insight story should render after scrolling to it");
         assert!(scrolled.top() < viewport_height);
         assert!(
             cx.debug_bounds("story-loading").is_none(),
             "the first animated story should leave the render tree when it is distant"
         );
+    }
+
+    #[gpui::test]
+    fn constrained_catalog_keeps_the_end_of_the_insight_story_reachable(cx: &mut TestAppContext) {
+        let (gallery, cx) = all_stories(cx);
+        cx.simulate_resize(size(px(900.), px(560.)));
+        gallery.update(cx, |gallery, cx| {
+            gallery.scroll_catalog_to(StoryId::Insights, cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let scroll = cx
+            .debug_bounds("insight-story-scroll")
+            .expect("the catalog insight story should expose its overflow region");
+        cx.simulate_event(ScrollWheelEvent {
+            position: scroll.center(),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
+            ..Default::default()
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("insight-story-end")
+            .expect("the insight story end marker should remain rendered");
+        assert!(
+            end.bottom() <= scroll.bottom(),
+            "{end:?} must fit in {scroll:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn constrained_direct_insight_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::Insights, cx));
+            Root::new(gallery, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let story = cx
+            .debug_bounds("insight-story-scroll")
+            .expect("the direct insight story should render");
+        cx.simulate_event(ScrollWheelEvent {
+            position: story.center(),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-10_000.))),
+            ..Default::default()
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let viewport_height = cx.update(|window, _| window.viewport_size().height);
+        let end = cx
+            .debug_bounds("insight-story-end")
+            .expect("the direct insight end marker should remain rendered");
+        assert!(end.bottom() <= viewport_height, "{end:?}");
     }
 
     #[test]
@@ -924,7 +1035,7 @@ mod tests {
         for _ in StoryId::ALL {
             scroll(cx, -10_000.);
         }
-        assert!(cx.debug_bounds("story-context").is_some());
+        assert!(cx.debug_bounds("story-insights").is_some());
 
         let (paused_at, task_running) = gallery.read_with(cx, |gallery, _| {
             (gallery.sim.elapsed(), gallery.simulation_task.is_some())

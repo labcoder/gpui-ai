@@ -25,6 +25,7 @@ pub mod code_block;
 pub mod context_card;
 mod control;
 pub mod image_generation;
+pub mod insight;
 pub mod loading;
 pub mod orbs;
 pub mod recommendation;
@@ -43,6 +44,9 @@ pub mod prelude {
     pub use crate::code_block::CodeBlock;
     pub use crate::context_card::{ContextCard, ContextCardEvent};
     pub use crate::image_generation::ImageGeneration;
+    pub use crate::insight::{
+        InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend,
+    };
     pub use crate::loading::LoadingState;
     pub use crate::orbs::Orbs;
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};

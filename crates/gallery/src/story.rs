@@ -33,6 +33,8 @@ pub enum StoryId {
     Recommendation,
     /// Context/source cards.
     Context,
+    /// Paged analytical insight card.
+    Insights,
 }
 
 impl StoryId {
@@ -51,6 +53,7 @@ impl StoryId {
         Self::Approval,
         Self::Recommendation,
         Self::Context,
+        Self::Insights,
     ];
 
     /// Stable URL slug for this selection.
@@ -70,6 +73,7 @@ impl StoryId {
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
             Self::Context => "context",
+            Self::Insights => "insights",
         }
     }
 
@@ -90,6 +94,7 @@ impl StoryId {
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
             Self::Context => "Context cards",
+            Self::Insights => "Insight card",
         }
     }
 }

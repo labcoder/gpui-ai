@@ -5,6 +5,7 @@ use gpui::{
 use mighty_gpui::{
     approval::ApprovalCard,
     code_block::CodeBlock,
+    insight::{InsightCard, InsightMetric, InsightPoint},
     recommendation::RecommendationCard,
     search_results::{SearchResult, SearchResults},
     stream::Progressive,
@@ -25,6 +26,7 @@ enum ComponentProbeKind {
     Todo,
     StreamingText,
     Thinking,
+    Insight,
 }
 
 struct CapturedNode {
@@ -97,6 +99,22 @@ impl Render for ComponentProbe {
                         Thinking::new("thinking", &Progressive::running(ThinkingTrace::new()))
                             .render(window, cx)
                     ),
+                    ComponentProbeKind::Insight => write_element!(
+                        InsightCard::new("insight", "Demand changed")
+                            .page(2, 3)
+                            .metrics([InsightMetric::new("mint", "Mint Chip", "$2,377.66")])
+                            .series(
+                                "Weekly demand",
+                                [
+                                    InsightPoint::new("Mon", 18.0),
+                                    InsightPoint::new("Tue", 24.0)
+                                ],
+                            )
+                            .chart_summary("Weekly demand rose from 18 to 24 orders.")
+                            .follow_up("Rebalance flavors")
+                            .on_event(|_, _, _| {})
+                            .render(window, cx)
+                    ),
                 };
                 *captured.lock().expect("capture mutex should be available") =
                     Some(CapturedNode { role, node });
@@ -136,6 +154,14 @@ fn content_cards_are_named_groups(cx: &mut TestAppContext) {
     assert_eq!(
         recommendation.node.description(),
         Some("Lowest price at the required volume")
+    );
+
+    let insight = capture(ComponentProbeKind::Insight, cx);
+    assert_eq!(insight.role, Some(Role::Group));
+    assert_eq!(insight.node.label(), Some("Demand changed"));
+    assert_eq!(
+        insight.node.description(),
+        Some("Insights · 2 of 3. Weekly demand rose from 18 to 24 orders.")
     );
 }
 

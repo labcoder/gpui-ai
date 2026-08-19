@@ -6,6 +6,7 @@ use gpui::{
 use gpui_component::Root;
 use mighty_gpui::{
     code_block::CodeBlock,
+    insight::InsightCard,
     stream::Progressive,
     streaming_text::StreamingText,
     thinking::{StepStatus, Thinking, ThinkingStep, ThinkingTrace},
@@ -17,6 +18,7 @@ enum Surface {
     Code,
     ThinkingProse,
     ThinkingDetail,
+    Insight,
 }
 
 struct ReadableSurface {
@@ -50,6 +52,9 @@ impl Render for ReadableSurface {
                     .open(true)
                     .into_any_element()
             }
+            Surface::Insight => InsightCard::new("insight", "Demand changed")
+                .body("selectable_insight selectable_insight")
+                .into_any_element(),
         };
 
         div().size_full().p(px(16.)).child(
@@ -88,6 +93,7 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
             bounds.left() + px(37.),
             bounds.top() + bounds.size.height * 0.74,
         ),
+        Surface::Insight => (bounds.left() + px(17.), bounds.top() + px(80.)),
     };
     let from = point(content_x, content_y);
     let to = point(bounds.left() + px(600.), bounds.bottom() - px(1.));
@@ -137,4 +143,11 @@ fn thinking_details_export_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::ThinkingDetail, cx);
 
     assert!(selected.contains("reasoning detail"), "{selected:?}");
+}
+
+#[gpui::test]
+fn insight_bodies_export_selected_text(cx: &mut TestAppContext) {
+    let selected = select_text(Surface::Insight, cx);
+
+    assert!(selected.contains("selectable_insight"), "{selected:?}");
 }
