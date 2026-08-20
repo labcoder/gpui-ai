@@ -1,7 +1,8 @@
 use gpui::{
-    AppContext as _, Context, Element as _, Entity, IntoElement as _, Modifiers, MouseButton,
-    Render, RenderOnce as _, Role, Subscription, TestAppContext, VisualTestContext, Window,
-    accesskit, canvas, point, px, size,
+    AppContext as _, Context, Element as _, Entity, InteractiveElement as _, IntoElement as _,
+    Modifiers, MouseButton, ParentElement as _, Render, RenderOnce as _, Role, ScrollDelta,
+    ScrollWheelEvent, Styled as _, Subscription, TestAppContext, VisualTestContext, Window,
+    accesskit, canvas, div, point, px,
 };
 use gpui_component::Root;
 use mighty_gpui::{
@@ -52,6 +53,57 @@ struct PublicSelectionProbe {
     selection: Entity<SelectionActions>,
     events: Rc<RefCell<Vec<SelectionActionsEvent>>>,
     _subscription: Subscription,
+}
+
+struct BoundedSelectionProbe {
+    selection: Entity<SelectionActions>,
+}
+
+impl BoundedSelectionProbe {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let selection = cx.new(|cx| {
+            SelectionActions::new(
+                "bounded-selection",
+                "Selectable action words for testing outside release and narrow overflow.",
+                window,
+                cx,
+            )
+        });
+        selection.update(cx, |selection, cx| {
+            selection.set_actions(
+                [
+                    SelectionAction::new("ask", "Ask about this selection"),
+                    SelectionAction::new("explain", "Explain this selected passage"),
+                    SelectionAction::new("rewrite", "Rewrite this selected passage clearly"),
+                    SelectionAction::new("compare", "Compare this passage with the source"),
+                    SelectionAction::new("final", "Open the final long selection action"),
+                ],
+                cx,
+            );
+        });
+        Self { selection }
+    }
+}
+
+impl Render for BoundedSelectionProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .debug_selector(|| "bounded-selection-host".to_owned())
+                    .w(px(184.))
+                    .h(px(144.))
+                    .child(self.selection.clone()),
+            )
+            .child(
+                div()
+                    .debug_selector(|| "selection-actions-outside-target".to_owned())
+                    .flex_1(),
+            )
+    }
 }
 
 impl PublicSelectionProbe {
@@ -418,7 +470,11 @@ fn public_selection_actions_preserve_selection_and_activate_typed_events(cx: &mu
     let ask = cx
         .debug_bounds("selection-action-ask")
         .expect("settled selection should expose Ask");
-    cx.simulate_click(ask.center(), Modifiers::default());
+    cx.simulate_mouse_down(ask.center(), MouseButton::Left, Modifiers::default());
+    assert!(probe.read_with(cx, |probe, cx| {
+        !probe.selection.read(cx).selected_text().is_empty()
+    }));
+    cx.simulate_mouse_up(ask.center(), MouseButton::Left, Modifiers::default());
     assert!(probe.read_with(cx, |probe, _| {
         let events = probe.events.borrow();
         let matched = events.iter().any(|event| {
@@ -436,23 +492,6 @@ fn public_selection_actions_preserve_selection_and_activate_typed_events(cx: &mu
         assert!(matched, "unexpected selection events: {events:?}");
         true
     }));
-
-    cx.simulate_resize(size(px(320.), px(180.)));
-    cx.update(|window, cx| window.draw(cx).clear(cx));
-    let constrained_surface = cx
-        .debug_bounds("selection-actions-surface")
-        .expect("constrained selection surface should remain rendered");
-    let rewrite = cx
-        .debug_bounds("selection-action-rewrite")
-        .expect("the final action should remain rendered");
-    assert!(
-        rewrite.right() <= constrained_surface.right(),
-        "{rewrite:?} vs {constrained_surface:?}"
-    );
-    assert!(
-        rewrite.bottom() <= constrained_surface.bottom(),
-        "{rewrite:?} vs {constrained_surface:?}"
-    );
 
     probe.update(cx, |probe, cx| {
         probe.selection.update(cx, |selection, cx| {
@@ -492,6 +531,9 @@ fn public_selection_actions_follow_keyboard_select_all_and_copy(cx: &mut TestApp
     cx.simulate_mouse_move(focus_to, Some(MouseButton::Left), Modifiers::default());
     cx.simulate_mouse_up(focus_to, MouseButton::Left, Modifiers::default());
     cx.run_until_parked();
+    #[cfg(target_os = "macos")]
+    cx.simulate_keystrokes("cmd-a");
+    #[cfg(not(target_os = "macos"))]
     cx.simulate_keystrokes("ctrl-a");
     cx.run_until_parked();
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -506,10 +548,189 @@ fn public_selection_actions_follow_keyboard_select_all_and_copy(cx: &mut TestApp
     );
     assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
 
+    #[cfg(target_os = "macos")]
+    cx.simulate_keystrokes("cmd-c");
+    #[cfg(not(target_os = "macos"))]
     cx.simulate_keystrokes("ctrl-c");
     let clipboard = cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()));
     assert_eq!(
         clipboard.as_deref(),
         Some("Selectable action words for testing.")
+    );
+}
+
+#[gpui::test]
+fn public_selection_actions_clear_after_an_outside_left_click(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<BoundedSelectionProbe>()
+            .expect("bounded selection probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+    let from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let to = point(surface.right() - px(14.), surface.top() + px(24.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+
+    let outside = cx
+        .debug_bounds("selection-actions-outside-target")
+        .expect("outside target should render");
+    cx.simulate_click(outside.center(), Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
+    assert!(probe.read_with(cx, |probe, cx| {
+        probe.selection.read(cx).selected_text().is_empty()
+    }));
+}
+
+#[gpui::test]
+fn public_selection_actions_follow_native_empty_selection(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<BoundedSelectionProbe>()
+            .expect("bounded selection probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+    let from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let to = point(surface.right() - px(14.), surface.top() + px(24.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+
+    cx.update(gpui_base::TextSelection::clear);
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
+    assert!(probe.read_with(cx, |probe, cx| {
+        probe.selection.read(cx).selected_text().is_empty()
+    }));
+}
+
+#[gpui::test]
+fn public_selection_actions_settle_when_a_drag_releases_outside(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<BoundedSelectionProbe>()
+            .expect("bounded selection probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+    let outside = cx
+        .debug_bounds("selection-actions-outside-target")
+        .expect("outside target should render");
+    let from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let release = point(surface.right() - px(8.), outside.top() + px(12.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(release, Some(MouseButton::Left), Modifiers::default());
+    cx.simulate_mouse_up(release, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(probe.read_with(cx, |probe, cx| {
+        !probe.selection.read(cx).selected_text().is_empty()
+    }));
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+}
+
+#[gpui::test]
+fn public_selection_actions_keep_long_final_action_reachable_in_a_narrow_root(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+    let from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let to = point(surface.right() - px(14.), surface.top() + px(24.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let toolbar = cx
+        .debug_bounds("selection-actions-toolbar")
+        .expect("toolbar should render after selection");
+    assert!(
+        toolbar.left() >= surface.left(),
+        "{toolbar:?} vs {surface:?}"
+    );
+    assert!(
+        toolbar.right() <= surface.right(),
+        "{toolbar:?} vs {surface:?}"
+    );
+
+    for _ in 0..12 {
+        cx.simulate_event(ScrollWheelEvent {
+            position: toolbar.center(),
+            delta: ScrollDelta::Pixels(point(px(-120.), px(0.))),
+            ..Default::default()
+        });
+    }
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let final_action = cx
+        .debug_bounds("selection-action-final")
+        .expect("final action should remain rendered after horizontal scrolling");
+    assert!(
+        final_action.left() >= toolbar.left() && final_action.right() <= toolbar.right(),
+        "{final_action:?} vs {toolbar:?}"
+    );
+    assert!(
+        final_action.left() >= surface.left() && final_action.right() <= surface.right(),
+        "{final_action:?} vs {surface:?}"
     );
 }

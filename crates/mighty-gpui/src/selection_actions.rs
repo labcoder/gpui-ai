@@ -4,9 +4,9 @@ use crate::control::composed_button;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, AppContext as _, Bounds, ElementId, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement, MouseButton, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Role,
-    SharedString, Size, Stateful, StatefulInteractiveElement as _, Styled, Subscription, Window,
-    div, point, prelude::FluentBuilder as _,
+    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
+    Render, Role, ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, point, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, ElementExt as _,
@@ -96,6 +96,23 @@ fn clamp_anchor(
     )
 }
 
+fn available_overlay_size(
+    root: Bounds<Pixels>,
+    preferred: Size<Pixels>,
+    inset: Pixels,
+) -> Size<Pixels> {
+    let horizontal_insets = inset + inset;
+    let vertical_insets = inset + inset;
+    Size::new(
+        preferred
+            .width
+            .min((root.size.width - horizontal_insets).max(Pixels::default())),
+        preferred
+            .height
+            .min((root.size.height - vertical_insets).max(Pixels::default())),
+    )
+}
+
 fn selection_control(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -125,6 +142,7 @@ fn selection_toolbar_frame(
     id: SharedString,
     anchor: Point<Pixels>,
     maximum_size: Size<Pixels>,
+    scroll_handle: &ScrollHandle,
     cx: &mut App,
 ) -> Stateful<gpui::Div> {
     let tokens = cx.theme().semantic_tokens();
@@ -133,6 +151,7 @@ fn selection_toolbar_frame(
         .debug_selector(|| "selection-actions-toolbar".to_owned())
         .role(Role::Toolbar)
         .aria_label("Selection actions")
+        .tab_group()
         .absolute()
         .occlude()
         .left(anchor.x)
@@ -140,6 +159,7 @@ fn selection_toolbar_frame(
         .max_w(maximum_size.width)
         .max_h(maximum_size.height)
         .overflow_x_scroll()
+        .track_scroll(scroll_handle)
         .flex()
         .items_center()
         .gap(tokens.spacing.xs)
@@ -149,6 +169,17 @@ fn selection_toolbar_frame(
         .rounded(tokens.radius.md)
         .bg(tokens.colors.surface)
         .shadow(tokens.shadow.md.clone())
+}
+
+fn defer_selection_settle(
+    entity: Entity<SelectionActions>,
+    pointer: Point<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    window.defer(cx, move |_, cx| {
+        entity.update(cx, |this, cx| this.settle_selection(Some(pointer), cx));
+    });
 }
 
 /// Selectable Markdown with application-owned actions anchored to a settled selection.
@@ -179,8 +210,8 @@ pub struct SelectionActions {
     drag_active: bool,
     pointer_anchor: Option<Point<Pixels>>,
     root_bounds: Option<Bounds<Pixels>>,
-    overlay_size: Size<Pixels>,
-    overlay_inset: Pixels,
+    toolbar_scroll: ScrollHandle,
+    toolbar_pointer_active: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -201,6 +232,19 @@ impl SelectionActions {
             let raw = text.read(cx).selected_text();
             if settled_selection(&raw).is_some() {
                 this.apply_selection(&raw, None, cx);
+            } else {
+                let selection = cx.weak_entity();
+                cx.defer(move |cx| {
+                    let _ = selection.update(cx, |this, cx| {
+                        if this.drag_active || this.toolbar_pointer_active {
+                            return;
+                        }
+                        let raw = this.text.read(cx).selected_text();
+                        if settled_selection(&raw).is_none() {
+                            this.apply_selection(&raw, None, cx);
+                        }
+                    });
+                });
             }
         });
         Self {
@@ -212,8 +256,8 @@ impl SelectionActions {
             drag_active: false,
             pointer_anchor: None,
             root_bounds: None,
-            overlay_size: Size::default(),
-            overlay_inset: Pixels::default(),
+            toolbar_scroll: ScrollHandle::new(),
+            toolbar_pointer_active: false,
             _subscriptions: vec![observation],
         }
     }
@@ -234,6 +278,7 @@ impl SelectionActions {
         self.selected_text = SharedString::default();
         self.pointer_anchor = None;
         self.drag_active = false;
+        self.toolbar_pointer_active = false;
         cx.notify();
     }
 
@@ -258,6 +303,7 @@ impl SelectionActions {
         self.selected_text = SharedString::default();
         self.pointer_anchor = None;
         self.drag_active = false;
+        self.toolbar_pointer_active = false;
         cx.notify();
     }
 
@@ -265,6 +311,17 @@ impl SelectionActions {
         self.drag_active = false;
         let raw = self.text.read(cx).selected_text();
         self.apply_selection(&raw, pointer, cx);
+    }
+
+    fn clear_cached_selection(&mut self, cx: &mut gpui::Context<Self>) {
+        let changed = !self.selected_text.is_empty() || self.pointer_anchor.is_some();
+        self.selected_text = SharedString::default();
+        self.pointer_anchor = None;
+        self.drag_active = false;
+        self.toolbar_pointer_active = false;
+        if changed {
+            cx.notify();
+        }
     }
 
     fn apply_selection(
@@ -293,6 +350,14 @@ impl SelectionActions {
         let root_id = self.id.clone();
         let selected_text = self.selected_text.clone();
         let actions = self.actions.clone();
+        let tokens = cx.theme().semantic_tokens();
+        let preferred_size = Size::new(tokens.spacing.xxl * 9., tokens.spacing.xxl * 2.);
+        let inset = tokens.spacing.sm;
+        let maximum_size = self
+            .root_bounds
+            .map(|bounds| available_overlay_size(bounds, preferred_size, inset))
+            .unwrap_or(preferred_size);
+        let maximum_control_width = (maximum_size.width - tokens.spacing.md).max(Pixels::default());
         let buttons = actions
             .into_iter()
             .map(|action| {
@@ -304,35 +369,48 @@ impl SelectionActions {
                     label.clone(),
                     cx,
                 )
+                .max_w(maximum_control_width)
+                .overflow_hidden()
                 .debug_selector(move || format!("selection-action-{action_id}"))
-                .on_click(cx.listener(move |_, _, _, cx| cx.emit(event.clone())))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        if event.button == MouseButton::Left {
+                            this.toolbar_pointer_active = true;
+                            cx.stop_propagation();
+                        }
+                    }),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.emit(event.clone());
+                    this.toolbar_pointer_active = false;
+                }))
             })
             .collect::<Vec<_>>();
 
         selection_toolbar_frame(
             self.id.clone(),
-            self.toolbar_anchor(),
-            self.overlay_size,
+            self.toolbar_anchor(maximum_size, inset),
+            maximum_size,
+            &self.toolbar_scroll,
             cx,
+        )
+        .on_mouse_up_out(
+            MouseButton::Left,
+            cx.listener(|this, _, _, _| {
+                this.toolbar_pointer_active = false;
+            }),
         )
         .children(buttons)
     }
 
-    fn toolbar_anchor(&self) -> Point<Pixels> {
+    fn toolbar_anchor(&self, overlay_size: Size<Pixels>, inset: Pixels) -> Point<Pixels> {
         match (self.pointer_anchor, self.root_bounds) {
             (Some(pointer), Some(bounds)) => {
-                let below_selection = point(
-                    pointer.x,
-                    pointer.y + self.overlay_inset + self.overlay_inset,
-                );
-                clamp_anchor(
-                    below_selection,
-                    bounds,
-                    self.overlay_size,
-                    self.overlay_inset,
-                )
+                let below_selection = point(pointer.x, pointer.y + inset + inset);
+                clamp_anchor(below_selection, bounds, overlay_size, inset)
             }
-            _ => point(self.overlay_inset, self.overlay_inset),
+            _ => point(inset, inset),
         }
     }
 }
@@ -342,8 +420,6 @@ impl EventEmitter<SelectionActionsEvent> for SelectionActions {}
 impl Render for SelectionActions {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
-        self.overlay_size = Size::new(tokens.spacing.xxl * 9., tokens.spacing.xxl * 2.);
-        self.overlay_inset = tokens.spacing.sm;
         let root_id = self.id.clone();
         let entity_for_layout = cx.entity().clone();
         let text_surface = div()
@@ -352,7 +428,11 @@ impl Render for SelectionActions {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
+                    if this.toolbar_pointer_active {
+                        return;
+                    }
                     this.drag_active = true;
+                    this.toolbar_pointer_active = false;
                     this.selected_text = SharedString::default();
                     this.pointer_anchor = None;
                     cx.notify();
@@ -361,11 +441,13 @@ impl Render for SelectionActions {
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|_, event: &MouseUpEvent, window, cx| {
-                    let pointer = event.position;
-                    let entity = cx.entity().clone();
-                    window.defer(cx, move |_, cx| {
-                        entity.update(cx, |this, cx| this.settle_selection(Some(pointer), cx));
-                    });
+                    defer_selection_settle(cx.entity().clone(), event.position, window, cx);
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|_, event: &MouseUpEvent, window, cx| {
+                    defer_selection_settle(cx.entity().clone(), event.position, window, cx);
                 }),
             )
             .on_key_up(cx.listener(|_, _, window, cx| {
@@ -390,9 +472,17 @@ impl Render for SelectionActions {
             .border_color(tokens.colors.border)
             .rounded(tokens.radius.lg)
             .bg(tokens.colors.background)
+            .on_mouse_down_out(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                if event.button == MouseButton::Left {
+                    this.clear_cached_selection(cx);
+                }
+            }))
             .on_prepaint(move |bounds, _, cx| {
-                entity_for_layout.update(cx, |this, _| {
-                    this.root_bounds = Some(bounds);
+                entity_for_layout.update(cx, |this, cx| {
+                    if this.root_bounds != Some(bounds) {
+                        this.root_bounds = Some(bounds);
+                        cx.notify();
+                    }
                 });
             })
             .child(text_surface)
@@ -474,6 +564,7 @@ mod tests {
                         "probe".into(),
                         point(px(0.), px(0.)),
                         size(px(240.), px(64.)),
+                        &ScrollHandle::new(),
                         cx,
                     )
                     .into_element();
