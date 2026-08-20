@@ -31,14 +31,7 @@ check_local_pair() {
   local manifest_rev
   manifest_rev="$(check_manifest_pair Cargo.toml)"
 
-  local lock_revs=()
-  mapfile -t lock_revs < <(lock_component_revs Cargo.lock)
-  if [[ "${#lock_revs[@]}" -ne 3 ]]; then
-    printf 'error: Cargo.lock does not contain the complete gpui-component stack\n' >&2
-    return 1
-  fi
-  if [[ "${lock_revs[0]}" != "$manifest_rev" || "${lock_revs[1]}" != "$manifest_rev" || "${lock_revs[2]}" != "$manifest_rev" ]]; then
-    printf 'error: Cargo.toml and Cargo.lock disagree on the gpui-component stack revision\n' >&2
+  if ! check_component_stack_lock Cargo.lock "$manifest_rev"; then
     return 1
   fi
 
