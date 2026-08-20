@@ -20,6 +20,7 @@
 #![deny(missing_docs)]
 
 pub mod approval;
+pub mod chat;
 pub mod chip;
 pub mod code_block;
 pub mod context_card;
@@ -42,6 +43,7 @@ pub mod todo_list;
 /// Convenient single-import surface: `use mighty_gpui::prelude::*;`.
 pub mod prelude {
     pub use crate::approval::{ApprovalCard, ApprovalEvent};
+    pub use crate::chat::{Chat, ChatEvent, ChatMessage, ChatRole};
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
     pub use crate::context_card::{ContextCard, ContextCardEvent};

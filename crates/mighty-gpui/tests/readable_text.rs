@@ -1,9 +1,10 @@
 use gpui::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers,
     MouseButton, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
-    Window, div, point, px,
+    Window, div, point, prelude::FluentBuilder as _, px,
 };
 use gpui_component::Root;
+use mighty_gpui::prelude::{Chat, ChatMessage, ChatRole, PromptBar};
 use mighty_gpui::{
     code_block::CodeBlock,
     insight::InsightCard,
@@ -12,6 +13,7 @@ use mighty_gpui::{
     streaming_text::{CitationRef, StreamingText},
     thinking::{StepStatus, Thinking, ThinkingStep, ThinkingTrace},
 };
+use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Surface {
@@ -23,11 +25,13 @@ enum Surface {
     ThinkingDetail,
     Insight,
     SelectionActions,
+    ChatUser,
 }
 
 struct ReadableSurface {
     surface: Surface,
     selection: Option<gpui::Entity<SelectionActions>>,
+    chat: Option<gpui::Entity<Chat>>,
 }
 
 impl ReadableSurface {
@@ -46,7 +50,29 @@ impl ReadableSurface {
             });
             selection
         });
-        Self { surface, selection }
+        let chat = (surface == Surface::ChatUser).then(|| {
+            let prompt = cx.new(|cx| PromptBar::new("readable-chat-prompt", window, cx));
+            let chat = cx.new(|cx| Chat::new("readable-chat", prompt, window, cx));
+            chat.update(cx, |chat, cx| {
+                chat.set_messages(
+                    Arc::from([ChatMessage::new(
+                        "readable-chat-user",
+                        ChatRole::User,
+                        Progressive::complete(
+                            "selectable_chat_message selectable_chat_message".to_owned(),
+                        ),
+                    )]),
+                    window,
+                    cx,
+                );
+            });
+            chat
+        });
+        Self {
+            surface,
+            selection,
+            chat,
+        }
     }
 }
 
@@ -113,12 +139,21 @@ impl Render for ReadableSurface {
                 .expect("selection entity is created for the selection surface")
                 .clone()
                 .into_any_element(),
+            Surface::ChatUser => self
+                .chat
+                .as_ref()
+                .expect("chat entity is created for the chat surface")
+                .clone()
+                .into_any_element(),
         };
 
         div().size_full().p(px(16.)).child(
             div()
                 .debug_selector(|| "readable-surface".into())
                 .w_full()
+                .when(self.surface == Surface::ChatUser, |surface| {
+                    surface.h(px(360.))
+                })
                 .child(surface),
         )
     }
@@ -135,7 +170,11 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
     let bounds = cx
-        .debug_bounds("readable-surface")
+        .debug_bounds(if surface == Surface::ChatUser {
+            "chat-message-readable-chat-user"
+        } else {
+            "readable-surface"
+        })
         .expect("readable surface should be rendered");
     let (content_x, content_y) = match surface {
         Surface::Answer | Surface::CitationAnswer | Surface::CitationLabel => {
@@ -155,9 +194,14 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
         ),
         Surface::Insight => (bounds.left() + px(17.), bounds.top() + px(80.)),
         Surface::SelectionActions => (bounds.left() + px(14.), bounds.top() + px(14.)),
+        Surface::ChatUser => (bounds.left() + px(20.), bounds.top() + px(48.)),
     };
     let from = point(content_x, content_y);
-    let to = point(bounds.left() + px(600.), bounds.bottom() - px(1.));
+    let to = if surface == Surface::ChatUser {
+        point(bounds.right() - px(20.), bounds.bottom() - px(14.))
+    } else {
+        point(bounds.left() + px(600.), bounds.bottom() - px(1.))
+    };
 
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
     cx.update(|window, cx| {
@@ -237,4 +281,11 @@ fn selection_action_surfaces_export_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::SelectionActions, cx);
 
     assert!(selected.contains("selectable_action"), "{selected:?}");
+}
+
+#[gpui::test]
+fn chat_user_prose_exports_selected_text(cx: &mut TestAppContext) {
+    let selected = select_text(Surface::ChatUser, cx);
+
+    assert!(selected.contains("selectable_chat_message"), "{selected:?}");
 }

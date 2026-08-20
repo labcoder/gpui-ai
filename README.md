@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Sixteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Seventeen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -57,7 +57,7 @@ npm run test:perf
 
 It samples three virtualized catalog regions in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
 
-Expected output: a native window opens showing every component with live simulated agent activity — a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
+Expected output: a native window opens showing every component with live simulated agent activity — a virtualized controlled chat, a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
 
 In your own app, components are fluent builders that render wherever an element fits:
 
@@ -95,6 +95,42 @@ let _subscription = cx.subscribe(&prompt, |_, _, event: &PromptBarEvent, _| {
     println!("prompt event: {event:?}");
 });
 ```
+
+`Chat` composes that prompt with selectable `StreamingText` rows. The application owns one immutable `Arc<[ChatMessage]>` snapshot and every async producer; Chat owns only transient virtual-list, tail-follow, anchor, and unread state. Message identity is stable across prepends and streaming replacements:
+
+```rust
+use std::sync::Arc;
+use mighty_gpui::prelude::*;
+
+let prompt = cx.new(|cx| PromptBar::new("conversation-prompt", window, cx));
+let chat = cx.new(|cx| Chat::new("conversation", prompt, window, cx));
+chat.update(cx, |chat, cx| {
+    chat.set_messages(
+        Arc::from([
+            ChatMessage::new(
+                "question-42",
+                ChatRole::User,
+                StreamedContent::done("Which supplier is safest?"),
+            ),
+            ChatMessage::new(
+                "answer-42",
+                ChatRole::Assistant,
+                StreamedContent::running("Comparing delivery risk…".to_owned()),
+            ),
+        ]),
+        window,
+        cx,
+    );
+});
+
+// Retain this subscription with the application state that owns the snapshot.
+let _subscription = cx.subscribe(&chat, |_, _, event: &ChatEvent, _| {
+    // Route prompts, retry, follow-up, citation, and jump intents by stable ID.
+    println!("chat event: {event:?}");
+});
+```
+
+Chat uses GPUI's variable-height `ListState` so only visible rows are laid out and wrapped or streaming rows can be remeasured at the real viewport width. The pinned `gpui-base` virtual-list API requires an exact height table for the full history up front, which would defeat virtualization for width-dependent prose.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
@@ -152,7 +188,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is chat, followed by command search, navigation, and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is command search, followed by navigation and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 

@@ -17,7 +17,7 @@ use gpui_component::{
     v_flex,
 };
 use mighty_gpui::prelude::*;
-use std::{ops::Range, time::Duration};
+use std::{ops::Range, sync::Arc, time::Duration};
 
 const CONTRAST_THEME: &str = r##"{
   "name": "mighty-gpui gallery themes",
@@ -80,6 +80,7 @@ fn story_needs_simulation(story: StoryId) -> bool {
             | StoryId::Search
             | StoryId::ImageGeneration
             | StoryId::StreamingText
+            | StoryId::Chat
             | StoryId::CodeBlock
     )
 }
@@ -94,7 +95,9 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
     match story {
         StoryId::Loading | StoryId::Tasks => true,
         StoryId::Thinking | StoryId::Search => delta.answer_phase_changed(),
-        StoryId::ImageGeneration | StoryId::StreamingText => delta.answer_content_changed(),
+        StoryId::ImageGeneration | StoryId::StreamingText | StoryId::Chat => {
+            delta.answer_content_changed()
+        }
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
         | StoryId::ToolChips
@@ -106,6 +109,168 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Insights
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
+    }
+}
+
+struct ChatStory {
+    chat: Entity<Chat>,
+    last_event: SharedString,
+    _subscription: Subscription,
+}
+
+impl ChatStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let prompt = cx.new(|cx| {
+            let mut prompt = PromptBar::new("gallery-chat-prompt", window, cx);
+            prompt.set_models(
+                [
+                    PromptModel::new("balanced", "Balanced"),
+                    PromptModel::new("fast", "Fast"),
+                ],
+                cx,
+            );
+            prompt.set_selected_model("balanced", cx);
+            prompt.set_mentions([PromptMention::new("suppliers", "Suppliers")], cx);
+            prompt.set_commands(
+                [PromptCommand::new("compare", "compare")
+                    .description("Compare current supplier context")],
+                cx,
+            );
+            prompt.set_attachments([PromptAttachment::new("pricing", "pricing.md")], cx);
+            prompt.set_draft("Ask a follow-up about suppliers", window, cx);
+            prompt
+        });
+        let chat = cx.new(|cx| Chat::new("gallery-chat", prompt, window, cx));
+        let subscription =
+            cx.subscribe_in(&chat, window, |this, chat, event: &ChatEvent, _, cx| {
+                this.last_event = format!("{event:?}").into();
+                let prompt = chat.read(cx).prompt_bar().clone();
+                match event {
+                    ChatEvent::Prompt(PromptBarEvent::ModelChanged { model_id, .. }) => {
+                        prompt.update(cx, |prompt, cx| {
+                            prompt.set_selected_model(model_id.clone(), cx);
+                        });
+                    }
+                    ChatEvent::Prompt(PromptBarEvent::Submit { .. }) => {
+                        prompt.update(cx, |prompt, cx| {
+                            prompt.set_progress(ProgressState::Running, cx);
+                        });
+                    }
+                    ChatEvent::Prompt(PromptBarEvent::CancelRequested { .. }) => {
+                        prompt.update(cx, |prompt, cx| {
+                            prompt.set_progress(ProgressState::Complete, cx);
+                        });
+                    }
+                    ChatEvent::Prompt(_)
+                    | ChatEvent::RetryRequested { .. }
+                    | ChatEvent::FollowUpSelected { .. }
+                    | ChatEvent::CitationActivated { .. }
+                    | ChatEvent::JumpedToLatest => {}
+                }
+                cx.notify();
+            });
+        Self {
+            chat,
+            last_event: "Try Retry, a citation, a follow-up, or the composer.".into(),
+            _subscription: subscription,
+        }
+    }
+
+    fn set_answer(&mut self, answer: StreamedContent, window: &mut Window, cx: &mut Context<Self>) {
+        let live_text = format!(
+            "The current supplier comparison follows [[cite:pricing]].\n\n{}",
+            answer.text()
+        );
+        let live_answer = match answer.state() {
+            ProgressState::Pending => StreamedContent::pending(live_text),
+            ProgressState::Running => StreamedContent::running(live_text),
+            ProgressState::Complete => StreamedContent::complete(live_text),
+            ProgressState::Failed(reason) => StreamedContent::failed(live_text, reason.clone()),
+        };
+        let mut messages = vec![ChatMessage::new(
+            "reference-note",
+            ChatRole::System,
+            StreamedContent::done(
+                "Beautiful UI keeps Chat compact and bottom-pinned. This original GPUI composition additionally virtualizes by stable application IDs, preserves the top item and pixel offset while reading history, exposes unread state, and delegates every async producer to the application.",
+            ),
+        )];
+        for index in 0..18 {
+            let role = if index % 2 == 0 {
+                ChatRole::User
+            } else {
+                ChatRole::Assistant
+            };
+            messages.push(ChatMessage::new(
+                format!("history-{index}"),
+                role,
+                StreamedContent::done(format!(
+                    "Historical message {index}: compare unit price, delivery window, and inventory risk."
+                )),
+            ));
+        }
+        messages.extend([
+            ChatMessage::new(
+                "tool-result",
+                ChatRole::Tool,
+                StreamedContent::done("Loaded pricing.md and suppliers.csv."),
+            )
+            .author("Catalog lookup"),
+            ChatMessage::new(
+                "failed-comparison",
+                ChatRole::Assistant,
+                StreamedContent::failed(
+                    "The first comparison stopped after two suppliers.".to_owned(),
+                    "Supplier service unavailable",
+                ),
+            )
+            .retryable(true),
+            ChatMessage::new(
+                "latest-question",
+                ChatRole::User,
+                StreamedContent::done("Which supplier is the safest choice this week?"),
+            ),
+            ChatMessage::new("live-answer", ChatRole::Assistant, live_answer)
+                .citations([CitationRef::new(
+                    "pricing",
+                    "Pricing report",
+                    "Open the supplier pricing report",
+                    "app://reports/supplier-pricing",
+                )])
+                .sources(["pricing.md", "suppliers.csv"])
+                .follow_ups([
+                    FollowUp::new("delivery", "Compare delivery windows"),
+                    FollowUp::new("risk", "Explain inventory risk"),
+                ]),
+        ]);
+        self.chat.update(cx, |chat, cx| {
+            chat.set_messages(Arc::from(messages), window, cx);
+        });
+    }
+}
+
+impl Render for ChatStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.xs)
+            .child(
+                div()
+                    .id("chat-story-host")
+                    .debug_selector(|| "chat-story-host".into())
+                    .h(px(232.))
+                    .max_h(px(232.))
+                    .flex_none()
+                    .child(self.chat.clone()),
+            )
+            .child(
+                div()
+                    .id("chat-story-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last chat event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
     }
 }
 
@@ -953,6 +1118,23 @@ impl Gallery {
                 },
                 cx,
             ),
+            StoryId::Chat => {
+                let answer = self.sim.answer.clone();
+                let chat_story = window.use_keyed_state(
+                    "chat-story-state",
+                    cx,
+                    ChatStory::new,
+                );
+                chat_story.update(cx, |story, cx| {
+                    story.set_answer(answer, window, cx);
+                });
+                self.section(
+                    story,
+                    "CHAT",
+                    || chat_story,
+                    cx,
+                )
+            }
             StoryId::CodeBlock => self.section(
                 story,
                 "CODE BLOCK",
@@ -1433,6 +1615,38 @@ mod tests {
     }
 
     #[gpui::test]
+    fn constrained_direct_chat_keeps_latest_message_and_composer_reachable(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::Chat, cx));
+            Root::new(gallery, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let host = cx
+            .debug_bounds("chat-story-host")
+            .expect("the constrained chat host should render");
+        let latest = cx
+            .debug_bounds("chat-message-live-answer")
+            .expect("tail-follow should keep the latest message rendered");
+        let composer = cx
+            .debug_bounds("chat-composer")
+            .expect("the composed prompt should remain rendered");
+        assert!(
+            latest.bottom() > host.top() && latest.top() < host.bottom(),
+            "{latest:?} must intersect the visible transcript in {host:?}"
+        );
+        assert!(
+            composer.bottom() <= host.bottom(),
+            "{composer:?} must fit in {host:?}"
+        );
+    }
+
+    #[gpui::test]
     fn constrained_catalog_keeps_the_end_of_the_prompt_bar_story_reachable(
         cx: &mut TestAppContext,
     ) {
@@ -1550,6 +1764,7 @@ mod tests {
             StoryId::StreamingText,
             first_tick
         ));
+        assert!(super::story_changed_by_delta(StoryId::Chat, first_tick));
         assert!(!super::story_changed_by_delta(StoryId::Search, first_tick));
         assert!(!super::story_changed_by_delta(
             StoryId::Thinking,

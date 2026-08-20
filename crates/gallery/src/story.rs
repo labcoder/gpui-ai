@@ -25,6 +25,8 @@ pub enum StoryId {
     ImageGeneration,
     /// Streaming Markdown answer.
     StreamingText,
+    /// Controlled virtualized conversation.
+    Chat,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -53,6 +55,7 @@ impl StoryId {
         Self::Todos,
         Self::ImageGeneration,
         Self::StreamingText,
+        Self::Chat,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -75,6 +78,7 @@ impl StoryId {
             Self::Todos => "todos",
             Self::ImageGeneration => "image-generation",
             Self::StreamingText => "streaming-text",
+            Self::Chat => "chat",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -98,6 +102,7 @@ impl StoryId {
             Self::Todos => "To-do list",
             Self::ImageGeneration => "Image generation",
             Self::StreamingText => "Streaming text",
+            Self::Chat => "Chat",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
