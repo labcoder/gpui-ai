@@ -158,7 +158,7 @@ let _subscription = cx.subscribe(&search, |_, _, event: &CommandSearchEvent, _| 
 });
 ```
 
-Title, subtitle, and keyword matching is case-insensitive. Arrow keys skip disabled rows, Enter and pointer activation emit the same stable item ID, and Escape clears a non-empty query before emitting dismissal on the next press.
+Title, subtitle, and keyword matching is case-insensitive. On native targets, arrow keys skip disabled rows, Enter and pointer activation emit the same stable item ID, and Escape clears a non-empty query before emitting dismissal on the next press. In browser WASM at the pinned GPUI revision, pointer activation remains usable, but general keyboard action dispatch currently panics before `Command` handles the action; the same failure reproduces with an upstream action-based control, so the keyboard claims are native-only until that upstream seam is fixed.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 

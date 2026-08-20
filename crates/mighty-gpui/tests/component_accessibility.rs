@@ -688,7 +688,7 @@ fn public_prompt_bar_assembled_controls_activate_typed_events(cx: &mut TestAppCo
 }
 
 #[gpui::test]
-fn public_command_search_exposes_stable_keyboard_events_and_named_rows(cx: &mut TestAppContext) {
+fn public_command_search_exposes_stable_keyboard_events_and_row_bounds(cx: &mut TestAppContext) {
     cx.update(mighty_gpui::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let content = cx.new(|cx| PublicCommandSearchProbe::new(window, cx));

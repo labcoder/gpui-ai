@@ -3,10 +3,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    AccessibleAction, App, AppContext as _, Context, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
-    SharedString, StatefulInteractiveElement as _, Styled as _, WeakEntity, Window, div,
-    prelude::FluentBuilder as _,
+    App, AppContext as _, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, ElementExt as _, IndexPath,
@@ -17,8 +16,6 @@ use gpui_component::{
 };
 
 use crate::theme::SemanticStyledExt as _;
-
-type RowActivation = std::rc::Rc<dyn for<'a, 'b> Fn(&'a mut Window, &'b mut App)>;
 
 /// One application-owned command-search item.
 ///
@@ -169,7 +166,6 @@ fn command_search_frame(id: &SharedString) -> gpui::Stateful<gpui::Div> {
 fn row_content(
     search_id: SharedString,
     item: CommandSearchItem,
-    activation: Option<RowActivation>,
     cx: &mut App,
 ) -> gpui::Stateful<gpui::Div> {
     let tokens = cx.theme().semantic_tokens();
@@ -185,7 +181,8 @@ fn row_content(
         .id(content_id)
         .accessibility_id(accessibility_id)
         .debug_selector(move || format!("command-search-item-{debug_item_id}"))
-        .role(Role::ListBoxOption)
+        // Pinned Command supplies the sole option node and activation path.
+        .role(Role::Label)
         .aria_label(label)
         .w_full()
         .min_w_0()
@@ -218,26 +215,11 @@ fn row_content(
                     .child(Label::new(shortcut)),
             )
         })
-        .when_some(activation, |this, activate| {
-            this.on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
-                activate(window, cx);
-            })
-        })
 }
 
-fn upstream_item(
-    search_id: &SharedString,
-    item: &CommandSearchItem,
-    owner: WeakEntity<CommandSearch>,
-) -> CommandItem {
+fn upstream_item(search_id: &SharedString, item: &CommandSearchItem) -> CommandItem {
     let row_item = item.clone();
     let row_search_id = search_id.clone();
-    let item_id = item.id.clone();
-    let row_activation: Option<RowActivation> = (!item.disabled).then(|| {
-        std::rc::Rc::new(move |_: &mut Window, cx: &mut App| {
-            _ = owner.update(cx, |search, cx| search.confirm_id(item_id.clone(), cx));
-        }) as RowActivation
-    });
     let mut search_terms =
         Vec::with_capacity(item.keywords.len() + usize::from(item.subtitle.is_some()));
     if let Some(subtitle) = &item.subtitle {
@@ -248,14 +230,7 @@ fn upstream_item(
     CommandItem::new()
         .label(item.title.clone())
         .keywords(search_terms)
-        .child(move |_, cx| {
-            row_content(
-                row_search_id.clone(),
-                row_item.clone(),
-                row_activation.clone(),
-                cx,
-            )
-        })
+        .child(move |_, cx| row_content(row_search_id.clone(), row_item.clone(), cx))
         .disabled(item.disabled)
 }
 
@@ -282,6 +257,7 @@ pub struct CommandSearch {
     upstream_items: Arc<[CommandItem]>,
     state: Entity<CommandState>,
     selected_id: Option<SharedString>,
+    last_emitted_query: SharedString,
     items_revision: u64,
     applied_selection_revision: u64,
 }
@@ -295,6 +271,7 @@ impl CommandSearch {
             upstream_items: Arc::from([]),
             state: cx.new(|cx| CommandState::new(window, cx)),
             selected_id: None,
+            last_emitted_query: "".into(),
             items_revision: 0,
             applied_selection_revision: 0,
         }
@@ -313,10 +290,9 @@ impl CommandSearch {
         }
 
         self.selected_id = retained_selection(self.selected_id.as_ref(), &items);
-        let owner = cx.weak_entity();
         self.upstream_items = items
             .iter()
-            .map(|item| upstream_item(&self.id, item, owner.clone()))
+            .map(|item| upstream_item(&self.id, item))
             .collect();
         self.items = items;
         self.items_revision = self.items_revision.wrapping_add(1);
@@ -331,8 +307,13 @@ impl CommandSearch {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let query = query.into();
+        let changed = self.query(cx) != query;
         self.state
-            .update(cx, |state, cx| state.set_query(query, window, cx));
+            .update(cx, |state, cx| state.set_query(query.clone(), window, cx));
+        if changed {
+            self.emit_query_changed(query, cx);
+        }
     }
 
     /// Return the native input's current query.
@@ -345,9 +326,9 @@ impl CommandSearch {
         self.state.update(cx, |state, cx| state.focus(window, cx));
     }
 
-    fn item_id_at(&self, index: IndexPath) -> Option<SharedString> {
+    fn item_id_at(items: &[CommandSearchItem], index: IndexPath) -> Option<SharedString> {
         (index.section == 0)
-            .then(|| self.items.get(index.row))
+            .then(|| items.get(index.row))
             .flatten()
             .map(|item| item.id.clone())
     }
@@ -359,14 +340,45 @@ impl CommandSearch {
             .map(IndexPath::new)
     }
 
-    fn on_select(&mut self, index: IndexPath) {
-        if let Some(item_id) = self.item_id_at(index) {
+    fn current_item_id_from_installed(
+        &self,
+        installed_revision: u64,
+        installed_items: &[CommandSearchItem],
+        index: IndexPath,
+    ) -> Option<SharedString> {
+        if installed_revision > self.items_revision {
+            return None;
+        }
+        let item_id = Self::item_id_at(installed_items, index)?;
+        self.items
+            .iter()
+            .find(|item| item.id == item_id && !item.disabled)
+            .map(|item| item.id.clone())
+    }
+
+    fn on_select(
+        &mut self,
+        installed_revision: u64,
+        installed_items: &[CommandSearchItem],
+        index: IndexPath,
+    ) {
+        if let Some(item_id) =
+            self.current_item_id_from_installed(installed_revision, installed_items, index)
+        {
             self.selected_id = Some(item_id);
         }
     }
 
-    fn on_confirm(&mut self, index: IndexPath, cx: &mut Context<Self>) {
-        let Some(item_id) = self.item_id_at(index) else {
+    fn on_confirm(
+        &mut self,
+        installed_revision: u64,
+        installed_items: &[CommandSearchItem],
+        index: IndexPath,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(item_id) =
+            self.current_item_id_from_installed(installed_revision, installed_items, index)
+        else {
             return;
         };
         self.confirm_id(item_id, cx);
@@ -389,9 +401,20 @@ impl CommandSearch {
     }
 
     fn on_query(&mut self, query: &str, cx: &mut Context<Self>) {
+        if self.query(cx).as_ref() != query {
+            return;
+        }
+        self.emit_query_changed(query.to_owned().into(), cx);
+    }
+
+    fn emit_query_changed(&mut self, query: SharedString, cx: &mut Context<Self>) {
+        if self.last_emitted_query == query {
+            return;
+        }
+        self.last_emitted_query = query.clone();
         cx.emit(CommandSearchEvent::QueryChanged {
             id: self.id.clone(),
-            query: query.to_owned().into(),
+            query,
         });
     }
 
@@ -420,6 +443,9 @@ impl Render for CommandSearch {
         let cancel_owner = cx.weak_entity();
         let selection_owner = cx.weak_entity();
         let revision = self.items_revision;
+        let installed_items = self.items.clone();
+        let select_items = installed_items.clone();
+        let confirm_items = installed_items;
         let should_restore_selection = self.applied_selection_revision != revision;
         let command = Command::new(&self.state)
             .items(self.upstream_items.iter().cloned())
@@ -451,10 +477,14 @@ impl Render for CommandSearch {
                 _ = query_owner.update(cx, |search, cx| search.on_query(query, cx));
             })
             .on_select(move |index, _, cx| {
-                _ = select_owner.update(cx, |search, _| search.on_select(index));
+                _ = select_owner.update(cx, |search, _| {
+                    search.on_select(revision, &select_items, index);
+                });
             })
             .on_confirm(move |index, _, cx| {
-                _ = confirm_owner.update(cx, |search, cx| search.on_confirm(index, cx));
+                _ = confirm_owner.update(cx, |search, cx| {
+                    search.on_confirm(revision, &confirm_items, index, cx);
+                });
             })
             .on_cancel(move |_, cx| {
                 _ = cancel_owner.update(cx, |search, cx| search.dismiss(cx));
@@ -475,7 +505,14 @@ impl Render for CommandSearch {
                         .as_ref()
                         .and_then(|id| search.index_for_id(id));
                     search.state.update(cx, |state, cx| {
+                        let current_index = state.selected_index();
                         state.set_selected_index(selected_index, window, cx);
+                        if selected_index.is_some()
+                            && state.selected_index().is_none()
+                            && current_index.is_some()
+                        {
+                            state.set_selected_index(current_index, window, cx);
+                        }
                     });
                 });
             })
@@ -556,9 +593,6 @@ mod tests {
                             .subtitle("Supplier pricing")
                             .shortcut("Ctrl+R")
                             .disabled(disabled),
-                        (!disabled).then(|| {
-                            Rc::new(|_: &mut Window, _: &mut gpui::App| {}) as super::RowActivation
-                        }),
                         cx,
                     );
                     let role = row.a11y_role();
@@ -586,17 +620,17 @@ mod tests {
     }
 
     #[gpui::test]
-    fn production_rows_expose_option_name_and_only_enabled_activation(cx: &mut TestAppContext) {
+    fn custom_rows_are_named_noninteractive_labels(cx: &mut TestAppContext) {
         let enabled = capture_row(false, cx);
-        assert_eq!(enabled.role, Some(Role::ListBoxOption));
+        assert_eq!(enabled.role, Some(Role::Label));
         assert_eq!(
             enabled.node.label(),
             Some("Open report, Supplier pricing, shortcut Ctrl+R")
         );
-        assert!(enabled.node.supports_action(accesskit::Action::Click));
+        assert!(!enabled.node.supports_action(accesskit::Action::Click));
 
         let disabled = capture_row(true, cx);
-        assert_eq!(disabled.role, Some(Role::ListBoxOption));
+        assert_eq!(disabled.role, Some(Role::Label));
         assert_eq!(
             disabled.node.label(),
             Some("Open report, Supplier pricing, shortcut Ctrl+R")
@@ -618,6 +652,37 @@ mod tests {
         search: Entity<CommandSearch>,
         events: Rc<RefCell<Vec<CommandSearchEvent>>>,
         _subscription: Subscription,
+    }
+
+    struct PreRenderQueryHarness {
+        search: Entity<CommandSearch>,
+        events: Rc<RefCell<Vec<CommandSearchEvent>>>,
+        _subscription: Subscription,
+    }
+
+    impl PreRenderQueryHarness {
+        fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+            let search = cx.new(|cx| CommandSearch::new("pre-render-query", window, cx));
+            let events = Rc::new(RefCell::new(Vec::new()));
+            let captured = events.clone();
+            let subscription = cx.subscribe(&search, move |_, _, event, _| {
+                captured.borrow_mut().push(event.clone());
+            });
+            search.update(cx, |search, cx| {
+                search.set_query("before render", window, cx);
+            });
+            Self {
+                search,
+                events,
+                _subscription: subscription,
+            }
+        }
+    }
+
+    impl Render for PreRenderQueryHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+            self.search.clone()
+        }
     }
 
     impl Harness {
@@ -689,6 +754,30 @@ mod tests {
         });
         cx.simulate_event(KeyUpEvent { keystroke });
         cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn set_query_emits_once_before_the_first_render(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (harness, cx) = cx.add_window_view(|window, cx| PreRenderQueryHarness::new(window, cx));
+
+        assert_eq!(
+            harness.read_with(cx, |harness, _| harness.events.borrow().clone()),
+            [CommandSearchEvent::QueryChanged {
+                id: "pre-render-query".into(),
+                query: "before render".into(),
+            }]
+        );
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        assert_eq!(
+            harness.read_with(cx, |harness, _| harness.events.borrow().clone()),
+            [CommandSearchEvent::QueryChanged {
+                id: "pre-render-query".into(),
+                query: "before render".into(),
+            }]
+        );
     }
 
     #[gpui::test]
@@ -833,6 +922,43 @@ mod tests {
     }
 
     #[gpui::test]
+    fn deferred_select_and_confirm_keep_the_installed_snapshot_identity(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        let search = harness.read_with(cx, |harness, _| harness.search.clone());
+        cx.update(|window, cx| {
+            window.dispatch_keystroke(Keystroke::parse("down").expect("test key should parse"), cx);
+            window.dispatch_keystroke(
+                Keystroke::parse("enter").expect("test key should parse"),
+                cx,
+            );
+            search.update(cx, |search, cx| {
+                search.set_items(
+                    [
+                        CommandSearchItem::new("second", "Open report"),
+                        CommandSearchItem::new("first", "Open report"),
+                        CommandSearchItem::new("replacement", "Replacement command"),
+                    ],
+                    window,
+                    cx,
+                );
+            });
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            harness.read_with(cx, |harness, _| harness.events.borrow().clone()),
+            [CommandSearchEvent::Selected {
+                id: "test-search".into(),
+                item_id: "second".into(),
+            }]
+        );
+        assert_eq!(
+            search.read_with(cx, |search, _| search.selected_id.clone()),
+            Some("second".into())
+        );
+    }
+
+    #[gpui::test]
     fn escape_clears_a_query_before_emitting_dismissal(cx: &mut TestAppContext) {
         let (harness, cx) = harness(cx);
         let search = harness.read_with(cx, |harness, _| harness.search.clone());
@@ -891,6 +1017,83 @@ mod tests {
             assert_eq!(
                 search.state.read(cx).selected_index(),
                 Some(gpui_component::IndexPath::new(0))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn pre_first_render_query_keeps_the_upstream_first_match_selected(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(|cx| Harness::new(window, cx));
+            Root::new(content, window, cx)
+        });
+        let harness = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<Harness>()
+                .expect("command-search harness should remain the root view")
+        });
+        let cx: &mut VisualTestContext = cx;
+        let search = harness.read_with(cx, |harness, _| harness.search.clone());
+        cx.update(|window, cx| {
+            search.update(cx, |search, cx| {
+                search.set_items(
+                    [
+                        CommandSearchItem::new("hidden", "Hidden command"),
+                        CommandSearchItem::new("match", "Matching command"),
+                    ],
+                    window,
+                    cx,
+                );
+                search.set_query("matching", window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+
+        search.read_with(cx, |search, cx| {
+            assert_eq!(search.selected_id, Some("match".into()));
+            assert_eq!(
+                search.state.read(cx).selected_index(),
+                Some(gpui_component::IndexPath::new(1))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn replacement_under_query_preserves_a_valid_upstream_match(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        let search = harness.read_with(cx, |harness, _| harness.search.clone());
+        cx.update(|window, cx| {
+            search.update(cx, |search, cx| search.set_query("margin", window, cx));
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            search.read_with(cx, |search, _| search.selected_id.clone()),
+            Some("second".into())
+        );
+
+        cx.update(|window, cx| {
+            search.update(cx, |search, cx| {
+                search.set_items(
+                    [
+                        CommandSearchItem::new("second", "No longer matches"),
+                        CommandSearchItem::new("next", "Margin command"),
+                    ],
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+
+        search.read_with(cx, |search, cx| {
+            assert_eq!(search.selected_id, Some("next".into()));
+            assert_eq!(
+                search.state.read(cx).selected_index(),
+                Some(gpui_component::IndexPath::new(1))
             );
         });
     }
