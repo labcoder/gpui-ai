@@ -8,7 +8,7 @@ use crate::{StoryId, sim};
 
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Root, StyledExt as _,
+    ActiveTheme as _, IconName, Root, StyledExt as _,
     button::Button,
     h_flex,
     scroll::ScrollableElement as _,
@@ -108,6 +108,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Context
         | StoryId::Insights
         | StoryId::CommandSearch
+        | StoryId::SidebarNav
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -406,6 +407,146 @@ impl Render for CommandSearchStory {
                 TextView::markdown(
                     "command-search-reference-note",
                     "**Reference comparison.** Beautiful UI presents a compact search-and-command list. This original GPUI adapter preserves the upstream native editor, filtering, keyboard navigation, focus, and virtual list while adding stable application IDs, typed query/selection/dismissal events, subtitles, shortcut hints, disabled-state semantics, and controlled snapshot replacement.",
+                )
+                .selectable(true),
+            )
+    }
+}
+
+fn creamery_sidebar_sections() -> [SidebarSection; 3] {
+    [
+        SidebarSection::new("production", "Production").items([
+            SidebarNavItem::new("overview", "Overview").icon(IconName::LayoutDashboard),
+            SidebarNavItem::new("orders", "Orders")
+                .icon(IconName::ChartPie)
+                .badge("12")
+                .children([
+                    SidebarNavItem::new("all-orders", "All orders"),
+                    SidebarNavItem::new("wholesale", "Wholesale"),
+                    SidebarNavItem::new("farm-shop", "Farm shop"),
+                ]),
+            SidebarNavItem::new("inventory", "Inventory")
+                .icon(IconName::BookOpen)
+                .children([
+                    SidebarNavItem::new("milk-cream", "Milk & cream"),
+                    SidebarNavItem::new("flavors", "Flavors").children([
+                        SidebarNavItem::new("pistachio", "Pistachio reserve").badge("Low"),
+                        SidebarNavItem::new("berry", "Summer berry"),
+                    ]),
+                    SidebarNavItem::new("packaging", "Packaging"),
+                ]),
+            SidebarNavItem::new("seasonal", "Seasonal forecast")
+                .icon(IconName::SquareTerminal)
+                .disabled(true),
+        ]),
+        SidebarSection::new("trade", "Trade").items([
+            SidebarNavItem::new("accounts", "Stockists").icon(IconName::BookOpen),
+            SidebarNavItem::new("promotions", "Promotions")
+                .icon(IconName::ChartPie)
+                .badge("New"),
+        ]),
+        SidebarSection::new("reports", "Reports").items([
+            SidebarNavItem::new("daily-report", "Reports").icon(IconName::SquareTerminal),
+            SidebarNavItem::new("archive-report", "Reports")
+                .icon(IconName::SquareTerminal)
+                .children([SidebarNavItem::new("supplier-risk", "Supplier risk")]),
+            SidebarNavItem::new("last-item", "Cold-chain audit").icon(IconName::BookOpen),
+        ]),
+    ]
+}
+
+struct SidebarNavStory {
+    expanded: Entity<SidebarNav>,
+    collapsed: Entity<SidebarNav>,
+    filtered: Entity<SidebarNav>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl SidebarNavStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let expanded = cx.new(|cx| SidebarNav::new("creamery-expanded", window, cx));
+        let collapsed = cx.new(|cx| SidebarNav::new("creamery-collapsed", window, cx));
+        let filtered = cx.new(|cx| SidebarNav::new("creamery-filtered", window, cx));
+        for nav in [&expanded, &collapsed, &filtered] {
+            nav.update(cx, |nav, cx| {
+                nav.set_sections(creamery_sidebar_sections(), cx);
+                nav.set_active_item("all-orders", cx);
+            });
+        }
+        collapsed.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+        filtered.update(cx, |nav, cx| nav.set_query("pistachio", window, cx));
+
+        let subscriptions = [&expanded, &collapsed, &filtered]
+            .into_iter()
+            .map(|nav| {
+                cx.subscribe(nav, |this, nav, event: &SidebarNavEvent, cx| {
+                    if let SidebarNavEvent::Selected { item_id, .. } = event {
+                        nav.update(cx, |nav, cx| nav.set_active_item(item_id.clone(), cx));
+                    }
+                    this.last_event = format!("{event:?}").into();
+                    cx.notify();
+                })
+            })
+            .collect();
+
+        Self {
+            expanded,
+            collapsed,
+            filtered,
+            last_event: "Choose a row, filter, collapse, or start a new task.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+}
+
+impl Render for SidebarNavStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.sm)
+            .child(
+                h_flex()
+                    .items_start()
+                    .gap(tokens.spacing.sm)
+                    .child(
+                        div()
+                            .id("sidebar-nav-expanded-host")
+                            .debug_selector(|| "sidebar-nav-expanded-host".into())
+                            .w(tokens.spacing.xxl * 8.)
+                            .h(tokens.spacing.xxl * 7.)
+                            .child(self.expanded.clone()),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-nav-collapsed-host")
+                            .debug_selector(|| "sidebar-nav-collapsed-host".into())
+                            .h(tokens.spacing.xxl * 7.)
+                            .child(self.collapsed.clone()),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-nav-filtered-host")
+                            .debug_selector(|| "sidebar-nav-filtered-host".into())
+                            .flex_1()
+                            .min_w_0()
+                            .h(tokens.spacing.xxl * 7.)
+                            .child(self.filtered.clone()),
+                    ),
+            )
+            .child(
+                div()
+                    .id("sidebar-nav-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last sidebar navigation event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
+            .child(
+                TextView::markdown(
+                    "sidebar-nav-reference-note",
+                    "**Reference comparison.** Inspired by Creamery's calm, compact navigation, this original GPUI composition keeps application-owned stable IDs and active state, recursively retains matching ancestors, exposes badges and disabled state, and intentionally scrolls deep content inside each constrained sidebar.",
                 )
                 .selectable(true),
             )
@@ -1285,6 +1426,14 @@ impl Gallery {
                     || command_story,
                     cx,
                 )
+            }
+            StoryId::SidebarNav => {
+                let sidebar_story = window.use_keyed_state(
+                    "sidebar-nav-story-state",
+                    cx,
+                    SidebarNavStory::new,
+                );
+                self.section(story, "SIDEBAR NAVIGATION", || sidebar_story, cx)
             }
             StoryId::CodeBlock => self.section(
                 story,

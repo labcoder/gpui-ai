@@ -34,6 +34,7 @@ pub mod prompt_bar;
 pub mod recommendation;
 pub mod search_results;
 pub mod selection_actions;
+pub mod sidebar_nav;
 pub mod stream;
 pub mod streaming_text;
 pub mod task;
@@ -62,6 +63,7 @@ pub mod prelude {
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
+    pub use crate::sidebar_nav::{SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarSection};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};
     pub use crate::streaming_text::{
         CitationRef, FollowUp, SourceRef, StreamingText, StreamingTextEvent,

@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Eighteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Nineteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: sidebar navigation, records/filter/diff/comparison tables, and the fine-tune inspector.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: records/filter/diff/comparison tables and the fine-tune inspector.
 
 ## Requirements
 
@@ -160,6 +160,36 @@ let _subscription = cx.subscribe(&search, |_, _, event: &CommandSearchEvent, _| 
 
 Title, subtitle, and keyword matching is case-insensitive. On native targets, arrow keys skip disabled rows, Enter and pointer activation emit the same stable item ID, and Escape clears a non-empty query before emitting dismissal on the next press. In browser WASM at the pinned GPUI revision, pointer activation remains usable, but general keyboard action dispatch currently panics before `Command` handles the action; the same failure reproduces with an upstream action-based control, so the keyboard claims are native-only until that upstream seam is fixed.
 
+`SidebarNav` composes gpui-component's retained Sidebar, group, and menu presentation with one native filter input. Applications replace stable-ID recursive sections and remain authoritative for the active item; the entity owns collapse, query, expansion, focus, and scrolling interaction state:
+
+```rust
+use gpui_component::IconName;
+use mighty_gpui::prelude::*;
+
+let nav = cx.new(|cx| SidebarNav::new("workspace-nav", window, cx));
+nav.update(cx, |nav, cx| {
+    nav.set_sections([
+        SidebarSection::new("production", "Production").items([
+            SidebarNavItem::new("orders", "Orders")
+                .icon(IconName::LayoutDashboard)
+                .badge("12")
+                .children([
+                    SidebarNavItem::new("wholesale", "Wholesale"),
+                    SidebarNavItem::new("farm-shop", "Farm shop"),
+                ]),
+            SidebarNavItem::new("forecast", "Seasonal forecast").disabled(true),
+        ]),
+    ], cx);
+    nav.set_active_item("wholesale", cx);
+});
+
+let _subscription = cx.subscribe(&nav, |_, _, event: &SidebarNavEvent, _| {
+    println!("sidebar event: {event:?}");
+});
+```
+
+Filtering is case-insensitive and recursively retains matching descendants with their ancestor path; duplicate labels are valid because selection, expansion, active state, and accessibility identity all use domain IDs. Native pointer, Enter, Space, and AccessKit activation converge on one stable control per row, while disabled rows expose no activation action. Collapsed icon rows retain accessible names and hover labels. The general action-dispatch limitation described above also applies to action-based keyboard paths in the browser WASM build at the pinned GPUI revision; pointer interaction remains available there.
+
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
 ```rust
@@ -216,7 +246,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is sidebar navigation and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, stable-ID command search, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, stable-ID command search, filterable sidebar navigation, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 

@@ -29,6 +29,8 @@ pub enum StoryId {
     Chat,
     /// Stable-ID command palette.
     CommandSearch,
+    /// Stable-ID filterable sidebar navigation.
+    SidebarNav,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -59,6 +61,7 @@ impl StoryId {
         Self::StreamingText,
         Self::Chat,
         Self::CommandSearch,
+        Self::SidebarNav,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -83,6 +86,7 @@ impl StoryId {
             Self::StreamingText => "streaming-text",
             Self::Chat => "chat",
             Self::CommandSearch => "command-search",
+            Self::SidebarNav => "sidebar-nav",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -108,6 +112,7 @@ impl StoryId {
             Self::StreamingText => "Streaming text",
             Self::Chat => "Chat",
             Self::CommandSearch => "Command search",
+            Self::SidebarNav => "Sidebar navigation",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -171,5 +176,13 @@ mod tests {
             Ok(StoryId::CommandSearch)
         );
         assert!(StoryId::ALL.contains(&StoryId::CommandSearch));
+    }
+
+    #[test]
+    fn sidebar_navigation_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::SidebarNav.slug(), "sidebar-nav");
+        assert_eq!(StoryId::SidebarNav.title(), "Sidebar navigation");
+        assert_eq!("sidebar-nav".parse::<StoryId>(), Ok(StoryId::SidebarNav));
+        assert!(StoryId::ALL.contains(&StoryId::SidebarNav));
     }
 }
