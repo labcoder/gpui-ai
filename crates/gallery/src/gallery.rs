@@ -104,7 +104,8 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Recommendation
         | StoryId::Context
         | StoryId::Insights
-        | StoryId::PromptBar => false,
+        | StoryId::PromptBar
+        | StoryId::SelectionActions => false,
     }
 }
 
@@ -334,6 +335,83 @@ impl Render for PromptBarStory {
     }
 }
 
+struct SelectionActionsStory {
+    selection: Entity<SelectionActions>,
+    last_event: SharedString,
+    _subscription: Subscription,
+}
+
+impl SelectionActionsStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let selection = cx.new(|cx| {
+            SelectionActions::new(
+                "gallery-selection-actions",
+                "## Weekly flavor review\n\nMint Chip demand softened while Vanilla recovered. Select any phrase in this readable analysis, then choose an action. Native **Ctrl/Cmd+A** and copy remain available.",
+                window,
+                cx,
+            )
+        });
+        selection.update(cx, |selection, cx| {
+            selection.set_actions(
+                [
+                    SelectionAction::new("ask", "Ask"),
+                    SelectionAction::new("explain", "Explain"),
+                    SelectionAction::new("rewrite", "Rewrite"),
+                ],
+                cx,
+            );
+        });
+        let _subscription =
+            cx.subscribe(&selection, |this, _, event: &SelectionActionsEvent, cx| {
+                this.last_event = format!("{event:?}").into();
+                cx.notify();
+            });
+        Self {
+            selection,
+            last_event: "Select text to reveal Ask, Explain, and Rewrite.".into(),
+            _subscription,
+        }
+    }
+}
+
+impl Render for SelectionActionsStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(
+                div()
+                    .id("selection-actions-instructions")
+                    .role(Role::Note)
+                    .aria_label("Selection actions instructions")
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Drag over the analysis or use Ctrl/Cmd+A, then activate an action."),
+            )
+            .child(
+                div()
+                    .h(px(168.))
+                    .max_h(px(168.))
+                    .flex_none()
+                    .child(self.selection.clone()),
+            )
+            .child(
+                TextView::markdown(
+                    "selection-actions-event-log",
+                    format!("**Last typed event.** {}", self.last_event),
+                )
+                .selectable(true),
+            )
+            .child(
+                TextView::markdown(
+                    "selection-actions-reference-note",
+                    "**Reference comparison.** Beautiful UI presents Ask, Explain, and Rewrite in a compact floating selection toolbar. This original GPUI composition deliberately keeps gpui-component's Markdown selection and native copy behavior, emits stable typed IDs for application-owned work, names every keyboard control, and clamps the token-driven toolbar inside constrained surfaces without motion-dependent meaning.",
+                )
+                .selectable(true),
+            )
+    }
+}
+
 /// Theme presets available to native and web gallery hosts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GalleryTheme {
@@ -400,6 +478,7 @@ pub struct Gallery {
     catalog_list: ListState,
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
+    selection_actions_scroll: ScrollHandle,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -441,6 +520,7 @@ impl Gallery {
             catalog_list,
             insight_scroll: ScrollHandle::new(),
             prompt_bar_scroll: ScrollHandle::new(),
+            selection_actions_scroll: ScrollHandle::new(),
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -994,6 +1074,35 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::SelectionActions => {
+                let selection_story = window.use_keyed_state(
+                    "selection-actions-story-state",
+                    cx,
+                    SelectionActionsStory::new,
+                );
+                self.section(
+                    story,
+                    "SELECTION ACTIONS",
+                    || {
+                        v_flex()
+                            .id("selection-actions-story-scroll")
+                            .debug_selector(|| "selection-actions-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .gap_2()
+                            .track_scroll(&self.selection_actions_scroll)
+                            .overflow_y_scrollbar()
+                            .child(selection_story)
+                            .child(
+                                div()
+                                    .debug_selector(|| "selection-actions-story-end".into())
+                                    .h(px(1.)),
+                            )
+                    },
+                    cx,
+                )
+            }
         }
     }
 }
@@ -1152,20 +1261,20 @@ mod tests {
         let viewport_height = cx.update(|window, _| window.viewport_size().height);
         assert!(cx.debug_bounds("story-loading").is_some());
         assert!(
-            cx.debug_bounds("story-prompt-bar").is_none(),
+            cx.debug_bounds("story-selection-actions").is_none(),
             "the final story should not be constructed before it nears the viewport"
         );
 
         for _ in StoryId::ALL {
-            if cx.debug_bounds("story-prompt-bar").is_some() {
+            if cx.debug_bounds("story-selection-actions").is_some() {
                 break;
             }
             scroll(cx, -10_000.);
         }
 
         let scrolled = cx
-            .debug_bounds("story-prompt-bar")
-            .expect("prompt bar story should render after scrolling to it");
+            .debug_bounds("story-selection-actions")
+            .expect("selection actions story should render after scrolling to it");
         assert!(scrolled.top() < viewport_height);
         assert!(
             cx.debug_bounds("story-loading").is_none(),
@@ -1309,6 +1418,41 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn constrained_direct_selection_actions_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::SelectionActions, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            Root::new(gallery, window, cx)
+        });
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.selection_actions_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let story = cx
+            .debug_bounds("selection-actions-story-scroll")
+            .expect("the selection actions story should expose its overflow region");
+        let end = cx
+            .debug_bounds("selection-actions-story-end")
+            .expect("the selection actions story end marker should remain rendered");
+        assert!(
+            end.bottom() <= story.bottom(),
+            "{end:?} must fit in {story:?}"
+        );
+    }
+
     #[test]
     fn virtualized_story_semantics_use_stable_domain_identity() {
         let list = super::story_list_frame().into_element();
@@ -1387,7 +1531,7 @@ mod tests {
         for _ in StoryId::ALL {
             scroll(cx, -10_000.);
         }
-        assert!(cx.debug_bounds("story-prompt-bar").is_some());
+        assert!(cx.debug_bounds("story-selection-actions").is_some());
 
         let (paused_at, task_running) = gallery.read_with(cx, |gallery, _| {
             (gallery.sim.elapsed(), gallery.simulation_task.is_some())

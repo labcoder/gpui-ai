@@ -7,22 +7,45 @@ use gpui_component::Root;
 use mighty_gpui::{
     code_block::CodeBlock,
     insight::InsightCard,
+    selection_actions::{SelectionAction, SelectionActions},
     stream::Progressive,
     streaming_text::StreamingText,
     thinking::{StepStatus, Thinking, ThinkingStep, ThinkingTrace},
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Surface {
     Answer,
     Code,
     ThinkingProse,
     ThinkingDetail,
     Insight,
+    SelectionActions,
 }
 
 struct ReadableSurface {
     surface: Surface,
+    selection: Option<gpui::Entity<SelectionActions>>,
+}
+
+impl ReadableSurface {
+    fn new(surface: Surface, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let selection = (surface == Surface::SelectionActions).then(|| {
+            let selection = cx.new(|cx| {
+                SelectionActions::new(
+                    "readable-selection",
+                    "selectable_action selectable_action",
+                    window,
+                    cx,
+                )
+            });
+            selection.update(cx, |selection, cx| {
+                selection.set_actions([SelectionAction::new("ask", "Ask")], cx)
+            });
+            selection
+        });
+        Self { surface, selection }
+    }
 }
 
 impl Render for ReadableSurface {
@@ -55,6 +78,12 @@ impl Render for ReadableSurface {
             Surface::Insight => InsightCard::new("insight", "Demand changed")
                 .body("selectable_insight selectable_insight")
                 .into_any_element(),
+            Surface::SelectionActions => self
+                .selection
+                .as_ref()
+                .expect("selection entity is created for the selection surface")
+                .clone()
+                .into_any_element(),
         };
 
         div().size_full().p(px(16.)).child(
@@ -69,7 +98,7 @@ impl Render for ReadableSurface {
 fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
     cx.update(mighty_gpui::init);
     let (_, cx) = cx.add_window_view(move |window, cx| {
-        let content = cx.new(|_| ReadableSurface { surface });
+        let content = cx.new(|cx| ReadableSurface::new(surface, window, cx));
         Root::new(content, window, cx)
     });
     let cx: &mut VisualTestContext = cx;
@@ -94,6 +123,7 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
             bounds.top() + bounds.size.height * 0.74,
         ),
         Surface::Insight => (bounds.left() + px(17.), bounds.top() + px(80.)),
+        Surface::SelectionActions => (bounds.left() + px(14.), bounds.top() + px(14.)),
     };
     let from = point(content_x, content_y);
     let to = point(bounds.left() + px(600.), bounds.bottom() - px(1.));
@@ -150,4 +180,11 @@ fn insight_bodies_export_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::Insight, cx);
 
     assert!(selected.contains("selectable_insight"), "{selected:?}");
+}
+
+#[gpui::test]
+fn selection_action_surfaces_export_selected_text(cx: &mut TestAppContext) {
+    let selected = select_text(Surface::SelectionActions, cx);
+
+    assert!(selected.contains("selectable_action"), "{selected:?}");
 }

@@ -1,7 +1,9 @@
 use gpui::{
-    AppContext as _, Context, Element as _, Entity, IntoElement as _, Modifiers, Render,
-    RenderOnce as _, Role, Subscription, TestAppContext, Window, accesskit, canvas,
+    AppContext as _, Context, Element as _, Entity, IntoElement as _, Modifiers, MouseButton,
+    Render, RenderOnce as _, Role, Subscription, TestAppContext, VisualTestContext, Window,
+    accesskit, canvas, point, px, size,
 };
+use gpui_component::Root;
 use mighty_gpui::{
     approval::ApprovalCard,
     code_block::CodeBlock,
@@ -9,6 +11,7 @@ use mighty_gpui::{
     prompt_bar::{PromptBar, PromptBarEvent, PromptModel},
     recommendation::RecommendationCard,
     search_results::{SearchResult, SearchResults},
+    selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent},
     stream::{ProgressState, Progressive},
     streaming_text::StreamingText,
     task::{TaskRow, TaskSnapshot},
@@ -43,6 +46,51 @@ struct PublicPromptProbe {
     prompt: Entity<PromptBar>,
     events: Rc<RefCell<Vec<PromptBarEvent>>>,
     _subscription: Subscription,
+}
+
+struct PublicSelectionProbe {
+    selection: Entity<SelectionActions>,
+    events: Rc<RefCell<Vec<SelectionActionsEvent>>>,
+    _subscription: Subscription,
+}
+
+impl PublicSelectionProbe {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let selection = cx.new(|cx| {
+            SelectionActions::new(
+                "public-selection",
+                "Selectable action words for testing.",
+                window,
+                cx,
+            )
+        });
+        selection.update(cx, |selection, cx| {
+            selection.set_actions(
+                [
+                    SelectionAction::new("ask", "Ask"),
+                    SelectionAction::new("explain", "Explain"),
+                    SelectionAction::new("rewrite", "Rewrite"),
+                ],
+                cx,
+            );
+        });
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured = events.clone();
+        let _subscription = cx.subscribe(&selection, move |_, _, event, _| {
+            captured.borrow_mut().push(event.clone());
+        });
+        Self {
+            selection,
+            events,
+            _subscription,
+        }
+    }
+}
+
+impl Render for PublicSelectionProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        self.selection.clone()
+    }
 }
 
 impl PublicPromptProbe {
@@ -329,4 +377,139 @@ fn public_prompt_bar_assembled_controls_activate_typed_events(cx: &mut TestAppCo
         )));
         true
     }));
+}
+
+#[gpui::test]
+fn public_selection_actions_preserve_selection_and_activate_typed_events(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSelectionProbe>()
+            .expect("public selection probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+    let from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let to = point(surface.right() - px(14.), surface.top() + px(24.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    assert!(
+        cx.debug_bounds("selection-actions-toolbar").is_none(),
+        "toolbar must stay hidden while selection drag is active"
+    );
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let selected = probe.read_with(cx, |probe, cx| {
+        probe.selection.read(cx).selected_text().to_string()
+    });
+    assert!(selected.contains("Selectable action words"), "{selected:?}");
+    let ask = cx
+        .debug_bounds("selection-action-ask")
+        .expect("settled selection should expose Ask");
+    cx.simulate_click(ask.center(), Modifiers::default());
+    assert!(probe.read_with(cx, |probe, _| {
+        let events = probe.events.borrow();
+        let matched = events.iter().any(|event| {
+            matches!(
+                event,
+                SelectionActionsEvent::Invoked {
+                    id,
+                    action_id,
+                    selected_text,
+                } if id == "public-selection"
+                    && action_id == "ask"
+                    && selected_text.contains("Selectable action words")
+            )
+        });
+        assert!(matched, "unexpected selection events: {events:?}");
+        true
+    }));
+
+    cx.simulate_resize(size(px(320.), px(180.)));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let constrained_surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("constrained selection surface should remain rendered");
+    let rewrite = cx
+        .debug_bounds("selection-action-rewrite")
+        .expect("the final action should remain rendered");
+    assert!(
+        rewrite.right() <= constrained_surface.right(),
+        "{rewrite:?} vs {constrained_surface:?}"
+    );
+    assert!(
+        rewrite.bottom() <= constrained_surface.bottom(),
+        "{rewrite:?} vs {constrained_surface:?}"
+    );
+
+    probe.update(cx, |probe, cx| {
+        probe.selection.update(cx, |selection, cx| {
+            selection.set_markdown("Replacement content", cx)
+        });
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
+    assert!(probe.read_with(cx, |probe, cx| {
+        probe.selection.read(cx).selected_text().is_empty()
+    }));
+}
+
+#[gpui::test]
+fn public_selection_actions_follow_keyboard_select_all_and_copy(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSelectionProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSelectionProbe>()
+            .expect("public selection probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let surface = cx
+        .debug_bounds("selection-actions-surface")
+        .expect("selection surface should render");
+
+    let focus_from = point(surface.left() + px(14.), surface.top() + px(14.));
+    let focus_to = point(surface.left() + px(42.), surface.top() + px(14.));
+    cx.simulate_mouse_down(focus_from, MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_move(focus_to, Some(MouseButton::Left), Modifiers::default());
+    cx.simulate_mouse_up(focus_to, MouseButton::Left, Modifiers::default());
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-a");
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert_eq!(
+        probe.read_with(cx, |probe, cx| probe
+            .selection
+            .read(cx)
+            .selected_text()
+            .to_string()),
+        "Selectable action words for testing."
+    );
+    assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+
+    cx.simulate_keystrokes("ctrl-c");
+    let clipboard = cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    assert_eq!(
+        clipboard.as_deref(),
+        Some("Selectable action words for testing.")
+    );
 }

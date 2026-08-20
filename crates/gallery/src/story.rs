@@ -37,6 +37,8 @@ pub enum StoryId {
     Insights,
     /// Hybrid-controlled prompt composer.
     PromptBar,
+    /// Actions anchored to a readable text selection.
+    SelectionActions,
 }
 
 impl StoryId {
@@ -57,6 +59,7 @@ impl StoryId {
         Self::Context,
         Self::Insights,
         Self::PromptBar,
+        Self::SelectionActions,
     ];
 
     /// Stable URL slug for this selection.
@@ -78,6 +81,7 @@ impl StoryId {
             Self::Context => "context",
             Self::Insights => "insights",
             Self::PromptBar => "prompt-bar",
+            Self::SelectionActions => "selection-actions",
         }
     }
 
@@ -100,6 +104,7 @@ impl StoryId {
             Self::Context => "Context cards",
             Self::Insights => "Insight card",
             Self::PromptBar => "Prompt bar",
+            Self::SelectionActions => "Selection actions",
         }
     }
 }

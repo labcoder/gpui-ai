@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Fifteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Sixteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, and paged insight cards with charts, plus a hybrid-controlled prompt bar with native text editing, mentions, commands, models, attachments, and typed submission/cancellation events. Still to come: chat, command search, sidebar navigation, records/filter/diff/comparison tables, fine-tune inspector, inline citations, and selection actions.
+Available today: streaming text (markdown, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: chat, command search, sidebar navigation, records/filter/diff/comparison tables, fine-tune inspector, and inline citations.
 
 ## Requirements
 
@@ -96,6 +96,23 @@ let _subscription = cx.subscribe(&prompt, |_, _, event: &PromptBarEvent, _| {
 });
 ```
 
+Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
+
+```rust
+use mighty_gpui::prelude::*;
+
+let selection = cx.new(|cx| {
+    SelectionActions::new("answer-selection", "Select any part of this answer.", window, cx)
+});
+selection.update(cx, |selection, cx| {
+    selection.set_actions([
+        SelectionAction::new("ask", "Ask"),
+        SelectionAction::new("explain", "Explain"),
+        SelectionAction::new("rewrite", "Rewrite"),
+    ], cx);
+});
+```
+
 Using mighty-gpui as a dependency is early (pre-0.1, API in flux). The wiring looks like this:
 
 ```toml
@@ -112,7 +129,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is selection actions and inline citations, followed by chat, command search, navigation, and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is inline citations, followed by chat, command search, navigation, and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, selection actions, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 
