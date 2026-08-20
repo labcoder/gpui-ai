@@ -113,7 +113,7 @@ selection.update(cx, |selection, cx| {
 });
 ```
 
-Streaming answers resolve complete `[[cite:<stable-id>]]` markers against application-owned citation metadata. The inline Markdown stays selectable; activation emits the stable ID and opaque destination instead of opening it inside the library:
+Streaming answers resolve complete `[[cite:<stable-id>]]` markers against application-owned citation metadata. The inline Markdown stays selectable; activation emits the stable ID and opaque destination instead of opening it inside the library. At the current upstream pin, the inline Markdown glyph is pointer-only, so the adjacent named companion Link is the keyboard and AccessKit authority and emits the same typed event:
 
 ```rust
 use mighty_gpui::prelude::*;

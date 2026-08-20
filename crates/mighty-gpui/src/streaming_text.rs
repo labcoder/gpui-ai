@@ -153,7 +153,38 @@ fn escape_markdown_title(title: &str) -> String {
     escaped
 }
 
-fn fence_marker(line: &str) -> Option<(u8, usize)> {
+#[derive(Clone, Copy)]
+struct FenceCandidate<'a> {
+    marker: u8,
+    length: usize,
+    trailing: &'a str,
+}
+
+#[derive(Clone, Copy)]
+struct OpenFence {
+    marker: u8,
+    length: usize,
+    quote_depth: usize,
+}
+
+fn block_quote_content(mut line: &str) -> (usize, &str) {
+    let mut depth = 0;
+    loop {
+        let bytes = line.as_bytes();
+        let indentation = bytes.iter().take_while(|byte| **byte == b' ').count();
+        if indentation > 3 || bytes.get(indentation) != Some(&b'>') {
+            return (depth, line);
+        }
+
+        depth += 1;
+        line = &line[indentation + 1..];
+        if line.starts_with([' ', '\t']) {
+            line = &line[1..];
+        }
+    }
+}
+
+fn fence_candidate(line: &str) -> Option<FenceCandidate<'_>> {
     let bytes = line.as_bytes();
     let indentation = bytes.iter().take_while(|byte| **byte == b' ').count();
     if indentation > 3 {
@@ -167,7 +198,25 @@ fn fence_marker(line: &str) -> Option<(u8, usize)> {
         .iter()
         .take_while(|byte| **byte == marker)
         .count();
-    (length >= 3).then_some((marker, length))
+    (length >= 3).then_some(FenceCandidate {
+        marker,
+        length,
+        trailing: &line[indentation + length..],
+    })
+}
+
+fn opens_fence(candidate: FenceCandidate<'_>) -> bool {
+    candidate.marker != b'`' || !candidate.trailing.contains('`')
+}
+
+fn closes_fence(candidate: FenceCandidate<'_>, open: OpenFence) -> bool {
+    candidate.marker == open.marker
+        && candidate.length >= open.length
+        && candidate
+            .trailing
+            .trim_end_matches(['\r', '\n'])
+            .bytes()
+            .all(|byte| matches!(byte, b' ' | b'\t'))
 }
 
 #[cfg(test)]
@@ -191,24 +240,35 @@ fn transform_citations(
 ) -> CitationTransform {
     let mut transformed = String::with_capacity(source.len());
     let mut referenced = Vec::new();
-    let mut fence: Option<(u8, usize)> = None;
+    let mut fence: Option<OpenFence> = None;
     let mut inline_ticks: Option<usize> = None;
 
     for line in source.split_inclusive('\n') {
-        if let Some((marker, length)) = fence_marker(line) {
-            if let Some((open_marker, open_length)) = fence {
+        let (quote_depth, quote_content) = block_quote_content(line);
+        let candidate = fence_candidate(quote_content);
+
+        if let Some(open) = fence {
+            if quote_depth >= open.quote_depth {
                 transformed.push_str(line);
-                if marker == open_marker && length >= open_length {
+                if quote_depth == open.quote_depth
+                    && candidate.is_some_and(|candidate| closes_fence(candidate, open))
+                {
                     fence = None;
                 }
                 continue;
             }
-            if inline_ticks.is_none() {
-                fence = Some((marker, length));
-                transformed.push_str(line);
-                continue;
-            }
-        } else if fence.is_some() {
+            fence = None;
+        }
+
+        if inline_ticks.is_none()
+            && let Some(candidate) = candidate
+            && opens_fence(candidate)
+        {
+            fence = Some(OpenFence {
+                marker: candidate.marker,
+                length: candidate.length,
+                quote_depth,
+            });
             transformed.push_str(line);
             continue;
         }
@@ -413,6 +473,11 @@ impl StreamingText {
 
     /// Adds inline citation metadata resolved from `[[cite:<stable-id>]]`
     /// markers in the streamed Markdown source.
+    ///
+    /// At the current upstream pin, the inline Markdown glyph is pointer-only.
+    /// When an event handler is present, the component therefore renders a
+    /// named companion Link as the keyboard and AccessKit authority; both
+    /// representations emit the same [`StreamingTextEvent::CitationActivated`].
     pub fn citations(mut self, citations: impl IntoIterator<Item = CitationRef>) -> Self {
         self.citations = citations.into_iter().collect();
         self
@@ -714,6 +779,52 @@ mod tests {
     }
 
     #[test]
+    fn trailing_text_cannot_close_a_fenced_code_block() {
+        let source = concat!(
+            "```rust\n",
+            "[[cite:pricing]]\n",
+            "```not-a-close\n",
+            "[[cite:pricing]]\n",
+            "```\n",
+            "Outside [[cite:pricing]]."
+        );
+        let expected = concat!(
+            "```rust\n",
+            "[[cite:pricing]]\n",
+            "```not-a-close\n",
+            "[[cite:pricing]]\n",
+            "```\n",
+            "Outside [Pricing](mighty-citation://pricing \"Open pricing source\")."
+        );
+
+        assert_eq!(
+            transform_citation_markers(source, &citations(), true),
+            expected
+        );
+    }
+
+    #[test]
+    fn block_quote_fences_protect_markers_and_accept_longer_closers() {
+        let source = concat!(
+            "> ```rust\n",
+            "> [[cite:pricing]]\n",
+            "> ````\n",
+            "Outside [[cite:pricing]]."
+        );
+        let expected = concat!(
+            "> ```rust\n",
+            "> [[cite:pricing]]\n",
+            "> ````\n",
+            "Outside [Pricing](mighty-citation://pricing \"Open pricing source\")."
+        );
+
+        assert_eq!(
+            transform_citation_markers(source, &citations(), true),
+            expected
+        );
+    }
+
+    #[test]
     fn duplicate_labels_route_by_stable_id_and_preserve_destination() {
         let refs = [
             CitationRef::new("first", "Report", "Open first", "app://first"),
@@ -741,8 +852,13 @@ mod tests {
         assert_eq!(transformed.referenced[0].id(), "pricing");
     }
 
+    struct CapturedCitationA11y {
+        role: Option<Role>,
+        node: accesskit::Node,
+    }
+
     struct CitationA11yProbe {
-        captured: Arc<Mutex<Option<accesskit::Node>>>,
+        captured: Arc<Mutex<Option<CapturedCitationA11y>>>,
     }
 
     impl gpui::Render for CitationA11yProbe {
@@ -750,8 +866,7 @@ mod tests {
             let captured = self.captured.clone();
             canvas(
                 move |_, window, cx| {
-                    let mut node = accesskit::Node::new(Role::Link);
-                    citation_companion_link(
+                    let element = citation_companion_link(
                         ElementId::from("answer"),
                         CitationRef::new(
                             "pricing",
@@ -763,9 +878,12 @@ mod tests {
                         cx,
                     )
                     .render(window, cx)
-                    .into_element()
-                    .write_a11y_info(&mut node);
-                    *captured.lock().expect("capture mutex should be available") = Some(node);
+                    .into_element();
+                    let role = element.a11y_role();
+                    let mut node = accesskit::Node::new(role.unwrap_or(Role::Unknown));
+                    element.write_a11y_info(&mut node);
+                    *captured.lock().expect("capture mutex should be available") =
+                        Some(CapturedCitationA11y { role, node });
                 },
                 |_, _, _, _| {},
             )
@@ -780,13 +898,13 @@ mod tests {
         let (_, cx) = cx.add_window_view(move |_, _| CitationA11yProbe { captured });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let node = result
+        let captured = result
             .lock()
             .expect("capture mutex should be available")
             .take()
             .expect("citation link should be captured");
-        assert_eq!(node.role(), Role::Link);
-        assert_eq!(node.label(), Some("Open pricing source"));
-        assert!(node.supports_action(accesskit::Action::Click));
+        assert_eq!(captured.role, Some(Role::Link));
+        assert_eq!(captured.node.label(), Some("Open pricing source"));
+        assert!(captured.node.supports_action(accesskit::Action::Click));
     }
 }
