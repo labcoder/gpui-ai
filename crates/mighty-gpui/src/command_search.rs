@@ -496,7 +496,9 @@ impl Render for CommandSearch {
                     return;
                 }
                 _ = selection_owner.update(cx, |search, cx| {
-                    if search.applied_selection_revision == revision {
+                    if search.items_revision != revision
+                        || search.applied_selection_revision == revision
+                    {
                         return;
                     }
                     search.applied_selection_revision = revision;
@@ -523,15 +525,16 @@ impl Render for CommandSearch {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::RefCell,
+        cell::{Cell, RefCell},
         rc::Rc,
         sync::{Arc, Mutex},
     };
 
     use gpui::{
-        AppContext as _, Context, Element as _, Entity, IntoElement as _, KeyDownEvent, KeyUpEvent,
-        Keystroke, Modifiers, Render, Role, Subscription, TestAppContext, VisualTestContext,
-        Window, accesskit, canvas, px, size,
+        AnyElement, App, AppContext as _, Bounds, Context, Element, Entity, GlobalElementId,
+        InspectorElementId, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke, LayoutId, Modifiers,
+        Pixels, Render, Role, Subscription, TestAppContext, VisualTestContext, Window, accesskit,
+        canvas, point, px, size,
     };
     use gpui_component::Root;
 
@@ -704,6 +707,78 @@ mod tests {
     impl Render for Harness {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
             self.search.clone()
+        }
+    }
+
+    struct ReplaceBeforeChildPrepaint {
+        search: Entity<CommandSearch>,
+        replacement: Option<Vec<CommandSearchItem>>,
+        observed_applied_revision: Rc<Cell<u64>>,
+        child: AnyElement,
+    }
+
+    impl IntoElement for ReplaceBeforeChildPrepaint {
+        type Element = Self;
+
+        fn into_element(self) -> Self::Element {
+            self
+        }
+    }
+
+    impl Element for ReplaceBeforeChildPrepaint {
+        type RequestLayoutState = ();
+        type PrepaintState = ();
+
+        fn id(&self) -> Option<gpui::ElementId> {
+            None
+        }
+
+        fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+            None
+        }
+
+        fn request_layout(
+            &mut self,
+            _: Option<&GlobalElementId>,
+            _: Option<&InspectorElementId>,
+            window: &mut Window,
+            cx: &mut App,
+        ) -> (LayoutId, Self::RequestLayoutState) {
+            (self.child.request_layout(window, cx), ())
+        }
+
+        fn prepaint(
+            &mut self,
+            _: Option<&GlobalElementId>,
+            _: Option<&InspectorElementId>,
+            _: Bounds<Pixels>,
+            _: &mut Self::RequestLayoutState,
+            window: &mut Window,
+            cx: &mut App,
+        ) -> Self::PrepaintState {
+            let replacement = self
+                .replacement
+                .take()
+                .expect("the catalog should be replaced exactly once before child prepaint");
+            self.search.update(cx, |search, cx| {
+                search.set_items(replacement, window, cx);
+            });
+            self.child.prepaint(window, cx);
+            self.observed_applied_revision
+                .set(self.search.read(cx).applied_selection_revision);
+        }
+
+        fn paint(
+            &mut self,
+            _: Option<&GlobalElementId>,
+            _: Option<&InspectorElementId>,
+            _: Bounds<Pixels>,
+            _: &mut Self::RequestLayoutState,
+            _: &mut Self::PrepaintState,
+            window: &mut Window,
+            cx: &mut App,
+        ) {
+            self.child.paint(window, cx);
         }
     }
 
@@ -1009,6 +1084,59 @@ mod tests {
             });
             window.draw(cx).clear(cx);
         });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        search.read_with(cx, |search, cx| {
+            assert_eq!(search.selected_id, Some("second".into()));
+            assert_eq!(
+                search.state.read(cx).selected_index(),
+                Some(gpui_component::IndexPath::new(0))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn stale_prepaint_does_not_apply_new_indices_to_an_old_command_model(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        activate_key(cx, "down");
+        let search = harness.read_with(cx, |harness, _| harness.search.clone());
+        let applied_before = search.read_with(cx, |search, _| search.applied_selection_revision);
+        let observed_applied_revision = Rc::new(Cell::new(u64::MAX));
+
+        cx.draw(
+            point(px(0.), px(0.)),
+            size(px(520.), px(360.)),
+            |window, cx| {
+                search.update(cx, |search, cx| {
+                    search.set_items(
+                        [
+                            CommandSearchItem::new("first", "First command"),
+                            CommandSearchItem::new("second", "Second command"),
+                        ],
+                        window,
+                        cx,
+                    );
+                });
+                ReplaceBeforeChildPrepaint {
+                    search: search.clone(),
+                    replacement: Some(vec![
+                        CommandSearchItem::new("second", "Second command"),
+                        CommandSearchItem::new("first", "First command"),
+                    ]),
+                    observed_applied_revision: observed_applied_revision.clone(),
+                    child: search.clone().into_any_element(),
+                }
+            },
+        );
+        assert_eq!(
+            observed_applied_revision.get(),
+            applied_before,
+            "a stale prepaint must not mark its model revision as applied"
+        );
+        cx.run_until_parked();
+
+        cx.update(|window, cx| window.draw(cx).clear(cx));
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
