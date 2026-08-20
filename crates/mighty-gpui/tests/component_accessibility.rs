@@ -5,7 +5,9 @@ use gpui::{
     TestAppContext, VisualTestContext, Window, accesskit, canvas, div, point, px,
 };
 use gpui_component::Root;
-use mighty_gpui::prelude::{Chat, ChatEvent, ChatMessage, ChatRole};
+use mighty_gpui::prelude::{
+    Chat, ChatEvent, ChatMessage, ChatRole, CommandSearch, CommandSearchEvent, CommandSearchItem,
+};
 use mighty_gpui::{
     approval::ApprovalCard,
     code_block::CodeBlock,
@@ -64,6 +66,47 @@ struct PublicChatProbe {
     chat: Entity<Chat>,
     events: Rc<RefCell<Vec<ChatEvent>>>,
     _subscription: Subscription,
+}
+
+struct PublicCommandSearchProbe {
+    search: Entity<CommandSearch>,
+    events: Rc<RefCell<Vec<CommandSearchEvent>>>,
+    _subscription: Subscription,
+}
+
+impl PublicCommandSearchProbe {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let search = cx.new(|cx| CommandSearch::new("public-command-search", window, cx));
+        search.update(cx, |search, cx| {
+            search.set_items(
+                [
+                    CommandSearchItem::new("pricing", "Open report")
+                        .subtitle("Supplier pricing")
+                        .keywords(["margin"])
+                        .shortcut("Ctrl+R"),
+                    CommandSearchItem::new("disabled", "Unavailable report").disabled(true),
+                ],
+                window,
+                cx,
+            );
+        });
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured = events.clone();
+        let subscription = cx.subscribe(&search, move |_, _, event, _| {
+            captured.borrow_mut().push(event.clone());
+        });
+        Self {
+            search,
+            events,
+            _subscription: subscription,
+        }
+    }
+}
+
+impl Render for PublicCommandSearchProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        self.search.clone()
+    }
 }
 
 impl PublicChatProbe {
@@ -642,6 +685,43 @@ fn public_prompt_bar_assembled_controls_activate_typed_events(cx: &mut TestAppCo
         )));
         true
     }));
+}
+
+#[gpui::test]
+fn public_command_search_exposes_stable_keyboard_events_and_named_rows(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicCommandSearchProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicCommandSearchProbe>()
+            .expect("public command-search probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    let search = probe.read_with(cx, |probe, _| probe.search.clone());
+    cx.update(|window, cx| {
+        search.update(cx, |search, cx| search.focus(window, cx));
+        window.draw(cx).clear(cx);
+    });
+
+    assert!(
+        cx.debug_bounds("command-search-public-command-search")
+            .is_some()
+    );
+    assert!(cx.debug_bounds("command-search-item-pricing").is_some());
+    assert!(cx.debug_bounds("command-search-item-disabled").is_some());
+
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [CommandSearchEvent::Selected {
+            id: "public-command-search".into(),
+            item_id: "pricing".into(),
+        }]
+    );
 }
 
 #[gpui::test]

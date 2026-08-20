@@ -107,6 +107,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Recommendation
         | StoryId::Context
         | StoryId::Insights
+        | StoryId::CommandSearch
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -270,6 +271,143 @@ impl Render for ChatStory {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
+            )
+    }
+}
+
+struct CommandSearchStory {
+    ready: Entity<CommandSearch>,
+    empty: Entity<CommandSearch>,
+    no_results: Entity<CommandSearch>,
+    last_event: SharedString,
+    _subscription: Subscription,
+}
+
+impl CommandSearchStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let ready = cx.new(|cx| CommandSearch::new("gallery-command-ready", window, cx));
+        ready.update(cx, |search, cx| {
+            search.set_items(
+                [
+                    CommandSearchItem::new("supplier-report", "Open report")
+                        .subtitle("Supplier pricing and margin summary")
+                        .keywords(["cost", "margin"])
+                        .shortcut("Ctrl+R"),
+                    CommandSearchItem::new("delivery-calendar", "Open delivery calendar")
+                        .subtitle("Review upcoming supplier windows")
+                        .keywords(["schedule", "dates"])
+                        .shortcut("Ctrl+D"),
+                    CommandSearchItem::new("duplicate-report", "Open report")
+                        .subtitle("Inventory risk summary")
+                        .keywords(["stock", "risk"]),
+                    CommandSearchItem::new("offline-sync", "Sync offline catalog")
+                        .subtitle("Unavailable while disconnected")
+                        .disabled(true),
+                ],
+                window,
+                cx,
+            );
+        });
+        let empty = cx.new(|cx| CommandSearch::new("gallery-command-empty", window, cx));
+        let no_results = cx.new(|cx| CommandSearch::new("gallery-command-no-results", window, cx));
+        no_results.update(cx, |search, cx| {
+            search.set_items(
+                [CommandSearchItem::new("available", "Available command")],
+                window,
+                cx,
+            );
+            search.set_query("no matching command", window, cx);
+        });
+
+        let _subscription = cx.subscribe(&ready, |this, _, event: &CommandSearchEvent, cx| {
+            this.last_event = format!("{event:?}").into();
+            cx.notify();
+        });
+        Self {
+            ready,
+            empty,
+            no_results,
+            last_event: "Type, use arrow keys, press Enter, or choose a row.".into(),
+            _subscription,
+        }
+    }
+}
+
+impl Render for CommandSearchStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(
+                div()
+                    .id("command-search-ready-heading")
+                    .role(Role::Heading)
+                    .aria_label("Populated command search")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("POPULATED — TYPE MARGIN, DELIVERY, OR RISK"),
+            )
+            .child(
+                div()
+                    .id("command-search-ready-host")
+                    .debug_selector(|| "command-search-ready-host".into())
+                    .h(px(248.))
+                    .max_h(px(248.))
+                    .flex_none()
+                    .child(self.ready.clone()),
+            )
+            .child(
+                div()
+                    .id("command-search-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last command-search event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
+            .child(
+                h_flex()
+                    .items_start()
+                    .gap(tokens.spacing.md)
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(tokens.spacing.xs)
+                            .child(
+                                div()
+                                    .id("command-search-empty-heading")
+                                    .role(Role::Heading)
+                                    .aria_label("Empty command catalog")
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("EMPTY CATALOG"),
+                            )
+                            .child(self.empty.clone()),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(tokens.spacing.xs)
+                            .child(
+                                div()
+                                    .id("command-search-no-results-heading")
+                                    .role(Role::Heading)
+                                    .aria_label("No command results")
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("NO RESULTS"),
+                            )
+                            .child(self.no_results.clone()),
+                    ),
+            )
+            .child(
+                TextView::markdown(
+                    "command-search-reference-note",
+                    "**Reference comparison.** Beautiful UI presents a compact search-and-command list. This original GPUI adapter preserves the upstream native editor, filtering, keyboard navigation, focus, and virtual list while adding stable application IDs, typed query/selection/dismissal events, subtitles, shortcut hints, disabled-state semantics, and controlled snapshot replacement.",
+                )
+                .selectable(true),
             )
     }
 }
@@ -1132,6 +1270,19 @@ impl Gallery {
                     story,
                     "CHAT",
                     || chat_story,
+                    cx,
+                )
+            }
+            StoryId::CommandSearch => {
+                let command_story = window.use_keyed_state(
+                    "command-search-story-state",
+                    cx,
+                    CommandSearchStory::new,
+                );
+                self.section(
+                    story,
+                    "COMMAND SEARCH",
+                    || command_story,
                     cx,
                 )
             }

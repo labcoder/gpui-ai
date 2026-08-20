@@ -23,6 +23,7 @@ pub mod approval;
 pub mod chat;
 pub mod chip;
 pub mod code_block;
+pub mod command_search;
 pub mod context_card;
 mod control;
 pub mod image_generation;
@@ -46,6 +47,7 @@ pub mod prelude {
     pub use crate::chat::{Chat, ChatEvent, ChatMessage, ChatRole};
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
+    pub use crate::command_search::{CommandSearch, CommandSearchEvent, CommandSearchItem};
     pub use crate::context_card::{ContextCard, ContextCardEvent};
     pub use crate::image_generation::ImageGeneration;
     pub use crate::insight::{

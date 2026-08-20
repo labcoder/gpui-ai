@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Seventeen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Eighteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: chat, command search, sidebar navigation, records/filter/diff/comparison tables, and the fine-tune inspector.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: sidebar navigation, records/filter/diff/comparison tables, and the fine-tune inspector.
 
 ## Requirements
 
@@ -132,6 +132,34 @@ let _subscription = cx.subscribe(&chat, |_, _, event: &ChatEvent, _| {
 
 Chat uses GPUI's variable-height `ListState` so only visible rows are laid out and wrapped or streaming rows can be remeasured at the real viewport width. The pinned `gpui-base` virtual-list API requires an exact height table for the full history up front, which would defeat virtualization for width-dependent prose.
 
+`CommandSearch` adapts gpui-component's native command palette without replacing its editor, filtering, focus, keyboard navigation, or virtual list. Applications replace stable-ID item snapshots and receive only typed application identity—never collection indices:
+
+```rust
+use mighty_gpui::prelude::*;
+
+let search = cx.new(|cx| CommandSearch::new("workspace-commands", window, cx));
+search.update(cx, |search, cx| {
+    search.set_items(
+        [
+            CommandSearchItem::new("supplier-report", "Open report")
+                .subtitle("Supplier pricing and margin summary")
+                .keywords(["cost", "margin"])
+                .shortcut("Ctrl+R"),
+            CommandSearchItem::new("offline-sync", "Sync offline catalog")
+                .disabled(true),
+        ],
+        window,
+        cx,
+    );
+});
+
+let _subscription = cx.subscribe(&search, |_, _, event: &CommandSearchEvent, _| {
+    println!("command-search event: {event:?}");
+});
+```
+
+Title, subtitle, and keyword matching is case-insensitive. Arrow keys skip disabled rows, Enter and pointer activation emit the same stable item ID, and Escape clears a non-empty query before emitting dismissal on the next press.
+
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
 ```rust
@@ -188,7 +216,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is command search, followed by navigation and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is sidebar navigation and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, stable-ID command search, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 

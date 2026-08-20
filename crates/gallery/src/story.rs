@@ -27,6 +27,8 @@ pub enum StoryId {
     StreamingText,
     /// Controlled virtualized conversation.
     Chat,
+    /// Stable-ID command palette.
+    CommandSearch,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -56,6 +58,7 @@ impl StoryId {
         Self::ImageGeneration,
         Self::StreamingText,
         Self::Chat,
+        Self::CommandSearch,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -79,6 +82,7 @@ impl StoryId {
             Self::ImageGeneration => "image-generation",
             Self::StreamingText => "streaming-text",
             Self::Chat => "chat",
+            Self::CommandSearch => "command-search",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -103,6 +107,7 @@ impl StoryId {
             Self::ImageGeneration => "Image generation",
             Self::StreamingText => "Streaming text",
             Self::Chat => "Chat",
+            Self::CommandSearch => "Command search",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -152,3 +157,19 @@ impl fmt::Display for StoryLookupError {
 }
 
 impl std::error::Error for StoryLookupError {}
+
+#[cfg(test)]
+mod tests {
+    use super::StoryId;
+
+    #[test]
+    fn command_search_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::CommandSearch.slug(), "command-search");
+        assert_eq!(StoryId::CommandSearch.title(), "Command search");
+        assert_eq!(
+            "command-search".parse::<StoryId>(),
+            Ok(StoryId::CommandSearch)
+        );
+        assert!(StoryId::ALL.contains(&StoryId::CommandSearch));
+    }
+}
