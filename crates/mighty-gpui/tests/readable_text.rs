@@ -10,10 +10,10 @@ use mighty_gpui::{
     insight::InsightCard,
     selection_actions::{SelectionAction, SelectionActions},
     stream::Progressive,
-    streaming_text::{CitationRef, StreamingText},
+    streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
     thinking::{StepStatus, Thinking, ThinkingStep, ThinkingTrace},
 };
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Surface {
@@ -32,6 +32,30 @@ struct ReadableSurface {
     surface: Surface,
     selection: Option<gpui::Entity<SelectionActions>>,
     chat: Option<gpui::Entity<Chat>>,
+}
+
+struct FollowUpSelectionSurface {
+    events: Rc<RefCell<Vec<StreamingTextEvent>>>,
+}
+
+impl Render for FollowUpSelectionSurface {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let content = Progressive::complete(
+            "Selectable supplier comparison remains available while choosing the next step."
+                .to_owned(),
+        );
+        let events = self.events.clone();
+        div().size_full().p(px(16.)).child(
+            div()
+                .debug_selector(|| "follow-up-selection-surface".into())
+                .w_full()
+                .child(
+                    StreamingText::new("follow-up-selection", &content)
+                        .follow_ups([FollowUp::new("compare", "Compare suppliers")])
+                        .on_event(move |event, _, _| events.borrow_mut().push(event.clone())),
+                ),
+        )
+    }
 }
 
 impl ReadableSurface {
@@ -288,4 +312,75 @@ fn chat_user_prose_exports_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::ChatUser, cx);
 
     assert!(selected.contains("selectable_chat_message"), "{selected:?}");
+}
+
+#[gpui::test]
+fn follow_up_pointer_drag_does_not_select_streaming_prose(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let captured = events.clone();
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let content = cx.new(|_| FollowUpSelectionSurface { events });
+        Root::new(content, window, cx)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let prose = cx
+        .debug_bounds("streaming-text-body")
+        .expect("selectable streaming prose should render");
+    let from = point(prose.left() + px(1.), prose.top() + px(1.));
+    let to = point(prose.left() + px(600.), prose.bottom() - px(1.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| {
+        let _ = window.draw(cx);
+    });
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.update(|window, cx| {
+        let _ = window.draw(cx);
+    });
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let selected = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+    assert!(
+        selected.contains("Selectable supplier comparison"),
+        "{selected:?}"
+    );
+
+    let follow_up = cx
+        .debug_bounds("streaming-follow-up-compare")
+        .expect("rendered follow-up should remain reachable");
+    cx.simulate_mouse_down(follow_up.center(), MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    // The pinned window selection layer clears an existing selection during
+    // capture. The control must still own the press before the bubble-phase
+    // selection handler can begin a new drag from the control into prose.
+    cx.simulate_mouse_move(from, Some(MouseButton::Left), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let during_drag = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+    assert!(
+        during_drag.is_empty(),
+        "dragging from a follow-up selected transcript text: {during_drag:?}"
+    );
+
+    cx.simulate_mouse_up(from, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        captured.borrow().is_empty(),
+        "dragging out must not activate"
+    );
+
+    cx.simulate_mouse_down(follow_up.center(), MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_mouse_up(follow_up.center(), MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::FollowUpSelected {
+            id: "compare".into(),
+        }]
+    );
 }

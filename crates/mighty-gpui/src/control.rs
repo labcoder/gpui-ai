@@ -1,6 +1,6 @@
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ElementId, InteractiveElement as _, ParentElement as _, SharedString,
+    App, ElementId, InteractiveElement as _, MouseButton, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, div,
 };
 use gpui_base::Button;
@@ -21,6 +21,10 @@ pub(crate) fn outlined_control(
     let tokens = cx.theme().semantic_tokens();
     let label = accessibility_label.into();
     composed_button(id, label.clone())
+        .on_mouse_down(MouseButton::Left, |_, window, cx| {
+            window.prevent_default();
+            gpui_base::GlobalState::suppress_text_selection(cx);
+        })
         .flex()
         .items_center()
         .justify_center()
