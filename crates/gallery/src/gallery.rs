@@ -109,7 +109,9 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
 }
 
 struct PromptBarStory {
+    empty: Entity<PromptBar>,
     ready: Entity<PromptBar>,
+    multiline: Entity<PromptBar>,
     running: Entity<PromptBar>,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
@@ -117,12 +119,23 @@ struct PromptBarStory {
 
 impl PromptBarStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let empty = cx.new(|cx| PromptBar::new("gallery-prompt-empty", window, cx));
         let ready = cx.new(|cx| {
             Self::configured_prompt(
                 "gallery-prompt-ready",
                 "Compare @cr",
                 ProgressState::Pending,
                 true,
+                window,
+                cx,
+            )
+        });
+        let multiline = cx.new(|cx| {
+            Self::configured_prompt(
+                "gallery-prompt-multiline",
+                "Compare supplier pricing\nand explain the largest variance",
+                ProgressState::Pending,
+                false,
                 window,
                 cx,
             )
@@ -137,8 +150,22 @@ impl PromptBarStory {
                 cx,
             )
         });
+        let empty_subscription = cx.subscribe_in(
+            &empty,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
         let ready_subscription = cx.subscribe_in(
             &ready,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
+        let multiline_subscription = cx.subscribe_in(
+            &multiline,
             window,
             |this, prompt, event: &PromptBarEvent, _, cx| {
                 this.on_event(prompt, event, cx);
@@ -153,10 +180,17 @@ impl PromptBarStory {
         );
 
         Self {
+            empty,
             ready,
+            multiline,
             running,
             last_event: "Interact with either composer to inspect its typed event.".into(),
-            _subscriptions: vec![ready_subscription, running_subscription],
+            _subscriptions: vec![
+                empty_subscription,
+                ready_subscription,
+                multiline_subscription,
+                running_subscription,
+            ],
         }
     }
 
@@ -243,6 +277,17 @@ impl Render for PromptBarStory {
             .gap(tokens.spacing.md)
             .child(
                 div()
+                    .id("prompt-bar-empty-heading")
+                    .debug_selector(|| "prompt-bar-empty-heading".into())
+                    .role(Role::Heading)
+                    .aria_label("Empty prompt without a model catalog")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("EMPTY WITHOUT MODELS"),
+            )
+            .child(self.empty.clone())
+            .child(
+                div()
                     .id("prompt-bar-ready-heading")
                     .role(Role::Heading)
                     .aria_label("Ready prompt with mention suggestions")
@@ -251,6 +296,17 @@ impl Render for PromptBarStory {
                     .child("READY WITH MENTION SUGGESTIONS"),
             )
             .child(self.ready.clone())
+            .child(
+                div()
+                    .id("prompt-bar-multiline-heading")
+                    .debug_selector(|| "prompt-bar-multiline-heading".into())
+                    .role(Role::Heading)
+                    .aria_label("Multiline prompt draft")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("MULTILINE DRAFT"),
+            )
+            .child(self.multiline.clone())
             .child(
                 div()
                     .id("prompt-bar-running-heading")
@@ -1192,6 +1248,15 @@ mod tests {
         });
         cx.simulate_resize(size(px(700.), px(400.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(
+            cx.debug_bounds("prompt-bar-empty-heading").is_some(),
+            "the shared story should render an explicit empty state"
+        );
+        assert!(
+            cx.debug_bounds("prompt-bar-multiline-heading").is_some(),
+            "the shared story should render an explicit multiline state"
+        );
 
         let gallery = result
             .borrow_mut()

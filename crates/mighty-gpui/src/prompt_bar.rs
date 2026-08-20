@@ -278,9 +278,13 @@ fn active_prompt_token(draft: &str, cursor: usize) -> Option<PromptToken> {
     } else {
         return None;
     };
+    let end = draft[cursor..]
+        .char_indices()
+        .find_map(|(offset, character)| character.is_whitespace().then_some(cursor + offset))
+        .unwrap_or(draft.len());
     (!query.chars().any(char::is_whitespace)).then(|| PromptToken {
         kind,
-        range: start..cursor,
+        range: start..end,
         query: query.to_owned(),
     })
 }
@@ -426,6 +430,7 @@ pub struct PromptBar {
     attachments: Vec<PromptAttachment>,
     progress: ProgressState,
     last_draft: String,
+    last_cursor: usize,
     token: Option<PromptToken>,
     filtered: Vec<SuggestionKey>,
     active_suggestion: Option<SuggestionKey>,
@@ -453,6 +458,13 @@ impl PromptBar {
                 this.on_input_event(editor, event, window, cx);
             },
         );
+        let observation = cx.observe(&editor, |this, editor, cx| {
+            let cursor = editor.read(cx).cursor();
+            if this.last_cursor != cursor {
+                this.last_cursor = cursor;
+                this.refresh_suggestions(cx);
+            }
+        });
         Self {
             id: id.into(),
             editor,
@@ -463,11 +475,12 @@ impl PromptBar {
             attachments: Vec::new(),
             progress: ProgressState::Pending,
             last_draft: String::new(),
+            last_cursor: 0,
             token: None,
             filtered: Vec::new(),
             active_suggestion: None,
             model_menu_open: false,
-            _subscriptions: vec![subscription],
+            _subscriptions: vec![subscription, observation],
         }
     }
 
@@ -482,6 +495,9 @@ impl PromptBar {
             return;
         }
         self.models = models;
+        if self.models.is_empty() {
+            self.model_menu_open = false;
+        }
         if self.selected_model.as_ref().is_none_or(|selected| {
             !self
                 .models
@@ -581,6 +597,7 @@ impl PromptBar {
         }
         self.last_draft = draft.clone();
         let cursor = draft.len();
+        self.last_cursor = cursor;
         self.editor.update(cx, |editor, cx| {
             editor.set_value(draft, window, cx);
             editor.set_selected_range(cursor..cursor, cx);
@@ -650,6 +667,7 @@ impl PromptBar {
         match event {
             InputEvent::Change => {
                 let draft = editor.read(cx).value().to_string();
+                self.last_cursor = editor.read(cx).cursor();
                 self.refresh_suggestions(cx);
                 if self.last_draft != draft {
                     self.last_draft = draft.clone();
@@ -698,7 +716,7 @@ impl PromptBar {
         direction: Option<isize>,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.token.is_none() {
+        if self.filtered.is_empty() {
             return;
         }
         match direction {
@@ -749,13 +767,25 @@ impl PromptBar {
         else {
             return;
         };
+        let separator = {
+            let draft = self.editor.read(cx).value();
+            if draft
+                .get(token.range.end..)
+                .and_then(|suffix| suffix.chars().next())
+                .is_none_or(|character| !character.is_whitespace())
+            {
+                " "
+            } else {
+                ""
+            }
+        };
         let (replacement, event) = match active {
             SuggestionKey::Mention(id) => {
                 let Some(mention) = self.mentions.iter().find(|mention| mention.id == id) else {
                     return;
                 };
                 (
-                    format!("@{} ", mention.label),
+                    format!("@{}{separator}", mention.label),
                     PromptBarEvent::MentionSelected {
                         id: self.id.clone(),
                         mention_id: mention.id.clone(),
@@ -767,7 +797,7 @@ impl PromptBar {
                     return;
                 };
                 (
-                    format!("/{} ", command.label),
+                    format!("/{}{separator}", command.label),
                     PromptBarEvent::CommandSelected {
                         id: self.id.clone(),
                         command_id: command.id.clone(),
@@ -874,6 +904,7 @@ impl Render for PromptBar {
             .iter()
             .map(|model| {
                 let model_id = model.id.clone();
+                let model_selector = format!("prompt-bar-model-option-{}", model.id);
                 let selected = self.selected_model.as_ref() == Some(&model.id);
                 prompt_control(
                     (
@@ -883,6 +914,7 @@ impl Render for PromptBar {
                     model.label.clone(),
                     cx,
                 )
+                .debug_selector(move || model_selector.clone())
                 .role(Role::ListBoxOption)
                 .disabled(model.disabled)
                 .selected(selected)
@@ -920,12 +952,12 @@ impl Render for PromptBar {
                 }))
             })
             .collect::<Vec<_>>();
-        let selected_model_label = self
+        let selected_model_label: SharedString = self
             .selected_model
             .as_ref()
             .and_then(|selected| self.models.iter().find(|model| &model.id == selected))
-            .map(|model| model.label.clone())
-            .unwrap_or_else(|| "Choose model".into());
+            .map(|model| format!("Model: {}", model.label).into())
+            .unwrap_or_else(|| "No models available".into());
         let draft = self.editor.read(cx).value().to_string();
         let running = self.progress == ProgressState::Running;
         let progress_text = match &self.progress {
@@ -995,28 +1027,39 @@ impl Render for PromptBar {
                         h_flex()
                             .flex_wrap()
                             .gap(tokens.spacing.xs)
-                            .child(
+                            .child(if self.models.is_empty() {
+                                prompt_status(
+                                    (gpui::ElementId::from(root_id.clone()), "model-empty").into(),
+                                    selected_model_label.clone(),
+                                )
+                                .debug_selector(|| "prompt-bar-model-empty".to_owned())
+                                .text_token(tokens.typography.sm)
+                                .text_color(cx.theme().muted_foreground)
+                                .child(selected_model_label)
+                                .into_any_element()
+                            } else {
                                 prompt_model_control(
                                     (gpui::ElementId::from(root_id.clone()), "model"),
                                     selected_model_label,
                                     self.model_menu_open,
                                     cx,
                                 )
+                                .debug_selector(|| "prompt-bar-model-trigger".to_owned())
                                 .border_color(cx.theme().border)
                                 .when(self.model_menu_open, |button| button.bg(cx.theme().accent))
-                                .on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.model_menu_open = !this.model_menu_open;
-                                        cx.notify();
-                                    },
-                                )),
-                            )
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.model_menu_open = !this.model_menu_open;
+                                    cx.notify();
+                                }))
+                                .into_any_element()
+                            })
                             .child(
                                 prompt_control(
                                     (gpui::ElementId::from(root_id.clone()), "attach"),
                                     "Attach",
                                     cx,
                                 )
+                                .debug_selector(|| "prompt-bar-attach-control".to_owned())
                                 .on_click(cx.listener(
                                     |this, _, _, cx| {
                                         cx.emit(PromptBarEvent::AttachRequested {
@@ -1031,6 +1074,7 @@ impl Render for PromptBar {
                                     "Enhance",
                                     cx,
                                 )
+                                .debug_selector(|| "prompt-bar-enhance-control".to_owned())
                                 .disabled(draft.trim().is_empty() || running)
                                 .on_click(cx.listener(
                                     |this, _, _, cx| {
@@ -1049,7 +1093,12 @@ impl Render for PromptBar {
                             if running { "Cancel" } else { "Send" },
                             cx,
                         )
-                        .debug_selector(|| "prompt-bar-primary-action".to_owned())
+                        .when(running, |button| {
+                            button.debug_selector(|| "prompt-bar-cancel-control".to_owned())
+                        })
+                        .when(!running, |button| {
+                            button.debug_selector(|| "prompt-bar-send-control".to_owned())
+                        })
                         .disabled(!running && draft.trim().is_empty())
                         .on_click(cx.listener(
                             move |this, _, window, cx| {
@@ -1100,6 +1149,7 @@ mod tests {
     struct ControlProbe {
         captured: CapturedControl,
         selected_option: bool,
+        disabled: bool,
     }
 
     struct ModelControlProbe {
@@ -1157,10 +1207,12 @@ mod tests {
         ) -> impl gpui::IntoElement {
             let captured = self.captured.clone();
             let selected_option = self.selected_option;
+            let disabled = self.disabled;
             canvas(
                 move |_, window, cx| {
-                    let control =
-                        prompt_control("prompt-send", "Send prompt", cx).on_click(|_, _, _| {});
+                    let control = prompt_control("prompt-send", "Send prompt", cx)
+                        .disabled(disabled)
+                        .on_click(|_, _, _| {});
                     let control = if selected_option {
                         control.role(Role::ListBoxOption).aria_selected(true)
                     } else {
@@ -1187,7 +1239,7 @@ mod tests {
             let captured = self.captured.clone();
             canvas(
                 move |_, window, cx| {
-                    let control = prompt_model_control("prompt-model", "Balanced", true, cx)
+                    let control = prompt_model_control("prompt-model", "Model: Balanced", true, cx)
                         .on_click(|_, _, _| {});
                     let element = control.render(window, cx).into_element();
                     let role = element.a11y_role();
@@ -1210,6 +1262,16 @@ mod tests {
         assert_eq!(token.kind, PromptTokenKind::Mention);
         assert_eq!(&draft[token.range], "@crème");
         assert_eq!(token.query, "crème");
+    }
+
+    #[test]
+    fn mid_token_range_includes_the_untyped_suffix_for_replacement() {
+        let draft = "Ask @Creamery about pricing";
+        let cursor = draft.find("amery").expect("mention suffix should exist");
+        let token = active_prompt_token(draft, cursor).expect("mention token should be active");
+
+        assert_eq!(&draft[token.range], "@Creamery");
+        assert_eq!(token.query, "Cre");
     }
 
     #[test]
@@ -1250,6 +1312,113 @@ mod tests {
         });
 
         assert_eq!(notifications.get(), 1);
+    }
+
+    #[gpui::test]
+    fn cursor_only_keyboard_change_refreshes_the_active_token(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (prompt, cx) = cx.add_window_view(|window, cx| {
+            let mut prompt = PromptBar::new("prompt", window, cx);
+            prompt.set_mentions(
+                [
+                    PromptMention::new("creamery", "Creamery"),
+                    PromptMention::new("suppliers", "Suppliers"),
+                ],
+                cx,
+            );
+            prompt.set_draft("Ask @Creamery then @Suppliers", window, cx);
+            prompt
+        });
+        cx.update(|window, cx| {
+            prompt.update(cx, |prompt, cx| prompt.focus(window, cx));
+            window.draw(cx).clear(cx);
+        });
+
+        cx.simulate_keystrokes("left left left left left left left left");
+
+        assert_eq!(
+            prompt.read_with(cx, |prompt, _| prompt
+                .token
+                .as_ref()
+                .map(|token| token.query.clone())),
+            Some("S".to_owned())
+        );
+        assert_eq!(
+            prompt.read_with(cx, |prompt, _| prompt.filtered.clone()),
+            vec![SuggestionKey::Mention("suppliers".into())]
+        );
+    }
+
+    #[gpui::test]
+    fn cursor_only_mouse_equivalent_refreshes_and_replaces_the_whole_token(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured_events = events.clone();
+        let (harness, cx) =
+            cx.add_window_view(move |window, cx| PromptHarness::new(captured_events, window, cx));
+        cx.update(|window, cx| {
+            let prompt = harness.read(cx).prompt.clone();
+            prompt.update(cx, |prompt, cx| {
+                prompt.set_draft("Ask @Creamery now", window, cx);
+                let cursor = "Ask @Cre".len();
+                prompt.editor.update(cx, |editor, cx| {
+                    editor.set_selected_range(cursor..cursor, cx)
+                });
+            });
+            window.draw(cx).clear(cx);
+        });
+
+        let prompt = harness.read_with(cx, |harness, _| harness.prompt.clone());
+        cx.update(|window, cx| {
+            prompt.update(cx, |prompt, cx| prompt.insert_active_suggestion(window, cx));
+        });
+
+        assert_eq!(
+            prompt.read_with(cx, |prompt, cx| prompt.draft(cx)),
+            "Ask @Creamery now"
+        );
+    }
+
+    #[gpui::test]
+    fn unmatched_token_does_not_capture_native_multiline_up(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) =
+            cx.add_window_view(move |window, cx| PromptHarness::new(events, window, cx));
+        cx.update(|window, cx| {
+            let prompt = harness.read(cx).prompt.clone();
+            prompt.update(cx, |prompt, cx| {
+                prompt.set_draft("first line\n@unmatched", window, cx);
+                prompt.focus(window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        let before = harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).editor.read(cx).cursor()
+        });
+
+        cx.simulate_keystrokes("up");
+
+        let after = harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).editor.read(cx).cursor()
+        });
+        assert!(after < before, "native multiline up should move the caret");
+    }
+
+    #[gpui::test]
+    fn empty_model_catalog_closes_the_menu(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (prompt, cx) = cx.add_window_view(|window, cx| PromptBar::new("prompt", window, cx));
+        prompt.update(cx, |prompt, cx| {
+            prompt.set_models([super::PromptModel::new("balanced", "Balanced")], cx);
+            prompt.model_menu_open = true;
+            prompt.set_models([], cx);
+        });
+
+        assert!(!prompt.read_with(cx, |prompt, _| prompt.model_menu_open));
+        assert!(prompt.read_with(cx, |prompt, _| prompt.models.is_empty()));
     }
 
     #[gpui::test]
@@ -1392,7 +1561,7 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let primary = cx
-            .debug_bounds("prompt-bar-primary-action")
+            .debug_bounds("prompt-bar-cancel-control")
             .expect("the primary action should remain rendered");
         assert!(
             primary.size.width > px(0.),
@@ -1459,6 +1628,7 @@ mod tests {
         let (_, cx) = cx.add_window_view(move |_, _| ControlProbe {
             captured,
             selected_option: false,
+            disabled: false,
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -1473,6 +1643,26 @@ mod tests {
     }
 
     #[gpui::test]
+    fn disabled_production_control_exposes_no_click_action(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(None));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ControlProbe {
+            captured,
+            selected_option: false,
+            disabled: true,
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (_, node) = result
+            .lock()
+            .expect("capture mutex should be available")
+            .take()
+            .expect("disabled control semantics should be captured");
+        assert!(!node.supports_action(accesskit::Action::Click));
+    }
+
+    #[gpui::test]
     fn suggestion_options_expose_selection_and_activation(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let captured = Arc::new(Mutex::new(None));
@@ -1480,6 +1670,7 @@ mod tests {
         let (_, cx) = cx.add_window_view(move |_, _| ControlProbe {
             captured,
             selected_option: true,
+            disabled: false,
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -1508,7 +1699,7 @@ mod tests {
             .take()
             .expect("model trigger semantics should be captured");
         assert_eq!(role, Some(Role::Button));
-        assert_eq!(node.label(), Some("Balanced"));
+        assert_eq!(node.label(), Some("Model: Balanced"));
         assert_eq!(node.is_expanded(), Some(true));
         assert!(node.supports_action(accesskit::Action::Click));
     }
