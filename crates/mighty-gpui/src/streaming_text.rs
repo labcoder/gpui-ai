@@ -1,16 +1,16 @@
 //! Streamed markdown answers with sources and follow-up suggestions.
 
-use crate::handlers::SharedHandler;
 use crate::stream::{ProgressState, StreamedContent};
 use crate::theme::SemanticStyledExt as _;
+use crate::{control::outlined_control, handlers::SharedHandler};
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _,
 };
+use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, button::Button, h_flex,
-    text::TextView, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, text::TextView, v_flex,
 };
 use std::rc::Rc;
 
@@ -381,6 +381,21 @@ fn citation_companion_link(
         .child(div().child(visible_label))
 }
 
+fn follow_up_button(
+    follow_up: FollowUp,
+    handler: Option<SharedHandler<StreamingTextEvent>>,
+    cx: &mut App,
+) -> Button {
+    let debug_id = follow_up.id.to_string();
+    let event = follow_up.selected_event();
+    outlined_control(follow_up.id.clone(), follow_up.label, cx)
+        .debug_selector(move || format!("streaming-follow-up-{debug_id}"))
+        .accessibility_id(format!("follow-up-{}", follow_up.id))
+        .when_some(handler, |this, handler| {
+            this.on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+        })
+}
+
 struct CitationDispatcher {
     citations: Vec<CitationRef>,
     on_event: SharedHandler<StreamingTextEvent>,
@@ -658,19 +673,11 @@ impl RenderOnce for StreamingText {
                         .aria_label("Follow-up suggestions")
                         .flex_wrap()
                         .gap(tokens.spacing.xs)
-                        .children(self.follow_ups.into_iter().map(|follow_up| {
-                            let event = follow_up.selected_event();
-                            Button::new(follow_up.id.clone())
-                                .outline()
-                                .small()
-                                .accessibility_id(format!("follow-up-{}", follow_up.id))
-                                .label(follow_up.label)
-                                .when_some(handler.clone(), |this, handler| {
-                                    this.on_click(move |_: &ClickEvent, window, cx| {
-                                        handler(&event, window, cx)
-                                    })
-                                })
-                        })),
+                        .children(
+                            self.follow_ups
+                                .into_iter()
+                                .map(|follow_up| follow_up_button(follow_up, handler.clone(), cx)),
+                        ),
                 )
             })
             .refine_style(&self.style)
@@ -905,6 +912,51 @@ mod tests {
             .expect("citation link should be captured");
         assert_eq!(captured.role, Some(Role::Link));
         assert_eq!(captured.node.label(), Some("Open pricing source"));
+        assert!(captured.node.supports_action(accesskit::Action::Click));
+    }
+
+    struct FollowUpA11yProbe {
+        captured: Arc<Mutex<Option<CapturedCitationA11y>>>,
+    }
+
+    impl gpui::Render for FollowUpA11yProbe {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            let captured = self.captured.clone();
+            canvas(
+                move |_, window, cx| {
+                    let element = follow_up_button(
+                        FollowUp::new("compare", "Compare suppliers"),
+                        Some(Rc::new(|_, _, _| {})),
+                        cx,
+                    )
+                    .render(window, cx)
+                    .into_element();
+                    let role = element.a11y_role();
+                    let mut node = accesskit::Node::new(Role::Unknown);
+                    element.write_a11y_info(&mut node);
+                    *captured.lock().expect("capture mutex should be available") =
+                        Some(CapturedCitationA11y { role, node });
+                },
+                |_, _, _, _| {},
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn follow_up_exposes_production_role_name_and_click_action(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(None));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| FollowUpA11yProbe { captured });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let captured = result
+            .lock()
+            .expect("capture mutex should be available")
+            .take()
+            .expect("follow-up button should be captured");
+        assert_eq!(captured.role, Some(Role::Button));
+        assert_eq!(captured.node.label(), Some("Compare suppliers"));
         assert!(captured.node.supports_action(accesskit::Action::Click));
     }
 }

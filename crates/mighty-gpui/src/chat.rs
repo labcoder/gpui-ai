@@ -1,21 +1,20 @@
 //! Controlled, virtualized chat transcript composed from mighty-gpui primitives.
 
 use crate::{
+    control::outlined_control,
     prompt_bar::{PromptBar, PromptBarEvent},
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnyElement, Context, ElementId, Entity, EventEmitter, FollowMode, InteractiveElement as _,
-    IntoElement as _, ListAlignment, ListOffset, ListState, ParentElement as _, Render, Role,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Window,
-    div, list, prelude::FluentBuilder as _, px,
+    AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, FollowMode,
+    InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset, ListState,
+    ParentElement as _, Render, Role, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, list, prelude::FluentBuilder as _, px,
 };
-use gpui_component::{
-    ActiveTheme as _, Sizable as _, StyledExt as _, button::Button, scroll::ScrollableElement as _,
-    text::TextView, v_flex,
-};
+use gpui_base::Button;
+use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView, v_flex};
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
@@ -256,6 +255,24 @@ fn message_frame(chat_id: &SharedString, message: &ChatMessage) -> Stateful<gpui
         .min_w_0()
 }
 
+fn retry_button(chat_id: &SharedString, message_id: &SharedString, cx: &mut App) -> Button {
+    let debug_id = message_id.to_string();
+    outlined_control(
+        (
+            ElementId::from((ElementId::from(chat_id.clone()), message_id.clone())),
+            "retry",
+        ),
+        "Retry message",
+        cx,
+    )
+    .debug_selector(move || format!("chat-retry-{debug_id}"))
+}
+
+fn jump_to_latest_button(chat_id: &SharedString, label: SharedString, cx: &mut App) -> Button {
+    outlined_control((ElementId::from(chat_id.clone()), "jump-latest"), label, cx)
+        .debug_selector(|| "chat-jump-latest".into())
+}
+
 /// A controlled virtualized conversation composed with [`PromptBar`] and
 /// [`StreamingText`].
 ///
@@ -286,10 +303,11 @@ pub struct Chat {
     id: SharedString,
     prompt_bar: Entity<PromptBar>,
     messages: Arc<[ChatMessage]>,
+    message_focus_handles: HashMap<SharedString, FocusHandle>,
     list_state: ListState,
     visible_range: Range<usize>,
     pinned_to_bottom: bool,
-    unread: usize,
+    unread_message_ids: HashSet<SharedString>,
     _prompt_subscription: Subscription,
 }
 
@@ -310,7 +328,7 @@ impl Chat {
                     chat.visible_range = event.visible_range.clone();
                     chat.pinned_to_bottom = event.is_following_tail;
                     if event.is_following_tail {
-                        chat.unread = 0;
+                        chat.unread_message_ids.clear();
                     }
                     cx.notify();
                 })
@@ -328,10 +346,11 @@ impl Chat {
             id: id.into(),
             prompt_bar,
             messages: Arc::from([]),
+            message_focus_handles: HashMap::new(),
             list_state,
             visible_range: 0..0,
             pinned_to_bottom: true,
-            unread: 0,
+            unread_message_ids: HashSet::new(),
             _prompt_subscription: prompt_subscription,
         }
     }
@@ -370,17 +389,31 @@ impl Chat {
         let last_retained_index = messages
             .iter()
             .rposition(|message| old_by_id.contains_key(&message.id));
-        let appended = messages
+        let appended_ids = messages
             .iter()
             .skip(last_retained_index.map_or(0, |index| index + 1))
             .filter(|message| !old_by_id.contains_key(&message.id))
-            .count();
+            .map(|message| message.id.clone())
+            .collect::<Vec<_>>();
         let (old_range, new_count) = structural_splice(&self.messages, &messages);
         let structural_new_range = old_range.start..old_range.start + new_count;
+        let mut next_focus_handles = HashMap::with_capacity(messages.len());
+        for message in messages.iter() {
+            let focus_handle = self
+                .message_focus_handles
+                .remove(&message.id)
+                .unwrap_or_else(|| cx.focus_handle());
+            next_focus_handles.insert(message.id.clone(), focus_handle);
+        }
 
         if !old_range.is_empty() || new_count > 0 {
-            self.list_state.splice(old_range, new_count);
+            let inserted_focus_handles = messages[structural_new_range.clone()]
+                .iter()
+                .map(|message| next_focus_handles.get(&message.id).cloned());
+            self.list_state
+                .splice_focusable(old_range, inserted_focus_handles);
         }
+        self.message_focus_handles = next_focus_handles;
 
         let changed = messages
             .iter()
@@ -397,10 +430,21 @@ impl Chat {
             self.list_state.remeasure_items(ix..ix + 1);
         }
 
+        let new_ids = messages
+            .iter()
+            .map(|message| message.id.clone())
+            .collect::<HashSet<_>>();
+        self.unread_message_ids
+            .retain(|message_id| new_ids.contains(message_id));
         self.messages = messages;
-        if was_following {
+        if self.messages.is_empty() {
+            self.list_state.set_follow_mode(FollowMode::Tail);
             self.list_state.scroll_to_end();
-            self.unread = 0;
+            self.unread_message_ids.clear();
+            self.pinned_to_bottom = true;
+        } else if was_following {
+            self.list_state.scroll_to_end();
+            self.unread_message_ids.clear();
             self.pinned_to_bottom = true;
         } else {
             if let Some((anchor_id, offset_in_item)) = old_anchor
@@ -414,7 +458,7 @@ impl Chat {
                     offset_in_item,
                 });
             }
-            self.unread = self.unread.saturating_add(appended);
+            self.unread_message_ids.extend(appended_ids);
         }
         cx.notify();
     }
@@ -431,7 +475,7 @@ impl Chat {
 
     /// Returns the number of messages received while the transcript was offscreen.
     pub fn unread_count(&self) -> usize {
-        self.unread
+        self.unread_message_ids.len()
     }
 
     /// Returns whether the list is actively following the latest content.
@@ -449,7 +493,7 @@ impl Chat {
         self.list_state.set_follow_mode(FollowMode::Tail);
         self.list_state.scroll_to_end();
         self.pinned_to_bottom = true;
-        self.unread = 0;
+        self.unread_message_ids.clear();
         cx.emit(ChatEvent::JumpedToLatest);
         cx.notify();
     }
@@ -492,6 +536,10 @@ impl Chat {
         };
         let tokens = cx.theme().semantic_tokens();
         let message_id = message.id.clone();
+        let Some(message_focus_handle) = self.message_focus_handles.get(&message_id).cloned()
+        else {
+            return div().hidden().into_any_element();
+        };
         let content_id = ElementId::from((
             ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
             "content",
@@ -522,13 +570,13 @@ impl Chat {
             .author
             .clone()
             .unwrap_or_else(|| message.role.label().into());
-        let retry_debug_id = message_id.to_string();
         let heading_id = ElementId::from((
             ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
             "heading",
         ));
 
         message_frame(&self.id, &message)
+            .track_focus(&message_focus_handle)
             .gap(tokens.spacing.sm)
             .px(tokens.spacing.md)
             .py(tokens.spacing.md)
@@ -545,24 +593,17 @@ impl Chat {
                     .role(Role::Heading)
                     .aria_label(author.clone())
                     .text_token(tokens.typography.xs)
-                    .font_semibold()
                     .text_color(cx.theme().muted_foreground)
                     .child(author),
             )
             .child(content)
             .when(retryable_failure, |this| {
                 this.child(
-                    Button::new((
-                        ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
-                        "retry",
-                    ))
-                    .debug_selector(move || format!("chat-retry-{retry_debug_id}"))
-                    .outline()
-                    .small()
-                    .label("Retry message")
-                    .on_click(cx.listener(move |chat, _, _, cx| {
-                        chat.retry(message_id.clone(), cx);
-                    })),
+                    retry_button(&self.id, &message_id, cx).on_click(cx.listener(
+                        move |chat, _, _, cx| {
+                            chat.retry(message_id.clone(), cx);
+                        },
+                    )),
                 )
             })
             .into_any_element()
@@ -576,7 +617,7 @@ impl Render for Chat {
         let tokens = cx.theme().semantic_tokens();
         let transcript_id = ElementId::from((ElementId::from(self.id.clone()), "transcript"));
         let composer_id = ElementId::from((ElementId::from(self.id.clone()), "composer"));
-        let unread = self.unread;
+        let unread = self.unread_message_ids.len();
         let show_jump = unread > 0 && !self.list_state.is_following_tail();
         let jump_label: SharedString = format!(
             "Jump to latest, {unread} unread message{}",
@@ -612,11 +653,7 @@ impl Render for Chat {
             )
             .when(show_jump, |this| {
                 this.child(
-                    Button::new((ElementId::from(self.id.clone()), "jump-latest"))
-                        .debug_selector(|| "chat-jump-latest".into())
-                        .outline()
-                        .small()
-                        .label(jump_label)
+                    jump_to_latest_button(&self.id, jump_label, cx)
                         .on_click(cx.listener(|chat, _, _, cx| chat.scroll_to_latest(cx))),
                 )
             })
@@ -638,14 +675,19 @@ mod tests {
     use crate::{
         prompt_bar::{PromptBar, PromptBarEvent},
         stream::{ProgressState, Progressive},
-        streaming_text::{CitationRef, FollowUp, StreamingTextEvent},
+        streaming_text::{CitationRef, FollowUp},
     };
     use gpui::{
-        AppContext as _, Context, Element as _, Entity, ListOffset, Modifiers, Render, Role,
-        SharedString, Subscription, TestAppContext, VisualTestContext, Window, accesskit, px, size,
+        AppContext as _, Context, Element as _, Entity, KeyDownEvent, KeyUpEvent, Keystroke,
+        ListOffset, Modifiers, Render, RenderOnce as _, Role, SharedString, Subscription,
+        TestAppContext, VisualTestContext, Window, accesskit, canvas, px, size,
     };
     use gpui_component::Root;
-    use std::{cell::RefCell, rc::Rc, sync::Arc};
+    use std::{
+        cell::RefCell,
+        rc::Rc,
+        sync::{Arc, Mutex},
+    };
 
     struct ChatHarness {
         chat: Entity<Chat>,
@@ -722,11 +764,82 @@ mod tests {
         });
     }
 
+    fn activate_key(cx: &mut VisualTestContext, key: &str) {
+        let keystroke = Keystroke::parse(key).expect("test key should parse");
+        cx.simulate_event(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke });
+    }
+
     fn top_anchor(chat: &Chat) -> Option<(SharedString, gpui::Pixels)> {
         let offset = chat.list_state.logical_scroll_top();
         chat.messages
             .get(offset.item_ix)
             .map(|message| (message.id.clone(), offset.offset_in_item))
+    }
+
+    #[derive(Clone, Copy)]
+    enum ChatControlKind {
+        Retry,
+        Jump,
+    }
+
+    struct CapturedControlA11y {
+        role: Option<Role>,
+        node: accesskit::Node,
+    }
+
+    struct ChatControlA11yProbe {
+        kind: ChatControlKind,
+        captured: Arc<Mutex<Option<CapturedControlA11y>>>,
+    }
+
+    impl Render for ChatControlA11yProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+            let kind = self.kind;
+            let captured = self.captured.clone();
+            canvas(
+                move |_, window, cx| {
+                    let button = match kind {
+                        ChatControlKind::Retry => {
+                            retry_button(&"chat".into(), &"retry-me".into(), cx)
+                        }
+                        ChatControlKind::Jump => jump_to_latest_button(
+                            &"chat".into(),
+                            "Jump to latest, 2 unread messages".into(),
+                            cx,
+                        ),
+                    };
+                    let element = button
+                        .on_click(|_: &gpui::ClickEvent, _, _| {})
+                        .render(window, cx)
+                        .into_element();
+                    let role = element.a11y_role();
+                    let mut node = accesskit::Node::new(Role::Unknown);
+                    element.write_a11y_info(&mut node);
+                    *captured.lock().expect("capture mutex should be available") =
+                        Some(CapturedControlA11y { role, node });
+                },
+                |_, _, _, _| {},
+            )
+        }
+    }
+
+    fn capture_chat_control(kind: ChatControlKind, cx: &mut TestAppContext) -> CapturedControlA11y {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(None));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ChatControlA11yProbe { kind, captured });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let captured = result
+            .lock()
+            .expect("capture mutex should be available")
+            .take()
+            .expect("chat control should be captured");
+        captured
     }
 
     #[test]
@@ -736,6 +849,19 @@ mod tests {
 
         let duplicate = [message(1), message(1)];
         assert!(!message_ids_are_unique(&duplicate));
+    }
+
+    #[gpui::test]
+    fn chat_owned_controls_expose_production_role_name_and_click_action(cx: &mut TestAppContext) {
+        let retry = capture_chat_control(ChatControlKind::Retry, cx);
+        assert_eq!(retry.role, Some(Role::Button));
+        assert_eq!(retry.node.label(), Some("Retry message"));
+        assert!(retry.node.supports_action(accesskit::Action::Click));
+
+        let jump = capture_chat_control(ChatControlKind::Jump, cx);
+        assert_eq!(jump.role, Some(Role::Button));
+        assert_eq!(jump.node.label(), Some("Jump to latest, 2 unread messages"));
+        assert!(jump.node.supports_action(accesskit::Action::Click));
     }
 
     #[gpui::test]
@@ -757,7 +883,7 @@ mod tests {
 
         assert_eq!(chat.read_with(cx, |chat, _| top_anchor(chat)), before);
         assert_eq!(
-            chat.read_with(cx, |chat, _| chat.unread),
+            chat.read_with(cx, |chat, _| chat.unread_count()),
             0,
             "older prepended history is not unread"
         );
@@ -773,7 +899,7 @@ mod tests {
         set_messages(&harness, messages(0..41), cx);
 
         assert!(chat.read_with(cx, |chat, _| chat.list_state.is_following_tail()));
-        assert_eq!(chat.read_with(cx, |chat, _| chat.unread), 0);
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
         assert!(cx.debug_bounds("chat-message-m0040").is_some());
     }
 
@@ -796,7 +922,7 @@ mod tests {
         set_messages(&harness, messages(0..63), cx);
 
         assert_eq!(chat.read_with(cx, |chat, _| top_anchor(chat)), before);
-        assert_eq!(chat.read_with(cx, |chat, _| chat.unread), 3);
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 3);
         assert!(cx.debug_bounds("chat-jump-latest").is_some());
         assert!(cx.debug_bounds("chat-message-m0062").is_none());
 
@@ -805,7 +931,7 @@ mod tests {
             .expect("named jump action should remain reachable");
         cx.simulate_click(jump.center(), Modifiers::default());
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        assert_eq!(chat.read_with(cx, |chat, _| chat.unread), 0);
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
         assert!(cx.debug_bounds("chat-message-m0062").is_some());
         harness.read_with(cx, |harness, _| {
             assert!(
@@ -813,6 +939,70 @@ mod tests {
                 "jumping should preserve the typed intent"
             );
         });
+    }
+
+    #[gpui::test]
+    fn unread_reconciles_removed_messages_and_targets_the_latest_retained_id(
+        cx: &mut TestAppContext,
+    ) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..60), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 12,
+                offset_in_item: px(5.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        set_messages(&harness, messages(0..63), cx);
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 3);
+
+        set_messages(&harness, messages(0..62), cx);
+        assert_eq!(
+            chat.read_with(cx, |chat, _| chat.unread_count()),
+            2,
+            "removed unread IDs must leave the unread set"
+        );
+        let jump = cx
+            .debug_bounds("chat-jump-latest")
+            .expect("remaining unread messages should keep the jump action reachable");
+        cx.simulate_click(jump.center(), Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("chat-message-m0061").is_some());
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
+    }
+
+    #[gpui::test]
+    fn clearing_the_conversation_clears_unread_state_and_jump_action(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..60), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 12,
+                offset_in_item: px(5.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        set_messages(&harness, messages(0..63), cx);
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 3);
+
+        set_messages(&harness, Arc::from([]), cx);
+
+        assert!(chat.read_with(cx, |chat, _| chat.messages().is_empty()));
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
+        assert!(cx.debug_bounds("chat-jump-latest").is_none());
+
+        set_messages(&harness, messages(100..101), cx);
+        assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
+        assert!(cx.debug_bounds("chat-message-m0100").is_some());
     }
 
     #[gpui::test]
@@ -848,11 +1038,7 @@ mod tests {
 
         cx.simulate_resize(size(px(360.), px(420.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        assert_eq!(
-            chat.read_with(cx, |chat, _| top_anchor(chat))
-                .map(|anchor| anchor.0),
-            before.map(|anchor| anchor.0)
-        );
+        assert_eq!(chat.read_with(cx, |chat, _| top_anchor(chat)), before);
     }
 
     #[gpui::test]
@@ -877,6 +1063,55 @@ mod tests {
         assert!(cx.debug_bounds("chat-message-m0500").is_some());
         assert!(cx.debug_bounds("chat-message-m0000").is_none());
         assert!(cx.debug_bounds("chat-message-m0999").is_none());
+    }
+
+    #[gpui::test]
+    fn focused_virtual_message_row_survives_scroll_and_stable_replacement(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        let mut snapshot = (0..999).map(message).collect::<Vec<_>>();
+        snapshot.push(
+            ChatMessage::new(
+                "retry-me",
+                ChatRole::Assistant,
+                Progressive::failed("Could not finish".to_owned(), "Network unavailable"),
+            )
+            .retryable(true),
+        );
+        set_messages(&harness, Arc::from(snapshot.clone()), cx);
+
+        cx.update(|window, cx| window.focus_next(cx));
+        activate_key(cx, "enter");
+        harness.read_with(cx, |harness, _| {
+            assert!(harness.events.borrow().iter().any(|event| matches!(
+                event,
+                ChatEvent::RetryRequested { message_id } if message_id == "retry-me"
+            )));
+            harness.events.borrow_mut().clear();
+        });
+
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 0,
+                offset_in_item: px(3.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        snapshot.insert(0, message(2_000));
+        set_messages(&harness, Arc::from(snapshot), cx);
+        assert!(cx.debug_bounds("chat-message-m0000").is_some());
+        assert!(cx.debug_bounds("chat-message-retry-me").is_some());
+
+        activate_key(cx, "enter");
+        harness.read_with(cx, |harness, _| {
+            assert!(harness.events.borrow().iter().any(|event| matches!(
+                event,
+                ChatEvent::RetryRequested { message_id } if message_id == "retry-me"
+            )));
+        });
     }
 
     #[gpui::test]
@@ -911,16 +1146,12 @@ mod tests {
             .expect("citation action should render");
         cx.simulate_click(citation.center(), Modifiers::default());
 
+        let follow_up = cx
+            .debug_bounds("streaming-follow-up-compare")
+            .expect("follow-up action should render");
+        cx.simulate_click(follow_up.center(), Modifiers::default());
+
         let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
-        chat.update(cx, |chat, cx| {
-            chat.forward_streaming_event(
-                "answer".into(),
-                &StreamingTextEvent::FollowUpSelected {
-                    id: "compare".into(),
-                },
-                cx,
-            );
-        });
         let prompt = chat.read_with(cx, |chat, _| chat.prompt_bar.clone());
         cx.update(|window, cx| {
             prompt.update(cx, |prompt, cx| {
@@ -953,6 +1184,62 @@ mod tests {
                 ChatEvent::Prompt(PromptBarEvent::Submit { submission, .. })
                     if submission.text() == "Send from chat"
             )));
+        });
+    }
+
+    #[gpui::test]
+    fn rendered_follow_up_activates_from_keyboard_with_stable_ids(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(
+            &harness,
+            Arc::from([ChatMessage::new(
+                "answer",
+                ChatRole::Assistant,
+                Progressive::complete("Choose the next comparison.".to_owned()),
+            )
+            .follow_ups([FollowUp::new("compare", "Compare suppliers")])]),
+            cx,
+        );
+
+        cx.update(|window, cx| window.focus_next(cx));
+        activate_key(cx, "enter");
+
+        harness.read_with(cx, |harness, _| {
+            assert!(harness.events.borrow().iter().any(|event| matches!(
+                event,
+                ChatEvent::FollowUpSelected { message_id, follow_up_id }
+                    if message_id == "answer" && follow_up_id == "compare"
+            )));
+        });
+    }
+
+    #[gpui::test]
+    fn rendered_jump_to_latest_activates_from_keyboard(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..60), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 12,
+                offset_in_item: px(5.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        set_messages(&harness, messages(0..62), cx);
+
+        cx.update(|window, cx| window.focus_next(cx));
+        activate_key(cx, "enter");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(cx.debug_bounds("chat-message-m0061").is_some());
+        assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
+        harness.read_with(cx, |harness, _| {
+            assert!(
+                harness.events.borrow().contains(&ChatEvent::JumpedToLatest),
+                "keyboard activation should emit the typed jump intent"
+            );
         });
     }
 
