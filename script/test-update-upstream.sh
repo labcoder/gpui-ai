@@ -123,6 +123,18 @@ if check_component_stack_lock "$TMP_DIR/component-stack.lock" "aaaaaaaaaaaaaaaaa
 fi
 
 write_component_stack_lock "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+cat >> "$TMP_DIR/component-stack.lock" <<'EOF'
+
+[[package]]
+name = "gpui-base"
+version = "0.5.2"
+EOF
+if check_component_stack_lock "$TMP_DIR/component-stack.lock" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >/dev/null 2>&1; then
+  printf 'FAIL: source-less duplicate gpui-base package record was accepted\n' >&2
+  exit 1
+fi
+
+write_component_stack_lock "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 sed -i.bak 's#https://github.com/longbridge/gpui-component?rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#https://example.invalid/gpui-component?rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#' "$TMP_DIR/component-stack.lock"
 rm -f "$TMP_DIR/component-stack.lock.bak"
 if check_component_stack_lock "$TMP_DIR/component-stack.lock" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >/dev/null 2>&1; then

@@ -74,6 +74,19 @@ lock_package_sources() {
   ' "$lock_file"
 }
 
+lock_package_record_count() {
+  local lock_file="$1"
+  local package="$2"
+  awk -v package="$package" '
+    $0 == "[[package]]" { in_package_record = 1; next }
+    in_package_record && $0 == "name = \"" package "\"" {
+      count += 1
+      in_package_record = 0
+    }
+    END { print count + 0 }
+  ' "$lock_file"
+}
+
 lock_package_source() {
   local lock_file="$1"
   local package="$2"
@@ -108,6 +121,12 @@ check_component_stack_lock() {
   expected_source="$(component_stack_lock_source "$revision")"
   local package
   for package in gpui-component gpui-component-assets gpui-base; do
+    local record_count
+    record_count="$(lock_package_record_count "$lock_file" "$package")"
+    if [[ "$record_count" -ne 1 ]]; then
+      printf 'error: expected exactly one %s package record in %s\n' "$package" "$lock_file" >&2
+      return 1
+    fi
     local sources=()
     mapfile -t sources < <(lock_package_sources "$lock_file" "$package")
     if [[ "${#sources[@]}" -ne 1 ]]; then
