@@ -33,12 +33,12 @@ check_local_pair() {
 
   local lock_revs=()
   mapfile -t lock_revs < <(lock_component_revs Cargo.lock)
-  if [[ "${#lock_revs[@]}" -ne 2 ]]; then
-    printf 'error: Cargo.lock does not contain both gpui-component packages\n' >&2
+  if [[ "${#lock_revs[@]}" -ne 3 ]]; then
+    printf 'error: Cargo.lock does not contain the complete gpui-component stack\n' >&2
     return 1
   fi
-  if [[ "${lock_revs[0]}" != "$manifest_rev" || "${lock_revs[1]}" != "$manifest_rev" ]]; then
-    printf 'error: Cargo.toml and Cargo.lock disagree on the gpui-component revision\n' >&2
+  if [[ "${lock_revs[0]}" != "$manifest_rev" || "${lock_revs[1]}" != "$manifest_rev" || "${lock_revs[2]}" != "$manifest_rev" ]]; then
+    printf 'error: Cargo.toml and Cargo.lock disagree on the gpui-component stack revision\n' >&2
     return 1
   fi
 
@@ -116,13 +116,11 @@ update_pair() {
 
   printf 'gpui-component: %s\nzed/gpui: %s\n' "$component_rev" "$zed_rev"
 
-  sed -i.bak -E \
-    "s|(gpui-component(-assets)?[[:space:]]*=[[:space:]]*\{[^}]*rev[[:space:]]*=[[:space:]]*\")[0-9a-f]+(\")|\1$component_rev\3|" \
-    Cargo.toml
-  rm -f Cargo.toml.bak
+  update_manifest_component_revs Cargo.toml "$component_rev"
 
   cargo update -p gpui-component --precise "$component_rev"
   cargo update -p gpui-component-assets --precise "$component_rev"
+  cargo update -p gpui-base --precise "$component_rev"
   cargo update -p gpui --precise "$zed_rev"
   check_local_pair >/dev/null
   cargo check --workspace

@@ -23,24 +23,40 @@ assert_eq() {
 write_manifest() {
   local ui_rev="$1"
   local assets_rev="$2"
+  local base_rev="$3"
   cat > "$TMP_DIR/Cargo.toml" <<EOF
 [workspace.dependencies]
 gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "$ui_rev" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "$assets_rev" }
+gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "$base_rev" }
 EOF
 }
 
-write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 mapfile -t manifest_revs < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
-assert_eq "2" "${#manifest_revs[@]}" "both component dependencies must be parsed"
+assert_eq "3" "${#manifest_revs[@]}" "all component-stack dependencies must be parsed"
 assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[0]}" "ui revision must be returned"
 assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[1]}" "assets revision must be returned"
+assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[2]}" "base revision must be returned"
 
-write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 if check_manifest_pair "$TMP_DIR/Cargo.toml" >/dev/null 2>&1; then
   printf 'FAIL: mismatched component revisions were accepted\n' >&2
   exit 1
 fi
+
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+if check_manifest_pair "$TMP_DIR/Cargo.toml" >/dev/null 2>&1; then
+  printf 'FAIL: mismatched gpui-base revision was accepted\n' >&2
+  exit 1
+fi
+
+write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+update_manifest_component_revs "$TMP_DIR/Cargo.toml" "cccccccccccccccccccccccccccccccccccccccc"
+mapfile -t updated_revs < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
+assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[0]}" "component revision must update"
+assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[1]}" "assets revision must update"
+assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[2]}" "base revision must update"
 
 cat > "$TMP_DIR/Cargo.lock" <<'EOF'
 [[package]]
