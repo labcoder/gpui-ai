@@ -59,7 +59,9 @@ pub mod prelude {
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};
-    pub use crate::streaming_text::{FollowUp, SourceRef, StreamingText, StreamingTextEvent};
+    pub use crate::streaming_text::{
+        CitationRef, FollowUp, SourceRef, StreamingText, StreamingTextEvent,
+    };
     pub use crate::task::{TaskRow, TaskSnapshot};
     pub use crate::thinking::{StepStatus, Thinking, ThinkingEvent, ThinkingStep, ThinkingTrace};
     pub use crate::todo_list::{TodoItem, TodoList, TodoListEvent, TodoStatus};

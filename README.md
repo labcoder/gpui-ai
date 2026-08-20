@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: chat, command search, sidebar navigation, records/filter/diff/comparison tables, fine-tune inspector, and inline citations.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: chat, command search, sidebar navigation, records/filter/diff/comparison tables, and the fine-tune inspector.
 
 ## Requirements
 
@@ -113,6 +113,29 @@ selection.update(cx, |selection, cx| {
 });
 ```
 
+Streaming answers resolve complete `[[cite:<stable-id>]]` markers against application-owned citation metadata. The inline Markdown stays selectable; activation emits the stable ID and opaque destination instead of opening it inside the library:
+
+```rust
+use mighty_gpui::prelude::*;
+
+let answer = StreamedContent::complete(
+    "Pistachio margins improved [[cite:margin-report]].".to_owned(),
+);
+
+let cited = StreamingText::new("answer", &answer)
+    .citations([CitationRef::new(
+        "margin-report",
+        "Margin report",
+        "Open the margin report",
+        "app://reports/margins",
+    )])
+    .on_event(cx.listener(|_, event: &StreamingTextEvent, _, _| {
+        if let StreamingTextEvent::CitationActivated { id, destination } = event {
+            println!("route citation {id} to {destination}");
+        }
+    }));
+```
+
 Using mighty-gpui as a dependency is early (pre-0.1, API in flux). The wiring looks like this:
 
 ```toml
@@ -129,7 +152,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is inline citations, followed by chat, command search, navigation, and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, selection actions, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is chat, followed by command search, navigation, and the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 

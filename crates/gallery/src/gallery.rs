@@ -898,15 +898,58 @@ impl Gallery {
                 story,
                 "STREAMING TEXT",
                 || {
-                    StreamingText::new("answer", &self.sim.answer)
-                        .sources(["pricing.md", "suppliers.csv", "orders 2026"])
-                        .follow_ups([
-                            FollowUp::new("compare-delivery", "Compare delivery times"),
-                            FollowUp::new("price-history", "Show price history"),
-                        ])
-                        .on_event(cx.listener(|_, event: &StreamingTextEvent, _, _| {
-                            println!("streaming-text event: {event:?}");
-                        }))
+                    let cited_answer = Progressive::complete(
+                        "Pistachio margins lead vanilla by eight points [[cite:margin-report]], while the supply forecast remains stable [[cite:supply-forecast]]."
+                            .into(),
+                    );
+                    v_flex()
+                        .gap_4()
+                        .child(
+                            TextView::markdown(
+                                "streaming-text-reference-note",
+                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups. mighty-gpui deliberately adds stable typed citation routing and keyboard/AccessKit companion links because the pinned Markdown glyph link is pointer-only.",
+                            )
+                            .selectable(true),
+                        )
+                        .child(
+                            StreamingText::new("answer", &self.sim.answer)
+                                .sources(["pricing.md", "suppliers.csv", "orders 2026"])
+                                .follow_ups([
+                                    FollowUp::new(
+                                        "compare-delivery",
+                                        "Compare delivery times",
+                                    ),
+                                    FollowUp::new("price-history", "Show price history"),
+                                ])
+                                .on_event(cx.listener(
+                                    |_, event: &StreamingTextEvent, _, _| {
+                                        println!("streaming-text event: {event:?}");
+                                    },
+                                )),
+                        )
+                        .child(
+                            StreamingText::new("cited-answer", &cited_answer)
+                                .citations([
+                                    CitationRef::new(
+                                        "margin-report",
+                                        "Margin report",
+                                        "Open the monthly margin report",
+                                        "app://reports/monthly-margin",
+                                    ),
+                                    CitationRef::new(
+                                        "supply-forecast",
+                                        "Supply forecast",
+                                        "Open the supply forecast",
+                                        "app://reports/supply-forecast",
+                                    ),
+                                ])
+                                .sources(["margin-report.csv", "supply-forecast.md"])
+                                .on_event(cx.listener(
+                                    |_, event: &StreamingTextEvent, _, _| {
+                                        println!("citation event: {event:?}");
+                                    },
+                                )),
+                        )
                 },
                 cx,
             ),

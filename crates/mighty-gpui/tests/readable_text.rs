@@ -9,13 +9,15 @@ use mighty_gpui::{
     insight::InsightCard,
     selection_actions::{SelectionAction, SelectionActions},
     stream::Progressive,
-    streaming_text::StreamingText,
+    streaming_text::{CitationRef, StreamingText},
     thinking::{StepStatus, Thinking, ThinkingStep, ThinkingTrace},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Surface {
     Answer,
+    CitationAnswer,
+    CitationLabel,
     Code,
     ThinkingProse,
     ThinkingDetail,
@@ -54,6 +56,33 @@ impl Render for ReadableSurface {
             Surface::Answer => {
                 let content = Progressive::complete("Selectable answer text".to_owned());
                 StreamingText::new("answer", &content).into_any_element()
+            }
+            Surface::CitationAnswer => {
+                let content = Progressive::complete(
+                    "Readable prose cites [[cite:pricing]] without losing selection.".to_owned(),
+                );
+                StreamingText::new("citation-answer", &content)
+                    .citations([CitationRef::new(
+                        "pricing",
+                        "Pricing report",
+                        "Open the pricing report",
+                        "app://reports/pricing",
+                    )])
+                    .on_event(|_, _, _| {})
+                    .into_any_element()
+            }
+            Surface::CitationLabel => {
+                let content = Progressive::complete(
+                    "Readable prose cites [[cite:pricing]] without a handler.".to_owned(),
+                );
+                StreamingText::new("citation-label", &content)
+                    .citations([CitationRef::new(
+                        "pricing",
+                        "Pricing report",
+                        "Open the pricing report",
+                        "app://reports/pricing",
+                    )])
+                    .into_any_element()
             }
             Surface::Code => CodeBlock::new("code", "selectable_code selectable_code")
                 .language("rust")
@@ -109,7 +138,9 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
         .debug_bounds("readable-surface")
         .expect("readable surface should be rendered");
     let (content_x, content_y) = match surface {
-        Surface::Answer => (bounds.left() + px(1.), bounds.top() + px(1.)),
+        Surface::Answer | Surface::CitationAnswer | Surface::CitationLabel => {
+            (bounds.left() + px(1.), bounds.top() + px(1.))
+        }
         Surface::Code => (
             bounds.left() + px(48.),
             bounds.top() + bounds.size.height * 0.68,
@@ -149,6 +180,25 @@ fn streamed_answers_export_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::Answer, cx);
 
     assert!(selected.contains("Selectable answer text"), "{selected:?}");
+}
+
+#[gpui::test]
+fn inline_citations_preserve_readable_selected_text(cx: &mut TestAppContext) {
+    let selected = select_text(Surface::CitationAnswer, cx);
+
+    assert!(selected.contains("Readable prose cites"), "{selected:?}");
+    assert!(selected.contains("Pricing report"), "{selected:?}");
+    assert!(!selected.contains("cite:pricing"), "{selected:?}");
+    assert!(!selected.contains("mighty-citation"), "{selected:?}");
+}
+
+#[gpui::test]
+fn citations_without_handlers_render_readable_non_link_labels(cx: &mut TestAppContext) {
+    let selected = select_text(Surface::CitationLabel, cx);
+
+    assert!(selected.contains("[Pricing report]"), "{selected:?}");
+    assert!(!selected.contains("cite:pricing"), "{selected:?}");
+    assert!(!selected.contains("mighty-citation"), "{selected:?}");
 }
 
 #[gpui::test]

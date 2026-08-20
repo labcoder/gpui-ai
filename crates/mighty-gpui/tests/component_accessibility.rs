@@ -1,8 +1,8 @@
 use gpui::{
     AppContext as _, Context, Element as _, Entity, InteractiveElement as _, IntoElement as _,
-    Modifiers, MouseButton, ParentElement as _, Render, RenderOnce as _, Role, ScrollDelta,
-    ScrollWheelEvent, Styled as _, Subscription, TestAppContext, VisualTestContext, Window,
-    accesskit, canvas, div, point, px,
+    KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, MouseButton, ParentElement as _, Render,
+    RenderOnce as _, Role, ScrollDelta, ScrollWheelEvent, Styled as _, Subscription,
+    TestAppContext, VisualTestContext, Window, accesskit, canvas, div, point, px,
 };
 use gpui_component::Root;
 use mighty_gpui::{
@@ -14,7 +14,7 @@ use mighty_gpui::{
     search_results::{SearchResult, SearchResults},
     selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent},
     stream::{ProgressState, Progressive},
-    streaming_text::StreamingText,
+    streaming_text::{CitationRef, StreamingText, StreamingTextEvent},
     task::{TaskRow, TaskSnapshot},
     thinking::{Thinking, ThinkingTrace},
     todo_list::{TodoItem, TodoList},
@@ -53,6 +53,67 @@ struct PublicSelectionProbe {
     selection: Entity<SelectionActions>,
     events: Rc<RefCell<Vec<SelectionActionsEvent>>>,
     _subscription: Subscription,
+}
+
+struct PublicCitationProbe {
+    events: Rc<RefCell<Vec<StreamingTextEvent>>>,
+}
+
+struct BoundedCitationProbe;
+
+impl Render for BoundedCitationProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        let citations = [
+            CitationRef::new("first", "One", "Open first", "app://first"),
+            CitationRef::new("second", "Two", "Open second", "app://second"),
+            CitationRef::new("third", "Three", "Open third", "app://third"),
+            CitationRef::new("fourth", "Four", "Open fourth", "app://fourth"),
+            CitationRef::new("final", "Final", "Open final", "app://final"),
+        ];
+        div()
+            .debug_selector(|| "bounded-citation-host".to_owned())
+            .w(px(184.))
+            .h(px(160.))
+            .overflow_hidden()
+            .child(
+                StreamingText::new(
+                    "bounded-citations",
+                    &Progressive::complete(
+                        "[[cite:first]] [[cite:second]] [[cite:third]] [[cite:fourth]] [[cite:final]]"
+                            .into(),
+                    ),
+                )
+                .citations(citations)
+                .on_event(|_, _, _| {}),
+            )
+    }
+}
+
+impl Render for PublicCitationProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        let events = self.events.clone();
+        StreamingText::new(
+            "citation-answer",
+            &Progressive::complete(
+                "[[cite:pricing]] changed while supply held [[cite:supply]].".into(),
+            ),
+        )
+        .citations([
+            CitationRef::new(
+                "pricing",
+                "Pricing report",
+                "Open the pricing report",
+                "app://reports/pricing",
+            ),
+            CitationRef::new(
+                "supply",
+                "Supply report",
+                "Open the supply report",
+                "app://reports/supply",
+            ),
+        ])
+        .on_event(move |event, _, _| events.borrow_mut().push(event.clone()))
+    }
 }
 
 struct BoundedSelectionProbe {
@@ -269,6 +330,116 @@ fn capture(kind: ComponentProbeKind, cx: &mut TestAppContext) -> CapturedNode {
         .take()
         .expect("component node should be captured");
     captured
+}
+
+fn activate_key(cx: &mut VisualTestContext, key: &str) {
+    let keystroke = Keystroke::parse(key).expect("test key should parse");
+    cx.simulate_event(KeyDownEvent {
+        keystroke: keystroke.clone(),
+        is_held: false,
+        prefer_character_input: false,
+    });
+    cx.simulate_event(KeyUpEvent { keystroke });
+}
+
+#[gpui::test]
+fn public_streaming_citation_companions_activate_typed_events(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let captured = events.clone();
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let content = cx.new(|_| PublicCitationProbe { events });
+        Root::new(content, window, cx)
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let body = cx
+        .debug_bounds("streaming-text-body")
+        .expect("selectable Markdown body should render");
+    cx.simulate_click(
+        point(body.left() + px(3.), body.top() + px(8.)),
+        Modifiers::default(),
+    );
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::CitationActivated {
+            id: "pricing".into(),
+            destination: "app://reports/pricing".into(),
+        }]
+    );
+    captured.borrow_mut().clear();
+
+    activate_key(cx, "tab");
+    activate_key(cx, "enter");
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::CitationActivated {
+            id: "pricing".into(),
+            destination: "app://reports/pricing".into(),
+        }]
+    );
+    captured.borrow_mut().clear();
+
+    let pricing = cx
+        .debug_bounds("streaming-citation-pricing")
+        .expect("resolved citation companion should render");
+    cx.simulate_click(pricing.center(), Modifiers::default());
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::CitationActivated {
+            id: "pricing".into(),
+            destination: "app://reports/pricing".into(),
+        }]
+    );
+
+    captured.borrow_mut().clear();
+    activate_key(cx, "enter");
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::CitationActivated {
+            id: "pricing".into(),
+            destination: "app://reports/pricing".into(),
+        }]
+    );
+    assert!(cx.debug_bounds("streaming-citation-supply").is_some());
+}
+
+#[gpui::test]
+fn streaming_citation_companions_keep_the_final_link_reachable_in_a_narrow_root(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|_| BoundedCitationProbe);
+        Root::new(content, window, cx)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let host = cx
+        .debug_bounds("bounded-citation-host")
+        .expect("bounded citation host should render");
+    let scroller = cx
+        .debug_bounds("streaming-citation-scroll")
+        .expect("citation scroller should render");
+    cx.simulate_mouse_move(scroller.center(), None, Modifiers::default());
+
+    for _ in 0..12 {
+        cx.simulate_event(ScrollWheelEvent {
+            position: scroller.center(),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-120.))),
+            ..Default::default()
+        });
+    }
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let final_link = cx
+        .debug_bounds("streaming-citation-final")
+        .expect("final citation should remain rendered after scrolling");
+    assert!(
+        final_link.left() >= host.left() && final_link.right() <= host.right(),
+        "{final_link:?} vs {host:?}"
+    );
 }
 
 #[gpui::test]
