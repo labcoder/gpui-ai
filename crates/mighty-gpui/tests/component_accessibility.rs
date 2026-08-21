@@ -887,6 +887,69 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
 }
 
 #[gpui::test]
+fn public_sidebar_nav_expanded_row_hover_preserves_one_stable_selection_target(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSidebarNavProbe>()
+            .expect("public sidebar probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let overview = cx
+        .debug_bounds("sidebar-nav-item-overview")
+        .expect("expanded row should render through the production tree");
+    assert!(cx.debug_bounds("sidebar-nav-hover-overview").is_none());
+
+    cx.simulate_mouse_move(overview.center(), None, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let hover = cx
+        .debug_bounds("sidebar-nav-hover-overview")
+        .expect("expanded row should render its theme-token hover layer");
+    assert_eq!(hover, overview);
+
+    let orders = cx
+        .debug_bounds("sidebar-nav-item-orders")
+        .expect("second expanded row should render");
+    cx.simulate_mouse_move(orders.center(), None, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-hover-overview").is_none());
+    assert_eq!(
+        cx.debug_bounds("sidebar-nav-hover-orders"),
+        Some(orders),
+        "hover presentation should transfer between stable rows"
+    );
+
+    cx.simulate_click(orders.center(), Modifiers::default());
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [SidebarNavEvent::Selected {
+            id: "public-sidebar".into(),
+            item_id: "orders".into(),
+        }]
+    );
+
+    let host = cx
+        .debug_bounds("public-sidebar-host")
+        .expect("sidebar host should remain rendered");
+    cx.simulate_mouse_move(
+        point(host.right() + px(20.), host.bottom() + px(20.)),
+        None,
+        Modifiers::default(),
+    );
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-hover-orders").is_none());
+}
+
+#[gpui::test]
 fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
     cx: &mut TestAppContext,
 ) {

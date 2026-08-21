@@ -321,6 +321,7 @@ fn sidebar_item_control(
 ) -> gpui_base::Button {
     let tokens = cx.theme().semantic_tokens();
     let label = label.into();
+    let accessible_expanded = expanded.map(|expanded| expanded && !collapsed);
     gpui_base::Button::new(id)
         .accessibility_id(accessibility_id)
         .accessibility_label(label.clone())
@@ -329,7 +330,9 @@ fn sidebar_item_control(
         .selected(active)
         .aria_selected(active)
         .aria_level(depth + 1)
-        .when_some(expanded, |this, expanded| this.aria_expanded(expanded))
+        .when_some(accessible_expanded, |this, expanded| {
+            this.aria_expanded(expanded)
+        })
         .when_some(description, |this, description| {
             this.aria_description(description)
         })
@@ -399,6 +402,10 @@ mod tests {
     type CapturedSemanticNodes = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;
 
     struct SemanticsProbe {
+        captured: CapturedSemanticNodes,
+    }
+
+    struct CollapsedParentSemanticsProbe {
         captured: CapturedSemanticNodes,
     }
 
@@ -472,6 +479,37 @@ mod tests {
                         (workspace_tree.a11y_role(), workspace_tree_node),
                         (reports_tree.a11y_role(), reports_tree_node),
                     ];
+                },
+                |_, _, _, _| {},
+            )
+        }
+    }
+
+    impl Render for CollapsedParentSemanticsProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let captured = self.captured.clone();
+            canvas(
+                move |_, window, cx| {
+                    let collapsed_parent = sidebar_item_control(
+                        "collapsed-parent",
+                        "sidebar-nav.test.item.orders",
+                        "Orders",
+                        0,
+                        false,
+                        true,
+                        Some(true),
+                        sidebar_item_description(None, false, true),
+                        None,
+                        true,
+                        cx,
+                    )
+                    .on_click(|_, _, _| {})
+                    .render(window, cx)
+                    .into_element();
+                    let mut node = accesskit::Node::new(Role::Unknown);
+                    collapsed_parent.write_a11y_info(&mut node);
+                    *captured.lock().expect("capture mutex should be available") =
+                        vec![(collapsed_parent.a11y_role(), node)];
                 },
                 |_, _, _, _| {},
             )
@@ -555,6 +593,29 @@ mod tests {
         assert_eq!(*reports_tree_role, Some(Role::Tree));
         assert_eq!(reports_tree.label(), Some("Reports navigation items"));
     }
+
+    #[gpui::test]
+    fn globally_collapsed_parent_reports_unmounted_children_as_not_expanded(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| CollapsedParentSemanticsProbe { captured });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let nodes = result
+            .lock()
+            .expect("capture mutex should be available")
+            .drain(..)
+            .collect::<Vec<_>>();
+
+        let (role, parent) = &nodes[0];
+        assert_eq!(*role, Some(Role::TreeItem));
+        assert_eq!(parent.label(), Some("Orders"));
+        assert_eq!(parent.is_selected(), Some(true));
+        assert_eq!(parent.description(), Some("Contains selected item"));
+        assert_eq!(parent.is_expanded(), Some(false));
+    }
 }
 
 #[derive(Clone)]
@@ -564,6 +625,7 @@ struct StableMenuTree {
     section_label: SharedString,
     items: Arc<[SidebarNavItem]>,
     active_item: Option<SharedString>,
+    hovered_item: Option<SharedString>,
     expanded: Arc<HashSet<SharedString>>,
     owner: WeakEntity<SidebarNav>,
     collapsed: bool,
@@ -616,11 +678,18 @@ impl StableMenuTree {
         let has_children = !item.children.is_empty();
         let expanded =
             has_children && (self.filtering || self.expanded.contains(&item.id) || contains_active);
+        let hovered = !self.collapsed
+            && !item.disabled
+            && !active
+            && self.hovered_item.as_ref() == Some(&item.id);
         let item_id = item.id.clone();
         let debug_id = item.id.clone();
         let active_debug_id = item.id.clone();
+        let hover_debug_id = item.id.clone();
         let keyboard_owner = self.owner.clone();
         let keyboard_item_id = item.id.clone();
+        let hover_owner = self.owner.clone();
+        let hover_item_id = item.id.clone();
         let component_id = self.component_id.clone();
         let badge = item.badge.clone();
         let collapsed_icon = item.icon.clone();
@@ -687,6 +756,13 @@ impl StableMenuTree {
             cx,
         )
         .debug_selector(move || format!("sidebar-nav-item-{debug_id}"))
+        .when(!self.collapsed && !item.disabled, |this| {
+            this.on_hover(move |hovered, _, cx| {
+                _ = hover_owner.update(cx, |nav, cx| {
+                    nav.set_item_hovered(hover_item_id.clone(), *hovered, cx)
+                });
+            })
+        })
         .on_click(move |_, _, cx| {
             _ = keyboard_owner.update(cx, |nav, cx| {
                 nav.activate_item(keyboard_item_id.clone(), cx)
@@ -701,6 +777,16 @@ impl StableMenuTree {
             .relative()
             .w_full()
             .min_w_0()
+            .when(hovered, |this| {
+                this.text_color(cx.theme().sidebar_accent_foreground).child(
+                    div()
+                        .debug_selector(move || format!("sidebar-nav-hover-{hover_debug_id}"))
+                        .absolute()
+                        .inset_0()
+                        .rounded(tokens.radius.sm)
+                        .bg(cx.theme().sidebar_accent.opacity(0.8)),
+                )
+            })
             .child(menu_item.render(
                 format!("sidebar-nav-menu.{}.{}", self.component_id, item.id),
                 // SidebarMenuItem owns the pinned presentation. The transparent
@@ -829,6 +915,7 @@ pub struct SidebarNav {
     query: SharedString,
     input: Entity<InputState>,
     expanded: HashSet<SharedString>,
+    hovered_item: Option<SharedString>,
     _input_subscription: Subscription,
 }
 
@@ -851,6 +938,7 @@ impl SidebarNav {
             query: "".into(),
             input,
             expanded: HashSet::new(),
+            hovered_item: None,
             _input_subscription: subscription,
         }
     }
@@ -882,6 +970,7 @@ impl SidebarNav {
             .extend(new_parents.difference(&old_parents).cloned());
 
         self.sections = sections;
+        self.hovered_item = None;
         cx.notify();
     }
 
@@ -900,6 +989,7 @@ impl SidebarNav {
             return;
         }
         self.collapsed = collapsed;
+        self.hovered_item = None;
         cx.emit(SidebarNavEvent::CollapsedChanged {
             id: self.id.clone(),
             collapsed,
@@ -919,6 +1009,7 @@ impl SidebarNav {
             return;
         }
         self.query = query.clone();
+        self.hovered_item = None;
         self.input.update(cx, |input, cx| {
             input.set_value(query.to_string(), window, cx)
         });
@@ -950,11 +1041,26 @@ impl SidebarNav {
         self.input.read(cx).focus_handle(cx).focus(window, cx);
     }
 
+    fn set_item_hovered(&mut self, item_id: SharedString, hovered: bool, cx: &mut Context<Self>) {
+        let next = if hovered {
+            Some(item_id)
+        } else if self.hovered_item.as_ref() == Some(&item_id) {
+            None
+        } else {
+            return;
+        };
+        if self.hovered_item != next {
+            self.hovered_item = next;
+            cx.notify();
+        }
+    }
+
     fn update_query(&mut self, query: SharedString, cx: &mut Context<Self>) {
         if self.query == query {
             return;
         }
         self.query = query.clone();
+        self.hovered_item = None;
         self.emit_query_changed(query, cx);
         cx.notify();
     }
@@ -1017,6 +1123,7 @@ impl Render for SidebarNav {
                     section_label: section.label.clone(),
                     items: section.items.clone(),
                     active_item: self.active_item.clone(),
+                    hovered_item: self.hovered_item.clone(),
                     expanded: expanded.clone(),
                     owner: owner.clone(),
                     collapsed: self.collapsed,
@@ -1135,6 +1242,7 @@ impl Render for SidebarNav {
                                 section_label: "Navigation status".into(),
                                 items: Arc::from([]),
                                 active_item: None,
+                                hovered_item: None,
                                 expanded: Arc::new(HashSet::new()),
                                 owner: cx.weak_entity(),
                                 collapsed,
