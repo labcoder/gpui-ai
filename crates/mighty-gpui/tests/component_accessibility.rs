@@ -891,26 +891,17 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
     cx: &mut TestAppContext,
 ) {
     cx.update(mighty_gpui::init);
-    let (root, cx) = cx.add_window_view(|window, cx| {
-        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
-        Root::new(content, window, cx)
-    });
-    let probe = root.read_with(cx, |root, _| {
-        root.view()
-            .clone()
-            .downcast::<PublicSidebarNavProbe>()
-            .expect("public sidebar probe should remain the root view")
-    });
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
     let overview = cx
         .debug_bounds("sidebar-nav-item-overview")
         .expect("expanded row should render through the production tree");
-    assert_ne!(
-        cx.debug_bounds("sidebar-nav-hover-overview"),
-        Some(overview)
-    );
+    let idle_overview_hover = cx
+        .debug_bounds("sidebar-nav-hover-overview")
+        .expect("expanded row should retain a stable native hover layer");
+    assert!(idle_overview_hover.size.width < overview.size.width / 2.);
 
     cx.simulate_mouse_move(overview.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -925,9 +916,10 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
         .expect("second expanded row should render");
     cx.simulate_mouse_move(orders.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    assert_ne!(
+    assert_eq!(
         cx.debug_bounds("sidebar-nav-hover-overview"),
-        Some(overview)
+        Some(idle_overview_hover),
+        "moving directly to Orders should restore Overview's idle hover width"
     );
     let orders_hover = cx
         .debug_bounds("sidebar-nav-hover-orders")
