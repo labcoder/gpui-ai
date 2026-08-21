@@ -8,3 +8,17 @@ export function parseEmbedOptions(search) {
 
   return { story, theme };
 }
+
+export function parseThemeMessage(data) {
+  if (data?.type !== 'mighty-gpui-theme') return undefined;
+  return ['light', 'dark', 'contrast'].includes(data.theme) ? data.theme : undefined;
+}
+
+export function themeMessage(theme) {
+  return { type: 'mighty-gpui-theme', theme };
+}
+
+export function parseThemeEvent(event, parent, origin) {
+  if (event.source !== parent || event.origin !== origin) return undefined;
+  return parseThemeMessage(event.data);
+}

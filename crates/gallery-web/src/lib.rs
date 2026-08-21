@@ -1,7 +1,7 @@
 use gallery::{Gallery, GalleryTheme, StoryId, StoryLookupError};
 use gpui::{App, ApplicationHandle, Entity};
-use gpui_component::theme::{Theme, ThemeMode};
-use std::cell::RefCell;
+use gpui_component::theme::{Theme, ThemeMode, ThemeRegistry};
+use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 
 thread_local! {
@@ -47,25 +47,38 @@ fn apply_theme(mode: ThemeMode, cx: &mut App) {
 /// Switches a running gallery between light and dark mode.
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub fn set_theme(dark: bool) {
-    let (mode, preset) = if dark {
-        (ThemeMode::Dark, GalleryTheme::Dark)
-    } else {
-        (ThemeMode::Light, GalleryTheme::Light)
-    };
+    let theme = if dark { "dark" } else { "light" };
+    let _ = set_gallery_theme(theme.to_owned());
+}
 
+/// Switches a running gallery to a named review theme.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn set_gallery_theme(theme: String) -> Result<bool, JsValue> {
+    let preset = parse_theme(Some(theme)).map_err(|error| JsValue::from_str(&error))?;
+    let applied = Cell::new(false);
     APPLICATION.with(|application| {
         if let Some(handle) = application.borrow().as_ref() {
             handle.update(|cx| {
-                apply_theme(mode, cx);
-                GALLERY.with(|gallery| {
-                    if let Some(gallery) = gallery.borrow().as_ref() {
-                        gallery.update(cx, |gallery, cx| gallery.set_theme_preset(preset, cx));
-                    }
-                });
+                if !cx.has_global::<ThemeRegistry>() {
+                    return;
+                }
+                let Some(gallery) = GALLERY.with(|gallery| gallery.borrow().clone()) else {
+                    return;
+                };
+                gallery::apply_gallery_theme(preset, None, cx);
+                #[cfg(target_family = "wasm")]
+                {
+                    let theme = Theme::global_mut(cx);
+                    theme.font_family = "IBM Plex Sans".into();
+                    theme.mono_font_family = "Lilex".into();
+                }
+                gallery.update(cx, |gallery, cx| gallery.set_theme_preset(preset, cx));
                 cx.refresh_windows();
+                applied.set(true);
             });
         }
     });
+    Ok(applied.get())
 }
 
 /// Starts the gallery for an optional story slug.
@@ -120,7 +133,7 @@ pub fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_story, parse_theme};
+    use super::{parse_story, parse_theme, set_gallery_theme};
     use gallery::{GalleryTheme, StoryId};
 
     #[test]
@@ -154,5 +167,13 @@ mod tests {
     fn invalid_theme_reports_the_requested_name() {
         let error = parse_theme(Some("neon".to_owned())).expect_err("theme must fail");
         assert_eq!(error, "unknown gallery theme: neon");
+    }
+
+    #[test]
+    fn named_theme_waits_until_the_gallery_is_ready() {
+        assert!(matches!(
+            set_gallery_theme("contrast".to_owned()),
+            Ok(false)
+        ));
     }
 }

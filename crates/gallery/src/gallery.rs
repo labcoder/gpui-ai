@@ -1104,7 +1104,8 @@ impl GalleryTheme {
     }
 }
 
-fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) {
+/// Applies a complete gallery preset, including its registered token configuration.
+pub fn apply_gallery_theme(preset: GalleryTheme, window: Option<&mut Window>, cx: &mut App) {
     let (mode, config) = match preset {
         GalleryTheme::Light => (
             ThemeMode::Light,
@@ -1132,7 +1133,7 @@ fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) 
     } else {
         theme.light_theme = config;
     }
-    Theme::change(mode, Some(window), cx);
+    Theme::change(mode, window, cx);
 }
 
 fn records_story_columns() -> Vec<RecordColumn> {
@@ -3541,7 +3542,7 @@ impl Render for Gallery {
                             .label(format!("Theme: {}", self.theme.label()))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.theme = this.theme.next();
-                                apply_gallery_theme(this.theme, window, cx);
+                                apply_gallery_theme(this.theme, Some(window), cx);
                                 cx.notify();
                             })),
                     ),
@@ -3581,7 +3582,7 @@ fn open_gallery_window(
     let root_view = view.clone();
     cx.open_window(WindowOptions::default(), move |window, cx| {
         if let Some(theme) = theme {
-            apply_gallery_theme(theme, window, cx);
+            apply_gallery_theme(theme, Some(window), cx);
         }
         cx.new(|cx| Root::new(root_view, window, cx).bg(cx.theme().background))
     })
@@ -3600,6 +3601,7 @@ mod tests {
         AppContext as _, Context, Element as _, IntoElement as _, Render, Role, ScrollDelta,
         ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit, point, px, size,
     };
+    use gpui_component::ActiveTheme as _;
     use mighty_gpui::{
         prelude::{FilterRow, FilterSortDirection, FilterTableEvent},
         stream::StreamedContent,
@@ -3649,6 +3651,18 @@ mod tests {
         assert_eq!(GalleryTheme::Light.next(), GalleryTheme::Dark);
         assert_eq!(GalleryTheme::Dark.next(), GalleryTheme::Contrast);
         assert_eq!(GalleryTheme::Contrast.next(), GalleryTheme::Light);
+    }
+
+    #[gpui::test]
+    fn contrast_theme_installs_the_contrast_registry_config(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        cx.update(|cx| {
+            super::apply_gallery_theme(GalleryTheme::Contrast, None, cx);
+            assert_eq!(
+                cx.theme().dark_theme.name.as_ref(),
+                super::CONTRAST_THEME_NAME
+            );
+        });
     }
 
     #[gpui::test]

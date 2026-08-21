@@ -16,6 +16,15 @@
   --border: #2e2e2e;
 }
 
+:root.contrast {
+  color-scheme: dark;
+  --page: #000000;
+  --surface: #000000;
+  --text: #ffffff;
+  --muted: #ffffff;
+  --border: #ffff00;
+}
+
 * { box-sizing: border-box; }
 
 html,

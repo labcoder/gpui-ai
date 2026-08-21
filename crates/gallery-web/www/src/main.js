@@ -1,5 +1,5 @@
 import './styles.css';
-import { parseEmbedOptions } from './query.js';
+import { parseEmbedOptions, parseThemeEvent, themeMessage } from './query.js';
 
 function preferredTheme(explicit) {
   if (explicit !== undefined) return explicit;
@@ -25,27 +25,49 @@ function showFallback(error, expected = false) {
   }
 }
 
-function watchTheme(wasm, initialDark) {
-  let dark = initialDark;
+function watchTheme(initialTheme) {
+  let theme;
+  let wasm;
+  let syncScheduled = false;
+  const sync = () => {
+    if (!wasm || syncScheduled) return;
+    syncScheduled = true;
+    const attempt = () => {
+      if (wasm.set_gallery_theme(theme)) {
+        syncScheduled = false;
+      } else {
+        window.requestAnimationFrame(attempt);
+      }
+    };
+    window.requestAnimationFrame(attempt);
+  };
   const apply = (next) => {
-    if (next === dark) return;
-    dark = next;
-    document.documentElement.classList.toggle('dark', dark);
-    wasm.set_theme(dark);
+    if (next === theme) return;
+    theme = next;
+    document.documentElement.classList.toggle('dark', theme !== 'light');
+    document.documentElement.classList.toggle('contrast', theme === 'contrast');
+    document.documentElement.dataset.theme = theme;
+    sync();
   };
 
   window.addEventListener('message', (event) => {
-    if (event.data?.type === 'mighty-gpui-theme' && typeof event.data.dark === 'boolean') {
-      apply(event.data.dark);
-    }
+    const next = parseThemeEvent(event, window.parent, window.location.origin);
+    if (next) apply(next);
   });
+  apply(initialTheme);
+  return {
+    current: () => theme,
+    connect: (runningWasm) => {
+      wasm = runningWasm;
+      sync();
+    },
+  };
 }
 
 async function initEmbed() {
   const options = parseEmbedOptions(window.location.search);
   const theme = preferredTheme(options.theme);
-  const dark = theme !== 'light';
-  document.documentElement.classList.toggle('dark', dark);
+  const themeChannel = watchTheme(theme);
 
   if (!navigator.gpu) {
     showFallback(new Error('This live example requires a browser with WebGPU support.'));
@@ -56,8 +78,8 @@ async function initEmbed() {
     const wasm = await import('./wasm/gallery_web.js');
     await wasm.default();
     wasm.validate_story(options.story);
-    watchTheme(wasm, dark);
-    await wasm.run(options.story, theme, document.body.dataset.assetBase || undefined);
+    await wasm.run(options.story, themeChannel.current(), document.body.dataset.assetBase || undefined);
+    themeChannel.connect(wasm);
     document.getElementById('loading')?.remove();
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));
@@ -73,7 +95,7 @@ function initIndex() {
     toggle?.setAttribute('aria-pressed', String(dark));
     toggle?.replaceChildren(dark ? 'Use light theme' : 'Use dark theme');
     document.querySelectorAll('iframe').forEach((frame) => {
-      frame.contentWindow?.postMessage({ type: 'mighty-gpui-theme', dark }, '*');
+      frame.contentWindow?.postMessage(themeMessage(dark ? 'dark' : 'light'), window.location.origin);
     });
   };
 

@@ -6,5 +6,7 @@ pub mod performance;
 mod sim;
 mod story;
 
-pub use gallery::{Gallery, GalleryTheme, init, open_gallery, open_gallery_with_theme};
+pub use gallery::{
+    Gallery, GalleryTheme, apply_gallery_theme, init, open_gallery, open_gallery_with_theme,
+};
 pub use story::{StoryId, StoryLookupError};

@@ -41,6 +41,15 @@ test("build emits stable catalog routes and copies one shared gallery", async (c
     );
     assert.match(page, /<main/);
     assert.match(page, new RegExp(`data-story="${component.slug}"`));
+    assert.match(page, /data-specimen-frame/);
+    assert.match(page, /data-webgpu-fallback hidden role="status"/);
+    assert.match(page, /data-specimen-reload/);
+    assert.match(page, /data-specimen-open/);
+    assert.match(
+      page,
+      new RegExp(`data-src="\\.\\.\\/\\.\\.\\/gallery/embed\\.html\\?story=${component.slug}&amp;theme=light"`),
+    );
+    assert.doesNotMatch(page, /<iframe[^>]+\ssrc=/);
     assert.match(page, /<pre[^>]*><code/);
     assert.match(page, /href="\.\.\/"/);
     assert.doesNotMatch(page, /href="[^"#]*index\.html/);
@@ -74,6 +83,22 @@ test("generated pages share the same local assets", async (context) => {
   await readFile(path.join(outDir, "assets", "styles.css"), "utf8");
   await readFile(path.join(outDir, "assets", "shell.js"), "utf8");
   await readFile(path.join(outDir, "assets", "catalog.js"), "utf8");
+  await readFile(path.join(outDir, "assets", "runtime.js"), "utf8");
+});
+
+test("every page exposes keyboard-operable three-theme controls", async (context) => {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-themes-"));
+  context.after(() => rm(temporaryRoot, { force: true, recursive: true }));
+  const galleryDir = path.join(temporaryRoot, "gallery-input");
+  const outDir = path.join(temporaryRoot, "site-output");
+  await createGalleryFixture(galleryDir);
+  await buildSite({ galleryDir, outDir });
+
+  for (const route of ["index.html", path.join("components", "index.html"), path.join("components", "chat", "index.html")]) {
+    const page = await readFile(path.join(outDir, route), "utf8");
+    assert.match(page, /aria-label="Theme"/);
+    assert.equal((page.match(/data-theme-choice=/g) ?? []).length, 3);
+  }
 });
 
 test("build rejects an incomplete gallery before replacing valid output", async (context) => {

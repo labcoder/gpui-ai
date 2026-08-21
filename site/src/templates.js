@@ -16,13 +16,13 @@ function documentShell({ title, description, root, body }) {
   <meta name="description" content="${escapeHtml(description)}">
   <title>${escapeHtml(title)} · mighty-gpui</title>
   <link rel="stylesheet" href="${root}assets/styles.css">
-  <script src="${root}assets/shell.js" defer></script>
+  <script type="module" src="${root}assets/shell.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="masthead">
     <a class="wordmark" href="${root}" aria-label="mighty-gpui home"><span>mighty</span>/gpui</a>
-    <nav aria-label="Primary"><a href="${root}components/">Component index</a><a href="https://github.com/labcoder/gpui-ai">Source</a></nav>
+    <div class="header-tools"><nav aria-label="Primary"><a href="${root}components/">Component index</a><a href="https://github.com/labcoder/gpui-ai">Source</a></nav><div class="theme-switcher" role="group" aria-label="Theme"><button type="button" data-theme-choice="light" aria-pressed="true">Light</button><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button><button type="button" data-theme-choice="contrast" aria-pressed="false">Contrast</button></div></div>
   </header>
   ${body}
   <footer><span>Field notes for AI interfaces in Rust.</span><span>24 components · 3 themes · one WASM gallery</span></footer>
@@ -73,8 +73,8 @@ export function componentPage(item) {
     body: `<main id="content" class="component-page">
       <nav class="breadcrumb" aria-label="Breadcrumb"><a href="../">Components</a><span aria-hidden="true">/</span><span>${escapeHtml(item.title)}</span></nav>
       <header class="component-intro"><p class="eyebrow">Plate ${number} / ${escapeHtml(item.category)}</p><h1>${escapeHtml(item.title)}</h1><p>${escapeHtml(item.summary)}</p></header>
-      <section class="specimen" aria-labelledby="specimen-title" data-story="${item.slug}"><div class="section-label"><h2 id="specimen-title">Live specimen</h2><span>GPUI · WASM</span></div><div class="specimen-stage"><p>Interactive specimen connects in the next build task.</p></div></section>
-      <section class="usage" aria-labelledby="usage-title"><div><p class="eyebrow">Usage note</p><h2 id="usage-title">Start with stable identity.</h2><p>The application owns durable data and work. The component reports intent through typed events.</p><a href="https://github.com/labcoder/gpui-ai/blob/main/${item.source}">Open implementation →</a></div><div class="code-panel"><div><span>Rust</span><button type="button" data-copy>Copy</button></div><pre tabindex="0"><code>${escapeHtml(`use mighty_gpui::prelude::*;\n\n${item.usage};`)}</code></pre></div></section>
+      <section class="specimen" aria-labelledby="specimen-title" data-story="${item.slug}"><div class="section-label"><h2 id="specimen-title">Live specimen</h2><div class="specimen-actions"><span>GPUI · WASM</span><button type="button" data-specimen-reload>Reload</button><a data-specimen-open href="../../gallery/embed.html?story=${item.slug}&amp;theme=light" target="_blank" rel="noopener">Open</a></div></div><div class="specimen-stage specimen-${item.viewport}"><iframe title="Interactive ${escapeHtml(item.title)} example" data-specimen-frame data-src="../../gallery/embed.html?story=${item.slug}&amp;theme=light"></iframe><div class="webgpu-fallback" data-webgpu-fallback hidden role="status"><strong>Live specimen unavailable</strong><p>This browser does not expose WebGPU. The native GPUI component and source remain available.</p></div><noscript><p>JavaScript is required to load the live GPUI specimen.</p></noscript></div><p class="specimen-note">${escapeHtml(item.limitation)}</p></section>
+      <section class="usage" aria-labelledby="usage-title"><div><p class="eyebrow">Usage note</p><h2 id="usage-title">Start with stable identity.</h2><p>The application owns durable data and work. The component reports intent through typed events.</p><a href="https://github.com/labcoder/gpui-ai/blob/main/${item.source}">Open implementation →</a></div><div class="code-panel"><div><span>Rust</span><button type="button" data-copy aria-describedby="copy-status-${item.slug}">Copy</button></div><pre tabindex="0"><code>${escapeHtml(`use mighty_gpui::prelude::*;\n\n${item.usage};`)}</code></pre><p class="copy-status" id="copy-status-${item.slug}" role="status" aria-live="polite"></p></div></section>
       <nav class="plate-nav" aria-label="Component pages"><a href="../">← Full index</a><span>${number} / ${components.length}</span></nav>
     </main>`,
   });

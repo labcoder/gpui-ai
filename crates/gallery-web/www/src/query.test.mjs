@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseEmbedOptions } from './query.js';
+import { parseEmbedOptions, parseThemeEvent, parseThemeMessage, themeMessage } from './query.js';
 
 test('parses a story and explicit dark theme', () => {
   assert.deepEqual(parseEmbedOptions('?story=streaming-text&theme=dark'), {
@@ -28,4 +28,20 @@ test('omits empty story and lets system theme decide', () => {
     story: undefined,
     theme: undefined,
   });
+});
+
+test('accepts all named live theme messages and rejects legacy noise', () => {
+  assert.equal(parseThemeMessage({ type: 'mighty-gpui-theme', theme: 'light' }), 'light');
+  assert.equal(parseThemeMessage({ type: 'mighty-gpui-theme', theme: 'dark' }), 'dark');
+  assert.equal(parseThemeMessage({ type: 'mighty-gpui-theme', theme: 'contrast' }), 'contrast');
+  assert.equal(parseThemeMessage({ type: 'mighty-gpui-theme', theme: 'neon' }), undefined);
+  assert.equal(parseThemeMessage({ type: 'other', theme: 'dark' }), undefined);
+});
+
+test('theme events require the expected parent and exact origin', () => {
+  const parent = {};
+  assert.equal(parseThemeEvent({ source: parent, origin: 'https://site.test', data: themeMessage('contrast') }, parent, 'https://site.test'), 'contrast');
+  assert.equal(parseThemeEvent({ source: {}, origin: 'https://site.test', data: themeMessage('dark') }, parent, 'https://site.test'), undefined);
+  assert.equal(parseThemeEvent({ source: parent, origin: 'https://evil.test', data: themeMessage('dark') }, parent, 'https://site.test'), undefined);
+  assert.deepEqual(themeMessage('light'), { type: 'mighty-gpui-theme', theme: 'light' });
 });

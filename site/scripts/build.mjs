@@ -67,6 +67,7 @@ async function generateInto(stageDir, galleryDir) {
     copySource("styles.css", path.join(assetsDir, "styles.css")),
     copySource("shell.js", path.join(assetsDir, "shell.js")),
     copySource("catalog.js", path.join(assetsDir, "catalog.js")),
+    copySource("runtime.js", path.join(assetsDir, "runtime.js")),
   ]);
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });
 }
