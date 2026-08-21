@@ -39,6 +39,8 @@ pub enum StoryId {
     DiffTable,
     /// Controlled filterable task grid with stable-row reorder motion.
     FilterTable,
+    /// Controlled bounded feature comparison grid.
+    ComparisonTable,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -74,6 +76,7 @@ impl StoryId {
         Self::RecordsTable,
         Self::DiffTable,
         Self::FilterTable,
+        Self::ComparisonTable,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -103,6 +106,7 @@ impl StoryId {
             Self::RecordsTable => "records-table",
             Self::DiffTable => "diff-table",
             Self::FilterTable => "filter-table",
+            Self::ComparisonTable => "comparison-table",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -133,6 +137,7 @@ impl StoryId {
             Self::RecordsTable => "Records table",
             Self::DiffTable => "Diff table",
             Self::FilterTable => "Filter table",
+            Self::ComparisonTable => "Comparison table",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -239,5 +244,16 @@ mod tests {
         assert_eq!(StoryId::FilterTable.title(), "Filter table");
         assert_eq!("filter-table".parse::<StoryId>(), Ok(StoryId::FilterTable));
         assert!(StoryId::ALL.contains(&StoryId::FilterTable));
+    }
+
+    #[test]
+    fn comparison_table_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::ComparisonTable.slug(), "comparison-table");
+        assert_eq!(StoryId::ComparisonTable.title(), "Comparison table");
+        assert_eq!(
+            "comparison-table".parse::<StoryId>(),
+            Ok(StoryId::ComparisonTable)
+        );
+        assert!(StoryId::ALL.contains(&StoryId::ComparisonTable));
     }
 }

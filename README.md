@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-three components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-four components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records, diff, and filter tables, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: comparison tables.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records, diff, and filter tables, a bounded feature comparison table, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown.
 
 ## Requirements
 
@@ -319,6 +319,32 @@ let _subscription = cx.subscribe(&tasks, |_, _, event: &FilterTableEvent, _| {
 ```
 
 Filter controls expose active, inactive, count, and unavailable state semantically as well as visually. A constrained 1,000-row projection constructs only the visible range, retains stable row anchors, and keeps the final row reachable.
+
+`ComparisonTable` uses an ordinary composed grid because its validated snapshot is intentionally bounded to 12 side-by-side items and 128 feature rows. It rejects duplicate IDs, dangling values, and larger shapes instead of truncating consumer data:
+
+```rust
+use mighty_gpui::prelude::*;
+
+let snapshot = ComparisonSnapshot::try_new(
+    [
+        ComparisonItem::new("starter", "Starter"),
+        ComparisonItem::new("business", "Business")
+            .state(ComparisonItemState::Highlighted),
+    ],
+    [ComparisonFeature::new("support", "Priority support").values([
+        ComparisonValue::included("starter", false),
+        ComparisonValue::included("business", true),
+    ])],
+)?;
+
+let comparison = cx.new(|cx| {
+    let mut table = ComparisonTable::new("plans", "Plan comparison", window, cx);
+    table.set_snapshot(Progressive::complete(snapshot), window, cx);
+    table
+});
+```
+
+Item highlighting, disabled state, progressive state, and selection stay application-owned. Pointer, keyboard, and AccessKit activation emit `ComparisonTableEvent::SelectionRequested` with stable table and item IDs. Long labels wrap inside fixed-width columns, readable values remain selectable, and the bounded surface scrolls in both axes with focused columns revealed horizontally.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 

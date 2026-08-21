@@ -113,6 +113,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::RecordsTable
         | StoryId::DiffTable
         | StoryId::FilterTable
+        | StoryId::ComparisonTable
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -2287,6 +2288,307 @@ impl Render for FilterTableStory {
     }
 }
 
+fn comparison_story_snapshot(item_states: &[ComparisonItemState]) -> ComparisonSnapshot {
+    let labels = [
+        "Starter",
+        "Business",
+        "Enterprise with dedicated regional support",
+    ];
+    let items = labels.into_iter().enumerate().map(|(index, label)| {
+        ComparisonItem::new(format!("plan-{index}"), label)
+            .description(format!("Plan {} details", index + 1))
+            .state(
+                item_states
+                    .get(index)
+                    .copied()
+                    .unwrap_or(ComparisonItemState::Default),
+            )
+    });
+    ComparisonSnapshot::try_new(
+        items,
+        [
+            ComparisonFeature::new("price", "Monthly price").values([
+                ComparisonValue::new("plan-0", "$12"),
+                ComparisonValue::new("plan-1", "$24"),
+                ComparisonValue::new("plan-2", "Custom"),
+            ]),
+            ComparisonFeature::new("seats", "Included team seats").values([
+                ComparisonValue::new("plan-0", "3"),
+                ComparisonValue::new("plan-1", "25"),
+                ComparisonValue::new("plan-2", "Unlimited"),
+            ]),
+            ComparisonFeature::new("support", "Priority support").values([
+                ComparisonValue::included("plan-0", false),
+                ComparisonValue::included("plan-1", true),
+                ComparisonValue::included("plan-2", true),
+            ]),
+        ],
+    )
+    .expect("gallery comparison fixture must satisfy the bounded contract")
+}
+
+fn configured_comparison_table(
+    id: &str,
+    label: &str,
+    snapshot: Progressive<ComparisonSnapshot>,
+    selected: Option<&str>,
+    window: &mut Window,
+    cx: &mut Context<ComparisonTable>,
+) -> ComparisonTable {
+    let mut table = ComparisonTable::new(id, label, window, cx);
+    table.set_snapshot(snapshot, window, cx);
+    if let Some(selected) = selected {
+        table.set_selected_item(selected, window, cx);
+    }
+    table
+}
+
+struct ComparisonTableStory {
+    populated: Entity<ComparisonTable>,
+    loading: Entity<ComparisonTable>,
+    failed: Entity<ComparisonTable>,
+    empty: Entity<ComparisonTable>,
+    disabled: Entity<ComparisonTable>,
+    selected: Entity<ComparisonTable>,
+    constrained: Entity<ComparisonTable>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl ComparisonTableStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let ordinary = comparison_story_snapshot(&[
+            ComparisonItemState::Default,
+            ComparisonItemState::Highlighted,
+            ComparisonItemState::Default,
+        ]);
+        let populated = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-populated",
+                "Plan comparison",
+                Progressive::complete(ordinary.clone()),
+                None,
+                window,
+                cx,
+            )
+        });
+        let loading = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-loading",
+                "Loading plan comparison",
+                Progressive::running(ordinary.clone()),
+                None,
+                window,
+                cx,
+            )
+        });
+        let failed = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-error",
+                "Unavailable plan comparison",
+                Progressive::failed(ordinary.clone(), "Pricing service is unavailable"),
+                None,
+                window,
+                cx,
+            )
+        });
+        let empty_snapshot = ComparisonSnapshot::try_new([], [])
+            .expect("an empty gallery comparison is structurally valid");
+        let empty = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-empty",
+                "Empty plan comparison",
+                Progressive::complete(empty_snapshot),
+                None,
+                window,
+                cx,
+            )
+        });
+        let disabled_snapshot = comparison_story_snapshot(&[
+            ComparisonItemState::Default,
+            ComparisonItemState::Highlighted,
+            ComparisonItemState::Disabled,
+        ]);
+        let disabled = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-disabled",
+                "Disabled plan comparison",
+                Progressive::complete(disabled_snapshot),
+                None,
+                window,
+                cx,
+            )
+        });
+        let selected = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-selected",
+                "Selected plan comparison",
+                Progressive::complete(ordinary.clone()),
+                Some("plan-1"),
+                window,
+                cx,
+            )
+        });
+        let wide_items = (0..12).map(|index| {
+            ComparisonItem::new(
+                format!("wide-{index}"),
+                format!("Regional plan {} with a long name", index + 1),
+            )
+            .state(if index == 9 {
+                ComparisonItemState::Highlighted
+            } else {
+                ComparisonItemState::Default
+            })
+        });
+        let wide_snapshot = ComparisonSnapshot::try_new(
+            wide_items,
+            (0..128).map(|feature_index| {
+                ComparisonFeature::new(
+                    format!("wide-feature-{feature_index}"),
+                    format!("Regional capability {}", feature_index + 1),
+                )
+                .description("Selectable supporting detail for this capability")
+                .values((0..12).map(|item_index| {
+                    ComparisonValue::new(
+                        format!("wide-{item_index}"),
+                        format!("Tier {}", feature_index + item_index + 1),
+                    )
+                }))
+            }),
+        )
+        .expect("the maximum-width gallery comparison must remain bounded");
+        let constrained = cx.new(|cx| {
+            configured_comparison_table(
+                "gallery-comparison-constrained",
+                "Constrained plan comparison",
+                Progressive::complete(wide_snapshot),
+                None,
+                window,
+                cx,
+            )
+        });
+
+        let mut subscriptions = Vec::new();
+        for table in [&populated, &selected] {
+            subscriptions.push(cx.subscribe_in(
+                table,
+                window,
+                |this, table, event: &ComparisonTableEvent, window, cx| {
+                    let ComparisonTableEvent::SelectionRequested { item_id, .. } = event;
+                    this.last_event = format!("{event:?}").into();
+                    table.update(cx, |table, cx| {
+                        table.set_selected_item(item_id.clone(), window, cx);
+                    });
+                    cx.notify();
+                },
+            ));
+        }
+
+        Self {
+            populated,
+            loading,
+            failed,
+            empty,
+            disabled,
+            selected,
+            constrained,
+            last_event: "Choose a plan.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    fn state(
+        selector: &'static str,
+        title: &'static str,
+        table: Entity<ComparisonTable>,
+    ) -> impl IntoElement {
+        v_flex()
+            .id(selector)
+            .debug_selector(move || selector.into())
+            .flex_none()
+            .gap_1()
+            .child(
+                div()
+                    .id(format!("{selector}-heading"))
+                    .role(Role::Heading)
+                    .aria_label(title)
+                    .text_xs()
+                    .child(title),
+            )
+            .child(div().h(px(220.)).child(table))
+    }
+}
+
+impl Render for ComparisonTableStory {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .child(Self::state(
+                "comparison-story-populated",
+                "POPULATED AND HIGHLIGHTED",
+                self.populated.clone(),
+            ))
+            .child(Self::state(
+                "comparison-story-loading",
+                "LOADING",
+                self.loading.clone(),
+            ))
+            .child(Self::state(
+                "comparison-story-error",
+                "ERROR",
+                self.failed.clone(),
+            ))
+            .child(Self::state(
+                "comparison-story-empty",
+                "EMPTY",
+                self.empty.clone(),
+            ))
+            .child(Self::state(
+                "comparison-story-disabled",
+                "DISABLED ITEM",
+                self.disabled.clone(),
+            ))
+            .child(Self::state(
+                "comparison-story-selected",
+                "CONTROLLED SELECTION",
+                self.selected.clone(),
+            ))
+            .child(
+                v_flex()
+                    .id("comparison-story-constrained")
+                    .debug_selector(|| "comparison-story-constrained".into())
+                    .gap_1()
+                    .child(
+                        div()
+                            .id("comparison-story-constrained-heading")
+                            .role(Role::Heading)
+                            .aria_label("Constrained width and height")
+                            .child("CONSTRAINED WIDTH AND HEIGHT"),
+                    )
+                    .child(div().w(px(520.)).h(px(190.)).child(self.constrained.clone())),
+            )
+            .child(
+                TextView::markdown(
+                    "comparison-story-event-log",
+                    format!("**Last typed event.** {}", self.last_event),
+                )
+                .selectable(true),
+            )
+            .child(
+                div()
+                    .id("comparison-story-reference-note")
+                    .debug_selector(|| "comparison-story-reference-note".into())
+                    .child(
+                        TextView::markdown(
+                            "comparison-story-reference-copy",
+                            "**Reference comparison.** Beautiful UI establishes a compact feature-by-plan layout. This original GPUI composition deliberately validates a bounded 12-item by 128-feature snapshot, keeps highlighting and selection application-owned, exposes stable typed intent and direct table semantics, preserves selectable values, and provides keyboard-driven horizontal reachability.",
+                        )
+                        .selectable(true),
+                    ),
+            )
+    }
+}
+
 /// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
@@ -2297,6 +2599,7 @@ pub struct Gallery {
     records_table_scroll: ScrollHandle,
     diff_table_scroll: ScrollHandle,
     filter_table_scroll: ScrollHandle,
+    comparison_table_scroll: ScrollHandle,
     #[cfg(feature = "performance")]
     performance_filter_story: Option<WeakEntity<FilterTableStory>>,
     visible_range: Range<usize>,
@@ -2344,6 +2647,7 @@ impl Gallery {
             records_table_scroll: ScrollHandle::new(),
             diff_table_scroll: ScrollHandle::new(),
             filter_table_scroll: ScrollHandle::new(),
+            comparison_table_scroll: ScrollHandle::new(),
             #[cfg(feature = "performance")]
             performance_filter_story: None,
             visible_range,
@@ -2453,7 +2757,7 @@ impl Gallery {
         cx.notify();
     }
 
-    /// Prepares one native performance viewport from a stable story identity.
+    /// Prepares one isolated native performance viewport from a stable story identity.
     ///
     /// The dedicated Streaming Text viewport measures ongoing progressive
     /// invalidation. Chat therefore stops only the gallery-owned fake producer
@@ -2462,13 +2766,20 @@ impl Gallery {
     /// streaming scenario.
     #[cfg(any(test, feature = "performance"))]
     pub fn prepare_performance_viewport(&mut self, story: StoryId, cx: &mut Context<Self>) {
-        self.scroll_catalog_to(story, cx);
+        self.selected = story;
+        let simulation_needed = story_needs_simulation(story);
+        match (simulation_needed, self.simulation_task.is_some()) {
+            (true, false) => self.simulation_task = Some(Self::spawn_simulation(cx)),
+            (false, true) => self.simulation_task = None,
+            _ => {}
+        }
         if story == StoryId::FilterTable {
             self.filter_table_scroll.scroll_to_bottom();
         }
         if story == StoryId::Chat {
             self.simulation_task.take();
         }
+        cx.notify();
     }
 
     /// Replaces the controlled 1,000-row performance projection.
@@ -2934,6 +3245,29 @@ impl Gallery {
                             .track_scroll(&self.filter_table_scroll)
                             .overflow_y_scrollbar()
                             .child(filter_story)
+                    },
+                    cx,
+                )
+            }
+            StoryId::ComparisonTable => {
+                let comparison_story = window.use_keyed_state(
+                    "comparison-table-story-state",
+                    cx,
+                    ComparisonTableStory::new,
+                );
+                self.section(
+                    story,
+                    "COMPARISON TABLE",
+                    || {
+                        v_flex()
+                            .id("comparison-table-story-scroll")
+                            .debug_selector(|| "comparison-table-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .track_scroll(&self.comparison_table_scroll)
+                            .overflow_y_scrollbar()
+                            .child(comparison_story)
                     },
                     cx,
                 )
@@ -3517,6 +3851,75 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn direct_comparison_table_story_exercises_required_controlled_states(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::ComparisonTable, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(560.)));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        for selector in [
+            "comparison-story-populated",
+            "comparison-story-loading",
+            "comparison-story-error",
+            "comparison-story-empty",
+            "comparison-story-disabled",
+            "comparison-story-selected",
+            "comparison-story-constrained",
+            "comparison-story-reference-note",
+        ] {
+            assert!(
+                cx.debug_bounds(selector).is_some(),
+                "comparison story should exercise {selector}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn constrained_comparison_table_story_keeps_its_reference_end_reachable(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::ComparisonTable, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            GalleryTestRoot { gallery }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let viewport = cx
+            .debug_bounds("comparison-table-story-scroll")
+            .expect("the direct comparison story should expose its overflow region");
+        let initial_end = cx
+            .debug_bounds("comparison-story-reference-note")
+            .expect("the comparison reference note should remain rendered");
+        assert!(initial_end.top() >= viewport.bottom());
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.comparison_table_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("comparison-story-reference-note")
+            .expect("the comparison reference note should remain rendered after scrolling");
+        assert!(
+            end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
+            "{end:?} must fit in {viewport:?}"
+        );
+    }
+
     #[test]
     fn filter_story_reducer_keeps_table_instances_independent_and_reapplies_sort() {
         let mut projections = HashMap::new();
@@ -3948,9 +4351,24 @@ mod tests {
         });
 
         gallery.read_with(cx, |gallery, _| {
-            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 9);
-            assert_eq!(gallery.visible_range, 9..12);
+            assert_eq!(gallery.selected, StoryId::Chat);
             assert!(gallery.simulation_task.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn performance_viewport_isolates_the_story_under_measurement(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.prepare_performance_viewport(StoryId::FilterTable, cx);
+        });
+
+        gallery.read_with(cx, |gallery, _| {
+            assert_eq!(gallery.selected, StoryId::FilterTable);
+            assert!(gallery.shows(StoryId::FilterTable));
+            assert!(!gallery.shows(StoryId::ComparisonTable));
         });
     }
 }

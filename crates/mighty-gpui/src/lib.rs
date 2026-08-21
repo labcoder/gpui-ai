@@ -24,6 +24,7 @@ pub mod chat;
 pub mod chip;
 pub mod code_block;
 pub mod command_search;
+pub mod comparison_table;
 pub mod context_card;
 mod control;
 pub mod diff_table;
@@ -53,6 +54,11 @@ pub mod prelude {
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
     pub use crate::command_search::{CommandSearch, CommandSearchEvent, CommandSearchItem};
+    pub use crate::comparison_table::{
+        ComparisonFeature, ComparisonItem, ComparisonItemState, ComparisonSnapshot,
+        ComparisonSnapshotError, ComparisonTable, ComparisonTableEvent, ComparisonValue,
+        MAX_COMPARISON_FEATURES, MAX_COMPARISON_ITEMS,
+    };
     pub use crate::context_card::{ContextCard, ContextCardEvent};
     pub use crate::diff_table::{
         DiffCell, DiffChangeKind, DiffColumn, DiffColumnAlignment, DiffProposalAction,
