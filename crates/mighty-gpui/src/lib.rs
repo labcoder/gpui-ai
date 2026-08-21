@@ -33,6 +33,7 @@ pub mod loading;
 pub mod orbs;
 pub mod prompt_bar;
 pub mod recommendation;
+pub mod records_table;
 pub mod search_results;
 pub mod selection_actions;
 pub mod sidebar_nav;
@@ -63,6 +64,10 @@ pub mod prelude {
         PromptSubmission,
     };
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
+    pub use crate::records_table::{
+        RecordCell, RecordCellKind, RecordColumn, RecordColumnAlignment, RecordRow,
+        RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent,
+    };
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
     pub use crate::sidebar_nav::{SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarSection};
@@ -95,4 +100,5 @@ use gpui::App;
 /// `gpui_component::init` separately.
 pub fn init(cx: &mut App) {
     gpui_component::init(cx);
+    records_table::init(cx);
 }

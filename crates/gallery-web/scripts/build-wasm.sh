@@ -23,5 +23,12 @@ if [[ ! -f "$WASM" ]]; then
   exit 1
 fi
 
-wasm-bindgen "$WASM" --out-dir "$OUT" --target web --no-typescript
+BINDGEN_WASM="$WASM"
+BINDGEN_OUT="$OUT"
+if command -v cygpath >/dev/null 2>&1; then
+  BINDGEN_WASM="$(cygpath -w "$WASM")"
+  BINDGEN_OUT="$(cygpath -w "$OUT")"
+fi
+
+wasm-bindgen "$BINDGEN_WASM" --out-dir "$BINDGEN_OUT" --target web --no-typescript
 printf 'generated browser bindings in %s\n' "$OUT"

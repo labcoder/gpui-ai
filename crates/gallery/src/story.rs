@@ -33,6 +33,8 @@ pub enum StoryId {
     SidebarNav,
     /// Controlled design-property inspector.
     FineTune,
+    /// Controlled virtualized CRM-style records grid.
+    RecordsTable,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -65,6 +67,7 @@ impl StoryId {
         Self::CommandSearch,
         Self::SidebarNav,
         Self::FineTune,
+        Self::RecordsTable,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -91,6 +94,7 @@ impl StoryId {
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
             Self::FineTune => "fine-tune",
+            Self::RecordsTable => "records-table",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -118,6 +122,7 @@ impl StoryId {
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
             Self::FineTune => "Fine-tune card",
+            Self::RecordsTable => "Records table",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -197,5 +202,16 @@ mod tests {
         assert_eq!(StoryId::FineTune.title(), "Fine-tune card");
         assert_eq!("fine-tune".parse::<StoryId>(), Ok(StoryId::FineTune));
         assert!(StoryId::ALL.contains(&StoryId::FineTune));
+    }
+
+    #[test]
+    fn records_table_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::RecordsTable.slug(), "records-table");
+        assert_eq!(StoryId::RecordsTable.title(), "Records table");
+        assert_eq!(
+            "records-table".parse::<StoryId>(),
+            Ok(StoryId::RecordsTable)
+        );
+        assert!(StoryId::ALL.contains(&StoryId::RecordsTable));
     }
 }

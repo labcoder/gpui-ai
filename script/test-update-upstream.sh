@@ -152,16 +152,7 @@ mkdir -p "$TMP_DIR/bin"
 cat > "$TMP_DIR/bin/curl" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-destination=""
-while [[ "\$#" -gt 0 ]]; do
-  if [[ "\$1" == "-o" ]]; then
-    destination="\$2"
-    shift 2
-  else
-    shift
-  fi
-done
-cp "$ROOT/Cargo.lock" "\$destination"
+cat "$ROOT/Cargo.lock"
 EOF
 chmod +x "$TMP_DIR/bin/curl"
 

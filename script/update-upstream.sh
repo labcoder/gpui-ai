@@ -24,7 +24,7 @@ download_upstream_lock() {
   local destination="$2"
   curl -fsSL \
     "https://raw.githubusercontent.com/longbridge/gpui-component/$component_rev/Cargo.lock" \
-    -o "$destination"
+    > "$destination"
 }
 
 check_local_pair() {

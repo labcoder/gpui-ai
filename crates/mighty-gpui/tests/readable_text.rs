@@ -3,7 +3,9 @@ use gpui::{
     MouseButton, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
     Window, div, point, prelude::FluentBuilder as _, px,
 };
-use mighty_gpui::prelude::{Chat, ChatMessage, ChatRole, PromptBar};
+use mighty_gpui::prelude::{
+    Chat, ChatMessage, ChatRole, PromptBar, RecordCell, RecordColumn, RecordRow, RecordsTable,
+};
 use mighty_gpui::{
     code_block::CodeBlock,
     insight::InsightCard,
@@ -35,6 +37,44 @@ struct ReadableSurface {
 
 struct FollowUpSelectionSurface {
     events: Rc<RefCell<Vec<StreamingTextEvent>>>,
+}
+
+struct RecordsReadableSurface {
+    table: gpui::Entity<RecordsTable>,
+}
+
+impl RecordsReadableSurface {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let table =
+            cx.new(|cx| RecordsTable::new("readable-records", "Readable records", window, cx));
+        table.update(cx, |table, cx| {
+            table.set_columns(
+                [RecordColumn::new("company", "Company").width(px(560.))],
+                window,
+                cx,
+            );
+            table.set_records(
+                Progressive::complete(Arc::from([RecordRow::new("supplier", "Supplier").cells([
+                    RecordCell::new("company", "selectable_record *literal* selectable_record"),
+                ])])),
+                window,
+                cx,
+            );
+        });
+        Self { table }
+    }
+}
+
+impl Render for RecordsReadableSurface {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().p(px(16.)).child(
+            div()
+                .debug_selector(|| "readable-records-surface".into())
+                .w_full()
+                .h(px(160.))
+                .child(self.table.clone()),
+        )
+    }
 }
 
 struct SelectionTestRoot {
@@ -332,6 +372,38 @@ fn chat_user_prose_exports_selected_text(cx: &mut TestAppContext) {
     let selected = select_text(Surface::ChatUser, cx);
 
     assert!(selected.contains("selectable_chat_message"), "{selected:?}");
+}
+
+#[gpui::test]
+fn record_cells_export_literal_selected_text(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| RecordsReadableSurface::new(window, cx));
+        SelectionTestRoot::new(content)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let cell = cx
+        .debug_bounds("records-cell-16:readable-records8:suppliercompany")
+        .expect("the readable record cell should render");
+    let from = point(cell.left() + px(4.), cell.top() + px(4.));
+    let to = point(cell.right() - px(4.), cell.bottom() - px(4.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let selected = cx.update(gpui_base::TextSelection::selected_text);
+    assert!(
+        selected.contains("selectable_record *literal* selectable_record"),
+        "{selected:?}"
+    );
 }
 
 #[gpui::test]

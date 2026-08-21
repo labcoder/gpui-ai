@@ -110,6 +110,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::CommandSearch
         | StoryId::SidebarNav
         | StoryId::FineTune
+        | StoryId::RecordsTable
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -1131,6 +1132,260 @@ fn apply_gallery_theme(preset: GalleryTheme, window: &mut Window, cx: &mut App) 
     Theme::change(mode, Some(window), cx);
 }
 
+fn records_story_columns() -> Vec<RecordColumn> {
+    vec![
+        RecordColumn::new("supplier", "Supplier")
+            .sortable(true)
+            .fixed(true)
+            .width(px(240.)),
+        RecordColumn::new("region", "Region")
+            .sortable(true)
+            .width(px(130.)),
+        RecordColumn::new("products", "Products").width(px(220.)),
+        RecordColumn::new("status", "Status")
+            .sortable(true)
+            .width(px(140.)),
+    ]
+}
+
+fn records_story_rows() -> Vec<RecordRow> {
+    vec![
+        RecordRow::new("alpenrose", "Alpenrose Dairy").cells([
+            RecordCell::new("supplier", "Alpenrose Dairy"),
+            RecordCell::new("region", "Northwest"),
+            RecordCell::tags("products", ["Milk", "Cream"]),
+            RecordCell::status("status", "Ready", RecordStatusTone::Positive),
+        ]),
+        RecordRow::new("tillamook", "Tillamook County Creamery").cells([
+            RecordCell::new("supplier", "Tillamook County Creamery"),
+            RecordCell::new("region", "Pacific"),
+            RecordCell::tags("products", ["Cheese", "Ice cream"]),
+            RecordCell::status("status", "Review", RecordStatusTone::Caution),
+        ]),
+        RecordRow::new("cascade", "Cascade Cultured Foods")
+            .cells([
+                RecordCell::new("supplier", "Cascade Cultured Foods"),
+                RecordCell::new("region", "Mountain"),
+                RecordCell::tags("products", ["Yogurt", "Kefir"]),
+                RecordCell::status("status", "Paused", RecordStatusTone::Neutral),
+            ])
+            .disabled(true),
+        RecordRow::new("redwood", "Redwood Organic Dairy").cells([
+            RecordCell::new("supplier", "Redwood Organic Dairy"),
+            RecordCell::new("region", "West"),
+            RecordCell::tags("products", ["Butter", "Cream"]),
+            RecordCell::status("status", "Blocked", RecordStatusTone::Critical),
+        ]),
+    ]
+}
+
+fn records_story_many_rows() -> Arc<[RecordRow]> {
+    (0..100)
+        .map(|index| {
+            RecordRow::new(format!("supplier-{index}"), format!("Supplier {index}")).cells([
+                RecordCell::new("supplier", format!("Supplier {index}")),
+                RecordCell::new("region", format!("Region {}", index % 8)),
+                RecordCell::tags("products", ["Milk", "Cream"]),
+                RecordCell::status("status", "Ready", RecordStatusTone::Positive),
+            ])
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn configured_records_table(
+    id: &'static str,
+    label: &'static str,
+    records: Progressive<Arc<[RecordRow]>>,
+    window: &mut Window,
+    cx: &mut Context<RecordsTable>,
+) -> RecordsTable {
+    let mut table = RecordsTable::new(id, label, window, cx);
+    table.set_columns(records_story_columns(), window, cx);
+    table.set_records(records, window, cx);
+    table
+}
+
+struct RecordsTableStory {
+    populated: Entity<RecordsTable>,
+    loading: Entity<RecordsTable>,
+    failed: Entity<RecordsTable>,
+    empty: Entity<RecordsTable>,
+    disabled: Entity<RecordsTable>,
+    selected: Entity<RecordsTable>,
+    constrained: Entity<RecordsTable>,
+    records: Vec<RecordRow>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl RecordsTableStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let rows: Arc<[RecordRow]> = records_story_rows().into();
+        let populated = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-populated",
+                "Supplier records",
+                Progressive::complete(rows.clone()),
+                window,
+                cx,
+            )
+        });
+        let loading = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-loading",
+                "Loading supplier records",
+                Progressive::running(Arc::from([])),
+                window,
+                cx,
+            )
+        });
+        let failed = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-error",
+                "Unavailable supplier records",
+                Progressive::failed(Arc::from([]), "Supplier service is unavailable"),
+                window,
+                cx,
+            )
+        });
+        let empty = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-empty",
+                "Empty supplier records",
+                Progressive::complete(Arc::from([])),
+                window,
+                cx,
+            )
+        });
+        let disabled = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-disabled",
+                "Disabled supplier record",
+                Progressive::complete(Arc::from([records_story_rows()[2].clone()])),
+                window,
+                cx,
+            )
+        });
+        let selected = cx.new(|cx| {
+            let mut table = configured_records_table(
+                "gallery-records-selected",
+                "Selected supplier record",
+                Progressive::complete(rows.clone()),
+                window,
+                cx,
+            );
+            table.set_selected_row("tillamook", window, cx);
+            table
+        });
+        let constrained = cx.new(|cx| {
+            configured_records_table(
+                "gallery-records-constrained",
+                "Constrained supplier records",
+                Progressive::complete(records_story_many_rows()),
+                window,
+                cx,
+            )
+        });
+
+        let mut subscriptions = Vec::new();
+        for table in [&populated, &selected] {
+            subscriptions.push(cx.subscribe_in(
+                table,
+                window,
+                |this, table, event: &RecordsTableEvent, window, cx| {
+                    this.last_event = format!("{event:?}").into();
+                    match event {
+                        RecordsTableEvent::SelectionRequested { row_id, .. } => table
+                            .update(cx, |table, cx| {
+                                table.set_selected_row(row_id.clone(), window, cx)
+                            }),
+                        RecordsTableEvent::SortRequested {
+                            column_id,
+                            direction,
+                            ..
+                        } => {
+                            if let Some(direction) = direction {
+                                this.records.sort_by(|left, right| {
+                                    let ordering = left
+                                        .cell(column_id)
+                                        .map(RecordCell::value)
+                                        .cmp(&right.cell(column_id).map(RecordCell::value));
+                                    match direction {
+                                        RecordSortDirection::Ascending => ordering,
+                                        RecordSortDirection::Descending => ordering.reverse(),
+                                    }
+                                });
+                            } else {
+                                this.records = records_story_rows();
+                            }
+                            let records: Arc<[RecordRow]> = this.records.clone().into();
+                            table.update(cx, |table, cx| {
+                                table.set_records(Progressive::complete(records), window, cx);
+                                table.set_sort(column_id.clone(), *direction, window, cx);
+                            });
+                        }
+                        RecordsTableEvent::ActivationRequested { .. } => {}
+                    }
+                    cx.notify();
+                },
+            ));
+        }
+
+        Self {
+            populated,
+            loading,
+            failed,
+            empty,
+            disabled,
+            selected,
+            constrained,
+            records: records_story_rows(),
+            last_event: "Select a row or sort a column to inspect its typed event.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    fn state(
+        selector: &'static str,
+        title: &'static str,
+        table: Entity<RecordsTable>,
+    ) -> impl IntoElement {
+        v_flex()
+            .id(selector)
+            .debug_selector(move || selector.into())
+            .flex_none()
+            .gap_1()
+            .child(
+                div()
+                    .id(format!("{selector}-heading"))
+                    .role(Role::Heading)
+                    .aria_label(title)
+                    .text_xs()
+                    .child(title),
+            )
+            .child(div().h(px(210.)).child(table))
+    }
+}
+
+impl Render for RecordsTableStory {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        v_flex().gap_3()
+            .child(Self::state("records-story-populated", "POPULATED AND SORTABLE", self.populated.clone()))
+            .child(Self::state("records-story-loading", "LOADING", self.loading.clone()))
+            .child(Self::state("records-story-error", "ERROR", self.failed.clone()))
+            .child(Self::state("records-story-empty", "EMPTY", self.empty.clone()))
+            .child(Self::state("records-story-disabled", "DISABLED ROW", self.disabled.clone()))
+            .child(Self::state("records-story-selected", "CONTROLLED SELECTION", self.selected.clone()))
+            .child(v_flex().id("records-story-constrained").debug_selector(|| "records-story-constrained".into()).flex_none().gap_1()
+                .child(div().id("records-story-constrained-heading").role(Role::Heading).aria_label("Constrained height and width").text_xs().child("CONSTRAINED HEIGHT AND WIDTH"))
+                .child(div().w(px(520.)).h(px(180.)).child(self.constrained.clone())))
+            .child(TextView::markdown("records-story-event-log", format!("**Last typed event.** {}", self.last_event)).selectable(true))
+            .child(div().id("records-story-reference-note").debug_selector(|| "records-story-reference-note".into())
+                .child(TextView::markdown("records-story-reference-copy", "**Reference comparison.** Beautiful UI's records table establishes the compact density and pinned identity column. This GPUI version keeps application-owned sorting and selection, stable row and column IDs, selectable cells, semantic state, and two-axis virtualization.").selectable(true)))
+    }
+}
+
 /// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
@@ -1138,6 +1393,7 @@ pub struct Gallery {
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
     selection_actions_scroll: ScrollHandle,
+    records_table_scroll: ScrollHandle,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -1180,6 +1436,7 @@ impl Gallery {
             insight_scroll: ScrollHandle::new(),
             prompt_bar_scroll: ScrollHandle::new(),
             selection_actions_scroll: ScrollHandle::new(),
+            records_table_scroll: ScrollHandle::new(),
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -1673,6 +1930,29 @@ impl Gallery {
                 );
                 self.section(story, "FINE-TUNE CARD", || fine_tune_story, cx)
             }
+            StoryId::RecordsTable => {
+                let records_story = window.use_keyed_state(
+                    "records-table-story-state",
+                    cx,
+                    RecordsTableStory::new,
+                );
+                self.section(
+                    story,
+                    "RECORDS TABLE",
+                    || {
+                        v_flex()
+                            .id("records-table-story-scroll")
+                            .debug_selector(|| "records-table-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .track_scroll(&self.records_table_scroll)
+                            .overflow_y_scrollbar()
+                            .child(records_story)
+                    },
+                    cx,
+                )
+            }
             StoryId::CodeBlock => self.section(
                 story,
                 "CODE BLOCK",
@@ -1875,7 +2155,9 @@ impl Render for Gallery {
         let content = if self.selected == StoryId::All {
             div()
                 .id("gallery-scroll")
+                .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
+                .min_h_0()
                 .overflow_hidden()
                 .child(
                     story_list_frame()
@@ -1893,7 +2175,9 @@ impl Render for Gallery {
         } else {
             div()
                 .id("gallery-scroll")
+                .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
+                .min_h_0()
                 .overflow_y_scrollbar()
                 .child(self.render_story(self.selected, window, cx))
                 .into_any_element()
@@ -1901,6 +2185,7 @@ impl Render for Gallery {
 
         v_flex()
             .size_full()
+            .overflow_hidden()
             .bg(cx.theme().background)
             .child(
                 h_flex()
@@ -2026,6 +2311,78 @@ mod tests {
         let (_, cx) = all_stories(cx);
 
         assert!(cx.debug_bounds("scrollbar-overlay").is_some());
+    }
+
+    #[gpui::test]
+    fn direct_records_table_story_exercises_required_controlled_states(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::RecordsTable, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(560.)));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        for selector in [
+            "records-story-populated",
+            "records-story-loading",
+            "records-story-error",
+            "records-story-empty",
+            "records-story-disabled",
+            "records-story-selected",
+            "records-story-constrained",
+            "records-story-reference-note",
+        ] {
+            assert!(
+                cx.debug_bounds(selector).is_some(),
+                "records story should exercise {selector}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn constrained_records_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::RecordsTable, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            GalleryTestRoot { gallery }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let viewport = cx
+            .debug_bounds("records-table-story-scroll")
+            .expect("the direct story should expose its overflow region");
+        let initial_end = cx
+            .debug_bounds("records-story-reference-note")
+            .expect("the reference note should remain rendered");
+        assert!(
+            initial_end.top() >= viewport.bottom(),
+            "the end should start below the constrained viewport: end={initial_end:?}, viewport={viewport:?}"
+        );
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.records_table_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("records-story-reference-note")
+            .expect("the reference note should remain rendered after scrolling");
+        assert!(
+            end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
+            "{end:?} must fit in {viewport:?}"
+        );
     }
 
     #[gpui::test]

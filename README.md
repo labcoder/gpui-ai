@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Twenty components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-one components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: records/filter/diff/comparison tables.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records tables, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: filter, diff, and comparison tables.
 
 ## Requirements
 
@@ -216,6 +216,39 @@ let _subscription = cx.subscribe(&inspector, |_, _, event: &FineTuneEvent, _| {
 ```
 
 Duplicate visible typeface labels are safe because selection and events use stable typeface IDs. Numeric values are clamped, opacity is normalized to `0..=1`, invalid intermediate editor text does not emit, color always has a textual name/value, and the final Apply action remains reachable when the inspector is height-constrained.
+
+`RecordsTable` adapts gpui-component's virtualized table while keeping records, selection, and sorting application-owned. Rows and columns use stable domain IDs, readable cells remain selectable, and progressive loading, empty, and failure states share `Progressive<T>`:
+
+```rust
+use std::sync::Arc;
+use mighty_gpui::prelude::*;
+
+let records = cx.new(|cx| RecordsTable::new("suppliers", "Supplier records", window, cx));
+records.update(cx, |records, cx| {
+    records.set_columns([
+        RecordColumn::new("company", "Company").sortable(true).fixed(true),
+        RecordColumn::new("status", "Status").sortable(true),
+    ], window, cx);
+    records.set_records(
+        Progressive::complete(Arc::from([
+            RecordRow::new("alpenrose", "Alpenrose Dairy").cells([
+                RecordCell::new("company", "Alpenrose Dairy"),
+                RecordCell::status("status", "Ready", RecordStatusTone::Positive),
+            ]),
+        ])),
+        window,
+        cx,
+    );
+});
+
+// Answer requests by replacing the controlled selected-row or sort snapshot;
+// use `clear_selected_row` when the application clears its selection.
+let _subscription = cx.subscribe(&records, |_, _, event: &RecordsTableEvent, _| {
+    println!("records-table event: {event:?}");
+});
+```
+
+Pointer double-click, Enter/Space, and each row's named Open control converge on stable row IDs. The Open control is the direct AccessKit activation path; disabled controls are named as unavailable, expose no Click action, and disabled rows are skipped by keyboard navigation. Both large row sets and wide column sets construct only their visible ranges, while snapshot replacement preserves the current stable row and column anchors. Applications can also move explicitly with `scroll_to_row` and `scroll_to_column`.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
