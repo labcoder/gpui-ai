@@ -1968,6 +1968,7 @@ struct FilterTableStory {
     disabled: Entity<FilterTable>,
     selected: Entity<FilterTable>,
     constrained: Entity<FilterTable>,
+    performance_only: bool,
     rows: Vec<FilterRow>,
     #[cfg(feature = "performance")]
     performance_rows: Arc<[FilterRow]>,
@@ -2132,6 +2133,7 @@ impl FilterTableStory {
             disabled,
             selected,
             constrained,
+            performance_only: false,
             rows,
             #[cfg(feature = "performance")]
             performance_rows: many_rows,
@@ -2142,7 +2144,16 @@ impl FilterTableStory {
     }
 
     #[cfg(feature = "performance")]
+    fn set_performance_only(&mut self, cx: &mut Context<Self>) {
+        if !self.performance_only {
+            self.performance_only = true;
+            cx.notify();
+        }
+    }
+
+    #[cfg(feature = "performance")]
     fn set_performance_projection(&mut self, filtered: bool, cx: &mut Context<Self>) {
+        self.set_performance_only(cx);
         let projection: Arc<[FilterRow]> = if filtered {
             self.performance_rows
                 .iter()
@@ -2193,27 +2204,17 @@ impl FilterTableStory {
 
 impl Render for FilterTableStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        #[cfg(feature = "performance")]
-        {
-            let _retained_gallery_states = (
-                &self.populated,
-                &self.loading,
-                &self.failed,
-                &self.empty,
-                &self.disabled,
-                &self.selected,
-            );
-            Self::state(
+        if self.performance_only {
+            return Self::state(
                 "filter-story-constrained",
                 "1,000 ROW FILTER + REORDER",
                 self.constrained.clone(),
             )
+            .into_any_element();
         }
 
-        #[cfg(not(feature = "performance"))]
-        {
-            v_flex()
-                .gap_3()
+        v_flex()
+            .gap_3()
             .child(Self::state(
                 "filter-story-populated",
                 "POPULATED, FILTERABLE, AND SORTABLE",
@@ -2265,7 +2266,6 @@ impl Render for FilterTableStory {
                             .child(self.constrained.clone()),
                     ),
             )
-        }
             .child(
                 TextView::markdown(
                     "filter-story-event-log",
@@ -2285,6 +2285,7 @@ impl Render for FilterTableStory {
                         .selectable(true),
                     ),
             )
+            .into_any_element()
     }
 }
 
@@ -2602,6 +2603,8 @@ pub struct Gallery {
     comparison_table_scroll: ScrollHandle,
     #[cfg(feature = "performance")]
     performance_filter_story: Option<WeakEntity<FilterTableStory>>,
+    #[cfg(feature = "performance")]
+    performance_viewport: Option<StoryId>,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -2650,6 +2653,8 @@ impl Gallery {
             comparison_table_scroll: ScrollHandle::new(),
             #[cfg(feature = "performance")]
             performance_filter_story: None,
+            #[cfg(feature = "performance")]
+            performance_viewport: None,
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -2766,6 +2771,18 @@ impl Gallery {
     /// streaming scenario.
     #[cfg(any(test, feature = "performance"))]
     pub fn prepare_performance_viewport(&mut self, story: StoryId, cx: &mut Context<Self>) {
+        #[cfg(feature = "performance")]
+        {
+            self.performance_viewport = Some(story);
+            if story == StoryId::FilterTable
+                && let Some(filter_story) = self
+                    .performance_filter_story
+                    .as_ref()
+                    .and_then(WeakEntity::upgrade)
+            {
+                filter_story.update(cx, FilterTableStory::set_performance_only);
+            }
+        }
         self.selected = story;
         let simulation_needed = story_needs_simulation(story);
         match (simulation_needed, self.simulation_task.is_some()) {
@@ -3231,6 +3248,9 @@ impl Gallery {
                 #[cfg(feature = "performance")]
                 {
                     self.performance_filter_story = Some(filter_story.downgrade());
+                    if self.performance_viewport == Some(StoryId::FilterTable) {
+                        filter_story.update(cx, FilterTableStory::set_performance_only);
+                    }
                 }
                 self.section(
                     story,
@@ -4369,6 +4389,30 @@ mod tests {
             assert_eq!(gallery.selected, StoryId::FilterTable);
             assert!(gallery.shows(StoryId::FilterTable));
             assert!(!gallery.shows(StoryId::ComparisonTable));
+        });
+    }
+
+    #[cfg(feature = "performance")]
+    #[gpui::test]
+    fn performance_filter_mode_is_active_before_the_first_measured_projection(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::All, cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.prepare_performance_viewport(StoryId::FilterTable, cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        gallery.read_with(cx, |gallery, cx| {
+            let story = gallery
+                .performance_filter_story
+                .as_ref()
+                .and_then(|story| story.upgrade())
+                .expect("the isolated Filter viewport should construct its story");
+            assert!(story.read(cx).performance_only);
         });
     }
 }

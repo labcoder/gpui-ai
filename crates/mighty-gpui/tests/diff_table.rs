@@ -127,6 +127,63 @@ fn controlled_diff_selection_survives_reorder_and_clears_when_disabled(cx: &mut 
     table.read_with(cx, |table, _| assert_eq!(table.selected_row_id(), None));
 }
 
+#[gpui::test]
+fn malformed_diff_row_identity_is_rejected_without_replacing_controlled_state(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (table, cx) = cx.add_window_view(|window, cx| DiffTable::new("diff", "Diff", window, cx));
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_columns([DiffColumn::new("name", "Name")], window, cx);
+            table.set_rows(
+                Progressive::complete(Arc::from([DiffRow::new(
+                    "keep",
+                    "Keep",
+                    DiffChangeKind::Unchanged,
+                )
+                .cells([DiffCell::unchanged("name", "Keep")])])),
+                window,
+                cx,
+            );
+            table.set_selected_row("keep", window, cx);
+        });
+    });
+
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_rows(
+                Progressive::complete(Arc::from([
+                    DiffRow::new("duplicate", "First", DiffChangeKind::Added),
+                    DiffRow::new("duplicate", "Second", DiffChangeKind::Removed),
+                ])),
+                window,
+                cx,
+            );
+        });
+    });
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_rows(
+                Progressive::complete(Arc::from([DiffRow::new(
+                    "bad-cells",
+                    "Bad cells",
+                    DiffChangeKind::Changed,
+                )
+                .cells([
+                    DiffCell::added("duplicate-cell", "First"),
+                    DiffCell::removed("duplicate-cell", "Second"),
+                ])])),
+                window,
+                cx,
+            );
+        });
+    });
+    table.read_with(cx, |table, _| {
+        assert_eq!(table.selected_row_id(), Some("keep"));
+    });
+}
+
 struct DiffEventHarness {
     table: Entity<DiffTable>,
     events: Rc<RefCell<Vec<DiffTableEvent>>>,

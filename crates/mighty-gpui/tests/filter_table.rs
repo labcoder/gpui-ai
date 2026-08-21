@@ -22,6 +22,35 @@ fn filter_definitions_keep_stable_identity_count_and_controlled_state() {
     assert!(filter.is_disabled());
 }
 
+#[gpui::test]
+fn duplicate_filter_identity_is_rejected_without_replacing_controlled_state(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (table, cx) =
+        cx.add_window_view(|window, cx| FilterTable::new("tasks", "Tasks", window, cx));
+    let valid = [
+        FilterDefinition::new("all", "All", 5).active(true),
+        FilterDefinition::new("done", "Done", 2),
+    ];
+    cx.update(|_, cx| {
+        table.update(cx, |table, cx| table.set_filters(valid.clone(), cx));
+    });
+    cx.update(|_, cx| {
+        table.update(cx, |table, cx| {
+            table.set_filters(
+                [
+                    FilterDefinition::new("duplicate", "First", 1),
+                    FilterDefinition::new("duplicate", "Second", 2),
+                ],
+                cx,
+            );
+        });
+    });
+
+    table.read_with(cx, |table, _| assert_eq!(table.filters(), &valid));
+}
+
 #[test]
 fn filter_events_carry_stable_application_identity() {
     assert_eq!(
@@ -103,6 +132,53 @@ fn controlled_filter_selection_survives_reorder_and_clears_when_removed(cx: &mut
         });
     });
     table.read_with(cx, |table, _| assert_eq!(table.selected_row_id(), None));
+}
+
+#[gpui::test]
+fn malformed_filter_row_identity_is_rejected_without_replacing_controlled_state(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (table, cx) =
+        cx.add_window_view(|window, cx| FilterTable::new("tasks", "Tasks", window, cx));
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_columns([FilterColumn::new("task", "Task")], window, cx);
+            table.set_rows(
+                Progressive::complete(Arc::from([task_row("keep", "Keep", "To do")])),
+                cx,
+            );
+            table.set_selected_row("keep", window, cx);
+        });
+    });
+
+    cx.update(|_, cx| {
+        table.update(cx, |table, cx| {
+            table.set_rows(
+                Progressive::complete(Arc::from([
+                    task_row("duplicate", "First", "To do"),
+                    task_row("duplicate", "Second", "To do"),
+                ])),
+                cx,
+            );
+        });
+    });
+    cx.update(|_, cx| {
+        table.update(cx, |table, cx| {
+            table.set_rows(
+                Progressive::complete(Arc::from([FilterRow::new("bad-cells", "Bad cells").cells(
+                    [
+                        FilterCell::new("duplicate-cell", "First"),
+                        FilterCell::new("duplicate-cell", "Second"),
+                    ],
+                )])),
+                cx,
+            );
+        });
+    });
+    table.read_with(cx, |table, _| {
+        assert_eq!(table.selected_row_id(), Some("keep"));
+    });
 }
 
 #[gpui::test]

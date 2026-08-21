@@ -355,12 +355,34 @@ impl RecordRow {
     }
 }
 
+pub(crate) fn record_columns_have_unique_ids(columns: &[RecordColumn]) -> bool {
+    let mut seen = HashSet::with_capacity(columns.len());
+    columns.iter().all(|column| seen.insert(column.id()))
+}
+
+pub(crate) fn record_rows_have_unique_ids(rows: &[RecordRow]) -> bool {
+    let mut row_ids = HashSet::with_capacity(rows.len());
+    rows.iter().all(|row| {
+        let mut cell_ids = HashSet::with_capacity(row.cells.len());
+        row_ids.insert(row.id())
+            && row
+                .cells
+                .iter()
+                .all(|cell| cell_ids.insert(cell.column_id()))
+    })
+}
+
+pub(crate) trait RecordCellProvider: Send + Sync {
+    fn cell(&self, row_ix: usize, column_id: &str) -> Option<RecordCell>;
+}
+
 #[derive(Clone)]
 struct RecordsDelegate {
     owner: WeakEntity<RecordsTable>,
     component_id: SharedString,
     columns: Arc<[RecordColumn]>,
     records: Progressive<Arc<[RecordRow]>>,
+    cell_provider: Option<Arc<dyn RecordCellProvider>>,
     selected_row_id: Option<SharedString>,
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
@@ -380,6 +402,7 @@ impl RecordsDelegate {
             component_id,
             columns: Arc::from([]),
             records: Progressive::pending(Arc::from([])),
+            cell_provider: None,
             selected_row_id: None,
             sort_column_id: None,
             sort_direction: None,
@@ -584,8 +607,21 @@ impl TableDelegate for RecordsDelegate {
         let column = self.record_column(col_ix);
         let cell = row
             .zip(column)
-            .and_then(|(row, column)| row.cell(column.id()));
-        let value = record_cell_accessible_value(cell, row, col_ix, self.activation_label.as_ref());
+            .and_then(|(row, column)| row.cell(column.id()))
+            .cloned()
+            .or_else(|| {
+                column.and_then(|column| {
+                    self.cell_provider
+                        .as_ref()
+                        .and_then(|provider| provider.cell(row_ix, column.id()))
+                })
+            });
+        let value = record_cell_accessible_value(
+            cell.as_ref(),
+            row,
+            col_ix,
+            self.activation_label.as_ref(),
+        );
         let row_id = row
             .map(|row| row.id.clone())
             .unwrap_or_else(|| SharedString::from(format!("missing-{row_ix}")));
@@ -597,6 +633,7 @@ impl TableDelegate for RecordsDelegate {
         let scoped_identity = scoped_records_id("cell", &self.component_id, &identity);
 
         let content = cell
+            .as_ref()
             .map(|cell| record_cell_content(&scoped_identity, cell, cx))
             .unwrap_or_else(|| div().into_any_element());
         let content = if col_ix == 0 {
@@ -674,10 +711,18 @@ impl TableDelegate for RecordsDelegate {
     }
 
     fn cell_text(&self, row_ix: usize, col_ix: usize, _: &App) -> String {
+        let Some(column) = self.record_column(col_ix) else {
+            return String::new();
+        };
         self.row(row_ix)
-            .zip(self.record_column(col_ix))
-            .and_then(|(row, column)| row.cell(column.id()))
+            .and_then(|row| row.cell(column.id()))
             .map(|cell| cell.value().to_owned())
+            .or_else(|| {
+                self.cell_provider
+                    .as_ref()
+                    .and_then(|provider| provider.cell(row_ix, column.id()))
+                    .map(|cell| cell.value().to_owned())
+            })
             .unwrap_or_default()
     }
 
@@ -836,6 +881,39 @@ fn records_state_frame(
         .justify_center()
         .role(role)
         .aria_label(label.clone())
+        .child(
+            TextView::markdown(
+                format!("{scoped_id}-text"),
+                escape_markdown_text(label.as_ref()),
+            )
+            .selectable(true),
+        )
+}
+
+fn records_inline_state_frame(
+    component_id: &str,
+    id: &str,
+    role: Role,
+    label: SharedString,
+    cx: &App,
+) -> Stateful<Div> {
+    let scoped_id = scoped_records_id("state", component_id, id);
+    let tokens = cx.theme().semantic_tokens();
+    div()
+        .id(scoped_id.clone())
+        .debug_selector({
+            let scoped_id = scoped_id.clone();
+            move || scoped_id.clone()
+        })
+        .w_full()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .py(tokens.spacing.xxs)
+        .role(role)
+        .aria_label(label.clone())
+        .text_color(cx.theme().muted_foreground)
         .child(
             TextView::markdown(
                 format!("{scoped_id}-text"),
@@ -1050,12 +1128,18 @@ impl RecordsTable {
     }
 
     /// Replaces the controlled column snapshot without rebuilding table state.
+    ///
+    /// A snapshot containing duplicate stable column IDs is ignored atomically.
     pub fn set_columns(
         &mut self,
         columns: impl IntoIterator<Item = RecordColumn>,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let columns = columns.into_iter().collect::<Vec<_>>();
+        if !record_columns_have_unique_ids(&columns) {
+            return;
+        }
         let anchor_column_id = self.viewport_column_anchor_id.clone().or_else(|| {
             let fixed_columns = self.columns.iter().filter(|column| column.fixed).count();
             self.columns
@@ -1069,7 +1153,7 @@ impl RecordsTable {
                 )
                 .map(|column| column.id.clone())
         });
-        self.columns = columns.into_iter().collect::<Vec<_>>().into();
+        self.columns = columns.into();
         if self.sort_column_id.as_ref().is_some_and(|sort_column_id| {
             !self
                 .columns
@@ -1099,20 +1183,35 @@ impl RecordsTable {
     }
 
     /// Replaces the controlled progressive record snapshot.
+    ///
+    /// A snapshot containing duplicate row IDs or duplicate cell column IDs
+    /// within one row is ignored atomically.
     pub fn set_records(
         &mut self,
         records: Progressive<Arc<[RecordRow]>>,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.set_records_snapshot(records, cx);
+        let _ = self.set_records_snapshot(records, cx);
     }
 
     pub(crate) fn set_records_snapshot(
         &mut self,
         records: Progressive<Arc<[RecordRow]>>,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
+        self.set_records_snapshot_with_cell_provider(records, None, cx)
+    }
+
+    pub(crate) fn set_records_snapshot_with_cell_provider(
+        &mut self,
+        records: Progressive<Arc<[RecordRow]>>,
+        cell_provider: Option<Arc<dyn RecordCellProvider>>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !record_rows_have_unique_ids(records.content()) {
+            return false;
+        }
         let anchor_row_id = self.viewport_row_anchor_id.clone().or_else(|| {
             self.records
                 .content()
@@ -1221,6 +1320,7 @@ impl RecordsTable {
         self.table.update(cx, |table, cx| {
             let delegate = table.delegate_mut();
             delegate.records = records;
+            delegate.cell_provider = cell_provider;
             delegate.selected_row_id = selected_row_id.clone();
             delegate.row_reorder_offsets = reorder_offsets;
             delegate.row_reorder_current_offsets.clear();
@@ -1238,6 +1338,7 @@ impl RecordsTable {
             cx.notify();
         });
         cx.notify();
+        true
     }
 
     /// Replaces the controlled selected row when the ID exists.
@@ -1520,14 +1621,44 @@ impl Focusable for RecordsTable {
 
 impl Render for RecordsTable {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        let inline_status = (!self.records.content().is_empty())
+            .then(|| match self.records.state() {
+                ProgressState::Pending | ProgressState::Running => {
+                    Some(records_inline_state_frame(
+                        &self.id,
+                        "records-loading",
+                        Role::ProgressIndicator,
+                        "Loading records".into(),
+                        cx,
+                    ))
+                }
+                ProgressState::Failed(reason) => Some(records_inline_state_frame(
+                    &self.id,
+                    "records-error",
+                    Role::Alert,
+                    format!("Records unavailable: {reason}").into(),
+                    cx,
+                )),
+                ProgressState::Complete => None,
+            })
+            .flatten();
         records_table_frame(self.id.clone(), self.label.clone())
+            .flex()
+            .flex_col()
+            .min_h_0()
             .key_context(RECORDS_TABLE_CONTEXT)
             .border_1()
             .border_color(cx.theme().transparent)
             .track_focus(&self.table.focus_handle(cx))
             .focus_visible(|style| style.border_color(cx.theme().ring))
             .on_action(cx.listener(Self::activate_selected))
-            .child(DataTable::new(&self.table).stripe(true).bordered(true))
+            .when_some(inline_status, |this, status| this.child(status))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(DataTable::new(&self.table).stripe(true).bordered(true)),
+            )
     }
 }
 
@@ -1700,6 +1831,142 @@ mod tests {
             assert_eq!(element.a11y_role(), Some(role));
             assert_eq!(node.label(), Some(label));
         }
+    }
+
+    #[gpui::test]
+    fn inline_progressive_states_keep_direct_roles_and_names(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.update(|cx| {
+            for (id, role, label) in [
+                (
+                    "records-loading",
+                    Role::ProgressIndicator,
+                    "Loading records",
+                ),
+                (
+                    "records-error",
+                    Role::Alert,
+                    "Records unavailable: Refresh unavailable",
+                ),
+            ] {
+                let element = records_inline_state_frame("suppliers", id, role, label.into(), cx)
+                    .into_element();
+                let mut node = accesskit::Node::new(Role::Unknown);
+                element.write_a11y_info(&mut node);
+                assert_eq!(element.a11y_role(), Some(role));
+                assert_eq!(node.label(), Some(label));
+            }
+        });
+    }
+
+    #[gpui::test]
+    fn nonempty_progressive_snapshots_keep_rows_and_lifecycle_status_visible(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("status", "Status", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let rows: Arc<[RecordRow]> = Arc::from([RecordRow::new("stale", "Stale record")
+            .cells([RecordCell::new("name", "Stale record")])]);
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+                records.set_records(Progressive::running(rows.clone()), window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        assert!(cx.debug_bounds("records-row-6:statusstale").is_some());
+        assert!(
+            cx.debug_bounds("records-state-6:statusrecords-loading")
+                .is_some(),
+            "running stale content must retain a named progress indicator"
+        );
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_records(Progressive::failed(rows, "Refresh unavailable"), window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        assert!(cx.debug_bounds("records-row-6:statusstale").is_some());
+        assert!(
+            cx.debug_bounds("records-state-6:statusrecords-error")
+                .is_some(),
+            "failed stale content must retain a named alert"
+        );
+    }
+
+    #[gpui::test]
+    fn malformed_duplicate_identity_snapshots_are_rejected_atomically(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("identity", "Identity", window, cx));
+        let valid_columns: Arc<[RecordColumn]> = Arc::from([
+            RecordColumn::new("name", "Name"),
+            RecordColumn::new("status", "Status"),
+        ]);
+        let valid_rows: Arc<[RecordRow]> = Arc::from([
+            RecordRow::new("first", "First").cells([
+                RecordCell::new("name", "First"),
+                RecordCell::new("status", "Ready"),
+            ]),
+            RecordRow::new("second", "Second").cells([
+                RecordCell::new("name", "Second"),
+                RecordCell::new("status", "Waiting"),
+            ]),
+        ]);
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns(valid_columns.iter().cloned(), window, cx);
+                records.set_records(Progressive::complete(valid_rows.clone()), window, cx);
+            });
+        });
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns(
+                    [
+                        RecordColumn::new("duplicate", "First"),
+                        RecordColumn::new("duplicate", "Second"),
+                    ],
+                    window,
+                    cx,
+                );
+                records.set_records(
+                    Progressive::complete(Arc::from([
+                        RecordRow::new("duplicate-row", "First"),
+                        RecordRow::new("duplicate-row", "Second"),
+                    ])),
+                    window,
+                    cx,
+                );
+            });
+        });
+        records.read_with(cx, |records, _| {
+            assert_eq!(records.columns, valid_columns);
+            assert_eq!(records.records.content().as_ref(), valid_rows.as_ref());
+        });
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_records(
+                    Progressive::complete(Arc::from([RecordRow::new("bad-cells", "Bad cells")
+                        .cells([
+                            RecordCell::new("duplicate-cell", "First"),
+                            RecordCell::new("duplicate-cell", "Second"),
+                        ])])),
+                    window,
+                    cx,
+                );
+            });
+        });
+        records.read_with(cx, |records, _| {
+            assert_eq!(records.records.content().as_ref(), valid_rows.as_ref());
+        });
     }
 
     type CapturedControls = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;

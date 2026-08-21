@@ -1,6 +1,12 @@
 //! Controlled before/after proposals for tabular data.
 
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 
 use gpui::{
     App, AppContext as _, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
@@ -12,8 +18,9 @@ use gpui_component::{ActiveTheme as _, text::TextView};
 use crate::{
     control::outlined_control_with_label,
     records_table::{
-        RecordCell, RecordColumn, RecordColumnAlignment, RecordRow, RecordSortDirection,
-        RecordStatusTone, RecordsTable, RecordsTableEvent, escape_markdown_text,
+        RecordCell, RecordCellProvider, RecordColumn, RecordColumnAlignment, RecordRow,
+        RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent,
+        escape_markdown_text, record_columns_have_unique_ids,
     },
     stream::{ProgressState, Progressive},
 };
@@ -220,6 +227,18 @@ impl DiffRow {
     }
 }
 
+fn diff_rows_have_unique_ids(rows: &[DiffRow]) -> bool {
+    let mut row_ids = HashSet::with_capacity(rows.len());
+    rows.iter().all(|row| {
+        let mut cell_ids = HashSet::with_capacity(row.cells.len());
+        row_ids.insert(row.id())
+            && row
+                .cells
+                .iter()
+                .all(|cell| cell_ids.insert(cell.column_id()))
+    })
+}
+
 /// Typed application intent emitted by [`DiffTable`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiffTableEvent {
@@ -272,6 +291,7 @@ pub struct DiffTable {
     sort_direction: Option<DiffSortDirection>,
     review_column_id: SharedString,
     decision_column_id: SharedString,
+    projected_cells: Arc<AtomicUsize>,
     records_table: gpui::Entity<RecordsTable>,
     _records_subscription: Subscription,
 }
@@ -309,19 +329,31 @@ impl DiffTable {
             sort_direction: None,
             review_column_id,
             decision_column_id,
+            projected_cells: Arc::new(AtomicUsize::new(0)),
             records_table,
             _records_subscription: records_subscription,
         }
     }
 
     /// Replaces the controlled column snapshot without rebuilding table state.
+    ///
+    /// A snapshot containing duplicate stable column IDs is ignored atomically.
     pub fn set_columns(
         &mut self,
         columns: impl IntoIterator<Item = DiffColumn>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.columns = columns.into_iter().collect::<Vec<_>>().into();
+        let columns = columns.into_iter().collect::<Vec<_>>();
+        let mut record_columns = vec![
+            RecordColumn::new(self.review_column_id.clone(), "Review").fixed(true),
+            RecordColumn::new(self.decision_column_id.clone(), "Decision").fixed(true),
+        ];
+        record_columns.extend(columns.iter().cloned());
+        if !record_columns_have_unique_ids(&record_columns) {
+            return;
+        }
+        self.columns = columns.into();
         if self.sort_column_id.as_ref().is_some_and(|sort_column_id| {
             !self
                 .columns
@@ -331,11 +363,6 @@ impl DiffTable {
             self.sort_column_id = None;
             self.sort_direction = None;
         }
-        let mut record_columns = vec![
-            RecordColumn::new(self.review_column_id.clone(), "Review").fixed(true),
-            RecordColumn::new(self.decision_column_id.clone(), "Decision").fixed(true),
-        ];
-        record_columns.extend(self.columns.iter().cloned());
         self.records_table.update(cx, |table, cx| {
             table.set_columns(record_columns, window, cx);
         });
@@ -343,12 +370,18 @@ impl DiffTable {
     }
 
     /// Replaces the controlled progressive proposal snapshot.
+    ///
+    /// Duplicate proposal IDs or duplicate cell column IDs make the complete
+    /// replacement invalid, so the prior controlled snapshot is retained.
     pub fn set_rows(
         &mut self,
         rows: Progressive<Arc<[DiffRow]>>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !diff_rows_have_unique_ids(rows.content()) {
+            return;
+        }
         self.rows = rows;
         if self.selected_row_id.as_ref().is_some_and(|selected| {
             !self
@@ -359,11 +392,22 @@ impl DiffTable {
         }) {
             self.selected_row_id = None;
         }
-        let records = diff_records_snapshot(&self.rows, &self.decision_column_id);
+        self.projected_cells.store(0, Ordering::Relaxed);
+        let records = diff_record_skeletons(&self.rows);
+        let provider: Arc<dyn RecordCellProvider> = Arc::new(DiffCellProvider {
+            rows: self.rows.content().clone(),
+            decision_column_id: self.decision_column_id.clone(),
+            projected_cells: self.projected_cells.clone(),
+        });
         self.records_table.update(cx, |table, cx| {
-            table.set_records(records, window, cx);
+            table.set_records_snapshot_with_cell_provider(records, Some(provider), cx);
         });
         cx.notify();
+    }
+
+    #[cfg(test)]
+    fn projected_cell_count(&self) -> usize {
+        self.projected_cells.load(Ordering::Relaxed)
     }
 
     /// Replaces the controlled selected proposal when the ID is enabled.
@@ -604,14 +648,36 @@ impl Render for DiffTable {
     }
 }
 
-fn diff_records_snapshot(
-    rows: &Progressive<Arc<[DiffRow]>>,
-    decision_column_id: &SharedString,
-) -> Progressive<Arc<[RecordRow]>> {
+struct DiffCellProvider {
+    rows: Arc<[DiffRow]>,
+    decision_column_id: SharedString,
+    projected_cells: Arc<AtomicUsize>,
+}
+
+impl RecordCellProvider for DiffCellProvider {
+    fn cell(&self, row_ix: usize, column_id: &str) -> Option<RecordCell> {
+        let row = self.rows.get(row_ix)?;
+        let cell = if column_id == self.decision_column_id.as_ref() {
+            Some(RecordCell::status(
+                self.decision_column_id.clone(),
+                proposal_state_label(row.proposal_state),
+                proposal_state_tone(row.proposal_state),
+            ))
+        } else {
+            row.cell(column_id).map(diff_record_cell)
+        };
+        if cell.is_some() {
+            self.projected_cells.fetch_add(1, Ordering::Relaxed);
+        }
+        cell
+    }
+}
+
+fn diff_record_skeletons(rows: &Progressive<Arc<[DiffRow]>>) -> Progressive<Arc<[RecordRow]>> {
     let records: Arc<[RecordRow]> = rows
         .content()
         .iter()
-        .map(|row| diff_record_row(row, decision_column_id))
+        .map(diff_record_skeleton)
         .collect::<Vec<_>>()
         .into();
     match rows.state() {
@@ -622,13 +688,18 @@ fn diff_records_snapshot(
     }
 }
 
-fn diff_record_row(row: &DiffRow, decision_column_id: &SharedString) -> RecordRow {
+fn diff_record_skeleton(row: &DiffRow) -> RecordRow {
     let semantic_label = format!(
         "{}; {}; {}",
         row.label,
         change_kind_label(row.change_kind),
         proposal_state_label(row.proposal_state)
     );
+    RecordRow::new(row.id.clone(), semantic_label).disabled(row.disabled)
+}
+
+#[cfg(test)]
+fn diff_record_row(row: &DiffRow, decision_column_id: &SharedString) -> RecordRow {
     let cells = row
         .cells
         .iter()
@@ -638,9 +709,7 @@ fn diff_record_row(row: &DiffRow, decision_column_id: &SharedString) -> RecordRo
             proposal_state_label(row.proposal_state),
             proposal_state_tone(row.proposal_state),
         )]);
-    RecordRow::new(row.id.clone(), semantic_label)
-        .cells(cells)
-        .disabled(row.disabled)
+    diff_record_skeleton(row).cells(cells)
 }
 
 fn diff_record_cell(cell: &DiffCell) -> RecordCell {
@@ -736,7 +805,8 @@ fn scoped_diff_id(kind: &str, table_id: &str, item_id: &str) -> SharedString {
 mod tests {
     use super::*;
     use gpui::{
-        Element as _, IntoElement as _, RenderOnce as _, TestAppContext, accesskit, canvas,
+        Element as _, IntoElement as _, RenderOnce as _, TestAppContext, VisualTestContext,
+        accesskit, canvas, px, size,
     };
     use std::sync::{Arc, Mutex};
 
@@ -795,6 +865,52 @@ mod tests {
             assert_eq!(decision.value(), expected);
             assert_eq!(decision.status_tone(), Some(tone));
         }
+    }
+
+    #[gpui::test]
+    fn thousand_row_diff_projects_cells_only_for_the_virtual_viewport(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (table, cx) =
+            cx.add_window_view(|window, cx| DiffTable::new("lazy", "Lazy diff", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let columns = (0..8)
+            .map(|index| DiffColumn::new(format!("column-{index}"), format!("Column {index}")))
+            .collect::<Vec<_>>();
+        let rows = (0..1_000)
+            .map(|row| {
+                DiffRow::new(
+                    format!("row-{row}"),
+                    format!("Row {row}"),
+                    DiffChangeKind::Changed,
+                )
+                .cells((0..8).map(|column| {
+                    DiffCell::changed(
+                        format!("column-{column}"),
+                        format!("Before {row}:{column}"),
+                        format!("After {row}:{column}"),
+                    )
+                }))
+            })
+            .collect::<Vec<_>>();
+
+        cx.update(|window, cx| {
+            table.update(cx, |table, cx| {
+                table.set_columns(columns, window, cx);
+                table.set_rows(Progressive::complete(rows.into()), window, cx);
+                assert_eq!(table.projected_cell_count(), 0);
+            });
+            window.draw(cx).clear(cx);
+        });
+        let projected = table.read_with(cx, |table, _| table.projected_cell_count());
+        assert!(
+            projected > 0,
+            "visible diff cells should be projected on demand"
+        );
+        assert!(
+            projected < 256,
+            "offscreen diff cells must not be projected eagerly; got {projected}"
+        );
     }
 
     type CapturedControls = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;

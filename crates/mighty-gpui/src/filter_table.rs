@@ -12,7 +12,10 @@ use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _};
 
 use crate::{
     control::outlined_control_with_label,
-    records_table::{RecordsTable, RecordsTableEvent},
+    records_table::{
+        RecordsTable, RecordsTableEvent, record_columns_have_unique_ids,
+        record_rows_have_unique_ids,
+    },
     stream::Progressive,
     theme::SemanticStyledExt as _,
 };
@@ -195,18 +198,20 @@ impl FilterTable {
         }
     }
 
-    /// Replaces the controlled filter definitions, retaining only the first occurrence of each ID.
+    /// Replaces the controlled filter definitions.
+    ///
+    /// A snapshot containing duplicate stable filter IDs is ignored atomically.
     pub fn set_filters(
         &mut self,
         filters: impl IntoIterator<Item = FilterDefinition>,
         cx: &mut Context<Self>,
     ) {
-        let mut seen = HashSet::new();
-        self.filters = filters
-            .into_iter()
-            .filter(|filter| seen.insert(filter.id.clone()))
-            .collect::<Vec<_>>()
-            .into();
+        let filters = filters.into_iter().collect::<Vec<_>>();
+        let mut seen = HashSet::with_capacity(filters.len());
+        if !filters.iter().all(|filter| seen.insert(filter.id())) {
+            return;
+        }
+        self.filters = filters.into();
         if self.focused_filter_id.as_ref().is_none_or(|focused| {
             !self
                 .filters
@@ -231,18 +236,19 @@ impl FilterTable {
     }
 
     /// Replaces the controlled column snapshot.
+    ///
+    /// A snapshot containing duplicate stable column IDs is ignored atomically.
     pub fn set_columns(
         &mut self,
         columns: impl IntoIterator<Item = FilterColumn>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut seen = HashSet::new();
-        self.columns = columns
-            .into_iter()
-            .filter(|column| seen.insert(column.id().to_owned()))
-            .collect::<Vec<_>>()
-            .into();
+        let columns = columns.into_iter().collect::<Vec<_>>();
+        if !record_columns_have_unique_ids(&columns) {
+            return;
+        }
+        self.columns = columns.into();
         if self.sort_column_id.as_ref().is_some_and(|sort_column_id| {
             !self
                 .columns
@@ -289,7 +295,13 @@ impl FilterTable {
     }
 
     /// Replaces the controlled progressive rows in their final filtered order.
+    ///
+    /// Duplicate row IDs or duplicate cell column IDs make the complete
+    /// replacement invalid, so the prior controlled snapshot is retained.
     pub fn set_rows(&mut self, rows: Progressive<Arc<[FilterRow]>>, cx: &mut Context<Self>) {
+        if !record_rows_have_unique_ids(rows.content()) {
+            return;
+        }
         self.rows = rows.clone();
         if self.selected_row_id.as_ref().is_some_and(|selected| {
             !self
