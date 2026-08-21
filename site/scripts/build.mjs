@@ -11,6 +11,7 @@ const repositoryRoot = path.resolve(siteRoot, "..");
 export async function buildSite({
   outDir = path.join(siteRoot, "dist"),
   galleryDir = path.join(repositoryRoot, "crates", "gallery-web", "www", "dist"),
+  renamePath = rename,
 } = {}) {
   await validateGallery(galleryDir);
   const parentDir = path.dirname(outDir);
@@ -21,21 +22,32 @@ export async function buildSite({
   const backupDir = path.join(backupRoot, "previous");
   let promoted = false;
   let backedUp = false;
+  let preserveBackup = false;
   try {
     await generateInto(stageDir, galleryDir);
     try {
       await access(outDir);
-      await rename(outDir, backupDir);
+      await renamePath(outDir, backupDir);
       backedUp = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
 
     try {
-      await rename(stageDir, outDir);
+      await renamePath(stageDir, outDir);
       promoted = true;
     } catch (promotionError) {
-      if (backedUp) await rename(backupDir, outDir);
+      if (backedUp) {
+        try {
+          await renamePath(backupDir, outDir);
+        } catch (rollbackError) {
+          preserveBackup = true;
+          throw new AggregateError(
+            [promotionError, rollbackError],
+            `Site promotion and rollback failed; prior output backup preserved at ${backupDir}`,
+          );
+        }
+      }
       throw promotionError;
     }
   } finally {
@@ -44,7 +56,7 @@ export async function buildSite({
       await rm(backupRoot, { force: true, recursive: true }).catch((error) => {
         process.emitWarning(`Built the site, but could not remove ${backupRoot}: ${error.message}`);
       });
-    } else {
+    } else if (!preserveBackup) {
       await rm(backupRoot, { force: true, recursive: true });
     }
   }

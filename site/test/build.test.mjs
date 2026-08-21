@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -42,7 +42,7 @@ test("build emits stable catalog routes and copies one shared gallery", async (c
     assert.match(page, /<main/);
     assert.match(page, new RegExp(`data-story="${component.slug}"`));
     assert.match(page, /data-specimen-frame/);
-    assert.match(page, /data-webgpu-fallback hidden role="status"/);
+    assert.doesNotMatch(page, /data-webgpu-fallback/);
     assert.match(page, /data-specimen-reload/);
     assert.match(page, /data-specimen-open/);
     assert.match(
@@ -115,7 +115,7 @@ test("catalog page has a labeled search and live result count", async (context) 
   await buildSite({ galleryDir, outDir });
   const catalog = await readFile(path.join(outDir, "components", "index.html"), "utf8");
 
-  assert.match(catalog, /type="search"[^>]+aria-label="Search components"[^>]+data-catalog-search/);
+  assert.match(catalog, /<label for="catalog-search">Find a pattern<\/label><input id="catalog-search" type="search" data-catalog-search/);
   assert.match(catalog, /data-catalog-status[^>]+role="status"[^>]+aria-live="polite"/);
   assert.equal((catalog.match(/data-catalog-item/g) ?? []).length, components.length);
 });
@@ -132,8 +132,31 @@ test("home features three shared-gallery specimens", async (context) => {
   assert.equal((home.match(/data-specimen-frame/g) ?? []).length, 3);
   assert.equal((home.match(/data-featured-specimen/g) ?? []).length, 3);
   assert.equal((home.match(/data-specimen-reload/g) ?? []).length, 3);
-  assert.equal((home.match(/data-webgpu-fallback hidden role="status"/g) ?? []).length, 3);
+  assert.doesNotMatch(home, /data-webgpu-fallback/);
   assert.equal((home.match(/gallery\/embed\.html\?story=/g) ?? []).length, 6);
+});
+
+test("home publishes honest build metadata, architecture, and repository links", async (context) => {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-home-anatomy-"));
+  context.after(() => rm(temporaryRoot, { force: true, recursive: true }));
+  const galleryDir = path.join(temporaryRoot, "gallery-input");
+  const outDir = path.join(temporaryRoot, "site-output");
+  await createGalleryFixture(galleryDir);
+  await buildSite({ galleryDir, outDir });
+  const home = await readFile(path.join(outDir, "index.html"), "utf8");
+
+  assert.match(home, /class="build-metadata" aria-label="Build metadata"/);
+  assert.match(home, /24 stable stories/);
+  assert.match(home, /One shared release WASM/);
+  assert.match(home, /Not published/);
+  assert.match(home, /class="architecture-strip" aria-labelledby="architecture-title"/);
+  assert.match(home, /Page chrome: semantic HTML, CSS, and browser JavaScript/);
+  assert.match(home, /<label for="catalog-search">Find a pattern<\/label><input id="catalog-search" type="search" data-catalog-search/);
+  assert.equal((home.match(/data-catalog-item/g) ?? []).length, components.length);
+  assert.equal((home.match(/class="catalog-group"/g) ?? []).length, new Set(components.map(({ category }) => category)).size);
+  for (const file of ["README.md", "Cargo.toml", "site/README.md"]) {
+    assert.match(home, new RegExp(`github\\.com/labcoder/gpui-ai/blob/main/${file.replaceAll("/", "\\/")}`));
+  }
 });
 
 test("component pages link to stable previous and next neighbors", async (context) => {
@@ -209,4 +232,36 @@ test("build rejects an incomplete gallery before replacing valid output", async 
     /gallery build is incomplete/i,
   );
   assert.equal(await readFile(path.join(outDir, "sentinel.txt"), "utf8"), "preserve me");
+});
+
+test("double promotion failure preserves the prior output backup", async (context) => {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-double-rollback-"));
+  context.after(() => rm(temporaryRoot, { force: true, recursive: true }));
+  const galleryDir = path.join(temporaryRoot, "gallery-input");
+  const outDir = path.join(temporaryRoot, "site-output");
+  await createGalleryFixture(galleryDir);
+  await mkdir(outDir, { recursive: true });
+  await writeFile(path.join(outDir, "index.html"), "previous production output");
+  let renameCount = 0;
+
+  await assert.rejects(
+    buildSite({
+      galleryDir,
+      outDir,
+      renamePath: async (source, destination) => {
+        renameCount += 1;
+        if (renameCount === 1) return rename(source, destination);
+        throw new Error(renameCount === 2 ? "injected promotion failure" : "injected rollback failure");
+      },
+    }),
+    /backup preserved at/,
+  );
+
+  const backups = (await readdir(temporaryRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(".site-output.backup-"));
+  assert.equal(backups.length, 1);
+  assert.equal(
+    await readFile(path.join(temporaryRoot, backups[0].name, "previous", "index.html"), "utf8"),
+    "previous production output",
+  );
 });

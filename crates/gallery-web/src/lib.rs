@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 thread_local! {
     static APPLICATION: RefCell<Option<ApplicationHandle>> = const { RefCell::new(None) };
     static GALLERY: RefCell<Option<Entity<Gallery>>> = const { RefCell::new(None) };
+    static ACTIVE_THEME: Cell<Option<GalleryTheme>> = const { Cell::new(None) };
 }
 
 fn parse_story(story: Option<String>) -> Result<StoryId, StoryLookupError> {
@@ -73,12 +74,25 @@ pub fn set_gallery_theme(theme: String) -> Result<bool, JsValue> {
                     theme.mono_font_family = "Lilex".into();
                 }
                 gallery.update(cx, |gallery, cx| gallery.set_theme_preset(preset, cx));
+                ACTIVE_THEME.with(|active| active.set(Some(preset)));
                 cx.refresh_windows();
                 applied.set(true);
             });
         }
     });
     Ok(applied.get())
+}
+
+/// Returns the theme preset most recently applied by the running Rust gallery.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn gallery_theme() -> Option<String> {
+    ACTIVE_THEME.with(|active| {
+        active.get().map(|theme| match theme {
+            GalleryTheme::Light => "light".to_owned(),
+            GalleryTheme::Dark => "dark".to_owned(),
+            GalleryTheme::Contrast => "contrast".to_owned(),
+        })
+    })
 }
 
 /// Starts the gallery for an optional story slug.
@@ -118,6 +132,7 @@ pub fn run(
         apply_theme(mode, cx);
         let gallery = gallery::open_gallery_with_theme(selected, theme, cx);
         GALLERY.with(|stored| *stored.borrow_mut() = Some(gallery));
+        ACTIVE_THEME.with(|active| active.set(Some(theme)));
         cx.activate(true);
     };
 
@@ -133,7 +148,7 @@ pub fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_story, parse_theme, set_gallery_theme};
+    use super::{gallery_theme, parse_story, parse_theme, set_gallery_theme};
     use gallery::{GalleryTheme, StoryId};
 
     #[test]
@@ -175,5 +190,6 @@ mod tests {
             set_gallery_theme("contrast".to_owned()),
             Ok(false)
         ));
+        assert_eq!(gallery_theme(), None);
     }
 }

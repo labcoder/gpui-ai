@@ -70,7 +70,7 @@ async function initEmbed() {
   const themeChannel = watchTheme(theme);
 
   if (!navigator.gpu) {
-    showFallback(new Error('This live example requires a browser with WebGPU support.'));
+    showFallback(new Error('This live example requires a browser with WebGPU support.'), true);
     return;
   }
 
@@ -80,6 +80,7 @@ async function initEmbed() {
     wasm.validate_story(options.story);
     await wasm.run(options.story, themeChannel.current(), document.body.dataset.assetBase || undefined);
     themeChannel.connect(wasm);
+    window.mightyGpui = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
     document.getElementById('loading')?.remove();
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));

@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
 import { components } from "../src/catalog.js";
@@ -26,6 +27,9 @@ const browserCandidates = process.platform === "win32"
       "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ];
 const browserPath = browserCandidates.find((candidate) => candidate && existsSync(candidate));
+const releaseIntegrationRequested = process.env.MIGHTY_RELEASE_INTEGRATION === "1";
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const releaseGalleryDir = path.join(repositoryRoot, "crates/gallery-web/www/dist");
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -52,7 +56,13 @@ async function serve(directory) {
       if (!file.startsWith(path.resolve(directory))) throw new Error("outside site root");
       if ((await stat(file)).isDirectory()) file = path.join(file, "index.html");
       const extension = path.extname(file);
-      response.setHeader("content-type", extension === ".js" ? "text/javascript" : extension === ".css" ? "text/css" : "text/html");
+      const contentType = {
+        ".css": "text/css",
+        ".html": "text/html",
+        ".js": "text/javascript",
+        ".wasm": "application/wasm",
+      }[extension] ?? "application/octet-stream";
+      response.setHeader("content-type", contentType);
       response.end(await readFile(file));
     } catch {
       response.statusCode = 404;
@@ -70,32 +80,72 @@ class Cdp {
     this.pending = new Map();
     this.listeners = new Map();
     socket.addEventListener("message", ({ data }) => {
-      const message = JSON.parse(data);
+      let message;
+      try {
+        message = JSON.parse(data);
+      } catch (error) {
+        this.fail(new Error(`Chromium sent invalid CDP JSON: ${error.message}`));
+        return;
+      }
       if (message.id) {
         const pending = this.pending.get(message.id);
         this.pending.delete(message.id);
+        if (pending) clearTimeout(pending.timer);
         if (message.error) pending?.reject(new Error(message.error.message));
         else pending?.resolve(message.result);
         return;
       }
       for (const listener of this.listeners.get(message.method) ?? []) listener(message.params);
     });
+    socket.addEventListener("close", () => this.fail(new Error("Chromium closed the CDP connection")));
+    socket.addEventListener("error", () => this.fail(new Error("Chromium CDP connection failed")));
   }
 
-  send(method, params = {}) {
+  fail(error) {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    for (const listeners of this.listeners.values()) {
+      for (const listener of listeners) {
+        clearTimeout(listener.timer);
+        listener.reject?.(error);
+      }
+    }
+    this.listeners.clear();
+  }
+
+  send(method, params = {}, timeoutMs = 5_000) {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.socket.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP ${method} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
 
-  once(method) {
-    return new Promise((resolve) => {
+  once(method, timeoutMs = 5_000) {
+    return new Promise((resolve, reject) => {
       const listener = (params) => {
+        clearTimeout(listener.timer);
         this.listeners.set(method, (this.listeners.get(method) ?? []).filter((candidate) => candidate !== listener));
         resolve(params);
       };
+      listener.reject = reject;
+      listener.timer = setTimeout(() => {
+        this.listeners.set(method, (this.listeners.get(method) ?? []).filter((candidate) => candidate !== listener));
+        reject(new Error(`CDP event ${method} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
       this.listeners.set(method, [...(this.listeners.get(method) ?? []), listener]);
     });
   }
@@ -123,6 +173,22 @@ class Cdp {
     await this.send("Input.dispatchKeyEvent", { ...params, type: "keyUp" });
   }
 }
+
+test("CDP commands and events reject on timeout or connection loss", async () => {
+  class FakeSocket extends EventTarget {
+    send() {}
+  }
+
+  const socket = new FakeSocket();
+  const cdp = new Cdp(socket);
+  await assert.rejects(cdp.send("Never.responds", {}, 10), /timed out/);
+  await assert.rejects(cdp.once("Never.arrives", 10), /timed out/);
+  const pendingCommand = cdp.send("Browser.crashes", {}, 1_000);
+  const pendingEvent = cdp.once("Page.neverLoads", 1_000);
+  socket.dispatchEvent(new Event("close"));
+  await assert.rejects(pendingCommand, /closed the CDP connection/);
+  await assert.rejects(pendingEvent, /closed the CDP connection/);
+});
 
 async function launchBrowser(userDataDir) {
   const child = spawn(browserPath, [
@@ -179,8 +245,20 @@ async function closeBrowser(browserHandle) {
   await stopBrowserProcess(browserHandle.child);
 }
 
+async function waitForValue(cdp, expression, { timeoutMs = 20_000, intervalMs = 100 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let value;
+  while (Date.now() < deadline) {
+    value = await cdp.evaluate(expression);
+    if (value) return value;
+    await delay(intervalMs);
+  }
+  throw new Error(`Browser condition timed out after ${timeoutMs}ms; last value: ${JSON.stringify(value)}`);
+}
+
 test("real browser covers responsive navigation, search, copy, and semantics", {
   skip: browserPath ? false : "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate",
+  timeout: 30_000,
 }, async (context) => {
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-browser-"));
   const galleryDir = path.join(temporaryRoot, "gallery");
@@ -203,6 +281,9 @@ test("real browser covers responsive navigation, search, copy, and semantics", {
   const errors = [];
   await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable"), cdp.send("Log.enable"), cdp.send("Accessibility.enable")]);
   cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
+  cdp.on("Runtime.consoleAPICalled", ({ type, args }) => {
+    if (type === "error") errors.push(args.map((argument) => argument.value ?? argument.description).join(" "));
+  });
   cdp.on("Log.entryAdded", ({ entry }) => {
     if (entry.level === "error") errors.push(entry.text);
   });
@@ -316,22 +397,123 @@ test("real browser covers responsive navigation, search, copy, and semantics", {
     groups: [...document.querySelectorAll('.catalog-group')].filter((group) => !group.hidden).length
   }))()`), { count: 4, status: "4 components", groups: 1 });
   const catalogAccessibility = await cdp.send("Accessibility.getFullAXTree");
-  assert.equal(catalogAccessibility.nodes.filter((node) => node.role?.value === "searchbox" && node.name?.value === "Search components").length, 1);
+  const searchboxes = catalogAccessibility.nodes.filter((node) => node.role?.value === "searchbox");
+  assert.equal(searchboxes.filter((node) => node.name?.value === "FIND A PATTERN").length, 1, JSON.stringify(searchboxes.map((node) => node.name?.value)));
   assert.equal(catalogAccessibility.nodes.find((node) => node.role?.value === "status")?.properties.find(({ name }) => name === "live")?.value.value, "polite");
 
-  await cdp.navigate(`${baseUrl}/`, 1280, 900);
+  for (const width of [360, 1280]) {
+    await cdp.navigate(`${baseUrl}/`, width, 900);
+    const homeLayout = await cdp.evaluate(`(() => ({
+      width: innerWidth,
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      noOverflow: document.documentElement.scrollWidth === document.documentElement.clientWidth,
+      metadata: document.querySelectorAll('.build-metadata dd').length,
+      architecture: document.querySelector('.architecture-strip').getBoundingClientRect().width > 0,
+      repositoryLinks: document.querySelectorAll('footer nav a').length,
+      offenders: [...document.querySelectorAll('body *')].filter((item) => item.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(0, 5).map((item) => item.className || item.tagName)
+    }))()`);
+    assert.equal(homeLayout.noOverflow, true, JSON.stringify(homeLayout));
+    assert.equal(homeLayout.metadata, 4);
+    assert.equal(homeLayout.architecture, true);
+    assert.equal(homeLayout.repositoryLinks, 3);
+  }
+  await cdp.evaluate(`document.querySelector('[data-catalog-search]').focus()`);
+  await cdp.send("Input.insertText", { text: "Data tables" });
+  assert.deepEqual(await cdp.evaluate(`(() => ({
+    count: [...document.querySelectorAll('[data-catalog-item]')].filter((item) => !item.hidden).length,
+    status: document.querySelector('[data-catalog-status]').textContent
+  }))()`), { count: 4, status: "4 components" });
   assert.equal(await cdp.evaluate(`document.querySelectorAll('[data-featured-specimen] iframe[title]').length`), 3);
   assert.deepEqual(await cdp.evaluate(`(() => [...document.querySelectorAll('[data-featured-specimen] iframe')].map((frame) => frame.dataset.galleryBase))()`), [
     `${baseUrl}/gallery/embed.html`, `${baseUrl}/gallery/embed.html`, `${baseUrl}/gallery/embed.html`,
   ]);
-  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
-    source: `Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined })`,
+  assert.deepEqual(errors, []);
+});
+
+test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
+  skip: !browserPath
+    ? "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate"
+    : releaseIntegrationRequested ? false : "Run npm run check:web:release for the built-artifact integration gate",
+  timeout: 60_000,
+}, async (context) => {
+  assert.equal(existsSync(path.join(releaseGalleryDir, "embed.html")), true, "build the release gallery before the site browser gate");
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-release-browser-"));
+  const outDir = path.join(temporaryRoot, "site");
+  const userDataDir = path.join(temporaryRoot, "browser");
+  let serverHandle;
+  let browserHandle;
+  context.after(async () => {
+    await closeBrowser(browserHandle);
+    if (serverHandle) await new Promise((resolve) => serverHandle.server.close(resolve));
+    await rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
-  await cdp.navigate(`${baseUrl}/`, 1280, 900);
+
+  await buildSite({ galleryDir: releaseGalleryDir, outDir });
+  serverHandle = await serve(outDir);
+  browserHandle = await launchBrowser(userDataDir);
+  const { cdp } = browserHandle;
+  const baseUrl = `${serverHandle.origin}/manual`;
+  const errors = [];
+  await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable"), cdp.send("Log.enable")]);
+  cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
+  cdp.on("Runtime.consoleAPICalled", ({ type, args }) => {
+    if (type === "error") errors.push(args.map((argument) => argument.value ?? argument.description).join(" "));
+  });
+  cdp.on("Log.entryAdded", ({ entry }) => {
+    if (entry.level === "error") errors.push(entry.text);
+  });
+
+  await cdp.navigate(`${baseUrl}/components/loading/?theme=light`, 1280, 900);
+  await waitForValue(cdp, `(() => {
+    const frame = document.querySelector('[data-specimen-frame]');
+    return Boolean(frame?.contentDocument?.querySelector('canvas') && !frame.contentDocument.getElementById('loading') && frame.contentWindow.mightyGpui?.currentTheme() === 'light');
+  })()`);
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "light");
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.mightyGpui.currentTheme()`), "light");
+
+  for (const theme of ["dark", "contrast", "dark"]) {
+    assert.equal(await cdp.evaluate(`(() => {
+      const button = document.querySelector('[data-theme-choice="${theme}"]');
+      button.focus();
+      return document.activeElement === button;
+    })()`), true);
+    await cdp.key(" ", "Space", 32);
+    await waitForValue(cdp, `(() => {
+      const frame = document.querySelector('[data-specimen-frame]');
+      return frame?.contentDocument?.documentElement.dataset.theme === '${theme}' && frame?.contentWindow?.mightyGpui?.currentTheme() === '${theme}';
+    })()`);
+    assert.equal(await cdp.evaluate(`document.documentElement.dataset.theme`), theme);
+  }
+
+  await cdp.evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
+  await waitForValue(cdp, `!document.querySelector('[data-specimen-frame]').hasAttribute('src')`);
+  await cdp.evaluate(`document.querySelector('[data-specimen-frame]').scrollIntoView({ block: 'center' })`);
+  await waitForValue(cdp, `(() => {
+    const frame = document.querySelector('[data-specimen-frame]');
+    return Boolean(frame?.contentDocument?.querySelector('canvas') && frame?.contentWindow?.mightyGpui?.currentTheme() === 'dark');
+  })()`);
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "dark");
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.mightyGpui.currentTheme()`), "dark");
+  assert.deepEqual(errors, []);
+
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined });`,
+  });
+  await cdp.navigate(`${baseUrl}/components/diff-table/?theme=contrast`, 1280, 900);
+  await waitForValue(cdp, `(() => {
+    const frame = document.querySelector('[data-specimen-frame]');
+    const fallback = frame?.contentDocument?.getElementById('fallback');
+    return Boolean(frame?.hasAttribute('src') && fallback && !fallback.hidden);
+  })()`);
   assert.deepEqual(await cdp.evaluate(`(() => ({
-    hiddenFrames: [...document.querySelectorAll('[data-featured-specimen] iframe')].filter((frame) => frame.hidden).length,
-    visibleFallbacks: [...document.querySelectorAll('[data-featured-specimen] [data-webgpu-fallback]')].filter((fallback) => !fallback.hidden).length,
-    disabledReloads: [...document.querySelectorAll('[data-featured-specimen] [data-specimen-reload]')].filter((reload) => reload.disabled).length
-  }))()`), { hiddenFrames: 3, visibleFallbacks: 3, disabledReloads: 3 });
+    parentFallbacks: document.querySelectorAll('.webgpu-fallback').length,
+    sourceVisible: document.querySelector('.code-panel').getBoundingClientRect().height > 0,
+    childMessage: document.querySelector('[data-specimen-frame]').contentDocument.querySelector('#fallback [data-error]').textContent
+  }))()`), {
+    parentFallbacks: 0,
+    sourceVisible: true,
+    childMessage: "This live example requires a browser with WebGPU support.",
+  });
   assert.deepEqual(errors, []);
 });

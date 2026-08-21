@@ -1,7 +1,6 @@
 import {
   copyFeedback,
   catalogMatches,
-  hasWebGpu,
   normalizeTheme,
   persistTheme,
   readStoredTheme,
@@ -122,31 +121,22 @@ catalogSearch?.addEventListener("input", () => {
 });
 
 const frames = [...document.querySelectorAll("[data-specimen-frame]")];
-if (!hasWebGpu(navigator)) {
-  for (const frame of frames) {
-    frame.hidden = true;
-    frame.parentElement.querySelector("[data-webgpu-fallback]").hidden = false;
-    const reload = frame.closest("[data-story]").querySelector("[data-specimen-reload]");
-    if (reload) reload.disabled = true;
-  }
+const load = (frame) => {
+  if (!frame.hasAttribute("src")) frame.src = frame.dataset.src;
+};
+if ("IntersectionObserver" in window) {
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const frame = entry.target;
+      const proximity = entry.isIntersecting ? "near" : "far";
+      const action = specimenTransition(proximity, frame.hasAttribute("src"));
+      if (action === "load") load(frame);
+      if (action === "unload") frame.removeAttribute("src");
+    }
+  }, { rootMargin: specimenOverdrawMargin });
+  frames.forEach((frame) => observer.observe(frame));
 } else {
-  const load = (frame) => {
-    if (!frame.hasAttribute("src")) frame.src = frame.dataset.src;
-  };
-  if ("IntersectionObserver" in window) {
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const frame = entry.target;
-        const proximity = entry.isIntersecting ? "near" : "far";
-        const action = specimenTransition(proximity, frame.hasAttribute("src"));
-        if (action === "load") load(frame);
-        if (action === "unload") frame.removeAttribute("src");
-      }
-    }, { rootMargin: specimenOverdrawMargin });
-    frames.forEach((frame) => observer.observe(frame));
-  } else {
-    frames.forEach(load);
-  }
+  frames.forEach(load);
 }
 
 for (const button of document.querySelectorAll("[data-specimen-reload]")) {

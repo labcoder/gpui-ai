@@ -4,7 +4,6 @@ import { test } from "node:test";
 import {
   copyFeedback,
   catalogMatches,
-  hasWebGpu,
   normalizeTheme,
   persistTheme,
   readStoredTheme,
@@ -60,12 +59,6 @@ test("specimen URLs address one shared gallery with explicit story and theme", (
     resolveSpecimenBase("../../gallery/embed.html?story=loading&theme=light", "https://example.test/manual/components/loading/"),
     "https://example.test/manual/gallery/embed.html",
   );
-});
-
-test("WebGPU capability detection fails closed", () => {
-  assert.equal(hasWebGpu({ gpu: {} }), true);
-  assert.equal(hasWebGpu({}), false);
-  assert.equal(hasWebGpu(undefined), false);
 });
 
 test("specimen lifecycle loads, unloads, and restores from retained data", () => {

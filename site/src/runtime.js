@@ -46,10 +46,6 @@ export function resolveSpecimenBase(source, pageUrl) {
   return url.href;
 }
 
-export function hasWebGpu(navigatorObject) {
-  return Boolean(navigatorObject?.gpu);
-}
-
 export function specimenTransition(proximity, isLoaded) {
   if (proximity === "near" && !isLoaded) return "load";
   if (proximity === "far" && isLoaded) return "unload";

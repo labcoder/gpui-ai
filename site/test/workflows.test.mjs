@@ -10,6 +10,7 @@ test("root workflows expose and compose site checks and builds", async () => {
 
   assert.equal(scripts["check:site"], "npm --prefix site test");
   assert.equal(scripts["build:site"], "npm --prefix site run build");
-  assert.match(scripts["check:web"], /check:site/);
+  assert.equal(scripts["check:web:release"], "node script/check-web-release.mjs");
+  assert.match(scripts["check:web"], /check:web:release/);
   assert.match(scripts["build:web"], /build:site/);
 });

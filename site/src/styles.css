@@ -78,6 +78,11 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.04em; }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-top: 2.5rem; }
 .button { padding: .9rem 1.2rem; background: var(--ink); color: var(--paper); text-decoration: none; font: 700 .8rem/1 var(--mono); text-transform: uppercase; }
 .text-link { font-weight: 700; }
+.build-metadata { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border-bottom: 1px solid var(--ink); }
+.build-metadata div { min-width: 0; padding: 1.25rem 1.5rem; border-right: 1px solid var(--line); }
+.build-metadata div:last-child { border-right: 0; }
+.build-metadata dt { margin-bottom: .5rem; color: var(--signal); font: 700 .65rem/1 var(--mono); text-transform: uppercase; }
+.build-metadata dd { margin: 0; font-size: .9rem; line-height: 1.4; }
 .manifesto { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--ink); }
 .manifesto p { display: grid; grid-template-columns: 3rem 1fr; gap: 1rem; margin: 0; padding: 2rem; border-right: 1px solid var(--line); line-height: 1.5; }
 .manifesto strong, .catalog-number { color: var(--signal); font-family: var(--mono); }
@@ -91,6 +96,15 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.04em; }
 .featured-specimen h3 { margin: 0; font: 400 clamp(1.4rem, 3vw, 2.5rem)/1 var(--serif); }
 .featured-specimen .specimen-stage { border: 0; }
 .featured-link { display: block; padding: 1rem 1.5rem; border-top: 1px solid var(--ink); font: 700 .7rem/1 var(--mono); text-align: right; text-transform: uppercase; }
+.architecture-strip { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 1fr); gap: clamp(3rem, 8vw, 8rem); padding: clamp(4rem, 8vw, 8rem) clamp(1rem, 6vw, 6rem); background: var(--ink); color: var(--paper); }
+.architecture-strip > * { min-width: 0; }
+.architecture-strip h2 { max-width: 10ch; font-size: clamp(3rem, 6vw, 6rem); }
+.architecture-strip p { max-width: 42rem; line-height: 1.6; }
+.architecture-strip pre { margin-top: 2rem; border: 1px solid var(--paper); }
+.architecture-strip dl { margin: 0; border-top: 1px solid var(--paper); }
+.architecture-strip dl div { padding: 1.5rem 0; border-bottom: 1px solid var(--paper); }
+.architecture-strip dt { margin-bottom: .6rem; color: var(--signal); font: 700 .68rem/1 var(--mono); text-transform: uppercase; }
+.architecture-strip dd { margin: 0; line-height: 1.5; }
 .index-preview, .catalog-page, .component-page { padding: clamp(3rem, 7vw, 7rem) clamp(1rem, 6vw, 6rem); }
 .index-preview h2, .page-intro h1, .component-intro h1 { max-width: 12ch; font-size: clamp(3rem, 7vw, 7rem); line-height: .92; }
 .ticker { margin-top: 3rem; border-top: 1px solid var(--ink); }
@@ -127,8 +141,6 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.04em; }
 .specimen-stage { min-height: 28rem; display: grid; place-items: center; background: var(--panel); color: var(--muted); }
 .specimen-stage iframe { display: block; width: 100%; height: 34rem; border: 0; background: var(--panel); }
 .specimen-stage.specimen-tall iframe { height: 42rem; }
-.webgpu-fallback { max-width: 32rem; margin: 3rem; padding: 2rem; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
-.webgpu-fallback p { margin: .75rem 0 0; line-height: 1.5; }
 .specimen-note { margin: 0; padding: .8rem 1rem; border-top: 1px solid var(--ink); color: var(--muted); font: .7rem/1.5 var(--mono); }
 .usage { display: grid; grid-template-columns: minmax(16rem, .75fr) minmax(0, 1.25fr); gap: 4rem; padding: 7rem 0; }
 .usage h2 { font-size: clamp(2.3rem, 4vw, 4rem); }
@@ -144,9 +156,10 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.04em; }
 pre { overflow: auto; margin: 0; padding: 1.5rem; font: .85rem/1.7 var(--mono); }
 .copy-status { min-height: 2.7rem; margin: 0; padding: .75rem 1.5rem; border-top: 1px solid var(--paper); font: .72rem/1.5 var(--mono); }
 .plate-nav, footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1.5rem clamp(1rem, 4vw, 4rem); border-top: 1px solid var(--ink); font: 700 .7rem/1.4 var(--mono); text-transform: uppercase; }
+footer nav { display: flex; gap: 1rem; }
 .plate-nav { display: grid; grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr); align-items: center; }
 .plate-neighbor-next { text-align: right; }
 @media (hover: hover) { .catalog-card:hover { background: var(--ink); color: var(--paper); } .catalog-card:hover p { color: var(--paper); } }
 @media (max-width: 900px) { .masthead nav { display: none; } .desktop-rail { display: none; } .has-desktop-rail .nav-toggle { display: block; } .has-desktop-rail .component-page, .has-desktop-rail footer { margin-left: 0; } }
-@media (max-width: 760px) { .masthead { align-items: flex-start; padding-inline: .75rem; gap: .5rem; } .header-tools { gap: .35rem; } .theme-switcher button { padding: .45rem .35rem; font-size: .54rem; } .nav-toggle { padding-inline: .45rem; font-size: .58rem; } .hero, .index-preview, .catalog-page, .component-page, .featured { padding-inline: .85rem; } .hero { min-height: 60vh; } .manifesto, .catalog-grid, .usage, .featured-heading, .component-metadata { grid-template-columns: 1fr; } .featured-heading .eyebrow { grid-column: auto; } .manifesto p { border-right: 0; border-bottom: 1px solid var(--line); } .catalog-search { position: static; grid-template-columns: 1fr auto; gap: .5rem; margin-bottom: 3rem; } .catalog-search label { grid-column: 1 / -1; } .catalog-card { min-height: 13rem; border-right: 0; } .component-metadata div { border-right: 0; border-bottom: 1px solid var(--line); } .component-metadata div:last-child { border-bottom: 0; } .usage { gap: 2rem; padding: 4rem 0; } .section-label { align-items: flex-start; gap: 1rem; } .specimen-actions { flex-wrap: wrap; justify-content: flex-end; } .plate-nav { grid-template-columns: 1fr 1fr; } .plate-nav > :nth-child(2), .plate-nav > :nth-child(3) { grid-row: 1; } .plate-nav > :nth-child(3) { text-align: right; } footer { flex-direction: column; } }
+@media (max-width: 760px) { .masthead { align-items: flex-start; padding-inline: .75rem; gap: .5rem; } .header-tools { gap: .35rem; } .theme-switcher button { padding: .45rem .35rem; font-size: .54rem; } .nav-toggle { padding-inline: .45rem; font-size: .58rem; } .hero, .index-preview, .catalog-page, .component-page, .featured { padding-inline: .85rem; } .hero { min-height: 60vh; } .manifesto, .catalog-grid, .usage, .featured-heading, .component-metadata, .build-metadata, .architecture-strip { grid-template-columns: 1fr; } .build-metadata div { border-right: 0; border-bottom: 1px solid var(--line); } .featured-heading .eyebrow { grid-column: auto; } .manifesto p { border-right: 0; border-bottom: 1px solid var(--line); } .catalog-search { position: static; grid-template-columns: 1fr auto; gap: .5rem; margin-bottom: 3rem; } .catalog-search label { grid-column: 1 / -1; } .catalog-card { min-height: 13rem; border-right: 0; } .component-metadata div { border-right: 0; border-bottom: 1px solid var(--line); } .component-metadata div:last-child { border-bottom: 0; } .usage { gap: 2rem; padding: 4rem 0; } .section-label { align-items: flex-start; gap: 1rem; } .specimen-actions { flex-wrap: wrap; justify-content: flex-end; } .plate-nav { grid-template-columns: 1fr 1fr; } .plate-nav > :nth-child(2), .plate-nav > :nth-child(3) { grid-row: 1; } .plate-nav > :nth-child(3) { text-align: right; } footer { flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
