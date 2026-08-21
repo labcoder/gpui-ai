@@ -8,6 +8,7 @@ dist/
 # Local development decisions, specifications, and implementation plans
 /docs/internal/
 /crates/gallery-web/www/src/wasm/
+/.superpowers/
 
 # OS noise
 .DS_Store
