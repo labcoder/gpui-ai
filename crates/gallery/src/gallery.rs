@@ -111,6 +111,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::SidebarNav
         | StoryId::FineTune
         | StoryId::RecordsTable
+        | StoryId::DiffTable
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -1386,6 +1387,358 @@ impl Render for RecordsTableStory {
     }
 }
 
+fn diff_story_columns() -> Vec<DiffColumn> {
+    vec![
+        DiffColumn::new("flavor", "Flavor")
+            .width(px(240.))
+            .fixed(true)
+            .sortable(true),
+        DiffColumn::new("category", "Category")
+            .width(px(220.))
+            .sortable(true),
+        DiffColumn::new("supplier", "Supplier")
+            .width(px(240.))
+            .sortable(true),
+    ]
+}
+
+fn diff_story_rows() -> Vec<DiffRow> {
+    vec![
+        DiffRow::new("rocky-road", "Rocky Road", DiffChangeKind::Changed).cells([
+            DiffCell::unchanged("flavor", "Rocky Road"),
+            DiffCell::changed("category", "Classic", "Seasonal"),
+            DiffCell::unchanged("supplier", "aurora-scoops"),
+        ]),
+        DiffRow::new("bubblegum", "Bubblegum", DiffChangeKind::Removed).cells([
+            DiffCell::removed("flavor", "Bubblegum"),
+            DiffCell::removed("category", "Retro"),
+            DiffCell::removed("supplier", "kumo-creamery"),
+        ]),
+        DiffRow::new("mint-chip", "Mint Chip", DiffChangeKind::Changed).cells([
+            DiffCell::unchanged("flavor", "Mint Chip"),
+            DiffCell::unchanged("category", "Classic"),
+            DiffCell::changed("supplier", "kumo-creamery", "maple-orbit"),
+        ]),
+        DiffRow::new("pistachio", "Pistachio", DiffChangeKind::Added).cells([
+            DiffCell::added("flavor", "Pistachio"),
+            DiffCell::added("category", "Seasonal"),
+            DiffCell::added("supplier", "maple-orbit"),
+        ]),
+    ]
+}
+
+fn diff_story_many_rows() -> Arc<[DiffRow]> {
+    (0..100)
+        .map(|index| {
+            let kind = match index % 4 {
+                0 => DiffChangeKind::Added,
+                1 => DiffChangeKind::Removed,
+                2 => DiffChangeKind::Changed,
+                _ => DiffChangeKind::Unchanged,
+            };
+            let flavor = match kind {
+                DiffChangeKind::Added => DiffCell::added("flavor", format!("Flavor {index}")),
+                DiffChangeKind::Removed => DiffCell::removed("flavor", format!("Flavor {index}")),
+                DiffChangeKind::Changed => DiffCell::changed(
+                    "flavor",
+                    format!("Flavor {index}"),
+                    format!("Seasonal {index}"),
+                ),
+                DiffChangeKind::Unchanged => {
+                    DiffCell::unchanged("flavor", format!("Flavor {index}"))
+                }
+            };
+            DiffRow::new(
+                format!("proposal-{index}"),
+                format!("Proposal {index}"),
+                kind,
+            )
+            .cells([
+                flavor,
+                DiffCell::unchanged("category", format!("Category {}", index % 8)),
+                DiffCell::changed(
+                    "supplier",
+                    format!("supplier-{}", index % 11),
+                    format!("supplier-{}", (index + 1) % 11),
+                ),
+            ])
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn configured_diff_table(
+    id: &'static str,
+    label: &'static str,
+    rows: Progressive<Arc<[DiffRow]>>,
+    window: &mut Window,
+    cx: &mut Context<DiffTable>,
+) -> DiffTable {
+    let mut table = DiffTable::new(id, label, window, cx);
+    table.set_columns(diff_story_columns(), window, cx);
+    table.set_rows(rows, window, cx);
+    table
+}
+
+struct DiffTableStory {
+    populated: Entity<DiffTable>,
+    loading: Entity<DiffTable>,
+    failed: Entity<DiffTable>,
+    empty: Entity<DiffTable>,
+    disabled: Entity<DiffTable>,
+    selected: Entity<DiffTable>,
+    constrained: Entity<DiffTable>,
+    rows: Vec<DiffRow>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl DiffTableStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let rows: Arc<[DiffRow]> = diff_story_rows().into();
+        let populated = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-populated",
+                "Proposed menu cleanup",
+                Progressive::complete(rows.clone()),
+                window,
+                cx,
+            )
+        });
+        let loading = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-loading",
+                "Loading proposed menu edits",
+                Progressive::running(Arc::from([])),
+                window,
+                cx,
+            )
+        });
+        let failed = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-error",
+                "Unavailable proposed menu edits",
+                Progressive::failed(Arc::from([]), "Menu proposal service is unavailable"),
+                window,
+                cx,
+            )
+        });
+        let empty = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-empty",
+                "Empty proposed menu edits",
+                Progressive::complete(Arc::from([])),
+                window,
+                cx,
+            )
+        });
+        let disabled = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-disabled",
+                "Disabled menu proposal",
+                Progressive::complete(Arc::from([diff_story_rows()[1].clone().disabled(true)])),
+                window,
+                cx,
+            )
+        });
+        let selected = cx.new(|cx| {
+            let mut table = configured_diff_table(
+                "gallery-diff-selected",
+                "Selected menu proposal",
+                Progressive::complete(rows.clone()),
+                window,
+                cx,
+            );
+            table.set_selected_row("mint-chip", window, cx);
+            table
+        });
+        let constrained = cx.new(|cx| {
+            configured_diff_table(
+                "gallery-diff-constrained",
+                "Constrained proposed menu edits",
+                Progressive::complete(diff_story_many_rows()),
+                window,
+                cx,
+            )
+        });
+
+        let mut subscriptions = Vec::new();
+        for table in [&populated, &selected] {
+            subscriptions.push(cx.subscribe_in(
+                table,
+                window,
+                |this, table, event: &DiffTableEvent, window, cx| {
+                    this.last_event = format!("{event:?}").into();
+                    match event {
+                        DiffTableEvent::SelectionRequested { row_id, .. } => table
+                            .update(cx, |table, cx| {
+                                table.set_selected_row(row_id.clone(), window, cx)
+                            }),
+                        DiffTableEvent::SortRequested {
+                            column_id,
+                            direction,
+                            ..
+                        } => {
+                            if let Some(direction) = direction {
+                                this.rows.sort_by(|left, right| {
+                                    let left_value = left
+                                        .cell(column_id)
+                                        .and_then(|cell| cell.after().or_else(|| cell.before()))
+                                        .unwrap_or_default();
+                                    let right_value = right
+                                        .cell(column_id)
+                                        .and_then(|cell| cell.after().or_else(|| cell.before()))
+                                        .unwrap_or_default();
+                                    let ordering = left_value.cmp(right_value);
+                                    match direction {
+                                        DiffSortDirection::Ascending => ordering,
+                                        DiffSortDirection::Descending => ordering.reverse(),
+                                    }
+                                });
+                            } else {
+                                this.rows = diff_story_rows();
+                            }
+                            let rows: Arc<[DiffRow]> = this.rows.clone().into();
+                            table.update(cx, |table, cx| {
+                                table.set_rows(Progressive::complete(rows), window, cx);
+                                table.set_sort(column_id.clone(), *direction, window, cx);
+                            });
+                        }
+                        DiffTableEvent::DecisionRequested { row_id, action, .. } => {
+                            if let Some(row) =
+                                this.rows.iter_mut().find(|row| row.id() == row_id.as_ref())
+                            {
+                                let state = match action {
+                                    DiffProposalAction::Accept => DiffProposalState::Accepted,
+                                    DiffProposalAction::Reject => DiffProposalState::Rejected,
+                                };
+                                *row = row.clone().state(state);
+                            }
+                            let rows: Arc<[DiffRow]> = this.rows.clone().into();
+                            table.update(cx, |table, cx| {
+                                table.set_rows(Progressive::complete(rows), window, cx)
+                            });
+                        }
+                        DiffTableEvent::ReviewRequested { .. } => {}
+                    }
+                    cx.notify();
+                },
+            ));
+        }
+
+        Self {
+            populated,
+            loading,
+            failed,
+            empty,
+            disabled,
+            selected,
+            constrained,
+            rows: diff_story_rows(),
+            last_event: "Select, sort, review, accept, or reject a proposal.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    fn state(
+        selector: &'static str,
+        title: &'static str,
+        table: Entity<DiffTable>,
+    ) -> impl IntoElement {
+        v_flex()
+            .id(selector)
+            .debug_selector(move || selector.into())
+            .flex_none()
+            .gap_1()
+            .child(
+                div()
+                    .id(format!("{selector}-heading"))
+                    .role(Role::Heading)
+                    .aria_label(title)
+                    .text_xs()
+                    .child(title),
+            )
+            .child(div().h(px(230.)).child(table))
+    }
+}
+
+impl Render for DiffTableStory {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .gap_3()
+            .child(Self::state(
+                "diff-story-populated",
+                "POPULATED AND SORTABLE",
+                self.populated.clone(),
+            ))
+            .child(Self::state(
+                "diff-story-loading",
+                "LOADING",
+                self.loading.clone(),
+            ))
+            .child(Self::state(
+                "diff-story-error",
+                "ERROR",
+                self.failed.clone(),
+            ))
+            .child(Self::state(
+                "diff-story-empty",
+                "EMPTY",
+                self.empty.clone(),
+            ))
+            .child(Self::state(
+                "diff-story-disabled",
+                "DISABLED PROPOSAL",
+                self.disabled.clone(),
+            ))
+            .child(Self::state(
+                "diff-story-selected",
+                "CONTROLLED SELECTION AND DECISION",
+                self.selected.clone(),
+            ))
+            .child(
+                v_flex()
+                    .id("diff-story-constrained")
+                    .debug_selector(|| "diff-story-constrained".into())
+                    .flex_none()
+                    .gap_1()
+                    .child(
+                        div()
+                            .id("diff-story-constrained-heading")
+                            .role(Role::Heading)
+                            .aria_label("Constrained height and width")
+                            .text_xs()
+                            .child("CONSTRAINED HEIGHT AND WIDTH"),
+                    )
+                    .child(
+                        div()
+                            .w(px(520.))
+                            .h(px(180.))
+                            .child(self.constrained.clone()),
+                    ),
+            )
+            .child(
+                TextView::markdown(
+                    "diff-story-event-log",
+                    format!("**Last typed event.** {}", self.last_event),
+                )
+                .selectable(true),
+            )
+            .child(
+                div()
+                    .id("diff-story-reference-note")
+                    .debug_selector(|| "diff-story-reference-note".into())
+                    .child(
+                        TextView::markdown(
+                            "diff-story-reference-copy",
+                            "**Reference comparison.** Beautiful UI presents AI-proposed menu edits as a compact table. This original GPUI composition adds explicit before/after labels, stable proposal and column IDs, application-owned decisions and sorting, selectable cells, direct semantics, and two-axis virtualization.",
+                        )
+                        .selectable(true),
+                    ),
+            )
+    }
+}
+
 /// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
@@ -1394,6 +1747,7 @@ pub struct Gallery {
     prompt_bar_scroll: ScrollHandle,
     selection_actions_scroll: ScrollHandle,
     records_table_scroll: ScrollHandle,
+    diff_table_scroll: ScrollHandle,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -1437,6 +1791,7 @@ impl Gallery {
             prompt_bar_scroll: ScrollHandle::new(),
             selection_actions_scroll: ScrollHandle::new(),
             records_table_scroll: ScrollHandle::new(),
+            diff_table_scroll: ScrollHandle::new(),
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -1953,6 +2308,29 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::DiffTable => {
+                let diff_story = window.use_keyed_state(
+                    "diff-table-story-state",
+                    cx,
+                    DiffTableStory::new,
+                );
+                self.section(
+                    story,
+                    "DIFF TABLE",
+                    || {
+                        v_flex()
+                            .id("diff-table-story-scroll")
+                            .debug_selector(|| "diff-table-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .track_scroll(&self.diff_table_scroll)
+                            .overflow_y_scrollbar()
+                            .child(diff_story)
+                    },
+                    cx,
+                )
+            }
             StoryId::CodeBlock => self.section(
                 story,
                 "CODE BLOCK",
@@ -2379,6 +2757,78 @@ mod tests {
         let end = cx
             .debug_bounds("records-story-reference-note")
             .expect("the reference note should remain rendered after scrolling");
+        assert!(
+            end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
+            "{end:?} must fit in {viewport:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn direct_diff_table_story_exercises_required_controlled_states(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::DiffTable, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(560.)));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        for selector in [
+            "diff-story-populated",
+            "diff-story-loading",
+            "diff-story-error",
+            "diff-story-empty",
+            "diff-story-disabled",
+            "diff-story-selected",
+            "diff-story-constrained",
+            "diff-story-reference-note",
+        ] {
+            assert!(
+                cx.debug_bounds(selector).is_some(),
+                "diff story should exercise {selector}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn constrained_diff_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::DiffTable, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            GalleryTestRoot { gallery }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let viewport = cx
+            .debug_bounds("diff-table-story-scroll")
+            .expect("the direct diff story should expose its overflow region");
+        let initial_end = cx
+            .debug_bounds("diff-story-reference-note")
+            .expect("the diff reference note should remain rendered");
+        assert!(
+            initial_end.top() >= viewport.bottom(),
+            "the end should start below the constrained viewport: end={initial_end:?}, viewport={viewport:?}"
+        );
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.diff_table_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("diff-story-reference-note")
+            .expect("the diff reference note should remain rendered after scrolling");
         assert!(
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"

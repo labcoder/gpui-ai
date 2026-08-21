@@ -35,6 +35,8 @@ pub enum StoryId {
     FineTune,
     /// Controlled virtualized CRM-style records grid.
     RecordsTable,
+    /// Controlled virtualized before/after proposal grid.
+    DiffTable,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -68,6 +70,7 @@ impl StoryId {
         Self::SidebarNav,
         Self::FineTune,
         Self::RecordsTable,
+        Self::DiffTable,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -95,6 +98,7 @@ impl StoryId {
             Self::SidebarNav => "sidebar-nav",
             Self::FineTune => "fine-tune",
             Self::RecordsTable => "records-table",
+            Self::DiffTable => "diff-table",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -123,6 +127,7 @@ impl StoryId {
             Self::SidebarNav => "Sidebar navigation",
             Self::FineTune => "Fine-tune card",
             Self::RecordsTable => "Records table",
+            Self::DiffTable => "Diff table",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -213,5 +218,13 @@ mod tests {
             Ok(StoryId::RecordsTable)
         );
         assert!(StoryId::ALL.contains(&StoryId::RecordsTable));
+    }
+
+    #[test]
+    fn diff_table_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::DiffTable.slug(), "diff-table");
+        assert_eq!(StoryId::DiffTable.title(), "Diff table");
+        assert_eq!("diff-table".parse::<StoryId>(), Ok(StoryId::DiffTable));
+        assert!(StoryId::ALL.contains(&StoryId::DiffTable));
     }
 }

@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-one components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-two components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -249,6 +249,41 @@ let _subscription = cx.subscribe(&records, |_, _, event: &RecordsTableEvent, _| 
 ```
 
 Pointer double-click, Enter/Space, and each row's named Open control converge on stable row IDs. The Open control is the direct AccessKit activation path; disabled controls are named as unavailable, expose no Click action, and disabled rows are skipped by keyboard navigation. Both large row sets and wide column sets construct only their visible ranges, while snapshot replacement preserves the current stable row and column anchors. Applications can also move explicitly with `scroll_to_row` and `scroll_to_column`.
+
+`DiffTable` composes the same virtualized focus and overflow behavior without adding diff flags to Records Table. Each cell is constructed as an added, removed, changed, or unchanged before/after value, and proposal decisions remain application-owned:
+
+```rust
+use std::sync::Arc;
+use mighty_gpui::prelude::*;
+
+let proposals = cx.new(|cx| {
+    DiffTable::new("menu-cleanup", "Proposed menu cleanup", window, cx)
+});
+proposals.update(cx, |table, cx| {
+    table.set_columns([
+        DiffColumn::new("flavor", "Flavor").fixed(true),
+        DiffColumn::new("supplier", "Supplier").sortable(true),
+    ], window, cx);
+    table.set_rows(
+        Progressive::complete(Arc::from([
+            DiffRow::new("mint-chip", "Mint Chip", DiffChangeKind::Changed).cells([
+                DiffCell::unchanged("flavor", "Mint Chip"),
+                DiffCell::changed("supplier", "kumo-creamery", "maple-orbit"),
+            ]),
+        ])),
+        window,
+        cx,
+    );
+});
+
+// Answer selection, sorting, review, accept, and reject requests with a new
+// controlled snapshot.
+let _subscription = cx.subscribe(&proposals, |_, _, event: &DiffTableEvent, _| {
+    println!("diff-table event: {event:?}");
+});
+```
+
+Every rendered value includes a readable change label and selectable prior/proposed content; color only reinforces that state. The selected proposal exposes named Accept and Reject controls with direct AccessKit actions, while Review, Enter, and Space converge on the same stable proposal ID. Loading, empty, failure, disabled, selected, wide, and growing snapshots use the shared progressive and virtualized contracts.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 

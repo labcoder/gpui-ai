@@ -359,6 +359,7 @@ struct RecordsDelegate {
     selected_row_id: Option<SharedString>,
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
+    activation_label: SharedString,
 }
 
 impl RecordsDelegate {
@@ -371,6 +372,7 @@ impl RecordsDelegate {
             selected_row_id: None,
             sort_column_id: None,
             sort_direction: None,
+            activation_label: "Open".into(),
         }
     }
 
@@ -516,7 +518,7 @@ impl TableDelegate for RecordsDelegate {
         let cell = row
             .zip(column)
             .and_then(|(row, column)| row.cell(column.id()));
-        let value = cell.map(|cell| cell.value.clone()).unwrap_or_default();
+        let value = record_cell_accessible_value(cell, row, col_ix, self.activation_label.as_ref());
         let row_id = row
             .map(|row| row.id.clone())
             .unwrap_or_else(|| SharedString::from(format!("missing-{row_ix}")));
@@ -534,14 +536,14 @@ impl TableDelegate for RecordsDelegate {
             if let Some(row) = row {
                 let owner = self.owner.clone();
                 let row_id = row.id.clone();
-                let activation = record_activation_button(&self.component_id, row, cx).on_click(
-                    move |_, _, cx| {
-                        let _ = owner.update(cx, |table, cx| {
-                            table.request_activation(row_id.clone(), cx);
+                let activation =
+                    record_activation_button(&self.component_id, &self.activation_label, row, cx)
+                        .on_click(move |_, _, cx| {
+                            let _ = owner.update(cx, |table, cx| {
+                                table.request_activation(row_id.clone(), cx);
+                            });
+                            cx.stop_propagation();
                         });
-                        cx.stop_propagation();
-                    },
-                );
                 div()
                     .size_full()
                     .flex()
@@ -640,7 +642,7 @@ impl TableDelegate for RecordsDelegate {
     }
 }
 
-fn escape_markdown_text(value: &str) -> String {
+pub(crate) fn escape_markdown_text(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
         if matches!(
@@ -712,15 +714,16 @@ fn record_sort_button(
 
 fn record_activation_button(
     component_id: &str,
+    activation_label: &str,
     row: &RecordRow,
     cx: &mut App,
 ) -> gpui_base::Button {
     let tokens = cx.theme().semantic_tokens();
     let debug_id = scoped_records_id("activate", component_id, &row.id);
     let label = if row.disabled {
-        format!("Unavailable: Open {}", row.label)
+        format!("Unavailable: {activation_label} {}", row.label)
     } else {
-        format!("Open {}", row.label)
+        format!("{activation_label} {}", row.label)
     };
     composed_button(debug_id.clone(), label)
         .debug_selector(move || debug_id.clone())
@@ -734,7 +737,7 @@ fn record_activation_button(
         .bg(cx.theme().transparent)
         .text_token(tokens.typography.xs)
         .focus_visible(|style| style.border_color(cx.theme().ring))
-        .child("Open")
+        .child(activation_label.to_owned())
 }
 
 fn records_state_frame(
@@ -790,6 +793,23 @@ fn record_cell_frame(identity: impl Into<String>, value: SharedString) -> Statef
         .role(Role::Cell)
         .aria_label(value.clone())
         .aria_value(value.clone())
+}
+
+fn record_cell_accessible_value(
+    cell: Option<&RecordCell>,
+    row: Option<&RecordRow>,
+    col_ix: usize,
+    activation_label: &str,
+) -> SharedString {
+    cell.map(|cell| cell.value.clone())
+        .or_else(|| {
+            (col_ix == 0).then(|| {
+                row.map(|row| format!("{activation_label} {}", row.label))
+                    .unwrap_or_default()
+                    .into()
+            })
+        })
+        .unwrap_or_default()
 }
 
 fn record_cell_content(identity: &str, cell: &RecordCell, cx: &mut App) -> gpui::AnyElement {
@@ -864,6 +884,7 @@ pub struct RecordsTable {
     selected_row_id: Option<SharedString>,
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
+    activation_label: SharedString,
     pending_suppressed_selection_events: usize,
     pending_pointer_row_id: Option<SharedString>,
     viewport_row_anchor_id: Option<SharedString>,
@@ -903,6 +924,7 @@ impl RecordsTable {
             selected_row_id: None,
             sort_column_id: None,
             sort_direction: None,
+            activation_label: "Open".into(),
             pending_suppressed_selection_events: 0,
             pending_pointer_row_id: None,
             viewport_row_anchor_id: None,
@@ -910,6 +932,21 @@ impl RecordsTable {
             table,
             _table_subscription: table_subscription,
         }
+    }
+
+    /// Replaces the visible and accessible verb used by row activation controls.
+    pub fn set_activation_label(
+        &mut self,
+        activation_label: impl Into<SharedString>,
+        cx: &mut Context<Self>,
+    ) {
+        self.activation_label = activation_label.into();
+        let activation_label = self.activation_label.clone();
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().activation_label = activation_label;
+            cx.notify();
+        });
+        cx.notify();
     }
 
     /// Replaces the controlled column snapshot without rebuilding table state.
@@ -1343,6 +1380,20 @@ mod tests {
     }
 
     #[test]
+    fn missing_first_column_value_names_the_synthetic_activation_cell() {
+        let row = RecordRow::new("pistachio", "Pistachio proposal");
+        let value = record_cell_accessible_value(None, Some(&row), 0, "Review");
+        assert_eq!(value, "Review Pistachio proposal");
+
+        let cell = record_cell_frame("pistachio-review", value).into_element();
+        let mut cell_node = accesskit::Node::new(Role::Unknown);
+        cell.write_a11y_info(&mut cell_node);
+        assert_eq!(cell.a11y_role(), Some(Role::Cell));
+        assert_eq!(cell_node.label(), Some("Review Pistachio proposal"));
+        assert_eq!(cell_node.value(), Some("Review Pistachio proposal"));
+    }
+
+    #[test]
     fn progressive_state_builders_are_named_and_role_specific() {
         for (id, role, label) in [
             (
@@ -1390,11 +1441,15 @@ mod tests {
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element(),
-                        record_activation_button("suppliers", &enabled, cx)
+                        record_activation_button("suppliers", "Open", &enabled, cx)
                             .on_click(|_, _, _| {})
                             .render(window, cx)
                             .into_element(),
-                        record_activation_button("suppliers", &disabled, cx)
+                        record_activation_button("suppliers", "Open", &disabled, cx)
+                            .on_click(|_, _, _| {})
+                            .render(window, cx)
+                            .into_element(),
+                        record_activation_button("diff", "Review", &enabled, cx)
                             .on_click(|_, _, _| {})
                             .render(window, cx)
                             .into_element(),
@@ -1437,5 +1492,10 @@ mod tests {
         assert_eq!(*disabled_role, Some(Role::Button));
         assert_eq!(disabled.label(), Some("Unavailable: Open Offline supplier"));
         assert!(!disabled.supports_action(accesskit::Action::Click));
+
+        let (review_role, review) = &nodes[3];
+        assert_eq!(*review_role, Some(Role::Button));
+        assert_eq!(review.label(), Some("Review Aurora Scoops"));
+        assert!(review.supports_action(accesskit::Action::Click));
     }
 }

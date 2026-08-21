@@ -26,6 +26,7 @@ pub mod code_block;
 pub mod command_search;
 pub mod context_card;
 mod control;
+pub mod diff_table;
 pub mod fine_tune;
 pub mod image_generation;
 pub mod insight;
@@ -52,6 +53,10 @@ pub mod prelude {
     pub use crate::code_block::CodeBlock;
     pub use crate::command_search::{CommandSearch, CommandSearchEvent, CommandSearchItem};
     pub use crate::context_card::{ContextCard, ContextCardEvent};
+    pub use crate::diff_table::{
+        DiffCell, DiffChangeKind, DiffColumn, DiffColumnAlignment, DiffProposalAction,
+        DiffProposalState, DiffRow, DiffSortDirection, DiffTable, DiffTableEvent,
+    };
     pub use crate::fine_tune::{FineTuneCard, FineTuneEvent, FineTuneTypeface, FineTuneValues};
     pub use crate::image_generation::ImageGeneration;
     pub use crate::insight::{

@@ -4,7 +4,8 @@ use gpui::{
     Window, div, point, prelude::FluentBuilder as _, px,
 };
 use mighty_gpui::prelude::{
-    Chat, ChatMessage, ChatRole, PromptBar, RecordCell, RecordColumn, RecordRow, RecordsTable,
+    Chat, ChatMessage, ChatRole, DiffCell, DiffChangeKind, DiffColumn, DiffRow, DiffTable,
+    PromptBar, RecordCell, RecordColumn, RecordRow, RecordsTable,
 };
 use mighty_gpui::{
     code_block::CodeBlock,
@@ -41,6 +42,50 @@ struct FollowUpSelectionSurface {
 
 struct RecordsReadableSurface {
     table: gpui::Entity<RecordsTable>,
+}
+
+struct DiffReadableSurface {
+    table: gpui::Entity<DiffTable>,
+}
+
+impl DiffReadableSurface {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let table = cx.new(|cx| DiffTable::new("readable-diff", "Readable diff", window, cx));
+        table.update(cx, |table, cx| {
+            table.set_columns(
+                [DiffColumn::new("value", "Value").width(px(560.))],
+                window,
+                cx,
+            );
+            table.set_rows(
+                Progressive::complete(Arc::from([DiffRow::new(
+                    "proposal",
+                    "Proposal",
+                    DiffChangeKind::Changed,
+                )
+                .cells([DiffCell::changed(
+                    "value",
+                    "selectable_before *literal*",
+                    "*literal* selectable_after selectable_after",
+                )])])),
+                window,
+                cx,
+            );
+        });
+        Self { table }
+    }
+}
+
+impl Render for DiffReadableSurface {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().p(px(16.)).child(
+            div()
+                .debug_selector(|| "readable-diff-surface".into())
+                .w_full()
+                .h(px(160.))
+                .child(self.table.clone()),
+        )
+    }
 }
 
 impl RecordsReadableSurface {
@@ -404,6 +449,39 @@ fn record_cells_export_literal_selected_text(cx: &mut TestAppContext) {
         selected.contains("selectable_record *literal* selectable_record"),
         "{selected:?}"
     );
+}
+
+#[gpui::test]
+fn diff_before_and_after_values_export_literal_selected_text(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| DiffReadableSurface::new(window, cx));
+        SelectionTestRoot::new(content)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let cell = cx
+        .debug_bounds("records-cell-40:diff-table-records-13:readable-difftable8:proposalvalue")
+        .expect("the readable diff cell should render");
+    let from = point(cell.left() + px(4.), cell.top() + px(4.));
+    let to = point(cell.right() - px(4.), cell.bottom() - px(4.));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let selected = cx.update(gpui_base::TextSelection::selected_text);
+    assert!(
+        selected.contains("selectable_before *literal*"),
+        "{selected:?}"
+    );
+    assert!(selected.contains("→ *literal*"), "{selected:?}");
 }
 
 #[gpui::test]

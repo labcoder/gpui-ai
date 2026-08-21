@@ -18,9 +18,18 @@ pub(crate) fn outlined_control(
     accessibility_label: impl Into<SharedString>,
     cx: &mut App,
 ) -> Button {
-    let tokens = cx.theme().semantic_tokens();
     let label = accessibility_label.into();
-    composed_button(id, label.clone())
+    outlined_control_with_label(id, label.clone(), label, cx)
+}
+
+pub(crate) fn outlined_control_with_label(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
+    visible_label: impl Into<SharedString>,
+    cx: &mut App,
+) -> Button {
+    let tokens = cx.theme().semantic_tokens();
+    composed_button(id, accessibility_label)
         .on_mouse_down(MouseButton::Left, |_, window, cx| {
             window.prevent_default();
             gpui_base::GlobalState::suppress_text_selection(cx);
@@ -39,7 +48,7 @@ pub(crate) fn outlined_control(
         .hover(|style| style.bg(cx.theme().button_hover))
         .active(|style| style.bg(cx.theme().button_active))
         .focus_visible(|style| style.border_color(cx.theme().ring))
-        .child(div().child(label))
+        .child(div().child(visible_label.into()))
 }
 
 #[cfg(test)]
