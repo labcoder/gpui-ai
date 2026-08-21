@@ -4,13 +4,20 @@ use crate::StoryId;
 
 /// Equal number of steady-state draws retained for every representative viewport.
 pub const STEADY_DRAWS_PER_VIEWPORT: usize = 100;
+/// Driven Filter Table draws retained while its controlled projection is changing.
+pub const FILTER_TRANSITION_DRAWS: usize = 40;
+/// Unmeasured Filter Table draws allowed after the final change before idle sampling.
+pub const FILTER_SETTLING_DRAWS: usize = 30;
+/// Maximum constructed/paint-eligible rows accepted for the 1,000-row Filter Table.
+pub const MAX_VISIBLE_FILTER_ROWS: usize = 64;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 5] = [
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 6] = [
     StoryId::Loading,
     StoryId::StreamingText,
     StoryId::Approval,
     StoryId::PromptBar,
     StoryId::Chat,
+    StoryId::FilterTable,
 ];
 /// Minimum number of measured draws required by the performance gate.
 pub const MIN_DRAW_SAMPLES: usize = PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT;
@@ -172,6 +179,7 @@ mod tests {
                 StoryId::Approval,
                 StoryId::PromptBar,
                 StoryId::Chat,
+                StoryId::FilterTable,
             ]
         );
         assert_eq!(

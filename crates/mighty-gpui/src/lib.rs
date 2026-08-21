@@ -27,6 +27,7 @@ pub mod command_search;
 pub mod context_card;
 mod control;
 pub mod diff_table;
+pub mod filter_table;
 pub mod fine_tune;
 pub mod image_generation;
 pub mod insight;
@@ -56,6 +57,10 @@ pub mod prelude {
     pub use crate::diff_table::{
         DiffCell, DiffChangeKind, DiffColumn, DiffColumnAlignment, DiffProposalAction,
         DiffProposalState, DiffRow, DiffSortDirection, DiffTable, DiffTableEvent,
+    };
+    pub use crate::filter_table::{
+        FilterCell, FilterColumn, FilterColumnAlignment, FilterDefinition, FilterRow,
+        FilterSortDirection, FilterTable, FilterTableEvent,
     };
     pub use crate::fine_tune::{FineTuneCard, FineTuneEvent, FineTuneTypeface, FineTuneValues};
     pub use crate::image_generation::ImageGeneration;

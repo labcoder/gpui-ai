@@ -112,6 +112,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::FineTune
         | StoryId::RecordsTable
         | StoryId::DiffTable
+        | StoryId::FilterTable
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -1739,6 +1740,553 @@ impl Render for DiffTableStory {
     }
 }
 
+fn filter_story_columns() -> [FilterColumn; 4] {
+    [
+        FilterColumn::new("task", "Task name")
+            .width(px(230.))
+            .fixed(true),
+        FilterColumn::new("date", "Date")
+            .width(px(110.))
+            .sortable(true),
+        FilterColumn::new("status", "Status")
+            .width(px(130.))
+            .sortable(true),
+        FilterColumn::new("advisor", "Advisor").width(px(190.)),
+    ]
+}
+
+fn filter_story_rows() -> Vec<FilterRow> {
+    [
+        (
+            "mango",
+            "Restock mango sorbet",
+            "Dec 03",
+            "To do",
+            "Mango Moon Gelato",
+        ),
+        (
+            "sesame",
+            "Churn black sesame",
+            "Sep 22",
+            "In Progress",
+            "Kumo Creamery",
+        ),
+        (
+            "menu",
+            "Print summer menu",
+            "Jan 02",
+            "To do",
+            "Coral Coast Sorbet",
+        ),
+        (
+            "batch",
+            "Taste-test batch 42",
+            "Nov 08",
+            "In Progress",
+            "Maple Orbit",
+        ),
+        (
+            "cones",
+            "Order waffle cones",
+            "Apr 14",
+            "Completed",
+            "Aurora Scoops",
+        ),
+    ]
+    .into_iter()
+    .map(|(id, task, date, status, advisor)| {
+        let tone = match status {
+            "Completed" => RecordStatusTone::Positive,
+            "In Progress" => RecordStatusTone::Caution,
+            _ => RecordStatusTone::Neutral,
+        };
+        FilterRow::new(id, task).cells([
+            FilterCell::new("task", task),
+            FilterCell::new("date", date),
+            FilterCell::status("status", status, tone),
+            FilterCell::new("advisor", advisor),
+        ])
+    })
+    .collect()
+}
+
+fn filter_story_definitions(active: &str, rows: &[FilterRow]) -> Vec<FilterDefinition> {
+    let count = |status: &str| {
+        rows.iter()
+            .filter(|row| {
+                row.cell("status")
+                    .is_some_and(|cell| cell.value() == status)
+            })
+            .count()
+    };
+    [
+        ("all", "All", rows.len()),
+        ("todo", "To do", count("To do")),
+        ("progress", "In Progress", count("In Progress")),
+        ("completed", "Completed", count("Completed")),
+    ]
+    .into_iter()
+    .map(|(id, label, count)| FilterDefinition::new(id, label, count).active(id == active))
+    .collect()
+}
+
+fn filter_story_projection(rows: &[FilterRow], active: &str) -> Arc<[FilterRow]> {
+    rows.iter()
+        .filter(|row| match active {
+            "todo" => row
+                .cell("status")
+                .is_some_and(|cell| cell.value() == "To do"),
+            "progress" => row
+                .cell("status")
+                .is_some_and(|cell| cell.value() == "In Progress"),
+            "completed" => row
+                .cell("status")
+                .is_some_and(|cell| cell.value() == "Completed"),
+            _ => true,
+        })
+        .cloned()
+        .collect::<Vec<_>>()
+        .into()
+}
+
+#[derive(Clone)]
+struct FilterStoryProjection {
+    active_filter: SharedString,
+    sort_column: Option<SharedString>,
+    sort_direction: Option<FilterSortDirection>,
+}
+
+impl Default for FilterStoryProjection {
+    fn default() -> Self {
+        Self {
+            active_filter: "all".into(),
+            sort_column: None,
+            sort_direction: None,
+        }
+    }
+}
+
+fn filter_story_project_rows(
+    rows: &[FilterRow],
+    projection: &FilterStoryProjection,
+) -> Arc<[FilterRow]> {
+    let mut rows = filter_story_projection(rows, &projection.active_filter)
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    if let (Some(column_id), Some(direction)) = (&projection.sort_column, projection.sort_direction)
+    {
+        rows.sort_by(|left, right| {
+            let left = left
+                .cell(column_id)
+                .map(FilterCell::value)
+                .unwrap_or_default();
+            let right = right
+                .cell(column_id)
+                .map(FilterCell::value)
+                .unwrap_or_default();
+            let ordering = left.cmp(right);
+            match direction {
+                FilterSortDirection::Ascending => ordering,
+                FilterSortDirection::Descending => ordering.reverse(),
+            }
+        });
+    }
+    rows.into()
+}
+
+fn reduce_filter_story_projection(
+    projections: &mut HashMap<SharedString, FilterStoryProjection>,
+    event: &FilterTableEvent,
+) {
+    match event {
+        FilterTableEvent::FilterRequested {
+            id,
+            filter_id,
+            active,
+        } => {
+            projections.entry(id.clone()).or_default().active_filter = if *active {
+                filter_id.clone()
+            } else {
+                "all".into()
+            };
+        }
+        FilterTableEvent::SortRequested {
+            id,
+            column_id,
+            direction,
+        } => {
+            let projection = projections.entry(id.clone()).or_default();
+            projection.sort_column = direction.map(|_| column_id.clone());
+            projection.sort_direction = *direction;
+        }
+        FilterTableEvent::SelectionRequested { .. }
+        | FilterTableEvent::ActivationRequested { .. } => {}
+    }
+}
+
+fn filter_story_many_rows() -> Arc<[FilterRow]> {
+    (0..1_000)
+        .map(|index| {
+            let status = match index % 3 {
+                0 => "To do",
+                1 => "In Progress",
+                _ => "Completed",
+            };
+            FilterRow::new(format!("task-{index}"), format!("Task {index}")).cells([
+                FilterCell::new("task", format!("Task {index}")),
+                FilterCell::new("date", format!("Aug {:02}", index % 28 + 1)),
+                FilterCell::status("status", status, RecordStatusTone::Neutral),
+                FilterCell::new("advisor", format!("Advisor {}", index % 9)),
+            ])
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn configured_filter_table(
+    id: &'static str,
+    label: &'static str,
+    rows: Progressive<Arc<[FilterRow]>>,
+    filters: Vec<FilterDefinition>,
+    window: &mut Window,
+    cx: &mut Context<FilterTable>,
+) -> FilterTable {
+    let mut table = FilterTable::new(id, label, window, cx);
+    table.set_columns(filter_story_columns(), window, cx);
+    table.set_filters(filters, cx);
+    table.set_rows(rows, cx);
+    table
+}
+
+struct FilterTableStory {
+    populated: Entity<FilterTable>,
+    loading: Entity<FilterTable>,
+    failed: Entity<FilterTable>,
+    empty: Entity<FilterTable>,
+    disabled: Entity<FilterTable>,
+    selected: Entity<FilterTable>,
+    constrained: Entity<FilterTable>,
+    rows: Vec<FilterRow>,
+    #[cfg(feature = "performance")]
+    performance_rows: Arc<[FilterRow]>,
+    projections: HashMap<SharedString, FilterStoryProjection>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl FilterTableStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let rows = filter_story_rows();
+        let populated_rows: Arc<[FilterRow]> = rows.clone().into();
+        let populated = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-populated",
+                "Live task filters",
+                Progressive::complete(populated_rows),
+                filter_story_definitions("all", &rows),
+                window,
+                cx,
+            )
+        });
+        let loading = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-loading",
+                "Loading filtered tasks",
+                Progressive::running(Arc::from([])),
+                filter_story_definitions("all", &rows),
+                window,
+                cx,
+            )
+        });
+        let failed = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-error",
+                "Unavailable filtered tasks",
+                Progressive::failed(Arc::from([]), "Task service is unavailable"),
+                filter_story_definitions("all", &rows),
+                window,
+                cx,
+            )
+        });
+        let empty = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-empty",
+                "Empty filtered tasks",
+                Progressive::complete(Arc::from([])),
+                filter_story_definitions("completed", &[]),
+                window,
+                cx,
+            )
+        });
+        let disabled = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-disabled",
+                "Disabled task row and filter",
+                Progressive::complete(Arc::from([rows[0].clone().disabled(true)])),
+                vec![
+                    FilterDefinition::new("todo", "To do", 1)
+                        .active(true)
+                        .disabled(true),
+                ],
+                window,
+                cx,
+            )
+        });
+        let selected = cx.new(|cx| {
+            let mut table = configured_filter_table(
+                "gallery-filter-selected",
+                "Selected filtered task",
+                Progressive::complete(rows.clone().into()),
+                filter_story_definitions("all", &rows),
+                window,
+                cx,
+            );
+            table.set_selected_row("batch", window, cx);
+            table
+        });
+        let many_rows = filter_story_many_rows();
+        let constrained = cx.new(|cx| {
+            configured_filter_table(
+                "gallery-filter-constrained",
+                "Constrained filtered tasks",
+                Progressive::complete(many_rows.clone()),
+                filter_story_definitions("all", &many_rows),
+                window,
+                cx,
+            )
+        });
+
+        let mut subscriptions = Vec::new();
+        for table in [&populated, &selected] {
+            subscriptions.push(cx.subscribe_in(
+                table,
+                window,
+                |this, table, event: &FilterTableEvent, window, cx| {
+                    this.last_event = format!("{event:?}").into();
+                    match event {
+                        FilterTableEvent::FilterRequested {
+                            id,
+                            filter_id: _,
+                            active: _,
+                        } => {
+                            reduce_filter_story_projection(&mut this.projections, event);
+                            let projection = this
+                                .projections
+                                .get(id)
+                                .expect("the reducer must install projection state");
+                            let definitions =
+                                filter_story_definitions(&projection.active_filter, &this.rows);
+                            let rows = filter_story_project_rows(&this.rows, projection);
+                            let sort = projection
+                                .sort_column
+                                .clone()
+                                .zip(projection.sort_direction);
+                            table.update(cx, |table, cx| {
+                                table.set_filters(definitions, cx);
+                                table.set_rows(Progressive::complete(rows), cx);
+                                if let Some((column_id, direction)) = sort {
+                                    table.set_sort(column_id, Some(direction), window, cx);
+                                }
+                            });
+                        }
+                        FilterTableEvent::SelectionRequested { row_id, .. } => table
+                            .update(cx, |table, cx| {
+                                table.set_selected_row(row_id.clone(), window, cx)
+                            }),
+                        FilterTableEvent::SortRequested {
+                            id,
+                            column_id,
+                            direction,
+                        } => {
+                            reduce_filter_story_projection(&mut this.projections, event);
+                            let projection = this
+                                .projections
+                                .get(id)
+                                .expect("the reducer must install projection state");
+                            let rows = filter_story_project_rows(&this.rows, projection);
+                            table.update(cx, |table, cx| {
+                                table.set_rows(Progressive::complete(rows), cx);
+                                table.set_sort(column_id.clone(), *direction, window, cx);
+                            });
+                        }
+                        FilterTableEvent::ActivationRequested { .. } => {}
+                    }
+                    cx.notify();
+                },
+            ));
+        }
+        let projections = [
+            SharedString::from("gallery-filter-populated"),
+            SharedString::from("gallery-filter-selected"),
+        ]
+        .into_iter()
+        .map(|id| (id, FilterStoryProjection::default()))
+        .collect();
+        Self {
+            populated,
+            loading,
+            failed,
+            empty,
+            disabled,
+            selected,
+            constrained,
+            rows,
+            #[cfg(feature = "performance")]
+            performance_rows: many_rows,
+            projections,
+            last_event: "Choose a status, row, action, or sort order.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    #[cfg(feature = "performance")]
+    fn set_performance_projection(&mut self, filtered: bool, cx: &mut Context<Self>) {
+        let projection: Arc<[FilterRow]> = if filtered {
+            self.performance_rows
+                .iter()
+                .filter(|row| {
+                    row.cell("status")
+                        .is_some_and(|cell| cell.value() == "Completed")
+                })
+                .cloned()
+                .rev()
+                .collect::<Vec<_>>()
+                .into()
+        } else {
+            self.performance_rows.clone()
+        };
+        self.constrained.update(cx, |table, cx| {
+            table.set_rows(Progressive::complete(projection), cx);
+        });
+    }
+
+    #[cfg(feature = "performance")]
+    fn performance_counts(&self, cx: &App) -> (usize, usize) {
+        self.constrained.read_with(cx, |table, cx| {
+            (table.visible_row_count(cx), table.animating_row_count(cx))
+        })
+    }
+
+    fn state(
+        selector: &'static str,
+        title: &'static str,
+        table: Entity<FilterTable>,
+    ) -> impl IntoElement {
+        v_flex()
+            .id(selector)
+            .debug_selector(move || selector.into())
+            .flex_none()
+            .gap_1()
+            .child(
+                div()
+                    .id(format!("{selector}-heading"))
+                    .role(Role::Heading)
+                    .aria_label(title)
+                    .text_xs()
+                    .child(title),
+            )
+            .child(div().h(px(250.)).child(table))
+    }
+}
+
+impl Render for FilterTableStory {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(feature = "performance")]
+        {
+            let _retained_gallery_states = (
+                &self.populated,
+                &self.loading,
+                &self.failed,
+                &self.empty,
+                &self.disabled,
+                &self.selected,
+            );
+            Self::state(
+                "filter-story-constrained",
+                "1,000 ROW FILTER + REORDER",
+                self.constrained.clone(),
+            )
+        }
+
+        #[cfg(not(feature = "performance"))]
+        {
+            v_flex()
+                .gap_3()
+            .child(Self::state(
+                "filter-story-populated",
+                "POPULATED, FILTERABLE, AND SORTABLE",
+                self.populated.clone(),
+            ))
+            .child(Self::state(
+                "filter-story-loading",
+                "LOADING",
+                self.loading.clone(),
+            ))
+            .child(Self::state(
+                "filter-story-error",
+                "ERROR",
+                self.failed.clone(),
+            ))
+            .child(Self::state(
+                "filter-story-empty",
+                "EMPTY",
+                self.empty.clone(),
+            ))
+            .child(Self::state(
+                "filter-story-disabled",
+                "DISABLED FILTER AND ROW",
+                self.disabled.clone(),
+            ))
+            .child(Self::state(
+                "filter-story-selected",
+                "CONTROLLED SELECTION",
+                self.selected.clone(),
+            ))
+            .child(
+                v_flex()
+                    .id("filter-story-constrained")
+                    .debug_selector(|| "filter-story-constrained".into())
+                    .flex_none()
+                    .gap_1()
+                    .child(
+                        div()
+                            .id("filter-story-constrained-heading")
+                            .role(Role::Heading)
+                            .aria_label("Constrained height and width")
+                            .text_xs()
+                            .child("CONSTRAINED HEIGHT AND WIDTH"),
+                    )
+                    .child(
+                        div()
+                            .w(px(520.))
+                            .h(px(190.))
+                            .child(self.constrained.clone()),
+                    ),
+            )
+        }
+            .child(
+                TextView::markdown(
+                    "filter-story-event-log",
+                    format!("**Last typed event.** {}", self.last_event),
+                )
+                .selectable(true),
+            )
+            .child(
+                div()
+                    .id("filter-story-reference-note")
+                    .debug_selector(|| "filter-story-reference-note".into())
+                    .child(
+                        TextView::markdown(
+                            "filter-story-reference-copy",
+                            "**Reference comparison.** Beautiful UI uses status chips to reorganize a compact task table. This original GPUI composition keeps filter definitions and ordered rows application-owned, adds stable IDs and typed intent, selectable cells, direct semantics, two-axis virtualization, and visible-only finite reorder motion that snaps under reduced motion.",
+                        )
+                        .selectable(true),
+                    ),
+            )
+    }
+}
+
 /// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
@@ -1748,6 +2296,9 @@ pub struct Gallery {
     selection_actions_scroll: ScrollHandle,
     records_table_scroll: ScrollHandle,
     diff_table_scroll: ScrollHandle,
+    filter_table_scroll: ScrollHandle,
+    #[cfg(feature = "performance")]
+    performance_filter_story: Option<WeakEntity<FilterTableStory>>,
     visible_range: Range<usize>,
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
@@ -1792,6 +2343,9 @@ impl Gallery {
             selection_actions_scroll: ScrollHandle::new(),
             records_table_scroll: ScrollHandle::new(),
             diff_table_scroll: ScrollHandle::new(),
+            filter_table_scroll: ScrollHandle::new(),
+            #[cfg(feature = "performance")]
+            performance_filter_story: None,
             visible_range,
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
@@ -1909,9 +2463,35 @@ impl Gallery {
     #[cfg(any(test, feature = "performance"))]
     pub fn prepare_performance_viewport(&mut self, story: StoryId, cx: &mut Context<Self>) {
         self.scroll_catalog_to(story, cx);
+        if story == StoryId::FilterTable {
+            self.filter_table_scroll.scroll_to_bottom();
+        }
         if story == StoryId::Chat {
             self.simulation_task.take();
         }
+    }
+
+    /// Replaces the controlled 1,000-row performance projection.
+    #[cfg(feature = "performance")]
+    pub fn set_performance_filter_projection(&mut self, filtered: bool, cx: &mut Context<Self>) {
+        if let Some(story) = self
+            .performance_filter_story
+            .as_ref()
+            .and_then(WeakEntity::upgrade)
+        {
+            story.update(cx, |story, cx| {
+                story.set_performance_projection(filtered, cx);
+            });
+        }
+    }
+
+    /// Returns visible constructed rows and rows currently carrying motion state.
+    #[cfg(feature = "performance")]
+    pub fn performance_filter_counts(&self, cx: &App) -> Option<(usize, usize)> {
+        self.performance_filter_story
+            .as_ref()
+            .and_then(WeakEntity::upgrade)
+            .map(|story| story.read_with(cx, FilterTableStory::performance_counts))
     }
 
     fn shows(&self, story: StoryId) -> bool {
@@ -2331,6 +2911,33 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::FilterTable => {
+                let filter_story = window.use_keyed_state(
+                    "filter-table-story-state",
+                    cx,
+                    FilterTableStory::new,
+                );
+                #[cfg(feature = "performance")]
+                {
+                    self.performance_filter_story = Some(filter_story.downgrade());
+                }
+                self.section(
+                    story,
+                    "FILTER TABLE",
+                    || {
+                        v_flex()
+                            .id("filter-table-story-scroll")
+                            .debug_selector(|| "filter-table-story-scroll".into())
+                            .h(px(256.))
+                            .max_h(px(256.))
+                            .flex_none()
+                            .track_scroll(&self.filter_table_scroll)
+                            .overflow_y_scrollbar()
+                            .child(filter_story)
+                    },
+                    cx,
+                )
+            }
             StoryId::CodeBlock => self.section(
                 story,
                 "CODE BLOCK",
@@ -2630,14 +3237,20 @@ fn open_gallery_window(
 
 #[cfg(test)]
 mod tests {
-    use super::{ChatStory, Gallery, GalleryTheme};
+    use super::{
+        ChatStory, Gallery, GalleryTheme, filter_story_project_rows, filter_story_rows,
+        reduce_filter_story_projection,
+    };
     use crate::StoryId;
     use gpui::{
         AppContext as _, Context, Element as _, IntoElement as _, Render, Role, ScrollDelta,
         ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit, point, px, size,
     };
-    use mighty_gpui::stream::StreamedContent;
-    use std::{cell::RefCell, rc::Rc};
+    use mighty_gpui::{
+        prelude::{FilterRow, FilterSortDirection, FilterTableEvent},
+        stream::StreamedContent,
+    };
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     struct GalleryTestRoot {
         gallery: gpui::Entity<Gallery>,
@@ -2833,6 +3446,126 @@ mod tests {
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"
         );
+    }
+
+    #[gpui::test]
+    fn direct_filter_table_story_exercises_required_controlled_states(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::FilterTable, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(560.)));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        for selector in [
+            "filter-story-populated",
+            "filter-story-loading",
+            "filter-story-error",
+            "filter-story-empty",
+            "filter-story-disabled",
+            "filter-story-selected",
+            "filter-story-constrained",
+            "filter-story-reference-note",
+        ] {
+            assert!(
+                cx.debug_bounds(selector).is_some(),
+                "filter story should exercise {selector}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn constrained_filter_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery_slot = Rc::new(RefCell::new(None));
+        let result = gallery_slot.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| {
+            let gallery = cx.new(|cx| Gallery::new(StoryId::FilterTable, cx));
+            *gallery_slot.borrow_mut() = Some(gallery.clone());
+            GalleryTestRoot { gallery }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(700.), px(400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let viewport = cx
+            .debug_bounds("filter-table-story-scroll")
+            .expect("the direct filter story should expose its overflow region");
+        let initial_end = cx
+            .debug_bounds("filter-story-reference-note")
+            .expect("the filter reference note should remain rendered");
+        assert!(initial_end.top() >= viewport.bottom());
+
+        let gallery = result
+            .borrow_mut()
+            .take()
+            .expect("gallery should be captured");
+        gallery.update(cx, |gallery, cx| {
+            gallery.filter_table_scroll.scroll_to_bottom();
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let end = cx
+            .debug_bounds("filter-story-reference-note")
+            .expect("the filter reference note should remain rendered after scrolling");
+        assert!(
+            end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
+            "{end:?} must fit in {viewport:?}"
+        );
+    }
+
+    #[test]
+    fn filter_story_reducer_keeps_table_instances_independent_and_reapplies_sort() {
+        let mut projections = HashMap::new();
+        reduce_filter_story_projection(
+            &mut projections,
+            &FilterTableEvent::SortRequested {
+                id: "gallery-filter-populated".into(),
+                column_id: "date".into(),
+                direction: Some(FilterSortDirection::Descending),
+            },
+        );
+        reduce_filter_story_projection(
+            &mut projections,
+            &FilterTableEvent::FilterRequested {
+                id: "gallery-filter-populated".into(),
+                filter_id: "todo".into(),
+                active: true,
+            },
+        );
+        reduce_filter_story_projection(
+            &mut projections,
+            &FilterTableEvent::FilterRequested {
+                id: "gallery-filter-selected".into(),
+                filter_id: "completed".into(),
+                active: true,
+            },
+        );
+
+        let populated = projections
+            .get("gallery-filter-populated")
+            .expect("populated projection should exist");
+        assert_eq!(populated.active_filter, "todo");
+        assert_eq!(populated.sort_column.as_deref(), Some("date"));
+        assert_eq!(
+            populated.sort_direction,
+            Some(FilterSortDirection::Descending)
+        );
+        let projected = filter_story_project_rows(&filter_story_rows(), populated);
+        assert_eq!(
+            projected.iter().map(FilterRow::id).collect::<Vec<_>>(),
+            ["menu", "mango"]
+        );
+
+        let selected = projections
+            .get("gallery-filter-selected")
+            .expect("selected projection should exist");
+        assert_eq!(selected.active_filter, "completed");
+        assert_eq!(selected.sort_column, None);
+        assert_eq!(selected.sort_direction, None);
     }
 
     #[gpui::test]

@@ -37,6 +37,8 @@ pub enum StoryId {
     RecordsTable,
     /// Controlled virtualized before/after proposal grid.
     DiffTable,
+    /// Controlled filterable task grid with stable-row reorder motion.
+    FilterTable,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -71,6 +73,7 @@ impl StoryId {
         Self::FineTune,
         Self::RecordsTable,
         Self::DiffTable,
+        Self::FilterTable,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -99,6 +102,7 @@ impl StoryId {
             Self::FineTune => "fine-tune",
             Self::RecordsTable => "records-table",
             Self::DiffTable => "diff-table",
+            Self::FilterTable => "filter-table",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -128,6 +132,7 @@ impl StoryId {
             Self::FineTune => "Fine-tune card",
             Self::RecordsTable => "Records table",
             Self::DiffTable => "Diff table",
+            Self::FilterTable => "Filter table",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -226,5 +231,13 @@ mod tests {
         assert_eq!(StoryId::DiffTable.title(), "Diff table");
         assert_eq!("diff-table".parse::<StoryId>(), Ok(StoryId::DiffTable));
         assert!(StoryId::ALL.contains(&StoryId::DiffTable));
+    }
+
+    #[test]
+    fn filter_table_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::FilterTable.slug(), "filter-table");
+        assert_eq!(StoryId::FilterTable.title(), "Filter table");
+        assert_eq!("filter-table".parse::<StoryId>(), Ok(StoryId::FilterTable));
+        assert!(StoryId::ALL.contains(&StoryId::FilterTable));
     }
 }

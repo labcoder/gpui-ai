@@ -1,7 +1,9 @@
 use gallery::{
     Gallery, GalleryTheme, StoryId, init, open_gallery_with_theme,
     performance::{
-        MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport, STEADY_DRAWS_PER_VIEWPORT,
+        FILTER_SETTLING_DRAWS, FILTER_TRANSITION_DRAWS, MAX_P99_DRAW_NANOS,
+        MAX_VISIBLE_FILTER_ROWS, MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport,
+        SIXTY_HZ_DRAW_NANOS, STEADY_DRAWS_PER_VIEWPORT,
     },
 };
 use gpui::{
@@ -25,6 +27,7 @@ const FAILURE_EXIT_CODE: i32 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SampleDestination {
     Setup(usize),
+    Transition(usize),
     Steady(usize),
 }
 
@@ -33,6 +36,8 @@ struct MeasurementPlan {
     settling_draws_remaining: usize,
     viewport_steady_draws: usize,
     steady_draws: usize,
+    filter_transition_draws: usize,
+    filter_settling_draws_remaining: usize,
 }
 
 impl MeasurementPlan {
@@ -42,6 +47,8 @@ impl MeasurementPlan {
             settling_draws_remaining: SETTLING_DRAWS_PER_VIEWPORT,
             viewport_steady_draws: 0,
             steady_draws: 0,
+            filter_transition_draws: 0,
+            filter_settling_draws_remaining: 0,
         }
     }
 
@@ -49,10 +56,30 @@ impl MeasurementPlan {
         self.steady_draws
     }
 
-    fn record_draw(&mut self) -> (SampleDestination, Option<usize>) {
+    fn record_draw(&mut self) -> (SampleDestination, Option<usize>, bool) {
         if self.settling_draws_remaining > 0 {
             self.settling_draws_remaining -= 1;
-            return (SampleDestination::Setup(self.viewport), None);
+            return (SampleDestination::Setup(self.viewport), None, false);
+        }
+
+        if PERFORMANCE_VIEWPORTS[self.viewport] == StoryId::FilterTable
+            && self.filter_transition_draws < FILTER_TRANSITION_DRAWS
+        {
+            self.filter_transition_draws += 1;
+            let toggle_projection = self.filter_transition_draws % 8 == 1;
+            if self.filter_transition_draws == FILTER_TRANSITION_DRAWS {
+                self.filter_settling_draws_remaining = FILTER_SETTLING_DRAWS;
+            }
+            return (
+                SampleDestination::Transition(self.viewport),
+                None,
+                toggle_projection,
+            );
+        }
+
+        if self.filter_settling_draws_remaining > 0 {
+            self.filter_settling_draws_remaining -= 1;
+            return (SampleDestination::Setup(self.viewport), None, false);
         }
 
         let viewport = self.viewport;
@@ -67,7 +94,7 @@ impl MeasurementPlan {
 
         let next_viewport = (completed_viewport && self.viewport < PERFORMANCE_VIEWPORTS.len())
             .then_some(self.viewport);
-        (SampleDestination::Steady(viewport), next_viewport)
+        (SampleDestination::Steady(viewport), next_viewport, false)
     }
 }
 
@@ -111,6 +138,10 @@ async fn run_performance_measurement(
     let mut present_samples = Vec::with_capacity(MIN_DRAW_SAMPLES);
     let mut viewport_draw_samples = vec![Vec::new(); PERFORMANCE_VIEWPORTS.len()];
     let mut setup_draw_samples = vec![Vec::new(); PERFORMANCE_VIEWPORTS.len()];
+    let mut filter_transition_draw_samples = Vec::with_capacity(FILTER_TRANSITION_DRAWS);
+    let mut filter_projection_is_filtered = false;
+    let mut maximum_visible_filter_rows = 0;
+    let mut maximum_animating_filter_rows = 0;
     let mut plan = MeasurementPlan::new();
 
     gallery.update(cx, |gallery, cx| {
@@ -120,13 +151,14 @@ async fn run_performance_measurement(
     while plan.steady_draws() < MIN_DRAW_SAMPLES && started_at.elapsed() < RUN_TIMEOUT {
         cx.background_executor().timer(DRIVE_INTERVAL).await;
         let mut next_viewport = None;
+        let mut toggle_filter_projection = false;
 
         for event in collector.collect_unseen() {
             match event {
                 FrameEvent::Draw(_) if warmup_remaining > 0 => warmup_remaining -= 1,
                 FrameEvent::Draw(timing) if plan.steady_draws() < MIN_DRAW_SAMPLES => {
                     let draw_nanos = duration_nanos(timing.draw_duration());
-                    let (destination, viewport_to_scroll) = plan.record_draw();
+                    let (destination, viewport_to_scroll, toggle_filter) = plan.record_draw();
                     match destination {
                         SampleDestination::Setup(viewport) => {
                             setup_draw_samples[viewport].push(draw_nanos);
@@ -135,7 +167,11 @@ async fn run_performance_measurement(
                             draw_samples.push(draw_nanos);
                             viewport_draw_samples[viewport].push(draw_nanos);
                         }
+                        SampleDestination::Transition(_) => {
+                            filter_transition_draw_samples.push(draw_nanos);
+                        }
                     }
+                    toggle_filter_projection ^= toggle_filter;
                     if viewport_to_scroll.is_some() {
                         next_viewport = viewport_to_scroll;
                         break;
@@ -150,9 +186,21 @@ async fn run_performance_measurement(
             }
         }
 
+        if let Some((visible_rows, animating_rows)) =
+            gallery.read_with(cx, |gallery, cx| gallery.performance_filter_counts(cx))
+        {
+            maximum_visible_filter_rows = maximum_visible_filter_rows.max(visible_rows);
+            maximum_animating_filter_rows = maximum_animating_filter_rows.max(animating_rows);
+        }
+
         if let Some(viewport) = next_viewport {
             gallery.update(cx, |gallery, cx| {
                 gallery.prepare_performance_viewport(PERFORMANCE_VIEWPORTS[viewport], cx);
+            });
+        } else if toggle_filter_projection {
+            filter_projection_is_filtered = !filter_projection_is_filtered;
+            gallery.update(cx, |gallery, cx| {
+                gallery.set_performance_filter_projection(filter_projection_is_filtered, cx);
             });
         } else {
             cx.refresh();
@@ -172,10 +220,50 @@ async fn run_performance_measurement(
         print_draw_distribution(&format!("{} steady", story.title()), samples);
     }
     for (story, samples) in PERFORMANCE_VIEWPORTS.iter().zip(&setup_draw_samples) {
-        print_draw_distribution(&format!("{} setup", story.title()), samples);
+        print_draw_distribution(&format!("{} setup/settling", story.title()), samples);
     }
 
-    let failures = report.gate_failures();
+    print_draw_distribution(
+        "Filter table driven transition",
+        &filter_transition_draw_samples,
+    );
+    eprintln!(
+        "  Filter table bounded work: maximum visible constructed/paint-eligible rows {maximum_visible_filter_rows}/1000; maximum rows with motion state {maximum_animating_filter_rows}"
+    );
+
+    let mut failures = report.gate_failures();
+    let transition_report =
+        PerformanceReport::from_samples(filter_transition_draw_samples, Vec::new());
+    if transition_report.draw.samples != FILTER_TRANSITION_DRAWS {
+        failures.push(format!(
+            "Filter transition requires {FILTER_TRANSITION_DRAWS} samples; observed {}",
+            transition_report.draw.samples
+        ));
+    }
+    if transition_report.draw.p99_nanos > MAX_P99_DRAW_NANOS {
+        failures.push(format!(
+            "Filter transition draw p99 {:.3}ms exceeds the 8.333ms budget",
+            transition_report.draw.p99_nanos as f64 / 1_000_000.0
+        ));
+    }
+    if transition_report.draw.max_nanos > SIXTY_HZ_DRAW_NANOS {
+        failures.push(format!(
+            "Filter transition max {:.3}ms exceeds the 16.667ms long-frame threshold",
+            transition_report.draw.max_nanos as f64 / 1_000_000.0
+        ));
+    }
+    if maximum_visible_filter_rows == 0 || maximum_visible_filter_rows >= MAX_VISIBLE_FILTER_ROWS {
+        failures.push(format!(
+            "Filter visible construction must be 1..{MAX_VISIBLE_FILTER_ROWS}; observed {maximum_visible_filter_rows}"
+        ));
+    }
+    if maximum_animating_filter_rows == 0
+        || maximum_animating_filter_rows >= MAX_VISIBLE_FILTER_ROWS
+    {
+        failures.push(format!(
+            "Filter motion state must be 1..{MAX_VISIBLE_FILTER_ROWS}; observed {maximum_animating_filter_rows}"
+        ));
+    }
     if started_at.elapsed() >= RUN_TIMEOUT && report.draw.samples < MIN_DRAW_SAMPLES {
         eprintln!("  gate failed: measurement timed out after {RUN_TIMEOUT:?}");
     }
@@ -213,7 +301,8 @@ fn print_draw_distribution(label: &str, draw_samples: &[u64]) {
 mod tests {
     use super::{MeasurementPlan, SETTLING_DRAWS_PER_VIEWPORT, SampleDestination};
     use gallery::performance::{
-        MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, STEADY_DRAWS_PER_VIEWPORT,
+        FILTER_SETTLING_DRAWS, FILTER_TRANSITION_DRAWS, MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS,
+        STEADY_DRAWS_PER_VIEWPORT,
     };
 
     #[test]
@@ -221,12 +310,26 @@ mod tests {
         let mut plan = MeasurementPlan::new();
         let steady_draws_per_viewport = STEADY_DRAWS_PER_VIEWPORT;
 
-        for viewport in 0..PERFORMANCE_VIEWPORTS.len() {
+        for (viewport, story) in PERFORMANCE_VIEWPORTS.iter().enumerate() {
             for _ in 0..SETTLING_DRAWS_PER_VIEWPORT {
                 assert_eq!(
                     plan.record_draw(),
-                    (SampleDestination::Setup(viewport), None)
+                    (SampleDestination::Setup(viewport), None, false)
                 );
+            }
+            if *story == gallery::StoryId::FilterTable {
+                for draw in 1..=FILTER_TRANSITION_DRAWS {
+                    assert_eq!(
+                        plan.record_draw(),
+                        (SampleDestination::Transition(viewport), None, draw % 8 == 1,)
+                    );
+                }
+                for _ in 0..FILTER_SETTLING_DRAWS {
+                    assert_eq!(
+                        plan.record_draw(),
+                        (SampleDestination::Setup(viewport), None, false)
+                    );
+                }
             }
             for draw in 0..steady_draws_per_viewport {
                 let next_viewport = (draw + 1 == steady_draws_per_viewport)
@@ -234,7 +337,7 @@ mod tests {
                     .filter(|next| *next < PERFORMANCE_VIEWPORTS.len());
                 assert_eq!(
                     plan.record_draw(),
-                    (SampleDestination::Steady(viewport), next_viewport)
+                    (SampleDestination::Steady(viewport), next_viewport, false,)
                 );
             }
         }

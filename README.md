@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-two components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Twenty-three components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records tables, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: filter, diff, and comparison tables.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records, diff, and filter tables, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: comparison tables.
 
 ## Requirements
 
@@ -55,7 +55,7 @@ Run the hardware-dependent native frame-budget check separately from the portabl
 npm run test:perf
 ```
 
-It retains 100 steady draws from each of five representative catalog regions (Loading, Streaming Text, Approval, Prompt Bar, and Chat) in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
+It retains 100 steady draws from each of six representative catalog regions (Loading, Streaming Text, Approval, Prompt Bar, Chat, and a repeatedly filtered and reordered 1,000-row Filter Table) in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
 
 Expected output: a native window opens showing every component with live simulated agent activity — a virtualized controlled chat, a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
 
@@ -284,6 +284,41 @@ let _subscription = cx.subscribe(&proposals, |_, _, event: &DiffTableEvent, _| {
 ```
 
 Every rendered value includes a readable change label and selectable prior/proposed content; color only reinforces that state. The selected proposal exposes named Accept and Reject controls with direct AccessKit actions, while Review, Enter, and Space converge on the same stable proposal ID. Loading, empty, failure, disabled, selected, wide, and growing snapshots use the shared progressive and virtualized contracts.
+
+`FilterTable` adds stable, counted status controls above the same virtualized table behavior. The application owns the active filter and supplies the final filtered row order; retained visible rows move through a finite GPUI transition, while reduced-motion mode snaps immediately:
+
+```rust
+use std::sync::Arc;
+use mighty_gpui::prelude::*;
+
+let tasks = cx.new(|cx| FilterTable::new("tasks", "Ice cream tasks", window, cx));
+tasks.update(cx, |table, cx| {
+    table.set_filters([
+        FilterDefinition::new("all", "All", 5).active(true),
+        FilterDefinition::new("todo", "To do", 2),
+        FilterDefinition::new("progress", "In Progress", 2),
+        FilterDefinition::new("completed", "Completed", 1),
+    ], cx);
+    table.set_columns([
+        FilterColumn::new("task", "Task name").fixed(true),
+        FilterColumn::new("status", "Status").sortable(true),
+    ], window, cx);
+    table.set_rows(Progressive::complete(Arc::from([
+        FilterRow::new("menu", "Update menu").cells([
+            FilterCell::new("task", "Update menu"),
+            FilterCell::new("status", "To do"),
+        ]),
+    ])), cx);
+});
+
+// Answer filter, selection, activation, and sort requests by replacing the
+// corresponding controlled snapshots.
+let _subscription = cx.subscribe(&tasks, |_, _, event: &FilterTableEvent, _| {
+    println!("filter-table event: {event:?}");
+});
+```
+
+Filter controls expose active, inactive, count, and unavailable state semantically as well as visually. A constrained 1,000-row projection constructs only the visible range, retains stable row anchors, and keeps the final row reachable.
 
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
