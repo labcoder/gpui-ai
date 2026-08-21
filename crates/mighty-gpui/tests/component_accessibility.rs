@@ -887,7 +887,7 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
 }
 
 #[gpui::test]
-fn public_sidebar_nav_expanded_row_hover_preserves_one_stable_selection_target(
+fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_query(
     cx: &mut TestAppContext,
 ) {
     cx.update(mighty_gpui::init);
@@ -907,34 +907,80 @@ fn public_sidebar_nav_expanded_row_hover_preserves_one_stable_selection_target(
     let overview = cx
         .debug_bounds("sidebar-nav-item-overview")
         .expect("expanded row should render through the production tree");
-    assert!(cx.debug_bounds("sidebar-nav-hover-overview").is_none());
+    assert_ne!(
+        cx.debug_bounds("sidebar-nav-hover-overview"),
+        Some(overview)
+    );
 
     cx.simulate_mouse_move(overview.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let hover = cx
         .debug_bounds("sidebar-nav-hover-overview")
         .expect("expanded row should render its theme-token hover layer");
-    assert_eq!(hover, overview);
+    assert!(hover.left() >= overview.left() && hover.right() <= overview.right());
+    assert!(hover.size.width > overview.size.width / 2.);
 
     let orders = cx
         .debug_bounds("sidebar-nav-item-orders")
         .expect("second expanded row should render");
     cx.simulate_mouse_move(orders.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    assert!(cx.debug_bounds("sidebar-nav-hover-overview").is_none());
+    assert_ne!(
+        cx.debug_bounds("sidebar-nav-hover-overview"),
+        Some(overview)
+    );
+    let orders_hover = cx
+        .debug_bounds("sidebar-nav-hover-orders")
+        .expect("hover presentation should transfer between stable rows");
+    assert!(orders_hover.left() >= orders.left() && orders_hover.right() <= orders.right());
+    assert!(orders_hover.size.width > orders.size.width / 2.);
+
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    let mut replacement = sidebar_sections();
+    replacement.truncate(1);
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_sections(replacement, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert_eq!(
+        cx.debug_bounds("sidebar-nav-item-orders"),
+        Some(orders),
+        "stable replacement should leave Orders under the stationary pointer"
+    );
     assert_eq!(
         cx.debug_bounds("sidebar-nav-hover-orders"),
+        Some(orders_hover),
+        "stable replacement should retain native hover without a pointer move"
+    );
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("workspace", window, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert_eq!(
+        cx.debug_bounds("sidebar-nav-item-orders"),
         Some(orders),
-        "hover presentation should transfer between stable rows"
+        "section-label filtering should preserve the hovered row layout"
+    );
+    assert_eq!(
+        cx.debug_bounds("sidebar-nav-hover-orders"),
+        Some(orders_hover),
+        "programmatic query should retain native hover without a pointer move"
     );
 
     cx.simulate_click(orders.center(), Modifiers::default());
     assert_eq!(
         probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
-        [SidebarNavEvent::Selected {
-            id: "public-sidebar".into(),
-            item_id: "orders".into(),
-        }]
+        [
+            SidebarNavEvent::QueryChanged {
+                id: "public-sidebar".into(),
+                query: "workspace".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "orders".into(),
+            },
+        ]
     );
 
     let host = cx
@@ -946,7 +992,10 @@ fn public_sidebar_nav_expanded_row_hover_preserves_one_stable_selection_target(
         Modifiers::default(),
     );
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    assert!(cx.debug_bounds("sidebar-nav-hover-orders").is_none());
+    let exited = cx
+        .debug_bounds("sidebar-nav-hover-orders")
+        .expect("native hover outline remains mounted after exit");
+    assert!(exited.size.width < orders_hover.size.width);
 }
 
 #[gpui::test]

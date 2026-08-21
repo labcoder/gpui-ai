@@ -625,7 +625,6 @@ struct StableMenuTree {
     section_label: SharedString,
     items: Arc<[SidebarNavItem]>,
     active_item: Option<SharedString>,
-    hovered_item: Option<SharedString>,
     expanded: Arc<HashSet<SharedString>>,
     owner: WeakEntity<SidebarNav>,
     collapsed: bool,
@@ -678,19 +677,19 @@ impl StableMenuTree {
         let has_children = !item.children.is_empty();
         let expanded =
             has_children && (self.filtering || self.expanded.contains(&item.id) || contains_active);
-        let hovered = !self.collapsed
-            && !item.disabled
-            && !active
-            && self.hovered_item.as_ref() == Some(&item.id);
         let item_id = item.id.clone();
         let debug_id = item.id.clone();
         let active_debug_id = item.id.clone();
         let hover_debug_id = item.id.clone();
         let keyboard_owner = self.owner.clone();
         let keyboard_item_id = item.id.clone();
-        let hover_owner = self.owner.clone();
-        let hover_item_id = item.id.clone();
         let component_id = self.component_id.clone();
+        let hover_element_id = (
+            ElementId::from((ElementId::from(component_id.clone()), item.id.clone())),
+            "hover",
+        );
+        let hover_group: SharedString =
+            format!("sidebar-nav-hover-group.{component_id}.{}", item.id).into();
         let badge = item.badge.clone();
         let collapsed_icon = item.icon.clone();
 
@@ -756,12 +755,25 @@ impl StableMenuTree {
             cx,
         )
         .debug_selector(move || format!("sidebar-nav-item-{debug_id}"))
-        .when(!self.collapsed && !item.disabled, |this| {
-            this.on_hover(move |hovered, _, cx| {
-                _ = hover_owner.update(cx, |nav, cx| {
-                    nav.set_item_hovered(hover_item_id.clone(), *hovered, cx)
-                });
-            })
+        .when(!self.collapsed && !item.disabled && !active, |this| {
+            this.group(hover_group.clone()).child(
+                div()
+                    .id(hover_element_id)
+                    .debug_selector(move || format!("sidebar-nav-hover-{hover_debug_id}"))
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left_0()
+                    .w_0()
+                    .rounded(tokens.radius.sm)
+                    .border_1()
+                    .border_color(cx.theme().transparent)
+                    .group_hover(hover_group, |style| {
+                        style
+                            .w_full()
+                            .border_color(cx.theme().sidebar_accent_foreground)
+                    }),
+            )
         })
         .on_click(move |_, _, cx| {
             _ = keyboard_owner.update(cx, |nav, cx| {
@@ -777,16 +789,6 @@ impl StableMenuTree {
             .relative()
             .w_full()
             .min_w_0()
-            .when(hovered, |this| {
-                this.text_color(cx.theme().sidebar_accent_foreground).child(
-                    div()
-                        .debug_selector(move || format!("sidebar-nav-hover-{hover_debug_id}"))
-                        .absolute()
-                        .inset_0()
-                        .rounded(tokens.radius.sm)
-                        .bg(cx.theme().sidebar_accent.opacity(0.8)),
-                )
-            })
             .child(menu_item.render(
                 format!("sidebar-nav-menu.{}.{}", self.component_id, item.id),
                 // SidebarMenuItem owns the pinned presentation. The transparent
@@ -915,7 +917,6 @@ pub struct SidebarNav {
     query: SharedString,
     input: Entity<InputState>,
     expanded: HashSet<SharedString>,
-    hovered_item: Option<SharedString>,
     _input_subscription: Subscription,
 }
 
@@ -938,7 +939,6 @@ impl SidebarNav {
             query: "".into(),
             input,
             expanded: HashSet::new(),
-            hovered_item: None,
             _input_subscription: subscription,
         }
     }
@@ -970,7 +970,6 @@ impl SidebarNav {
             .extend(new_parents.difference(&old_parents).cloned());
 
         self.sections = sections;
-        self.hovered_item = None;
         cx.notify();
     }
 
@@ -989,7 +988,6 @@ impl SidebarNav {
             return;
         }
         self.collapsed = collapsed;
-        self.hovered_item = None;
         cx.emit(SidebarNavEvent::CollapsedChanged {
             id: self.id.clone(),
             collapsed,
@@ -1009,7 +1007,6 @@ impl SidebarNav {
             return;
         }
         self.query = query.clone();
-        self.hovered_item = None;
         self.input.update(cx, |input, cx| {
             input.set_value(query.to_string(), window, cx)
         });
@@ -1041,26 +1038,11 @@ impl SidebarNav {
         self.input.read(cx).focus_handle(cx).focus(window, cx);
     }
 
-    fn set_item_hovered(&mut self, item_id: SharedString, hovered: bool, cx: &mut Context<Self>) {
-        let next = if hovered {
-            Some(item_id)
-        } else if self.hovered_item.as_ref() == Some(&item_id) {
-            None
-        } else {
-            return;
-        };
-        if self.hovered_item != next {
-            self.hovered_item = next;
-            cx.notify();
-        }
-    }
-
     fn update_query(&mut self, query: SharedString, cx: &mut Context<Self>) {
         if self.query == query {
             return;
         }
         self.query = query.clone();
-        self.hovered_item = None;
         self.emit_query_changed(query, cx);
         cx.notify();
     }
@@ -1123,7 +1105,6 @@ impl Render for SidebarNav {
                     section_label: section.label.clone(),
                     items: section.items.clone(),
                     active_item: self.active_item.clone(),
-                    hovered_item: self.hovered_item.clone(),
                     expanded: expanded.clone(),
                     owner: owner.clone(),
                     collapsed: self.collapsed,
@@ -1242,7 +1223,6 @@ impl Render for SidebarNav {
                                 section_label: "Navigation status".into(),
                                 items: Arc::from([]),
                                 active_item: None,
-                                hovered_item: None,
                                 expanded: Arc::new(HashSet::new()),
                                 owner: cx.weak_entity(),
                                 collapsed,
