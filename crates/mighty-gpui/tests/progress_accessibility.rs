@@ -66,12 +66,11 @@ fn capture(kind: ProgressProbeKind, cx: &mut TestAppContext) -> CapturedNode {
     let result = captured.clone();
     let (_, cx) = cx.add_window_view(move |_, _| ProgressProbe { kind, captured });
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let captured = result
+    result
         .lock()
         .expect("capture mutex should be available")
         .take()
-        .expect("progress node should be captured");
-    captured
+        .expect("progress node should be captured")
 }
 
 #[gpui::test]

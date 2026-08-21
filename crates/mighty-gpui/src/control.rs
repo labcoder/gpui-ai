@@ -51,8 +51,10 @@ mod tests {
     };
     use std::sync::{Arc, Mutex};
 
+    type CapturedNode = Arc<Mutex<Option<(Option<Role>, accesskit::Node)>>>;
+
     struct Probe {
-        captured: Arc<Mutex<Option<(Option<Role>, accesskit::Node)>>>,
+        captured: CapturedNode,
     }
 
     impl Render for Probe {

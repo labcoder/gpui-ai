@@ -273,10 +273,9 @@ fn active_prompt_token(draft: &str, cursor: usize) -> Option<PromptToken> {
     let token = &draft[start..cursor];
     let (kind, query) = if let Some(query) = token.strip_prefix('@') {
         (PromptTokenKind::Mention, query)
-    } else if let Some(query) = token.strip_prefix('/') {
-        (PromptTokenKind::Command, query)
     } else {
-        return None;
+        let query = token.strip_prefix('/')?;
+        (PromptTokenKind::Command, query)
     };
     let end = draft[cursor..]
         .char_indices()
@@ -1314,6 +1313,10 @@ mod tests {
         assert_eq!(notifications.get(), 1);
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn cursor_only_keyboard_change_refreshes_the_active_token(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1381,6 +1384,10 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn unmatched_token_does_not_capture_native_multiline_up(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1421,6 +1428,10 @@ mod tests {
         assert!(prompt.read_with(cx, |prompt, _| prompt.models.is_empty()));
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn keyboard_navigation_inserts_the_active_stable_suggestion(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1451,6 +1462,10 @@ mod tests {
         )));
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn shift_enter_preserves_multiline_editing_without_submitting(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1481,6 +1496,10 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn plain_enter_submits_once_and_leaves_no_newline(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1513,6 +1532,10 @@ mod tests {
         );
     }
 
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
     #[gpui::test]
     fn escape_closes_the_model_menu_without_dropping_editor_focus(cx: &mut TestAppContext) {
         cx.update(crate::init);

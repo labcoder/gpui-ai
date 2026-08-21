@@ -25,7 +25,9 @@ manifest_component_records() {
 check_manifest_pair() {
   local manifest="${1:-Cargo.toml}"
   local revisions=()
-  mapfile -t revisions < <(manifest_component_revs "$manifest")
+  while IFS= read -r revision; do
+    revisions+=("$revision")
+  done < <(manifest_component_revs "$manifest")
 
   if [[ "${#revisions[@]}" -ne 3 ]]; then
     printf 'error: expected exact revisions for gpui-component, gpui-component-assets, and gpui-base in %s\n' "$manifest" >&2
@@ -91,7 +93,9 @@ lock_package_source() {
   local lock_file="$1"
   local package="$2"
   local sources=()
-  mapfile -t sources < <(lock_package_sources "$lock_file" "$package")
+  while IFS= read -r source; do
+    sources+=("$source")
+  done < <(lock_package_sources "$lock_file" "$package")
   if [[ "${#sources[@]}" -ne 1 ]]; then
     printf 'error: expected exactly one %s source in %s\n' "$package" "$lock_file" >&2
     return 1
@@ -128,7 +132,9 @@ check_component_stack_lock() {
       return 1
     fi
     local sources=()
-    mapfile -t sources < <(lock_package_sources "$lock_file" "$package")
+    while IFS= read -r source; do
+      sources+=("$source")
+    done < <(lock_package_sources "$lock_file" "$package")
     if [[ "${#sources[@]}" -ne 1 ]]; then
       printf 'error: expected exactly one %s source in %s\n' "$package" "$lock_file" >&2
       return 1

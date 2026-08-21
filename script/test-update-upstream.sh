@@ -51,7 +51,10 @@ EOF
 }
 
 write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-mapfile -t manifest_revs < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
+manifest_revs=()
+while IFS= read -r revision; do
+  manifest_revs+=("$revision")
+done < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
 assert_eq "3" "${#manifest_revs[@]}" "all component-stack dependencies must be parsed"
 assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[0]}" "ui revision must be returned"
 assert_eq "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "${manifest_revs[1]}" "assets revision must be returned"
@@ -71,7 +74,10 @@ fi
 
 write_manifest "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 update_manifest_component_revs "$TMP_DIR/Cargo.toml" "cccccccccccccccccccccccccccccccccccccccc"
-mapfile -t updated_revs < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
+updated_revs=()
+while IFS= read -r revision; do
+  updated_revs+=("$revision")
+done < <(manifest_component_revs "$TMP_DIR/Cargo.toml")
 assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[0]}" "component revision must update"
 assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[1]}" "assets revision must update"
 assert_eq "cccccccccccccccccccccccccccccccccccccccc" "${updated_revs[2]}" "base revision must update"

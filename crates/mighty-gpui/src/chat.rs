@@ -672,8 +672,10 @@ impl Render for Chat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_os = "macos"))]
+    use crate::prompt_bar::PromptBarEvent;
     use crate::{
-        prompt_bar::{PromptBar, PromptBarEvent},
+        prompt_bar::PromptBar,
         stream::{ProgressState, Progressive},
         streaming_text::{CitationRef, FollowUp},
     };
@@ -682,7 +684,6 @@ mod tests {
         ListOffset, Modifiers, Render, RenderOnce as _, Role, SharedString, Subscription,
         TestAppContext, VisualTestContext, Window, accesskit, canvas, px, size,
     };
-    use gpui_component::Root;
     use std::{
         cell::RefCell,
         rc::Rc,
@@ -736,16 +737,7 @@ mod tests {
 
     fn harness(cx: &mut TestAppContext) -> (Entity<ChatHarness>, &mut VisualTestContext) {
         cx.update(crate::init);
-        let (root, cx) = cx.add_window_view(|window, cx| {
-            let content = cx.new(|cx| ChatHarness::new(window, cx));
-            Root::new(content, window, cx)
-        });
-        let harness = root.read_with(cx, |root, _| {
-            root.view()
-                .clone()
-                .downcast::<ChatHarness>()
-                .expect("chat harness should remain the root view")
-        });
+        let (harness, cx) = cx.add_window_view(ChatHarness::new);
         let cx: &mut VisualTestContext = cx;
         cx.simulate_resize(size(px(640.), px(420.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -834,12 +826,11 @@ mod tests {
         let result = captured.clone();
         let (_, cx) = cx.add_window_view(move |_, _| ChatControlA11yProbe { kind, captured });
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        let captured = result
+        result
             .lock()
             .expect("capture mutex should be available")
             .take()
-            .expect("chat control should be captured");
-        captured
+            .expect("chat control should be captured")
     }
 
     #[test]
@@ -1151,15 +1142,18 @@ mod tests {
             .expect("follow-up action should render");
         cx.simulate_click(follow_up.center(), Modifiers::default());
 
-        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
-        let prompt = chat.read_with(cx, |chat, _| chat.prompt_bar.clone());
-        cx.update(|window, cx| {
-            prompt.update(cx, |prompt, cx| {
-                prompt.set_draft("Send from chat", window, cx);
-                prompt.focus(window, cx);
+        #[cfg(not(target_os = "macos"))]
+        {
+            let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+            let prompt = chat.read_with(cx, |chat, _| chat.prompt_bar.clone());
+            cx.update(|window, cx| {
+                prompt.update(cx, |prompt, cx| {
+                    prompt.set_draft("Send from chat", window, cx);
+                    prompt.focus(window, cx);
+                });
             });
-        });
-        cx.simulate_keystrokes("enter");
+            cx.simulate_keystrokes("enter");
+        }
 
         harness.read_with(cx, |harness, _| {
             let events = harness.events.borrow();
@@ -1179,6 +1173,7 @@ mod tests {
                         && citation_id == "pricing"
                         && destination == "app://pricing"
             )));
+            #[cfg(not(target_os = "macos"))]
             assert!(events.iter().any(|event| matches!(
                 event,
                 ChatEvent::Prompt(PromptBarEvent::Submit { submission, .. })

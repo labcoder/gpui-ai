@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn duplicate_labels_keep_stable_action_identity() {
-        let actions = vec![
+        let actions = [
             SelectionAction::new("ask-short", "Ask"),
             SelectionAction::new("ask-deep", "Ask"),
         ];

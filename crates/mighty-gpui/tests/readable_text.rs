@@ -1,9 +1,8 @@
 use gpui::{
-    AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers,
+    AnyElement, AnyView, AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers,
     MouseButton, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
     Window, div, point, prelude::FluentBuilder as _, px,
 };
-use gpui_component::Root;
 use mighty_gpui::prelude::{Chat, ChatMessage, ChatRole, PromptBar};
 use mighty_gpui::{
     code_block::CodeBlock,
@@ -36,6 +35,27 @@ struct ReadableSurface {
 
 struct FollowUpSelectionSurface {
     events: Rc<RefCell<Vec<StreamingTextEvent>>>,
+}
+
+struct SelectionTestRoot {
+    view: AnyView,
+}
+
+impl SelectionTestRoot {
+    fn new(view: impl Into<AnyView>) -> Self {
+        Self { view: view.into() }
+    }
+}
+
+impl Render for SelectionTestRoot {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("selection-test-root")
+            .relative()
+            .size_full()
+            .child(gpui_base::TextSelectionLayer)
+            .child(self.view.clone())
+    }
 }
 
 impl Render for FollowUpSelectionSurface {
@@ -187,7 +207,7 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
     cx.update(mighty_gpui::init);
     let (_, cx) = cx.add_window_view(move |window, cx| {
         let content = cx.new(|cx| ReadableSurface::new(surface, window, cx));
-        Root::new(content, window, cx)
+        SelectionTestRoot::new(content)
     });
     let cx: &mut VisualTestContext = cx;
     cx.run_until_parked();
@@ -240,7 +260,7 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
         let _ = window.draw(cx);
     });
 
-    cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx))
+    cx.update(gpui_base::TextSelection::selected_text)
 }
 
 #[gpui::test]
@@ -319,9 +339,9 @@ fn follow_up_pointer_drag_does_not_select_streaming_prose(cx: &mut TestAppContex
     cx.update(mighty_gpui::init);
     let events = Rc::new(RefCell::new(Vec::new()));
     let captured = events.clone();
-    let (_, cx) = cx.add_window_view(move |window, cx| {
+    let (_, cx) = cx.add_window_view(move |_, cx| {
         let content = cx.new(|_| FollowUpSelectionSurface { events });
-        Root::new(content, window, cx)
+        SelectionTestRoot::new(content)
     });
     let cx: &mut VisualTestContext = cx;
     cx.run_until_parked();
@@ -343,7 +363,7 @@ fn follow_up_pointer_drag_does_not_select_streaming_prose(cx: &mut TestAppContex
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
-    let selected = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+    let selected = cx.update(gpui_base::TextSelection::selected_text);
     assert!(
         selected.contains("Selectable supplier comparison"),
         "{selected:?}"
@@ -360,7 +380,7 @@ fn follow_up_pointer_drag_does_not_select_streaming_prose(cx: &mut TestAppContex
     // selection handler can begin a new drag from the control into prose.
     cx.simulate_mouse_move(from, Some(MouseButton::Left), Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let during_drag = cx.update(|window, cx| gpui_base::TextSelection::selected_text(window, cx));
+    let during_drag = cx.update(gpui_base::TextSelection::selected_text);
     assert!(
         during_drag.is_empty(),
         "dragging from a follow-up selected transcript text: {during_drag:?}"
