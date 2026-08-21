@@ -31,6 +31,8 @@ pub enum StoryId {
     CommandSearch,
     /// Stable-ID filterable sidebar navigation.
     SidebarNav,
+    /// Controlled design-property inspector.
+    FineTune,
     /// Streaming code block.
     CodeBlock,
     /// Human approval gate.
@@ -62,6 +64,7 @@ impl StoryId {
         Self::Chat,
         Self::CommandSearch,
         Self::SidebarNav,
+        Self::FineTune,
         Self::CodeBlock,
         Self::Approval,
         Self::Recommendation,
@@ -87,6 +90,7 @@ impl StoryId {
             Self::Chat => "chat",
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
+            Self::FineTune => "fine-tune",
             Self::CodeBlock => "code-block",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
@@ -113,6 +117,7 @@ impl StoryId {
             Self::Chat => "Chat",
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
+            Self::FineTune => "Fine-tune card",
             Self::CodeBlock => "Code block",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
@@ -184,5 +189,13 @@ mod tests {
         assert_eq!(StoryId::SidebarNav.title(), "Sidebar navigation");
         assert_eq!("sidebar-nav".parse::<StoryId>(), Ok(StoryId::SidebarNav));
         assert!(StoryId::ALL.contains(&StoryId::SidebarNav));
+    }
+
+    #[test]
+    fn fine_tune_has_a_stable_gallery_route() {
+        assert_eq!(StoryId::FineTune.slug(), "fine-tune");
+        assert_eq!(StoryId::FineTune.title(), "Fine-tune card");
+        assert_eq!("fine-tune".parse::<StoryId>(), Ok(StoryId::FineTune));
+        assert!(StoryId::ALL.contains(&StoryId::FineTune));
     }
 }

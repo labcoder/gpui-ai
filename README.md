@@ -2,7 +2,7 @@
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
-> **Status: early development.** Nothing is published yet and the API is in flux. Nineteen components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
+> **Status: early development.** Nothing is published yet and the API is in flux. Twenty components have typed native and live-WASM gallery stories; the reproducible native, web, progressive-state, interaction, and theme foundations are operational.
 
 ## What is this?
 
@@ -10,7 +10,7 @@ Building an AI application means building the same interface patterns over and o
 
 mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
-Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: records/filter/diff/comparison tables and the fine-tune inspector.
+Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown. Still to come: records/filter/diff/comparison tables.
 
 ## Requirements
 
@@ -190,6 +190,33 @@ let _subscription = cx.subscribe(&nav, |_, _, event: &SidebarNavEvent, _| {
 
 Filtering is case-insensitive and recursively retains matching descendants with their ancestor path; duplicate labels are valid because selection, expansion, active state, and accessibility identity all use domain IDs. An externally controlled active descendant forces only its rendered ancestor path open without changing the consumer snapshot, and a globally collapsed ancestor conveys that descendant selection. Activating a parent intentionally toggles expansion and emits `Selected` together, allowing parent routes to navigate as well as disclose children. Native pointer, Enter, Space, and AccessKit activation converge on one stable control per row, while disabled rows expose no activation action. Collapsed navigation renders one fully visible expand control, keeps filter focus on visible controls, and gives icon rows accessible names plus a single hover label. The general action-dispatch limitation described above also applies to action-based keyboard paths in the browser WASM build at the pinned GPUI revision; pointer interaction remains available there.
 
+`FineTuneCard` is a controlled property inspector composed from retained upstream number-input, slider, color-picker, and popup-menu state. Width, height, radius, opacity, typeface, and optional accent remain application-owned; every intent carries the stable card ID and a typed value:
+
+```rust
+use mighty_gpui::prelude::*;
+
+let values = FineTuneValues::new(320., 180., 24., 0.84, "inter-regular");
+let inspector = cx.new(|cx| {
+    FineTuneCard::new(
+        "design-properties",
+        values,
+        [
+            FineTuneTypeface::new("inter-regular", "Inter"),
+            FineTuneTypeface::new("inter-display", "Inter"),
+        ],
+        window,
+        cx,
+    )
+});
+
+// Retain this subscription and answer change events with a new controlled snapshot.
+let _subscription = cx.subscribe(&inspector, |_, _, event: &FineTuneEvent, _| {
+    println!("fine-tune event: {event:?}");
+});
+```
+
+Duplicate visible typeface labels are safe because selection and events use stable typeface IDs. Numeric values are clamped, opacity is normalized to `0..=1`, invalid intermediate editor text does not emit, color always has a textual name/value, and the final Apply action remains reachable when the inspector is height-constrained.
+
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
 ```rust
@@ -246,7 +273,7 @@ Questions, bugs, and ideas: open a GitHub issue on this repository.
 
 ## Direction
 
-The next focus is the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, stable-ID command search, filterable sidebar navigation, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
+The next focus is the remaining data-rich composites. The shared progressive-content API, semantic-token styling, accessible typed interactions, hybrid-controlled prompt composition, virtualized controlled chat, stable-ID command search, filterable sidebar navigation, controlled fine-tune inspection, selection actions, typed inline citations, reproducible native builds, one native/WASM story registry, and live multi-canvas web host are now established.
 
 ## Contributing
 

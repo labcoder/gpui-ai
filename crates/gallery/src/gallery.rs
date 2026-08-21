@@ -17,7 +17,7 @@ use gpui_component::{
     v_flex,
 };
 use mighty_gpui::prelude::*;
-use std::{ops::Range, sync::Arc, time::Duration};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 const CONTRAST_THEME: &str = r##"{
   "name": "mighty-gpui gallery themes",
@@ -109,6 +109,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Insights
         | StoryId::CommandSearch
         | StoryId::SidebarNav
+        | StoryId::FineTune
         | StoryId::PromptBar
         | StoryId::SelectionActions => false,
     }
@@ -547,6 +548,208 @@ impl Render for SidebarNavStory {
                 TextView::markdown(
                     "sidebar-nav-reference-note",
                     "**Reference comparison.** Inspired by Creamery's calm, compact navigation, this original GPUI composition keeps application-owned stable IDs and active state, recursively retains matching ancestors, exposes badges and disabled state, and intentionally scrolls deep content inside each constrained sidebar.",
+                )
+                .selectable(true),
+            )
+    }
+}
+
+fn gallery_typefaces() -> Vec<FineTuneTypeface> {
+    vec![
+        FineTuneTypeface::new("inter-regular", "Inter"),
+        FineTuneTypeface::new("inter-display", "Inter"),
+        FineTuneTypeface::new("jetbrains-mono", "JetBrains Mono"),
+    ]
+}
+
+struct FineTuneStory {
+    populated: Entity<FineTuneCard>,
+    replacement: Entity<FineTuneCard>,
+    no_accent: Entity<FineTuneCard>,
+    constrained: Entity<FineTuneCard>,
+    values: HashMap<SharedString, FineTuneValues>,
+    last_event: SharedString,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl FineTuneStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let populated_values =
+            FineTuneValues::new(320., 180., 24., 0.84, "inter-regular").accent(cx.theme().info);
+        let replacement_values =
+            FineTuneValues::new(640., 360., 32., 0.55, "inter-display").accent(cx.theme().warning);
+        let no_accent_values = FineTuneValues::new(280., 180., 14., 1., "jetbrains-mono");
+        let constrained_values =
+            FineTuneValues::new(420., 260., 20., 0.68, "inter-regular").accent(cx.theme().success);
+        let populated = cx.new(|cx| {
+            FineTuneCard::new(
+                "gallery-fine-tune-populated",
+                populated_values.clone(),
+                gallery_typefaces(),
+                window,
+                cx,
+            )
+        });
+        let replacement = cx.new(|cx| {
+            FineTuneCard::new(
+                "gallery-fine-tune-replacement",
+                FineTuneValues::new(240., 160., 8., 1., "inter-regular"),
+                [FineTuneTypeface::new("inter-regular", "Inter")],
+                window,
+                cx,
+            )
+        });
+        replacement.update(cx, |card, cx| {
+            card.set_values(replacement_values.clone(), window, cx);
+            card.set_typefaces(gallery_typefaces(), cx);
+        });
+        let no_accent = cx.new(|cx| {
+            FineTuneCard::new(
+                "gallery-fine-tune-no-accent",
+                no_accent_values.clone(),
+                gallery_typefaces(),
+                window,
+                cx,
+            )
+        });
+        let constrained = cx.new(|cx| {
+            FineTuneCard::new(
+                "gallery-fine-tune-constrained",
+                constrained_values.clone(),
+                gallery_typefaces(),
+                window,
+                cx,
+            )
+        });
+        let subscriptions = [&populated, &replacement, &no_accent, &constrained]
+            .into_iter()
+            .map(|card| {
+                cx.subscribe_in(
+                    card,
+                    window,
+                    move |this, card, event: &FineTuneEvent, window, cx| {
+                        this.handle_event(card, event, window, cx);
+                    },
+                )
+            })
+            .collect();
+        let values = HashMap::from([
+            ("gallery-fine-tune-populated".into(), populated_values),
+            ("gallery-fine-tune-replacement".into(), replacement_values),
+            ("gallery-fine-tune-no-accent".into(), no_accent_values),
+            ("gallery-fine-tune-constrained".into(), constrained_values),
+        ]);
+
+        Self {
+            populated,
+            replacement,
+            no_accent,
+            constrained,
+            values,
+            last_event: "Edit a property, choose a typeface, or apply the snapshot.".into(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    fn handle_event(
+        &mut self,
+        card: &Entity<FineTuneCard>,
+        event: &FineTuneEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(current) = self.values.get(event.id()).cloned() else {
+            return;
+        };
+        let next = match event {
+            FineTuneEvent::WidthChanged { width, .. } => Some(current.with_width(*width)),
+            FineTuneEvent::HeightChanged { height, .. } => Some(current.with_height(*height)),
+            FineTuneEvent::RadiusChanged { radius, .. } => Some(current.with_radius(*radius)),
+            FineTuneEvent::OpacityChanged { opacity, .. } => Some(current.with_opacity(*opacity)),
+            FineTuneEvent::TypefaceChanged { typeface_id, .. } => {
+                Some(current.with_typeface(typeface_id.clone()))
+            }
+            FineTuneEvent::AccentChanged { accent, .. } => Some(current.with_accent(*accent)),
+            FineTuneEvent::ResetRequested { .. } => {
+                Some(FineTuneValues::new(320., 180., 24., 0.72, "inter-regular"))
+            }
+            FineTuneEvent::ApplyRequested { .. } => None,
+        };
+        if let Some(next) = next {
+            self.values.insert(event.id().clone(), next.clone());
+            card.update(cx, |card, cx| card.set_values(next, window, cx));
+        }
+        self.last_event = format!("{event:?}").into();
+        cx.notify();
+    }
+}
+
+impl Render for FineTuneStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let card_width = tokens.spacing.xxl * 9.;
+        let full_height = tokens.spacing.xxl * 13.;
+        let constrained_height = tokens.spacing.xxl * 7.;
+        v_flex()
+            .gap(tokens.spacing.sm)
+            .child(
+                h_flex()
+                    .items_start()
+                    .flex_wrap()
+                    .gap(tokens.spacing.sm)
+                    .children([
+                        v_flex()
+                            .id("fine-tune-populated-host")
+                            .role(Role::Group)
+                            .aria_label("Populated Fine-tune card")
+                            .w(card_width)
+                            .gap(tokens.spacing.xs)
+                            .child("POPULATED · DUPLICATE TYPEFACE LABELS")
+                            .child(div().h(full_height).child(self.populated.clone())),
+                        v_flex()
+                            .id("fine-tune-replacement-host")
+                            .role(Role::Group)
+                            .aria_label("Controlled replacement Fine-tune card")
+                            .w(card_width)
+                            .gap(tokens.spacing.xs)
+                            .child("CONTROLLED REPLACEMENT")
+                            .child(div().h(full_height).child(self.replacement.clone())),
+                        v_flex()
+                            .id("fine-tune-no-accent-host")
+                            .role(Role::Group)
+                            .aria_label("Fine-tune card without an accent")
+                            .w(card_width)
+                            .gap(tokens.spacing.xs)
+                            .child("NO ACCENT")
+                            .child(div().h(full_height).child(self.no_accent.clone())),
+                        v_flex()
+                            .id("fine-tune-constrained-host")
+                            .role(Role::Group)
+                            .aria_label("Constrained scrolling Fine-tune card")
+                            .w(card_width)
+                            .gap(tokens.spacing.xs)
+                            .child("CONSTRAINED HEIGHT · SCROLL TO APPLY")
+                            .child(
+                                div()
+                                    .h(constrained_height)
+                                    .overflow_hidden()
+                                    .child(self.constrained.clone()),
+                            ),
+                    ]),
+            )
+            .child(
+                div()
+                    .id("fine-tune-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last Fine-tune event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
+            .child(
+                TextView::markdown(
+                    "fine-tune-reference-note",
+                    "**Reference comparison.** Beautiful UI's compact Fine-tune surface groups width, height, radius, opacity, and typeface. This original GPUI inspector adds an optional named accent color, application-owned stable identities, typed controlled events, duplicate-label-safe typeface selection, and deliberate constrained-height scrolling.",
                 )
                 .selectable(true),
             )
@@ -1434,6 +1637,14 @@ impl Gallery {
                     SidebarNavStory::new,
                 );
                 self.section(story, "SIDEBAR NAVIGATION", || sidebar_story, cx)
+            }
+            StoryId::FineTune => {
+                let fine_tune_story = window.use_keyed_state(
+                    "fine-tune-story-state",
+                    cx,
+                    FineTuneStory::new,
+                );
+                self.section(story, "FINE-TUNE CARD", || fine_tune_story, cx)
             }
             StoryId::CodeBlock => self.section(
                 story,
