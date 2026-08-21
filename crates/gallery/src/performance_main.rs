@@ -1,6 +1,8 @@
 use gallery::{
     Gallery, GalleryTheme, StoryId, init, open_gallery_with_theme,
-    performance::{MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport},
+    performance::{
+        MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport, STEADY_DRAWS_PER_VIEWPORT,
+    },
 };
 use gpui::{
     AsyncApp, Entity, Global, Task,
@@ -56,8 +58,7 @@ impl MeasurementPlan {
         let viewport = self.viewport;
         self.viewport_steady_draws += 1;
         self.steady_draws += 1;
-        let steady_draws_per_viewport = MIN_DRAW_SAMPLES / PERFORMANCE_VIEWPORTS.len();
-        let completed_viewport = self.viewport_steady_draws == steady_draws_per_viewport;
+        let completed_viewport = self.viewport_steady_draws == STEADY_DRAWS_PER_VIEWPORT;
         if completed_viewport {
             self.viewport += 1;
             self.viewport_steady_draws = 0;
@@ -113,7 +114,7 @@ async fn run_performance_measurement(
     let mut plan = MeasurementPlan::new();
 
     gallery.update(cx, |gallery, cx| {
-        gallery.scroll_catalog_to(PERFORMANCE_VIEWPORTS[0], cx);
+        gallery.prepare_performance_viewport(PERFORMANCE_VIEWPORTS[0], cx);
     });
 
     while plan.steady_draws() < MIN_DRAW_SAMPLES && started_at.elapsed() < RUN_TIMEOUT {
@@ -151,7 +152,7 @@ async fn run_performance_measurement(
 
         if let Some(viewport) = next_viewport {
             gallery.update(cx, |gallery, cx| {
-                gallery.scroll_catalog_to(PERFORMANCE_VIEWPORTS[viewport], cx);
+                gallery.prepare_performance_viewport(PERFORMANCE_VIEWPORTS[viewport], cx);
             });
         } else {
             cx.refresh();
@@ -211,12 +212,14 @@ fn print_draw_distribution(label: &str, draw_samples: &[u64]) {
 #[cfg(test)]
 mod tests {
     use super::{MeasurementPlan, SETTLING_DRAWS_PER_VIEWPORT, SampleDestination};
-    use gallery::performance::{MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS};
+    use gallery::performance::{
+        MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, STEADY_DRAWS_PER_VIEWPORT,
+    };
 
     #[test]
     fn measurement_plan_settles_each_viewport_before_equal_steady_samples() {
         let mut plan = MeasurementPlan::new();
-        let steady_draws_per_viewport = MIN_DRAW_SAMPLES / PERFORMANCE_VIEWPORTS.len();
+        let steady_draws_per_viewport = STEADY_DRAWS_PER_VIEWPORT;
 
         for viewport in 0..PERFORMANCE_VIEWPORTS.len() {
             for _ in 0..SETTLING_DRAWS_PER_VIEWPORT {
@@ -237,5 +240,9 @@ mod tests {
         }
 
         assert_eq!(plan.steady_draws(), MIN_DRAW_SAMPLES);
+        assert_eq!(
+            plan.steady_draws(),
+            PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT
+        );
     }
 }

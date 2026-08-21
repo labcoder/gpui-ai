@@ -2,11 +2,18 @@
 
 use crate::StoryId;
 
-/// Minimum number of measured draws required by the performance gate.
-pub const MIN_DRAW_SAMPLES: usize = 300;
+/// Equal number of steady-state draws retained for every representative viewport.
+pub const STEADY_DRAWS_PER_VIEWPORT: usize = 100;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 3] =
-    [StoryId::Loading, StoryId::StreamingText, StoryId::Approval];
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 5] = [
+    StoryId::Loading,
+    StoryId::StreamingText,
+    StoryId::Approval,
+    StoryId::PromptBar,
+    StoryId::Chat,
+];
+/// Minimum number of measured draws required by the performance gate.
+pub const MIN_DRAW_SAMPLES: usize = PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT;
 /// Maximum accepted 99th-percentile draw time for a 120 Hz frame budget.
 pub const MAX_P99_DRAW_NANOS: u64 = 8_333_333;
 /// Threshold used to identify frames longer than a 60 Hz frame budget.
@@ -150,13 +157,26 @@ fn nanos_to_ms(nanos: u64) -> f64 {
 mod tests {
     use crate::StoryId;
 
-    use super::{MAX_P99_DRAW_NANOS, MIN_DRAW_SAMPLES, PerformanceReport};
+    use super::{
+        MAX_P99_DRAW_NANOS, MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport,
+        STEADY_DRAWS_PER_VIEWPORT,
+    };
 
     #[test]
     fn performance_viewports_cover_animation_streaming_and_idle_work() {
         assert_eq!(
             super::PERFORMANCE_VIEWPORTS,
-            [StoryId::Loading, StoryId::StreamingText, StoryId::Approval]
+            [
+                StoryId::Loading,
+                StoryId::StreamingText,
+                StoryId::Approval,
+                StoryId::PromptBar,
+                StoryId::Chat,
+            ]
+        );
+        assert_eq!(
+            MIN_DRAW_SAMPLES,
+            PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT
         );
     }
 
@@ -186,7 +206,7 @@ mod tests {
         assert!(!slow.gate_failures().is_empty());
 
         let mut long_frames = vec![4_000_000; MIN_DRAW_SAMPLES];
-        long_frames[..3].fill(17_000_000);
+        long_frames[..MIN_DRAW_SAMPLES / 100].fill(17_000_000);
         let long_frames = PerformanceReport::from_samples(long_frames, Vec::new());
         assert!(!long_frames.gate_failures().is_empty());
     }

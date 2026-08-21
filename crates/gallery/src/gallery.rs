@@ -117,6 +117,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
 
 struct ChatStory {
     chat: Entity<Chat>,
+    answer: Option<StreamedContent>,
     last_event: SharedString,
     _subscription: Subscription,
 }
@@ -174,12 +175,21 @@ impl ChatStory {
             });
         Self {
             chat,
+            answer: None,
             last_event: "Try Retry, a citation, a follow-up, or the composer.".into(),
             _subscription: subscription,
         }
     }
 
-    fn set_answer(&mut self, answer: StreamedContent, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_answer(
+        &mut self,
+        answer: StreamedContent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.answer.as_ref() == Some(&answer) {
+            return false;
+        }
         let live_text = format!(
             "The current supplier comparison follows [[cite:pricing]].\n\n{}",
             answer.text()
@@ -248,6 +258,8 @@ impl ChatStory {
         self.chat.update(cx, |chat, cx| {
             chat.set_messages(Arc::from(messages), window, cx);
         });
+        self.answer = Some(answer);
+        true
     }
 }
 
@@ -1275,6 +1287,21 @@ impl Gallery {
         cx.notify();
     }
 
+    /// Prepares one native performance viewport from a stable story identity.
+    ///
+    /// The dedicated Streaming Text viewport measures ongoing progressive
+    /// invalidation. Chat therefore stops only the gallery-owned fake producer
+    /// after its transition so its equal steady sample window measures the
+    /// populated virtual transcript and composer rather than duplicating the
+    /// streaming scenario.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn prepare_performance_viewport(&mut self, story: StoryId, cx: &mut Context<Self>) {
+        self.scroll_catalog_to(story, cx);
+        if story == StoryId::Chat {
+            self.simulation_task.take();
+        }
+    }
+
     fn shows(&self, story: StoryId) -> bool {
         self.selected == StoryId::All || self.selected == story
     }
@@ -1608,7 +1635,7 @@ impl Gallery {
                     ChatStory::new,
                 );
                 chat_story.update(cx, |story, cx| {
-                    story.set_answer(answer, window, cx);
+                    let _ = story.set_answer(answer, window, cx);
                 });
                 self.section(
                     story,
@@ -1940,23 +1967,33 @@ fn open_gallery_window(
 
 #[cfg(test)]
 mod tests {
-    use super::{Gallery, GalleryTheme};
+    use super::{ChatStory, Gallery, GalleryTheme};
     use crate::StoryId;
     use gpui::{
-        AppContext as _, Element as _, IntoElement as _, Role, ScrollDelta, ScrollWheelEvent,
-        TestAppContext, VisualTestContext, accesskit, point, px, size,
+        AppContext as _, Context, Element as _, IntoElement as _, Render, Role, ScrollDelta,
+        ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit, point, px, size,
     };
-    use gpui_component::Root;
+    use mighty_gpui::stream::StreamedContent;
     use std::{cell::RefCell, rc::Rc};
+
+    struct GalleryTestRoot {
+        gallery: gpui::Entity<Gallery>,
+    }
+
+    impl Render for GalleryTestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+            self.gallery.clone()
+        }
+    }
 
     fn all_stories(cx: &mut TestAppContext) -> (gpui::Entity<Gallery>, &mut VisualTestContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
-        let (_, cx) = cx.add_window_view(|window, cx| {
+        let (_, cx) = cx.add_window_view(|_, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
             *gallery_slot.borrow_mut() = Some(gallery.clone());
-            Root::new(gallery, window, cx)
+            GalleryTestRoot { gallery }
         });
         let cx: &mut VisualTestContext = cx;
         cx.run_until_parked();
@@ -2050,10 +2087,10 @@ mod tests {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
+        let (_, cx) = cx.add_window_view(move |_, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::Insights, cx));
             *gallery_slot.borrow_mut() = Some(gallery.clone());
-            Root::new(gallery, window, cx)
+            GalleryTestRoot { gallery }
         });
         let cx: &mut VisualTestContext = cx;
         cx.simulate_resize(size(px(700.), px(400.)));
@@ -2086,10 +2123,10 @@ mod tests {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
+        let (_, cx) = cx.add_window_view(move |_, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::PromptBar, cx));
             *gallery_slot.borrow_mut() = Some(gallery.clone());
-            Root::new(gallery, window, cx)
+            GalleryTestRoot { gallery }
         });
         cx.simulate_resize(size(px(700.), px(400.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -2130,9 +2167,9 @@ mod tests {
         cx: &mut TestAppContext,
     ) {
         cx.update(super::init);
-        let (_, cx) = cx.add_window_view(|window, cx| {
+        let (_, cx) = cx.add_window_view(|_, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::Chat, cx));
-            Root::new(gallery, window, cx)
+            GalleryTestRoot { gallery }
         });
         let cx: &mut VisualTestContext = cx;
         cx.simulate_resize(size(px(700.), px(400.)));
@@ -2155,6 +2192,23 @@ mod tests {
             composer.bottom() <= host.bottom(),
             "{composer:?} must fit in {host:?}"
         );
+    }
+
+    #[gpui::test]
+    fn chat_story_skips_unchanged_answer_rebuilds(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (story, cx) = cx.add_window_view(ChatStory::new);
+        let answer = StreamedContent::running("Live supplier comparison".to_owned());
+
+        let first = cx.update(|window, cx| {
+            story.update(cx, |story, cx| story.set_answer(answer.clone(), window, cx))
+        });
+        let repeated = cx.update(|window, cx| {
+            story.update(cx, |story, cx| story.set_answer(answer, window, cx))
+        });
+
+        assert!(first);
+        assert!(!repeated);
     }
 
     #[gpui::test]
@@ -2191,10 +2245,10 @@ mod tests {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
-        let (_, cx) = cx.add_window_view(move |window, cx| {
+        let (_, cx) = cx.add_window_view(move |_, cx| {
             let gallery = cx.new(|cx| Gallery::new(StoryId::SelectionActions, cx));
             *gallery_slot.borrow_mut() = Some(gallery.clone());
-            Root::new(gallery, window, cx)
+            GalleryTestRoot { gallery }
         });
         cx.simulate_resize(size(px(700.), px(400.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -2341,6 +2395,22 @@ mod tests {
             assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 8);
             assert_eq!(gallery.visible_range, 8..11);
             assert!(gallery.simulation_task.is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn performance_chat_viewport_freezes_only_the_gallery_demo_producer(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let gallery = cx.new(|cx| Gallery::new(StoryId::All, cx));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.prepare_performance_viewport(StoryId::Chat, cx);
+        });
+
+        gallery.read_with(cx, |gallery, _| {
+            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 9);
+            assert_eq!(gallery.visible_range, 9..12);
+            assert!(gallery.simulation_task.is_none());
         });
     }
 }
