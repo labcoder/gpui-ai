@@ -1,9 +1,12 @@
-# site
+# Showcase site
 
-The public showcase site (Phase 5 — not started).
+The public showcase is generated from plain HTML, CSS, and JavaScript. Its catalog metadata lives in `src/catalog.js`; `npm run build` emits stable physical routes for all 24 components and copies the already-built gallery host once into `dist/gallery`.
 
-Page chrome is plain web tech: HTML/Vite (React if useful) for navigation, component descriptions, copyable Rust source, and usage snippets. Only the component examples themselves run as WebAssembly, embedded from the single shared `gallery-web` binary with per-story deep links (for example `/gallery?story=prompt-bar&theme=dark`), lazy-loaded as they scroll into view, with a recorded fallback for browsers without WebGPU.
+From the repository root:
 
-Planned host: Cloudflare. A theme picker beyond light/dark is a strong candidate for v1, since gpui-component's theme registry makes it cheap.
+```sh
+npm run check:web
+npm run build:web
+```
 
-Nothing else lives here yet by design — the site follows the reusable component and gallery foundations.
+The root build first produces the shared Vite/WebAssembly gallery, then generates the static site. Deployment is intentionally separate from the repository workflow.
