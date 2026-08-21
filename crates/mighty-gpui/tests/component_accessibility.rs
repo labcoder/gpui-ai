@@ -24,7 +24,7 @@ use mighty_gpui::{
     todo_list::{TodoItem, TodoList},
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -847,6 +847,7 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
         Modifiers::default(),
     );
     activate_key(cx, "enter");
+    activate_key(cx, "space");
 
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
     cx.update(|window, cx| {
@@ -865,6 +866,10 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
     assert_eq!(
         probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
         [
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "live-report".into(),
+            },
             SidebarNavEvent::Selected {
                 id: "public-sidebar".into(),
                 item_id: "live-report".into(),
@@ -897,6 +902,7 @@ fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
             .expect("public sidebar probe should remain the root view")
     });
     let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
     let disabled = cx
@@ -918,6 +924,28 @@ fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
     cx.update(|window, cx| window.draw(cx).clear(cx));
     assert!(cx.debug_bounds("sidebar-nav-item-overview").is_some());
     assert!(cx.debug_bounds("sidebar-nav-filter").is_none());
+    assert!(cx.debug_bounds("sidebar-nav-new-task").is_none());
+
+    let host = cx
+        .debug_bounds("public-sidebar-host")
+        .expect("the constrained sidebar host should remain available");
+    let expand = cx
+        .debug_bounds("sidebar-nav-collapse")
+        .expect("collapsed navigation should expose one expand control");
+    assert!(expand.left() >= host.left(), "{expand:?} vs {host:?}");
+    assert!(expand.right() <= host.right(), "{expand:?} vs {host:?}");
+    assert!(expand.size.width >= px(30.), "{expand:?}");
+
+    // Calling focus_filter while collapsed must not move focus into its
+    // unmounted input.
+    cx.update(|window, cx| nav.update(cx, |nav, cx| nav.focus_filter(window, cx)));
+    cx.simulate_keystrokes("risk");
+    assert_eq!(nav.read_with(cx, |nav, _| nav.query().clone()), "");
+
+    // Pointer completes the collapsed-to-expanded round trip.
+    cx.simulate_click(expand.center(), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-filter").is_some());
 
     assert_eq!(
         probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
@@ -928,6 +956,55 @@ fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
             SidebarNavEvent::CollapsedChanged {
                 id: "public-sidebar".into(),
                 collapsed: true,
+            },
+            SidebarNavEvent::CollapsedChanged {
+                id: "public-sidebar".into(),
+                collapsed: false,
+            },
+        ]
+    );
+}
+
+#[gpui::test]
+fn public_sidebar_nav_keyboard_expands_the_only_compact_header_control(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSidebarNavProbe>()
+            .expect("public sidebar probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+        window.draw(cx).clear(cx);
+    });
+
+    cx.update(|window, cx| {
+        window.focus_next(cx);
+        assert!(window.focused(cx).is_some());
+        window.draw(cx).clear(cx);
+    });
+    activate_key(cx, "enter");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(!nav.read_with(cx, |nav, _| nav.is_collapsed()));
+    assert!(cx.debug_bounds("sidebar-nav-filter").is_some());
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [
+            SidebarNavEvent::CollapsedChanged {
+                id: "public-sidebar".into(),
+                collapsed: true,
+            },
+            SidebarNavEvent::CollapsedChanged {
+                id: "public-sidebar".into(),
+                collapsed: false,
             },
         ]
     );
@@ -969,6 +1046,64 @@ fn public_sidebar_nav_native_filter_typing_updates_query_and_emits_identity(
 }
 
 #[gpui::test]
+fn public_sidebar_nav_programmatic_query_notifies_while_filter_is_unmounted(
+    cx: &mut TestAppContext,
+) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSidebarNavProbe>()
+            .expect("public sidebar probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+        window.draw(cx).clear(cx);
+    });
+    probe.read_with(cx, |probe, _| probe.events.borrow_mut().clear());
+
+    let notifications = Rc::new(Cell::new(0));
+    let observed = notifications.clone();
+    let _observation =
+        cx.update(|_, cx| cx.observe(&nav, move |_, _| observed.set(observed.get() + 1)));
+    cx.update(|window, cx| nav.update(cx, |nav, cx| nav.set_query("risk", window, cx)));
+
+    assert_eq!(notifications.get(), 1);
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [SidebarNavEvent::QueryChanged {
+            id: "public-sidebar".into(),
+            query: "risk".into(),
+        }]
+    );
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_collapsed(false, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(cx.debug_bounds("sidebar-nav-item-orders").is_some());
+    assert!(cx.debug_bounds("sidebar-nav-item-supplier-risk").is_some());
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_none());
+    assert_eq!(
+        probe.read_with(cx, |probe, _| {
+            probe
+                .events
+                .borrow()
+                .iter()
+                .filter(|event| matches!(event, SidebarNavEvent::QueryChanged { .. }))
+                .count()
+        }),
+        1
+    );
+}
+
+#[gpui::test]
 fn public_sidebar_nav_preserves_active_identity_after_controlled_reorder(cx: &mut TestAppContext) {
     cx.update(mighty_gpui::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
@@ -1004,6 +1139,89 @@ fn public_sidebar_nav_preserves_active_identity_after_controlled_reorder(cx: &mu
             .is_some()
     );
     assert!(cx.debug_bounds("sidebar-nav-active-live-report").is_none());
+}
+
+#[gpui::test]
+fn public_sidebar_nav_keeps_controlled_active_descendants_reachable(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSidebarNavProbe>()
+            .expect("public sidebar probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let orders = cx
+        .debug_bounds("sidebar-nav-item-orders")
+        .expect("parent route should render");
+    cx.simulate_click(orders.center(), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_none());
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_active_item("supplier-risk", cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(cx.debug_bounds("sidebar-nav-item-supplier-risk").is_some());
+    assert!(
+        cx.debug_bounds("sidebar-nav-active-supplier-risk")
+            .is_some()
+    );
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(cx.debug_bounds("sidebar-nav-active-orders").is_some());
+    assert!(cx.debug_bounds("sidebar-nav-item-supplier-risk").is_none());
+}
+
+#[gpui::test]
+fn public_sidebar_nav_parent_activation_intentionally_selects_and_toggles(cx: &mut TestAppContext) {
+    cx.update(mighty_gpui::init);
+    let (root, cx) = cx.add_window_view(|window, cx| {
+        let content = cx.new(|cx| PublicSidebarNavProbe::new(window, cx));
+        Root::new(content, window, cx)
+    });
+    let probe = root.read_with(cx, |root, _| {
+        root.view()
+            .clone()
+            .downcast::<PublicSidebarNavProbe>()
+            .expect("public sidebar probe should remain the root view")
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let orders = cx
+        .debug_bounds("sidebar-nav-item-orders")
+        .expect("parent route should render");
+    cx.simulate_click(orders.center(), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_none());
+    cx.simulate_click(orders.center(), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_some());
+
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "orders".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "orders".into(),
+            },
+        ]
+    );
 }
 
 #[gpui::test]

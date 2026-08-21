@@ -3,15 +3,16 @@
 use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, EventEmitter, Focusable as _,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, div,
-    percentage, prelude::FluentBuilder as _,
+    AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, EventEmitter,
+    Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity,
+    Window, div, percentage, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Collapsible, Icon, IconName, h_flex,
     input::{Input, InputEvent, InputState},
     sidebar::{Sidebar, SidebarGroup, SidebarItem, SidebarMenuItem},
+    tooltip::Tooltip,
     v_flex,
 };
 
@@ -149,6 +150,10 @@ impl SidebarSection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SidebarNavEvent {
     /// An enabled item was activated by pointer, keyboard, or accessibility.
+    ///
+    /// Activating a parent intentionally toggles its transient expansion and
+    /// emits `Selected` in the same interaction so applications may navigate
+    /// to parent routes as well as expose their children.
     Selected {
         /// Sidebar component identity.
         id: SharedString,
@@ -282,6 +287,24 @@ fn nav_control(
         })
 }
 
+fn sidebar_item_description(
+    badge: Option<&SharedString>,
+    disabled: bool,
+    contains_active: bool,
+) -> Option<SharedString> {
+    let mut parts = Vec::new();
+    if let Some(badge) = badge {
+        parts.push(format!("Badge {badge}"));
+    }
+    if contains_active {
+        parts.push("Contains selected item".to_owned());
+    }
+    if disabled {
+        parts.push("Unavailable".to_owned());
+    }
+    (!parts.is_empty()).then(|| parts.join(". ").into())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn sidebar_item_control(
     id: impl Into<ElementId>,
@@ -291,20 +314,25 @@ fn sidebar_item_control(
     disabled: bool,
     active: bool,
     expanded: Option<bool>,
+    description: Option<SharedString>,
+    collapsed_icon: Option<SharedString>,
+    collapsed: bool,
     cx: &mut App,
 ) -> gpui_base::Button {
     let tokens = cx.theme().semantic_tokens();
     let label = label.into();
     gpui_base::Button::new(id)
         .accessibility_id(accessibility_id)
-        .accessibility_label(label)
+        .accessibility_label(label.clone())
         .role(Role::TreeItem)
         .disabled(disabled)
         .selected(active)
         .aria_selected(active)
         .aria_level(depth + 1)
         .when_some(expanded, |this, expanded| this.aria_expanded(expanded))
-        .when(disabled, |this| this.aria_description("Unavailable"))
+        .when_some(description, |this, description| {
+            this.aria_description(description)
+        })
         .absolute()
         .inset_0()
         .size_full()
@@ -312,12 +340,54 @@ fn sidebar_item_control(
         .border_1()
         .border_color(cx.theme().transparent)
         .bg(cx.theme().transparent)
+        .block_mouse_except_scroll()
         .focus_visible(|style| style.border_color(cx.theme().ring))
+        .when(collapsed, |this| {
+            let tooltip_label = label.clone();
+            this.when_some(collapsed_icon, |this, icon| {
+                this.child(Icon::default().path(icon).size_4())
+            })
+            .tooltip(move |window, cx| Tooltip::new(tooltip_label.clone()).build(window, cx))
+        })
         .styles(|styles| {
             styles
                 .selected(|style| style.border_color(cx.theme().sidebar_border))
                 .disabled(|style| style.text_color(cx.theme().muted_foreground))
         })
+}
+
+fn sidebar_tree_container(
+    component_id: SharedString,
+    section_id: SharedString,
+    section_label: SharedString,
+) -> Stateful<Div> {
+    v_flex()
+        .id((
+            ElementId::from((ElementId::from(component_id.clone()), section_id.clone())),
+            "tree",
+        ))
+        .accessibility_id(format!(
+            "sidebar-nav.{component_id}.section.{section_id}.tree"
+        ))
+        .role(Role::Tree)
+        .aria_label(format!("{section_label} navigation items"))
+}
+
+fn sidebar_section_container(
+    component_id: SharedString,
+    section_id: SharedString,
+    section_label: SharedString,
+    child: impl IntoElement,
+) -> Stateful<Div> {
+    div()
+        .id((
+            ElementId::from((ElementId::from(component_id.clone()), section_id.clone())),
+            "group",
+        ))
+        .accessibility_id(format!("sidebar-nav.{component_id}.section.{section_id}"))
+        .role(Role::Group)
+        .aria_label(section_label)
+        .child(child)
 }
 
 #[cfg(test)]
@@ -345,6 +415,9 @@ mod tests {
                         false,
                         true,
                         Some(true),
+                        sidebar_item_description(Some(&"12".into()), false, true),
+                        None,
+                        false,
                         cx,
                     )
                     .on_click(|_, _, _| {})
@@ -358,18 +431,46 @@ mod tests {
                         true,
                         false,
                         None,
+                        sidebar_item_description(None, true, false),
+                        None,
+                        false,
                         cx,
                     )
                     .on_click(|_, _, _| {})
                     .render(window, cx)
                     .into_element();
+                    let workspace_group = sidebar_section_container(
+                        "test".into(),
+                        "workspace".into(),
+                        "Workspace".into(),
+                        div(),
+                    )
+                    .into_element();
+                    let workspace_tree = sidebar_tree_container(
+                        "test".into(),
+                        "workspace".into(),
+                        "Workspace".into(),
+                    )
+                    .into_element();
+                    let reports_tree =
+                        sidebar_tree_container("test".into(), "reports".into(), "Reports".into())
+                            .into_element();
                     let mut active_node = accesskit::Node::new(Role::Unknown);
                     active.write_a11y_info(&mut active_node);
                     let mut disabled_node = accesskit::Node::new(Role::Unknown);
                     disabled.write_a11y_info(&mut disabled_node);
+                    let mut workspace_group_node = accesskit::Node::new(Role::Unknown);
+                    workspace_group.write_a11y_info(&mut workspace_group_node);
+                    let mut workspace_tree_node = accesskit::Node::new(Role::Unknown);
+                    workspace_tree.write_a11y_info(&mut workspace_tree_node);
+                    let mut reports_tree_node = accesskit::Node::new(Role::Unknown);
+                    reports_tree.write_a11y_info(&mut reports_tree_node);
                     *captured.lock().expect("capture mutex should be available") = vec![
                         (active.a11y_role(), active_node),
                         (disabled.a11y_role(), disabled_node),
+                        (workspace_group.a11y_role(), workspace_group_node),
+                        (workspace_tree.a11y_role(), workspace_tree_node),
+                        (reports_tree.a11y_role(), reports_tree_node),
                     ];
                 },
                 |_, _, _, _| {},
@@ -428,6 +529,11 @@ mod tests {
         let (active_role, active) = &nodes[0];
         assert_eq!(*active_role, Some(Role::TreeItem));
         assert_eq!(active.label(), Some("Reports"));
+        assert_eq!(
+            active.description(),
+            Some("Badge 12. Contains selected item")
+        );
+        assert_eq!(active.level(), Some(3));
         assert_eq!(active.is_selected(), Some(true));
         assert_eq!(active.is_expanded(), Some(true));
         assert!(active.supports_action(accesskit::Action::Click));
@@ -437,6 +543,17 @@ mod tests {
         assert_eq!(disabled.label(), Some("Exports"));
         assert_eq!(disabled.description(), Some("Unavailable"));
         assert!(!disabled.supports_action(accesskit::Action::Click));
+
+        let (group_role, group) = &nodes[2];
+        assert_eq!(*group_role, Some(Role::Group));
+        assert_eq!(group.label(), Some("Workspace"));
+
+        let (workspace_tree_role, workspace_tree) = &nodes[3];
+        assert_eq!(*workspace_tree_role, Some(Role::Tree));
+        assert_eq!(workspace_tree.label(), Some("Workspace navigation items"));
+        let (reports_tree_role, reports_tree) = &nodes[4];
+        assert_eq!(*reports_tree_role, Some(Role::Tree));
+        assert_eq!(reports_tree.label(), Some("Reports navigation items"));
     }
 }
 
@@ -444,6 +561,7 @@ mod tests {
 struct StableMenuTree {
     component_id: SharedString,
     section_id: SharedString,
+    section_label: SharedString,
     items: Arc<[SidebarNavItem]>,
     active_item: Option<SharedString>,
     expanded: Arc<HashSet<SharedString>>,
@@ -485,9 +603,19 @@ impl StableMenuTree {
         cx: &mut App,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
-        let active = self.active_item.as_ref() == Some(&item.id);
+        let exact_active = self.active_item.as_ref() == Some(&item.id);
+        let contains_active = self.active_item.as_ref().is_some_and(|active_id| {
+            item.children
+                .iter()
+                .any(|child| find_item(child, active_id).is_some())
+        });
+        // A compact sidebar cannot expose descendants, so its visible ancestor
+        // carries selected state. Expanded navigation instead keeps the exact
+        // controlled route reachable through transiently collapsed parents.
+        let active = exact_active || (self.collapsed && contains_active);
         let has_children = !item.children.is_empty();
-        let expanded = has_children && (self.filtering || self.expanded.contains(&item.id));
+        let expanded =
+            has_children && (self.filtering || self.expanded.contains(&item.id) || contains_active);
         let item_id = item.id.clone();
         let debug_id = item.id.clone();
         let active_debug_id = item.id.clone();
@@ -495,13 +623,16 @@ impl StableMenuTree {
         let keyboard_item_id = item.id.clone();
         let component_id = self.component_id.clone();
         let badge = item.badge.clone();
+        let collapsed_icon = item.icon.clone();
 
         let menu_item = SidebarMenuItem::new(item.label.clone())
             .active(active)
             .collapsed(self.collapsed)
             .disable(item.disabled)
-            .when_some(item.icon.clone(), |this, icon| {
-                this.icon(Icon::default().path(icon))
+            .when(!self.collapsed, |this| {
+                this.when_some(item.icon.clone(), |this, icon| {
+                    this.icon(Icon::default().path(icon))
+                })
             })
             .when(
                 !self.collapsed && (badge.is_some() || active || has_children),
@@ -546,6 +677,13 @@ impl StableMenuTree {
             item.disabled,
             active,
             has_children.then_some(expanded),
+            sidebar_item_description(
+                item.badge.as_ref(),
+                item.disabled,
+                self.collapsed && contains_active,
+            ),
+            collapsed_icon,
+            self.collapsed,
             cx,
         )
         .debug_selector(move || format!("sidebar-nav-item-{debug_id}"))
@@ -565,9 +703,9 @@ impl StableMenuTree {
             .min_w_0()
             .child(menu_item.render(
                 format!("sidebar-nav-menu.{}.{}", self.component_id, item.id),
-                // SidebarMenuItem owns the pinned presentation and collapsed
-                // tooltip. The transparent stable control overlays its row so
-                // pointer, keyboard, and AccessKit converge on one handler.
+                // SidebarMenuItem owns the pinned presentation. The transparent
+                // stable control blocks non-scroll pointer fallthrough and owns
+                // tooltip, keyboard, and AccessKit activation as one handler.
                 window,
                 cx,
             ))
@@ -609,18 +747,13 @@ impl SidebarItem for StableMenuTree {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        v_flex()
-            .id((
-                ElementId::from((
-                    ElementId::from(self.component_id.clone()),
-                    self.section_id.clone(),
-                )),
-                "tree",
-            ))
-            .role(Role::Tree)
-            .aria_label("Navigation items")
-            .gap(cx.theme().semantic_tokens().spacing.xxs)
-            .children(self.render_items(&self.items, 0, window, cx))
+        sidebar_tree_container(
+            self.component_id.clone(),
+            self.section_id.clone(),
+            self.section_label.clone(),
+        )
+        .gap(cx.theme().semantic_tokens().spacing.xxs)
+        .children(self.render_items(&self.items, 0, window, cx))
     }
 }
 
@@ -651,14 +784,21 @@ impl SidebarItem for StableSection {
         cx: &mut App,
     ) -> impl IntoElement {
         let section_id = self.section.id.clone();
-        SidebarGroup::new(self.section.label.clone())
+        let component_id = self.tree.component_id.clone();
+        let group = SidebarGroup::new(self.section.label.clone())
             .child(self.tree)
             .collapsed(self.collapsed)
             .render(
                 (ElementId::from("sidebar-nav-section"), section_id),
                 window,
                 cx,
-            )
+            );
+        sidebar_section_container(
+            component_id,
+            self.section.id.clone(),
+            self.section.label.clone(),
+            group,
+        )
     }
 }
 
@@ -783,6 +923,10 @@ impl SidebarNav {
             input.set_value(query.to_string(), window, cx)
         });
         self.emit_query_changed(query, cx);
+        // InputState intentionally suppresses Change for programmatic values,
+        // and it may be unmounted while collapsed, so the owner must invalidate
+        // its filtered snapshot directly.
+        cx.notify();
     }
 
     /// Return whether the sidebar is currently collapsed.
@@ -795,8 +939,14 @@ impl SidebarNav {
         &self.query
     }
 
-    /// Move focus into the retained native filter input.
+    /// Move focus into the retained native filter input when it is mounted.
+    ///
+    /// Collapsed navigation keeps focus on its visible compact control instead
+    /// of moving it into an unmounted input.
     pub fn focus_filter(&self, window: &mut Window, cx: &mut App) {
+        if self.collapsed {
+            return;
+        }
         self.input.read(cx).focus_handle(cx).focus(window, cx);
     }
 
@@ -864,6 +1014,7 @@ impl Render for SidebarNav {
                 tree: StableMenuTree {
                     component_id: self.id.clone(),
                     section_id: section.id.clone(),
+                    section_label: section.label.clone(),
                     items: section.items.clone(),
                     active_item: self.active_item.clone(),
                     expanded: expanded.clone(),
@@ -887,51 +1038,59 @@ impl Render for SidebarNav {
         };
         let empty_selector = self.sections.is_empty();
 
+        let header_actions = if collapsed {
+            h_flex().w_full().child(
+                nav_control(
+                    (ElementId::from(id.clone()), "collapse"),
+                    "Expand navigation".into(),
+                    IconName::PanelLeftOpen,
+                    false,
+                    cx,
+                )
+                .w_full()
+                .debug_selector(|| "sidebar-nav-collapse".to_owned())
+                .on_click(move |_, _, cx| {
+                    _ = collapse_owner.update(cx, |nav, cx| nav.set_collapsed(false, cx));
+                }),
+            )
+        } else {
+            h_flex()
+                .w_full()
+                .gap(tokens.spacing.xs)
+                .child(
+                    nav_control(
+                        (ElementId::from(id.clone()), "new-task"),
+                        "New task".into(),
+                        IconName::Plus,
+                        true,
+                        cx,
+                    )
+                    .debug_selector(|| "sidebar-nav-new-task".to_owned())
+                    .on_click(move |_, _, cx| {
+                        _ = new_task_owner.update(cx, |nav, cx| {
+                            cx.emit(SidebarNavEvent::NewTaskRequested { id: nav.id.clone() });
+                        });
+                    }),
+                )
+                .child(
+                    nav_control(
+                        (ElementId::from(id.clone()), "collapse"),
+                        "Collapse navigation".into(),
+                        IconName::PanelLeftClose,
+                        false,
+                        cx,
+                    )
+                    .debug_selector(|| "sidebar-nav-collapse".to_owned())
+                    .on_click(move |_, _, cx| {
+                        _ = collapse_owner.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+                    }),
+                )
+        };
+
         let header = v_flex()
             .w_full()
             .gap(tokens.spacing.sm)
-            .child(
-                h_flex()
-                    .w_full()
-                    .gap(tokens.spacing.xs)
-                    .child(
-                        nav_control(
-                            (ElementId::from(id.clone()), "new-task"),
-                            "New task".into(),
-                            IconName::Plus,
-                            !collapsed,
-                            cx,
-                        )
-                        .debug_selector(|| "sidebar-nav-new-task".to_owned())
-                        .on_click(move |_, _, cx| {
-                            _ = new_task_owner.update(cx, |nav, cx| {
-                                cx.emit(SidebarNavEvent::NewTaskRequested { id: nav.id.clone() });
-                            });
-                        }),
-                    )
-                    .child(
-                        nav_control(
-                            (ElementId::from(id.clone()), "collapse"),
-                            if collapsed {
-                                "Expand navigation".into()
-                            } else {
-                                "Collapse navigation".into()
-                            },
-                            if collapsed {
-                                IconName::PanelLeftOpen
-                            } else {
-                                IconName::PanelLeftClose
-                            },
-                            false,
-                            cx,
-                        )
-                        .debug_selector(|| "sidebar-nav-collapse".to_owned())
-                        .on_click(move |_, _, cx| {
-                            _ = collapse_owner
-                                .update(cx, |nav, cx| nav.set_collapsed(!nav.collapsed, cx));
-                        }),
-                    ),
-            )
+            .child(header_actions)
             .when(!collapsed, |this| {
                 this.child(
                     div()
@@ -973,6 +1132,7 @@ impl Render for SidebarNav {
                             tree: StableMenuTree {
                                 component_id: self.id.clone(),
                                 section_id: "empty".into(),
+                                section_label: "Navigation status".into(),
                                 items: Arc::from([]),
                                 active_item: None,
                                 expanded: Arc::new(HashSet::new()),
