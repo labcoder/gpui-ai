@@ -39,6 +39,13 @@ export function specimenUrl(base, story, theme) {
   return `${base}?${params}`;
 }
 
+export function resolveSpecimenBase(source, pageUrl) {
+  const url = new URL(source, pageUrl);
+  url.search = "";
+  url.hash = "";
+  return url.href;
+}
+
 export function hasWebGpu(navigatorObject) {
   return Boolean(navigatorObject?.gpu);
 }
@@ -53,4 +60,13 @@ export function copyFeedback(copied) {
   return copied
     ? { button: "Copied", status: "Rust example copied to the clipboard." }
     : { button: "Copy", status: "Could not copy automatically. Select the code and copy it manually." };
+}
+
+export function catalogMatches(item, query) {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return true;
+  return [item.title, item.category, item.summary]
+    .join(" ")
+    .toLocaleLowerCase()
+    .includes(normalized);
 }

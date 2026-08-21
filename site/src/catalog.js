@@ -1,3 +1,25 @@
+const componentEventTypes = Object.freeze({
+  "tool-chips": "ToolChipEvent",
+  thinking: "ThinkingEvent",
+  search: "SearchResultsEvent",
+  todos: "TodoListEvent",
+  "streaming-text": "StreamingTextEvent",
+  chat: "ChatEvent",
+  "command-search": "CommandSearchEvent",
+  "sidebar-nav": "SidebarNavEvent",
+  "fine-tune": "FineTuneEvent",
+  "records-table": "RecordsTableEvent",
+  "diff-table": "DiffTableEvent",
+  "filter-table": "FilterTableEvent",
+  "comparison-table": "ComparisonTableEvent",
+  approval: "ApprovalEvent",
+  recommendation: "RecommendationEvent",
+  context: "ContextCardEvent",
+  insights: "InsightEvent",
+  "prompt-bar": "PromptBarEvent",
+  "selection-actions": "SelectionActionsEvent",
+});
+
 const component = (sequence, slug, title, category, summary, source, api, usage, viewport = "wide") => ({
   sequence,
   slug,
@@ -9,7 +31,18 @@ const component = (sequence, slug, title, category, summary, source, api, usage,
   api,
   usage,
   viewport,
+  event: componentEventTypes[slug] ?? null,
   limitation: "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.",
+  behavior: Object.freeze({
+    ownership: `${api} renders state supplied by the application; it does not own durable work.`,
+    interaction: componentEventTypes[slug]
+      ? `Interactive intent is reported through the typed ${componentEventTypes[slug]} contract and stable application IDs.`
+      : "This presentation surface adds no component-specific interaction event.",
+    semantics: summary,
+    overflow: viewport === "tall"
+      ? "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+      : "Wide content retains context in a bounded surface; reduced motion preserves a useful state.",
+  }),
 });
 
 /** Canonical public-site metadata, kept in the same order as StoryId::ALL. */

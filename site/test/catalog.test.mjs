@@ -41,3 +41,12 @@ test("every component has useful static documentation and a real source file", a
     );
   }
 });
+
+test("catalog interaction metadata exactly matches public component event enums", async () => {
+  for (const component of components) {
+    const source = await readFile(new URL(component.source, repositoryRoot), "utf8");
+    const publicEvents = [...source.matchAll(/pub enum ([A-Za-z0-9_]+Event)\b/g)].map((match) => match[1]);
+    assert.deepEqual(publicEvents, component.event ? [component.event] : [], component.slug);
+    assert.equal(/typed [A-Za-z0-9_]+Event contract/.test(component.behavior.interaction), Boolean(component.event), component.slug);
+  }
+});

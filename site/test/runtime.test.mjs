@@ -3,10 +3,12 @@ import { test } from "node:test";
 
 import {
   copyFeedback,
+  catalogMatches,
   hasWebGpu,
   normalizeTheme,
   persistTheme,
   readStoredTheme,
+  resolveSpecimenBase,
   specimenOverdrawMargin,
   specimenTransition,
   specimenUrl,
@@ -50,6 +52,14 @@ test("specimen URLs address one shared gallery with explicit story and theme", (
     specimenUrl("../../gallery/embed.html", "prompt-bar", "dark"),
     "../../gallery/embed.html?story=prompt-bar&theme=dark",
   );
+  assert.equal(
+    resolveSpecimenBase("gallery/embed.html?story=loading&theme=light", "https://example.test/manual/"),
+    "https://example.test/manual/gallery/embed.html",
+  );
+  assert.equal(
+    resolveSpecimenBase("../../gallery/embed.html?story=loading&theme=light", "https://example.test/manual/components/loading/"),
+    "https://example.test/manual/gallery/embed.html",
+  );
 });
 
 test("WebGPU capability detection fails closed", () => {
@@ -69,4 +79,13 @@ test("specimen lifecycle loads, unloads, and restores from retained data", () =>
 test("copy feedback covers clipboard success and manual fallback", () => {
   assert.deepEqual(copyFeedback(true), { button: "Copied", status: "Rust example copied to the clipboard." });
   assert.deepEqual(copyFeedback(false), { button: "Copy", status: "Could not copy automatically. Select the code and copy it manually." });
+});
+
+test("catalog search matches title, category, and summary without case sensitivity", () => {
+  const item = { title: "Prompt bar", category: "Composites", summary: "Mentions and commands" };
+  assert.equal(catalogMatches(item, "PROMPT"), true);
+  assert.equal(catalogMatches(item, "composite"), true);
+  assert.equal(catalogMatches(item, "commands"), true);
+  assert.equal(catalogMatches(item, "table"), false);
+  assert.equal(catalogMatches(item, "  "), true);
 });
