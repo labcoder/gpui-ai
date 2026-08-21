@@ -1477,6 +1477,17 @@ fn public_fine_tune_reset_and_apply_emit_stable_card_identity(cx: &mut TestAppCo
     );
 }
 
+#[test]
+fn fine_tune_presentation_uses_theme_typography_tokens() {
+    let source = include_str!("../src/fine_tune.rs");
+    let fixed_gpui_text_helper = [".text_", "sm()"].concat();
+
+    assert!(
+        !source.contains(&fixed_gpui_text_helper),
+        "Fine-tune type styles must resolve through semantic theme tokens"
+    );
+}
+
 #[gpui::test]
 fn public_fine_tune_rendered_clear_accent_and_slider_keyboard_paths_emit_typed_events(
     cx: &mut TestAppContext,

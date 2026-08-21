@@ -24,7 +24,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::control::outlined_control;
+use crate::{control::outlined_control, theme::SemanticStyledExt as _};
 
 const MIN_DIMENSION: f64 = 1.;
 const MAX_DIMENSION: f64 = 4_096.;
@@ -928,7 +928,7 @@ fn numeric_field(
         .flex_1()
         .min_w_0()
         .gap(tokens.spacing.xs)
-        .child(Label::new(label).text_sm())
+        .child(Label::new(label).text_token(tokens.typography.sm))
         .child(named_number_input(
             card_id, key, label, semantics, input, suffix, cx,
         ))
@@ -1062,7 +1062,11 @@ impl Render for FineTuneCard {
                         h_flex()
                             .items_end()
                             .gap(tokens.spacing.sm)
-                            .child(Label::new("Opacity").text_sm().flex_1())
+                            .child(
+                                Label::new("Opacity")
+                                    .text_token(tokens.typography.sm)
+                                    .flex_1(),
+                            )
                             .child(div().w(tokens.spacing.xxl * 2.).child(named_number_input(
                                 &self.id,
                                 "opacity-input",
@@ -1093,7 +1097,7 @@ impl Render for FineTuneCard {
                     .aria_label("Typeface selection")
                     .aria_value(selected_typeface_value)
                     .gap(tokens.spacing.xs)
-                    .child(Label::new("Typeface").text_sm())
+                    .child(Label::new("Typeface").text_token(tokens.typography.sm))
                     .child(typeface_control),
             )
             .child(
@@ -1103,7 +1107,7 @@ impl Render for FineTuneCard {
                     .aria_label("Accent color")
                     .aria_value(accent_text.clone())
                     .gap(tokens.spacing.xs)
-                    .child(Label::new("Accent").text_sm())
+                    .child(Label::new("Accent").text_token(tokens.typography.sm))
                     .child(
                         h_flex()
                             .w_full()
@@ -1115,7 +1119,11 @@ impl Render for FineTuneCard {
                                     .small()
                                     .label("Accent color"),
                             )
-                            .child(Label::new(accent_text).text_sm().flex_1())
+                            .child(
+                                Label::new(accent_text)
+                                    .text_token(tokens.typography.sm)
+                                    .flex_1(),
+                            )
                             .when(has_accent, |this| {
                                 this.child(
                                     outlined_control(

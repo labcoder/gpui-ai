@@ -55,7 +55,7 @@ Run the hardware-dependent native frame-budget check separately from the portabl
 npm run test:perf
 ```
 
-It samples three virtualized catalog regions in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
+It retains 100 steady draws from each of five representative catalog regions (Loading, Streaming Text, Approval, Prompt Bar, and Chat) in an optimized build. The enforced draw-time gate targets a 120 Hz CPU budget; reported presentation intervals depend on the connected display and are informational.
 
 Expected output: a native window opens showing every component with live simulated agent activity — a virtualized controlled chat, a streaming markdown answer, a code block revealing line by line, tool chips and task rows in each status, and a light/dark/contrast theme control. Other scripts include `npm run build`, `npm run check`, `npm run build:wasm`, `npm run build:web`, and `npm run update:upstream` (see [AGENTS.md](AGENTS.md)).
 
