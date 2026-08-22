@@ -789,8 +789,12 @@ impl Render for ComparisonTable {
                     .w_full()
                     .flex_1()
                     .min_h_0()
+                    // The grid's intrinsic width is feature column + N item
+                    // columns; horizontal overflow scrolls here (shared with
+                    // the outer x-scroll handle) so headers and cells always
+                    // stay aligned on one canvas.
                     .min_w(feature_width + item_width * items.len() as f32)
-                    .overflow_y_scroll()
+                    .overflow_scroll()
                     .track_scroll(&self.feature_scroll)
                     .vertical_scrollbar(&self.feature_scroll)
                     .role(Role::RowGroup)
