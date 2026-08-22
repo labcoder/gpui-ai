@@ -803,55 +803,93 @@ impl FineTuneStory {
 impl Render for FineTuneStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
-        let card_width = tokens.spacing.xxl * 9.;
-        let full_height = tokens.spacing.xxl * 13.;
-        let constrained_height = tokens.spacing.xxl * 7.;
+        // The component is a design-property inspector. The story should show
+        // it doing its job: one live inspector beside a preview that reflects
+        // the edited values in real time — the reference demos' arrangement —
+        // plus a compact constrained-height variant for the scroll contract.
+        let populated_values = self
+            .values
+            .get("gallery-fine-tune-populated")
+            .cloned()
+            .expect("populated fine-tune values should exist");
+        let preview_width = px(populated_values.width() as f32);
+        let preview_height = px(populated_values.height() as f32);
+        let accent = populated_values.accent_color();
         v_flex()
             .gap(tokens.spacing.sm)
             .child(
                 h_flex()
                     .items_start()
                     .flex_wrap()
-                    .gap(tokens.spacing.sm)
-                    .children([
+                    .gap(tokens.spacing.md)
+                    // The inspector being demonstrated.
+                    .child(
                         v_flex()
                             .id("fine-tune-populated-host")
                             .role(Role::Group)
-                            .aria_label("Populated Fine-tune card")
-                            .w(card_width)
+                            .aria_label("Fine-tune inspector")
+                            .w(px(320.))
                             .gap(tokens.spacing.xs)
-                            .child("Populated · duplicate typeface labels")
-                            .child(div().h(full_height).child(self.populated.clone())),
+                            .child("Inspector")
+                            .child(div().h(px(416.)).child(self.populated.clone())),
+                    )
+                    // Live preview bound to the same values the inspector
+                    // edits: width, height, radius, opacity, typeface, and
+                    // accent color all apply here as you drag.
+                    .child(
                         v_flex()
-                            .id("fine-tune-replacement-host")
+                            .id("fine-tune-preview-host")
                             .role(Role::Group)
-                            .aria_label("Controlled replacement Fine-tune card")
-                            .w(card_width)
+                            .aria_label("Live preview of the fine-tuned card")
+                            .flex_1()
+                            .min_w(px(280.))
                             .gap(tokens.spacing.xs)
-                            .child("Controlled replacement")
-                            .child(div().h(full_height).child(self.replacement.clone())),
-                        v_flex()
-                            .id("fine-tune-no-accent-host")
-                            .role(Role::Group)
-                            .aria_label("Fine-tune card without an accent")
-                            .w(card_width)
-                            .gap(tokens.spacing.xs)
-                            .child("No accent")
-                            .child(div().h(full_height).child(self.no_accent.clone())),
-                        v_flex()
-                            .id("fine-tune-constrained-host")
-                            .role(Role::Group)
-                            .aria_label("Constrained scrolling Fine-tune card")
-                            .w(card_width)
-                            .gap(tokens.spacing.xs)
-                            .child("Constrained height · scroll to apply")
+                            .child("Live preview")
                             .child(
-                                div()
-                                    .h(constrained_height)
-                                    .overflow_hidden()
-                                    .child(self.constrained.clone()),
+                                div().flex_1().items_start().child(
+                                    div()
+                                        .id("fine-tune-preview-target")
+                                        .debug_selector(|| {
+                                            "fine-tune-preview-target".to_owned()
+                                        })
+                                        .w(preview_width)
+                                        .h(preview_height)
+                                        .rounded(px(populated_values.radius() as f32))
+                                        .opacity(populated_values.opacity())
+                                        .bg(cx.theme().primary)
+                                        .border_1()
+                                        .border_color(cx.theme().border)
+                                        .when_some(accent, |this, accent| {
+                                            this.child(
+                                                div()
+                                                    .absolute()
+                                                    .bottom_3()
+                                                    .right_3()
+                                                    .size_4()
+                                                    .rounded_full()
+                                                    .bg(accent),
+                                            )
+                                        }),
+                                ),
                             ),
-                    ]),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .id("fine-tune-constrained-host")
+                    .role(Role::Group)
+                    .aria_label("Constrained scrolling Fine-tune card")
+                    .flex_wrap()
+                    .gap(tokens.spacing.xs)
+                    .child("Constrained height · scroll to apply")
+                    .child(
+                        div()
+                            .w_full()
+                            .max_w(px(420.))
+                            .h(tokens.spacing.xxl * 7.)
+                            .overflow_hidden()
+                            .child(self.constrained.clone()),
+                    ),
             )
             .child(
                 div()
