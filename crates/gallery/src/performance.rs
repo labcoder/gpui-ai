@@ -11,13 +11,16 @@ pub const FILTER_SETTLING_DRAWS: usize = 30;
 /// Maximum constructed/paint-eligible rows accepted for the 1,000-row Filter Table.
 pub const MAX_VISIBLE_FILTER_ROWS: usize = 64;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 6] = [
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 9] = [
     StoryId::Loading,
     StoryId::StreamingText,
     StoryId::Approval,
     StoryId::PromptBar,
     StoryId::Chat,
     StoryId::FilterTable,
+    StoryId::RecordsTable,
+    StoryId::DiffTable,
+    StoryId::ComparisonTable,
 ];
 /// Minimum number of measured draws required by the performance gate.
 pub const MIN_DRAW_SAMPLES: usize = PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT;
@@ -180,6 +183,9 @@ mod tests {
                 StoryId::PromptBar,
                 StoryId::Chat,
                 StoryId::FilterTable,
+                StoryId::RecordsTable,
+                StoryId::DiffTable,
+                StoryId::ComparisonTable,
             ]
         );
         assert_eq!(
