@@ -137,7 +137,7 @@ impl RenderOnce for ToolChip {
                     .into_any_element(),
                 _ => div()
                     .size_1p5()
-                    .rounded(tokens.radius.full)
+                    .rounded(tokens.radius.md)
                     .bg(status_color)
                     .into_any_element(),
             })
@@ -154,7 +154,7 @@ impl RenderOnce for ToolChip {
                 .bg(cx.theme().secondary)
                 .border_1()
                 .border_color(cx.theme().border)
-                .rounded(tokens.radius.full)
+                .rounded(tokens.radius.md)
                 .hover(|style| style.bg(cx.theme().accent))
                 .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -171,7 +171,7 @@ impl RenderOnce for ToolChip {
                 .bg(cx.theme().secondary)
                 .border_1()
                 .border_color(cx.theme().border)
-                .rounded(tokens.radius.full)
+                .rounded(tokens.radius.md)
                 .into_any_element()
         }
     }
