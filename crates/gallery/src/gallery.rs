@@ -31,7 +31,22 @@ const PAGE_FRACTION: f32 = 3.0;
 const MAX_AUTOSCROLL_SPEED_PX_PER_SEC: f32 = 900.;
 /// Pointer distance from the anchor at which autoscroll reaches full speed.
 const AUTOSCROLL_FULL_SPEED_DISTANCE_PX: f32 = 140.;
-use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
+/// Base multiplier applied to wheel line deltas, matching Zed's editor
+/// `scroll_sensitivity` default of 1.0.
+const WHEEL_SENSITIVITY: f32 = 1.0;
+/// Multiplier applied while Alt is held, matching Zed's editor
+/// `fast_scroll_sensitivity` default.
+const WHEEL_FAST_SENSITIVITY: f32 = 4.0;
+/// Consecutive same-direction wheel events before acceleration reaches full
+/// strength. Windows conventions ramp over a handful of notches.
+const WHEEL_ACCEL_EVENTS_TO_FULL: f32 = 5.;
+/// Peak wheel acceleration multiplier at full cadence.
+const WHEEL_ACCEL_MAX_MULTIPLIER: f32 = 3.0;
+/// Wheel cadence decays to rest after this many seconds without a notch.
+const WHEEL_ACCEL_DECAY_SECONDS: f32 = 0.35;
+/// Pixels per scroll line for wheel deltas, matching gpui's List conversion.
+const LINE_HEIGHT_PX: f32 = 20.;
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration, time::Instant};
 
 const CONTRAST_THEME: &str = r##"{
   "name": "mighty-gpui gallery themes",
@@ -2846,6 +2861,10 @@ pub struct Gallery {
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<AutoscrollSession>,
+    /// Rolling same-direction notch count feeding wheel acceleration.
+    wheel_cadence: f32,
+    /// Time of the last wheel event, used to decay acceleration.
+    last_wheel_at: Option<Instant>,
     /// Frame driver for an active autoscroll session.
     #[cfg(any(test, feature = "performance"))]
     scan_simulation_suspended: bool,
@@ -2914,6 +2933,8 @@ impl Gallery {
                 }
             }),
             autoscroll: None,
+            wheel_cadence: 0.,
+            last_wheel_at: None,
             #[cfg(any(test, feature = "performance"))]
             scan_simulation_suspended: false,
         }
@@ -3098,6 +3119,50 @@ impl Gallery {
                 offset_in_item: px(0.),
             });
             self.update_visible_range(0..3.min(StoryId::ALL.len()), cx);
+            cx.notify();
+        }
+    }
+
+    /// Handles a wheel event over the catalog feed.
+    ///
+    /// Mirrors Zed's editor wheel model: discrete `Lines` notches get a
+    /// sensitivity multiplier plus cadence-based acceleration so fast
+    /// successive scrolling moves farther, and Alt+wheel applies Zed's
+    /// fast-scroll multiplier. Trackpad `Pixels` deltas are left entirely to
+    /// the `List` element — they are already OS-scaled and were already
+    /// applied before this bubble-phase handler runs.
+    fn handle_catalog_wheel(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        let ScrollDelta::Lines(lines) = event.delta else {
+            return;
+        };
+        let now = Instant::now();
+        // Decay acceleration after a pause between notches.
+        if let Some(last) = self.last_wheel_at {
+            let elapsed = now.duration_since(last).as_secs_f32();
+            if elapsed > WHEEL_ACCEL_DECAY_SECONDS {
+                self.wheel_cadence = 0.;
+            }
+        }
+        self.last_wheel_at = Some(now);
+        // Direction reversal resets acceleration.
+        if lines.y * self.wheel_cadence < 0. {
+            self.wheel_cadence = 0.;
+        }
+        self.wheel_cadence += lines.y.signum();
+        let strength = (self.wheel_cadence.abs() / WHEEL_ACCEL_EVENTS_TO_FULL).min(1.);
+        let accel = 1. + (WHEEL_ACCEL_MAX_MULTIPLIER - 1.) * strength;
+        let sensitivity = if event.modifiers.alt {
+            WHEEL_FAST_SENSITIVITY
+        } else {
+            WHEEL_SENSITIVITY
+        };
+        let boost_y = -lines.y * sensitivity * (accel - 1.);
+        // Wheel dy < 0 means scroll down; scroll_by takes positive-for-down.
+        if boost_y.abs() > f32::EPSILON {
+            self.catalog_list.scroll_by(px(boost_y * LINE_HEIGHT_PX));
             cx.notify();
         }
     }
@@ -3937,6 +4002,12 @@ impl Render for Gallery {
                 .flex_1()
                 .min_h_0()
                 .overflow_hidden()
+                // The wheel cursor signals the feed accepts scroll input;
+                // an active autoscroll session shows the grab affordance.
+                .cursor(CursorStyle::Arrow)
+                .when(self.autoscroll.is_some(), |region| {
+                    region.cursor(CursorStyle::OpenHand)
+                })
                 // Middle-click autoscroll: middle press starts or cancels,
                 // any other press cancels.
                 .on_mouse_down(
@@ -3963,6 +4034,9 @@ impl Render for Gallery {
                 )
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                     this.track_autoscroll_pointer(event.position, cx);
+                }))
+                .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+                    this.handle_catalog_wheel(event, cx);
                 }))
                 .on_action(cx.listener(|this, _: &ScrollHome, _, cx| {
                     this.scroll_catalog_edge(false, cx);
@@ -4158,6 +4232,64 @@ mod tests {
         let (_, cx) = all_stories(cx);
 
         assert!(cx.debug_bounds("scrollbar-overlay").is_some());
+    }
+
+    #[gpui::test]
+    fn catalog_wheel_acceleration_scales_with_cadence_and_resets(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+
+        // Notches must land over the feed; negative dy scrolls down.
+        // One simulated event proves the render-tree wiring end to end
+        // (List applies its base scroll, our bubble-phase handler sees it).
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(100.), px(200.)),
+            delta: ScrollDelta::Lines(point(0., -1.)),
+            ..Default::default()
+        });
+        let after_first = gallery.read_with(cx, |gallery: &Gallery, _| {
+            let top = gallery.catalog_list.logical_scroll_top();
+            top.item_ix as f32 * 320. + top.offset_in_item.as_f32()
+        });
+        assert!(after_first > 0., "the first notch should scroll the feed");
+
+        // Drive the remaining notches directly so the acceleration math is
+        // exercised deterministically, independent of hit-test plumbing.
+        let notch = ScrollWheelEvent {
+            position: point(px(100.), px(200.)),
+            delta: ScrollDelta::Lines(point(0., -1.)),
+            ..Default::default()
+        };
+        for _ in 0..8 {
+            gallery.update(cx, |gallery, cx| gallery.handle_catalog_wheel(&notch, cx));
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let after_ramp = gallery.read_with(cx, |gallery: &Gallery, _| {
+            let top = gallery.catalog_list.logical_scroll_top();
+            top.item_ix as f32 * 320. + top.offset_in_item.as_f32()
+        });
+        assert!(
+            after_ramp > after_first,
+            "accelerated notches should travel farther than the first"
+        );
+
+        // A direction reversal resets cadence: the opposite notch moves back
+        // up by roughly one base step without panic.
+        let reverse = ScrollWheelEvent {
+            position: point(px(100.), px(200.)),
+            delta: ScrollDelta::Lines(point(0., 1.)),
+            ..Default::default()
+        };
+        gallery.update(cx, |gallery, cx| gallery.handle_catalog_wheel(&reverse, cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let after_reverse = gallery.read_with(cx, |gallery: &Gallery, _| {
+            let top = gallery.catalog_list.logical_scroll_top();
+            top.item_ix as f32 * 320. + top.offset_in_item.as_f32()
+        });
+        assert!(
+            after_reverse < after_ramp,
+            "reverse notch should move the feed back up"
+        );
     }
 
     #[gpui::test]
