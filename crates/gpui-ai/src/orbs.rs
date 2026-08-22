@@ -21,6 +21,9 @@ const N: usize = 3;
 /// Stage edge length the geometry is tuned on.
 const STAGE: f32 = 28.0;
 
+/// Center-to-center lattice spacing at stage size, in stage pixels.
+const PITCH_STAGE: f32 = 6.5;
+
 /// One cycle of any variant, in milliseconds. Phase offsets are fractions of
 /// this duration.
 const CYCLE_MS: u64 = 1700;
@@ -220,10 +223,18 @@ impl RenderOnce for Orbs {
                     } else {
                         delay as f32 / CYCLE_MS as f32
                     };
+                    // Swirl-settle: each dot gathers from a position rotated
+                    // one way around the lattice center and releases to the
+                    // mirror rotation, so the cycle keeps swirling in one
+                    // direction instead of rewinding.
+                    let (ax, ay) = swirl_offset(x, y, -SWIRL_RADIANS, scale);
+                    let (bx, by) = swirl_offset(x, y, SWIRL_RADIANS, scale);
+                    let home_x = origin + pitch * x;
+                    let home_y = origin + pitch * y;
                     div()
                         .absolute()
-                        .left(origin + pitch * x)
-                        .top(origin + pitch * y)
+                        .left(home_x)
+                        .top(home_y)
                         .size(dot)
                         .rounded(tokens.radius.full)
                         .bg(color)
@@ -234,18 +245,52 @@ impl RenderOnce for Orbs {
                             ),
                             Animation::new(Duration::from_millis(CYCLE_MS)).repeat(),
                             move |this, delta| {
-                                // One-beat swell: fade up, peak, settle. The
-                                // seeded phase makes each dot sit at a
-                                // different point of this curve.
                                 let phase = (delta + seeded_phase) % 1.0;
+                                // Eased triangle: 0→1→0 across the cycle so
+                                // each dot leaves home, swings through the
+                                // far rotation, and returns.
+                                let swing = if phase < 0.5 {
+                                    phase * 2.0
+                                } else {
+                                    2.0 - phase * 2.0
+                                };
+                                let eased = swing * swing * (3.0 - 2.0 * swing);
+                                let dx = ax + (bx - ax) * eased;
+                                let dy = ay + (by - ay) * eased;
+                                // One-beat swell rides on top of the travel:
+                                // brightest mid-swing, dimmest at rest.
                                 let swell = (phase * std::f32::consts::TAU).sin();
-                                this.opacity(0.35 + 0.5 * (0.5 + 0.5 * swell))
+                                this.left(home_x + px(dx))
+                                    .top(home_y + px(dy))
+                                    .opacity(0.35 + 0.5 * (0.5 + 0.5 * swell))
                             },
                         )
                 })
             }))
             .refine_style(&self.style)
     }
+}
+
+/// Radians of rotation at each end of the settle cycle (~60°), matching the
+/// AICSS reference choreography.
+const SWIRL_RADIANS: f32 = 1.05;
+
+/// Outward push on top of the rotation, as a fraction of pitch.
+const SWIRL_SPREAD: f32 = 1.6;
+
+/// Offset from a cell's own grid slot to its swirled position, scaled to the
+/// rendered cluster size.
+fn swirl_offset(x: usize, y: usize, angle: f32, scale: f32) -> (f32, f32) {
+    let mid = (N - 1) as f32 / 2.0;
+    let dx = x as f32 - mid;
+    let dy = y as f32 - mid;
+    let pitch = PITCH_STAGE * scale;
+    let cos = angle.cos();
+    let sin = angle.sin();
+    (
+        ((dx * cos - dy * sin) * SWIRL_SPREAD - dx) * pitch,
+        ((dx * sin + dy * cos) * SWIRL_SPREAD - dy) * pitch,
+    )
 }
 
 #[cfg(test)]
