@@ -18,6 +18,19 @@ use gpui_component::{
     v_flex,
 };
 use mighty_gpui::prelude::*;
+
+// Catalog keyboard actions: page and jump navigation for the story feed.
+actions!(
+    catalog,
+    [PageUp, PageDown, ScrollHome, ScrollEnd, CancelAutoscroll]
+);
+
+/// Distance scrolled by one Page Up/Down, as a fraction of one story row.
+const PAGE_FRACTION: f32 = 3.0;
+/// Maximum autoscroll speed in pixels per second.
+const MAX_AUTOSCROLL_SPEED_PX_PER_SEC: f32 = 900.;
+/// Pointer distance from the anchor at which autoscroll reaches full speed.
+const AUTOSCROLL_FULL_SPEED_DISTANCE_PX: f32 = 140.;
 use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 const CONTRAST_THEME: &str = r##"{
@@ -2831,8 +2844,19 @@ pub struct Gallery {
     sim: sim::Simulation,
     trace_open: bool,
     theme: GalleryTheme,
+    /// Active middle-click autoscroll session (catalog view only).
+    autoscroll: Option<AutoscrollSession>,
+    /// Frame driver for an active autoscroll session.
     #[cfg(any(test, feature = "performance"))]
     scan_simulation_suspended: bool,
+}
+
+/// One middle-click autoscroll gesture anchored to a window position.
+#[derive(Debug, Clone, Copy)]
+struct AutoscrollSession {
+    anchor: Point<Pixels>,
+    /// Latest known pointer position, updated by hover events.
+    pointer: Point<Pixels>,
 }
 
 impl Gallery {
@@ -2889,6 +2913,7 @@ impl Gallery {
                     GalleryTheme::Light
                 }
             }),
+            autoscroll: None,
             #[cfg(any(test, feature = "performance"))]
             scan_simulation_suspended: false,
         }
@@ -3043,6 +3068,121 @@ impl Gallery {
         {
             self.simulation_task = Some(Self::spawn_simulation(cx));
         }
+    }
+
+    /// Scrolls the catalog by one page in `direction` (keyboard paging).
+    pub fn scroll_catalog_page(&mut self, direction: f32, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        self.catalog_list
+            .scroll_by(px(direction * PAGE_FRACTION * 320.));
+        let first = self.catalog_list.logical_scroll_top().item_ix;
+        self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
+        cx.notify();
+    }
+
+    /// Jumps the catalog to its start or end (Home/End keys).
+    pub fn scroll_catalog_edge(&mut self, to_end: bool, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        if to_end {
+            self.catalog_list.scroll_to_end();
+            let first = self.catalog_list.logical_scroll_top().item_ix;
+            self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
+            cx.notify();
+        } else {
+            self.catalog_list.scroll_to(ListOffset {
+                item_ix: 0,
+                offset_in_item: px(0.),
+            });
+            self.update_visible_range(0..3.min(StoryId::ALL.len()), cx);
+            cx.notify();
+        }
+    }
+
+    /// Begins a middle-click autoscroll session at the pointer anchor.
+    ///
+    /// Spawns a frame-paced task that scrolls toward the latest pointer
+    /// position until the session is cancelled.
+    pub fn start_autoscroll(&mut self, anchor: Point<Pixels>, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        if self
+            .autoscroll
+            .replace(AutoscrollSession {
+                anchor,
+                pointer: anchor,
+            })
+            .is_none()
+        {
+            cx.spawn(async move |this, cx| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(16))
+                        .await;
+                    let alive = this.update(cx, |gallery, cx| {
+                        if gallery.autoscroll.is_none() {
+                            return false;
+                        }
+                        gallery.tick_autoscroll(0.016, cx);
+                        gallery.autoscroll.is_some()
+                    });
+                    if alive.is_err() || !alive.unwrap_or(false) {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// Records the current pointer position for an active autoscroll session.
+    pub fn track_autoscroll_pointer(&mut self, position: Point<Pixels>, _cx: &mut Context<Self>) {
+        if let Some(session) = self.autoscroll.as_mut() {
+            session.pointer = position;
+        }
+    }
+
+    /// Ends any active autoscroll session (middle click again, Escape, click).
+    pub fn cancel_autoscroll(&mut self, cx: &mut Context<Self>) {
+        if self.autoscroll.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Advances autoscroll by `delta_seconds` toward the tracked pointer.
+    ///
+    /// Speed grows linearly with pointer distance from the anchor up to
+    /// [`MAX_AUTOSCROLL_SPEED_PX_PER_SEC`], matching Windows conventions.
+    fn tick_autoscroll(&mut self, delta_seconds: f32, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        let Some(session) = self.autoscroll else {
+            return;
+        };
+        let offset = session.pointer.y - session.anchor.y;
+        let distance = offset.abs();
+        if distance < px(1.) {
+            return;
+        }
+        let direction = offset.signum();
+        let speed = ((distance / px(AUTOSCROLL_FULL_SPEED_DISTANCE_PX)).min(1.)
+            * MAX_AUTOSCROLL_SPEED_PX_PER_SEC) as f32;
+        self.catalog_list
+            .scroll_by(px(direction * speed * delta_seconds));
+        let first = self.catalog_list.logical_scroll_top().item_ix;
+        self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
+        cx.notify();
+    }
+
+    /// Whether an autoscroll session is currently active.
+    pub fn autoscroll_active(&self) -> bool {
+        self.autoscroll.is_some()
     }
 
     /// Scrolls the catalog to its absolute end for the scan's tail phase.
@@ -3797,6 +3937,48 @@ impl Render for Gallery {
                 .flex_1()
                 .min_h_0()
                 .overflow_hidden()
+                // Middle-click autoscroll: middle press starts or cancels,
+                // any other press cancels.
+                .on_mouse_down(
+                    MouseButton::Middle,
+                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        if this.autoscroll.is_some() {
+                            this.cancel_autoscroll(cx);
+                        } else {
+                            this.start_autoscroll(event.position, cx);
+                        }
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.cancel_autoscroll(cx);
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(|this, _, _, cx| {
+                        this.cancel_autoscroll(cx);
+                    }),
+                )
+                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                    this.track_autoscroll_pointer(event.position, cx);
+                }))
+                .on_action(cx.listener(|this, _: &ScrollHome, _, cx| {
+                    this.scroll_catalog_edge(false, cx);
+                }))
+                .on_action(cx.listener(|this, _: &ScrollEnd, _, cx| {
+                    this.scroll_catalog_edge(true, cx);
+                }))
+                .on_action(cx.listener(|this, _: &PageUp, _, cx| {
+                    this.scroll_catalog_page(-1., cx);
+                }))
+                .on_action(cx.listener(|this, _: &PageDown, _, cx| {
+                    this.scroll_catalog_page(1., cx);
+                }))
+                .on_action(cx.listener(|this, _: &CancelAutoscroll, _, cx| {
+                    this.cancel_autoscroll(cx);
+                }))
                 .child(
                     story_list_frame()
                         .size_full()
@@ -3855,6 +4037,13 @@ pub fn init(cx: &mut App) {
     ThemeRegistry::global_mut(cx)
         .load_themes_from_str(CONTRAST_THEME)
         .expect("embedded gallery theme must be valid");
+    cx.bind_keys([
+        KeyBinding::new("pageup", PageUp, Some("gallery-scroll")),
+        KeyBinding::new("pagedown", PageDown, Some("gallery-scroll")),
+        KeyBinding::new("home", ScrollHome, Some("gallery-scroll")),
+        KeyBinding::new("end", ScrollEnd, Some("gallery-scroll")),
+        KeyBinding::new("escape", CancelAutoscroll, Some("gallery-scroll")),
+    ]);
 }
 
 /// Opens a gallery window for `selected`.
@@ -3969,6 +4158,39 @@ mod tests {
         let (_, cx) = all_stories(cx);
 
         assert!(cx.debug_bounds("scrollbar-overlay").is_some());
+    }
+
+    #[gpui::test]
+    fn catalog_paging_and_edge_navigation_move_the_feed(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        let before = gallery.read_with(cx, |gallery: &Gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+
+        gallery.update(cx, |gallery, cx| gallery.scroll_catalog_page(1., cx));
+        let after_page_down = gallery.read_with(cx, |gallery: &Gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        assert!(after_page_down > before, "PageDown should advance the feed");
+
+        gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(true, cx));
+        let at_end = gallery.read_with(cx, |gallery: &Gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        assert!(at_end >= after_page_down, "End should reach the last story");
+
+        gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(false, cx));
+        let at_home = gallery.read_with(cx, |gallery: &Gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        assert_eq!(at_home, 0, "Home should return to the first story");
+
+        gallery.update(cx, |gallery, cx| gallery.scroll_catalog_page(-1., cx));
+        let clamped = gallery.read_with(cx, |gallery: &Gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        assert_eq!(clamped, 0, "PageUp at home stays clamped");
     }
 
     #[gpui::test]
