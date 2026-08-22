@@ -2611,6 +2611,8 @@ pub struct Gallery {
     sim: sim::Simulation,
     trace_open: bool,
     theme: GalleryTheme,
+    #[cfg(any(test, feature = "performance"))]
+    scan_simulation_suspended: bool,
 }
 
 impl Gallery {
@@ -2667,6 +2669,8 @@ impl Gallery {
                     GalleryTheme::Light
                 }
             }),
+            #[cfg(any(test, feature = "performance"))]
+            scan_simulation_suspended: false,
         }
     }
 
@@ -2694,6 +2698,10 @@ impl Gallery {
         }
 
         self.visible_range = visible_range;
+        #[cfg(any(test, feature = "performance"))]
+        let simulation_needed = !self.scan_simulation_suspended
+            && visible_range_needs_simulation(self.visible_range.clone());
+        #[cfg(not(any(test, feature = "performance")))]
         let simulation_needed = visible_range_needs_simulation(self.visible_range.clone());
         match (simulation_needed, self.simulation_task.is_some()) {
             (true, false) => self.simulation_task = Some(Self::spawn_simulation(cx)),
@@ -2760,6 +2768,76 @@ impl Gallery {
             offset_in_item: px(0.),
         });
         self.update_visible_range(index..(index + 3).min(StoryId::ALL.len()), cx);
+        cx.notify();
+    }
+
+    /// Advances the catalog scan by `distance` and reports whether it moved.
+    ///
+    /// Catalog-scan harness seam: scrolls the shared list, re-derives the
+    /// simulated visible range exactly as a real scroll would, and requests a
+    /// redraw. Returns `false` once the list can no longer advance.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn advance_catalog_scan(&mut self, distance: Pixels, cx: &mut Context<Self>) -> bool {
+        if self.selected != StoryId::All {
+            return false;
+        }
+        let before = self.catalog_list.logical_scroll_top();
+        self.catalog_list.scroll_by(distance);
+        let after = self.catalog_list.logical_scroll_top();
+        let moved =
+            after.item_ix != before.item_ix || after.offset_in_item != before.offset_in_item;
+        // Always request a redraw: scrolling into unmeasured content saturates
+        // `scroll_by` at the measured frontier, and only a subsequent layout
+        // pass measures new items and extends the reachable range.
+        let first = after.item_ix;
+        self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
+        cx.notify();
+        moved
+    }
+
+    /// Story region the catalog currently focuses, for scan attribution.
+    ///
+    /// The scan measures whole frames, so a frame is attributed to the region
+    /// containing the catalog's scroll top rather than the single story that
+    /// happens to intersect the viewport center.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn scan_focus_region(&self) -> usize {
+        if self.selected != StoryId::All {
+            return 0;
+        }
+        self.catalog_list.logical_scroll_top().item_ix
+    }
+
+    /// Suspends or resumes the simulated agent activity for the catalog scan.
+    /// Simulated streams change row heights while the scan scrolls, which
+    /// pins the virtual-list anchor and races the scripted traversal.
+    /// Suspending the simulation makes the scan deterministic; the flag must
+    /// be cleared before handing the gallery back to interactive review.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn set_scan_simulation_suspended(&mut self, suspended: bool, cx: &mut Context<Self>) {
+        self.scan_simulation_suspended = suspended;
+        if suspended {
+            self.simulation_task = None;
+        } else if self.simulation_task.is_none()
+            && visible_range_needs_simulation(self.visible_range.clone())
+        {
+            self.simulation_task = Some(Self::spawn_simulation(cx));
+        }
+    }
+
+    /// Scrolls the catalog to its absolute end for the scan's tail phase.
+    ///
+    /// The deepest reachable scroll top clamps when the remaining content is
+    /// shorter than the viewport, so the final stories can never present at
+    /// scroll top; this seam guarantees the catalog bottom is on screen.
+    #[cfg(any(test, feature = "performance"))]
+    pub fn scroll_catalog_to_end(&mut self, cx: &mut Context<Self>) {
+        if self.selected != StoryId::All {
+            return;
+        }
+        self.catalog_list.scroll_to_end();
+        let first = self.catalog_list.logical_scroll_top().item_ix;
+        self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
         cx.notify();
     }
 

@@ -2125,6 +2125,7 @@ dependencies = [
  "gpui-component-assets",
  "gpui_platform",
  "mighty-gpui",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

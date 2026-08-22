@@ -12,8 +12,13 @@ name = "gallery-performance"
 path = "src/performance_main.rs"
 required-features = ["performance"]
 
+[[bin]]
+name = "gallery-catalog-scan"
+path = "src/catalog_main.rs"
+required-features = ["performance"]
+
 [features]
-performance = ["gpui/profiler"]
+performance = ["gpui/profiler", "dep:windows-sys"]
 
 [dependencies]
 anyhow.workspace = true
@@ -22,6 +27,12 @@ gpui_platform.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
 mighty-gpui.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
