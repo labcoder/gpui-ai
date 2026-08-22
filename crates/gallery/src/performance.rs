@@ -126,7 +126,7 @@ impl PerformanceReport {
 
     /// Prints a compact human-readable report.
     pub fn print(&self) {
-        eprintln!("mighty-gpui native performance report");
+        eprintln!("gpui-ai native performance report");
         print_distribution("draw", &self.draw);
         if self.present.samples > 0 {
             print_distribution("present interval (display-dependent)", &self.present);

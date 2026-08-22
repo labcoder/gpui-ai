@@ -3,11 +3,11 @@ use gpui::{
     MouseButton, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
     Window, div, point, prelude::FluentBuilder as _, px,
 };
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     Chat, ChatMessage, ChatRole, DiffCell, DiffChangeKind, DiffColumn, DiffRow, DiffTable,
     PromptBar, RecordCell, RecordColumn, RecordRow, RecordsTable,
 };
-use mighty_gpui::{
+use gpui_ai::{
     code_block::CodeBlock,
     insight::InsightCard,
     selection_actions::{SelectionAction, SelectionActions},
@@ -289,7 +289,7 @@ impl Render for ReadableSurface {
 }
 
 fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(move |window, cx| {
         let content = cx.new(|cx| ReadableSurface::new(surface, window, cx));
         SelectionTestRoot::new(content)
@@ -362,7 +362,7 @@ fn inline_citations_preserve_readable_selected_text(cx: &mut TestAppContext) {
     assert!(selected.contains("Readable prose cites"), "{selected:?}");
     assert!(selected.contains("Pricing report"), "{selected:?}");
     assert!(!selected.contains("cite:pricing"), "{selected:?}");
-    assert!(!selected.contains("mighty-citation"), "{selected:?}");
+    assert!(!selected.contains("gpui-ai-citation"), "{selected:?}");
 }
 
 #[gpui::test]
@@ -371,7 +371,7 @@ fn citations_without_handlers_render_readable_non_link_labels(cx: &mut TestAppCo
 
     assert!(selected.contains("[Pricing report]"), "{selected:?}");
     assert!(!selected.contains("cite:pricing"), "{selected:?}");
-    assert!(!selected.contains("mighty-citation"), "{selected:?}");
+    assert!(!selected.contains("gpui-ai-citation"), "{selected:?}");
 }
 
 #[gpui::test]
@@ -421,7 +421,7 @@ fn chat_user_prose_exports_selected_text(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn record_cells_export_literal_selected_text(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(|window, cx| {
         let content = cx.new(|cx| RecordsReadableSurface::new(window, cx));
         SelectionTestRoot::new(content)
@@ -453,7 +453,7 @@ fn record_cells_export_literal_selected_text(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn diff_before_and_after_values_export_literal_selected_text(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(|window, cx| {
         let content = cx.new(|cx| DiffReadableSurface::new(window, cx));
         SelectionTestRoot::new(content)
@@ -486,7 +486,7 @@ fn diff_before_and_after_values_export_literal_selected_text(cx: &mut TestAppCon
 
 #[gpui::test]
 fn follow_up_pointer_drag_does_not_select_streaming_prose(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let events = Rc::new(RefCell::new(Vec::new()));
     let captured = events.clone();
     let (_, cx) = cx.add_window_view(move |_, cx| {

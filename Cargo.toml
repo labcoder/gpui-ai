@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/mighty-gpui",
+    "crates/gpui-ai",
     "crates/gallery",
     "crates/gallery-web",
 ]
-default-members = ["crates/mighty-gpui", "crates/gallery", "crates/gallery-web"]
+default-members = ["crates/gpui-ai", "crates/gallery", "crates/gallery-web"]
 
 [workspace.package]
 version = "0.0.1"
@@ -14,7 +14,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
-mighty-gpui = { path = "crates/mighty-gpui" }
+gpui-ai = { path = "crates/gpui-ai" }
 
 # GPUI must come from the Zed repository (the crates.io release is outdated).
 # Do NOT add a `rev` field here: gpui-component declares this dependency

@@ -172,7 +172,7 @@ impl CatalogScanReport {
 
     /// Prints the full human-readable scan report.
     pub fn print(&self) {
-        eprintln!("mighty-gpui catalog scan report");
+        eprintln!("gpui-ai catalog scan report");
         for (story, metrics) in StoryId::ALL.iter().zip(&self.regions) {
             if metrics.samples.is_empty() {
                 eprintln!("  {:<18} UNVISITED", story.title());

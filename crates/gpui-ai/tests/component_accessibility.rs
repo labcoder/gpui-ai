@@ -4,13 +4,12 @@ use gpui::{
     ParentElement as _, Render, RenderOnce as _, Role, ScrollDelta, ScrollWheelEvent, Styled as _,
     Subscription, TestAppContext, VisualTestContext, Window, accesskit, canvas, div, point, px,
 };
-use gpui_component::IconName;
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     Chat, ChatEvent, ChatMessage, ChatRole, CommandSearch, CommandSearchEvent, CommandSearchItem,
     FineTuneCard, FineTuneEvent, FineTuneTypeface, FineTuneValues, SidebarNav, SidebarNavEvent,
     SidebarNavItem, SidebarSection,
 };
-use mighty_gpui::{
+use gpui_ai::{
     approval::ApprovalCard,
     code_block::CodeBlock,
     insight::{InsightCard, InsightMetric, InsightPoint},
@@ -24,6 +23,7 @@ use mighty_gpui::{
     thinking::{Thinking, ThinkingTrace},
     todo_list::{TodoItem, TodoList},
 };
+use gpui_component::IconName;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -645,7 +645,7 @@ impl Render for ComponentProbe {
 }
 
 fn capture(kind: ComponentProbeKind, cx: &mut TestAppContext) -> CapturedNode {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let captured = Arc::new(Mutex::new(None));
     let result = captured.clone();
     let (_, cx) = cx.add_window_view(move |_, _| ComponentProbe { kind, captured });
@@ -669,7 +669,7 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
 
 #[gpui::test]
 fn public_streaming_citation_companions_activate_typed_events(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let events = Rc::new(RefCell::new(Vec::new()));
     let captured = events.clone();
     let (_, cx) = cx.add_window_view(move |_, _| PublicCitationProbe { events });
@@ -730,7 +730,7 @@ fn public_streaming_citation_companions_activate_typed_events(cx: &mut TestAppCo
 fn streaming_citation_companions_keep_the_final_link_reachable_in_a_narrow_root(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(|_, _| BoundedCitationProbe);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -821,7 +821,7 @@ fn composite_content_has_a_named_semantic_boundary(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn public_prompt_bar_empty_catalog_and_disabled_submit_are_noninteractive(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicPromptProbe::new);
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -837,7 +837,7 @@ fn public_prompt_bar_empty_catalog_and_disabled_submit_are_noninteractive(cx: &m
 
 #[gpui::test]
 fn public_prompt_bar_assembled_controls_activate_typed_events(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicPromptProbe::new);
     cx.update(|window, cx| {
         let prompt = probe.read(cx).prompt.clone();
@@ -927,7 +927,7 @@ fn public_prompt_bar_assembled_controls_activate_typed_events(cx: &mut TestAppCo
 )]
 #[gpui::test]
 fn public_command_search_exposes_stable_keyboard_events_and_row_bounds(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicCommandSearchProbe::new);
     let cx: &mut VisualTestContext = cx;
     let search = probe.read_with(cx, |probe, _| probe.search.clone());
@@ -957,7 +957,7 @@ fn public_command_search_exposes_stable_keyboard_events_and_row_bounds(cx: &mut 
 fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_id(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1014,7 +1014,7 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
 fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_query(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1118,7 +1118,7 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
 fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1186,7 +1186,7 @@ fn public_sidebar_nav_suppresses_disabled_selection_and_emits_collapse_identity(
 
 #[gpui::test]
 fn public_sidebar_nav_keyboard_expands_the_only_compact_header_control(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1228,7 +1228,7 @@ fn public_sidebar_nav_keyboard_expands_the_only_compact_header_control(cx: &mut 
 fn public_sidebar_nav_native_filter_typing_updates_query_and_emits_identity(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1254,7 +1254,7 @@ fn public_sidebar_nav_native_filter_typing_updates_query_and_emits_identity(
 fn public_sidebar_nav_programmatic_query_notifies_while_filter_is_unmounted(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1301,7 +1301,7 @@ fn public_sidebar_nav_programmatic_query_notifies_while_filter_is_unmounted(
 
 #[gpui::test]
 fn public_sidebar_nav_preserves_active_identity_after_controlled_reorder(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1330,7 +1330,7 @@ fn public_sidebar_nav_preserves_active_identity_after_controlled_reorder(cx: &mu
 
 #[gpui::test]
 fn public_sidebar_nav_keeps_controlled_active_descendants_reachable(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1363,7 +1363,7 @@ fn public_sidebar_nav_keeps_controlled_active_descendants_reachable(cx: &mut Tes
 
 #[gpui::test]
 fn public_sidebar_nav_parent_activation_intentionally_selects_and_toggles(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1395,7 +1395,7 @@ fn public_sidebar_nav_parent_activation_intentionally_selects_and_toggles(cx: &m
 
 #[gpui::test]
 fn public_sidebar_nav_distinguishes_empty_catalog_from_no_results(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
@@ -1419,7 +1419,7 @@ fn public_sidebar_nav_distinguishes_empty_catalog_from_no_results(cx: &mut TestA
 fn public_sidebar_nav_scrolls_the_final_stable_item_into_the_constrained_viewport(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(OverflowSidebarProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1450,7 +1450,7 @@ fn public_sidebar_nav_scrolls_the_final_stable_item_into_the_constrained_viewpor
 
 #[gpui::test]
 fn public_fine_tune_reset_and_apply_emit_stable_card_identity(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicFineTuneProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1492,7 +1492,7 @@ fn fine_tune_presentation_uses_theme_typography_tokens() {
 fn public_fine_tune_rendered_clear_accent_and_slider_keyboard_paths_emit_typed_events(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicFineTuneProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1527,7 +1527,7 @@ fn public_fine_tune_rendered_clear_accent_and_slider_keyboard_paths_emit_typed_e
 
 #[gpui::test]
 fn public_fine_tune_empty_typeface_catalog_cannot_open_a_popup(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicFineTuneProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| {
@@ -1551,7 +1551,7 @@ fn public_fine_tune_empty_typeface_catalog_cannot_open_a_popup(cx: &mut TestAppC
 
 #[gpui::test]
 fn public_fine_tune_keeps_controls_inside_a_narrow_card(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(NarrowFineTuneProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1574,7 +1574,7 @@ fn public_fine_tune_keeps_controls_inside_a_narrow_card(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn public_fine_tune_keeps_apply_reachable_in_a_constrained_viewport(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(ConstrainedFineTuneProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1612,7 +1612,7 @@ fn public_fine_tune_keeps_apply_reachable_in_a_constrained_viewport(cx: &mut Tes
 
 #[gpui::test]
 fn public_chat_keeps_typed_retry_and_keyboard_composer_paths(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicChatProbe::new);
     let cx: &mut VisualTestContext = cx;
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1655,7 +1655,7 @@ fn public_chat_keeps_typed_retry_and_keyboard_composer_paths(cx: &mut TestAppCon
 
 #[gpui::test]
 fn public_selection_actions_preserve_selection_and_activate_typed_events(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| PublicSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)
@@ -1724,7 +1724,7 @@ fn public_selection_actions_preserve_selection_and_activate_typed_events(cx: &mu
 
 #[gpui::test]
 fn public_selection_actions_follow_keyboard_select_all_and_copy(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| PublicSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)
@@ -1773,7 +1773,7 @@ fn public_selection_actions_follow_keyboard_select_all_and_copy(cx: &mut TestApp
 
 #[gpui::test]
 fn public_selection_actions_clear_after_an_outside_left_click(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)
@@ -1810,7 +1810,7 @@ fn public_selection_actions_clear_after_an_outside_left_click(cx: &mut TestAppCo
 
 #[gpui::test]
 fn public_selection_actions_follow_native_empty_selection(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)
@@ -1844,7 +1844,7 @@ fn public_selection_actions_follow_native_empty_selection(cx: &mut TestAppContex
 
 #[gpui::test]
 fn public_selection_actions_settle_when_a_drag_releases_outside(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (root, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)
@@ -1878,7 +1878,7 @@ fn public_selection_actions_settle_when_a_drag_releases_outside(cx: &mut TestApp
 fn public_selection_actions_keep_long_final_action_reachable_in_a_narrow_root(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(|window, cx| {
         let probe = cx.new(|cx| BoundedSelectionProbe::new(window, cx));
         SelectionTestRoot::new(probe)

@@ -1,6 +1,6 @@
 # gallery-web
 
-WebAssembly build of the mighty-gpui gallery, for embedding live component demos in the showcase site.
+WebAssembly build of the gpui-ai gallery, for embedding live component demos in the showcase site.
 
 The Rust cdylib reuses the same typed story registry and gallery view as the native `gallery` binary. The `www/` host is plain HTML, CSS, and JavaScript; only the component canvas runs in WebAssembly.
 

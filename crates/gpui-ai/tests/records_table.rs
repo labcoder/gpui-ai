@@ -6,7 +6,7 @@ use gpui::{
     AppContext as _, Context, Entity, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
     Subscription, TestAppContext, VisualTestContext, Window, px, size,
 };
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     Progressive, RecordCell, RecordCellKind, RecordColumn, RecordColumnAlignment, RecordRow,
     RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent,
 };
@@ -69,7 +69,7 @@ fn records_specific_column_cell_and_disabled_policies_are_typed() {
 fn controlled_selection_survives_reorder_by_row_id_and_clears_when_removed(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| {
         RecordsTable::new("suppliers", "Supplier records", window, cx)
     });
@@ -131,7 +131,7 @@ fn controlled_selection_survives_reorder_by_row_id_and_clears_when_removed(
 
 #[gpui::test]
 fn controlled_snapshots_clear_selection_and_stale_sort_state(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| {
         RecordsTable::new("suppliers", "Supplier records", window, cx)
     });
@@ -235,7 +235,7 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
 
 #[gpui::test]
 fn pointer_selection_and_sort_emit_stable_application_ids(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -327,7 +327,7 @@ fn pointer_selection_and_sort_emit_stable_application_ids(cx: &mut TestAppContex
 fn thousand_records_construct_only_a_bounded_visible_range_and_reach_the_last_id(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -384,7 +384,7 @@ fn thousand_records_construct_only_a_bounded_visible_range_and_reach_the_last_id
 
 #[gpui::test]
 fn row_anchor_survives_prepend_by_stable_id(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -429,7 +429,7 @@ fn row_anchor_survives_prepend_by_stable_id(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn keyboard_selection_emits_the_same_stable_row_event_as_pointer(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -454,7 +454,7 @@ fn keyboard_selection_emits_the_same_stable_row_event_as_pointer(cx: &mut TestAp
 
 #[gpui::test]
 fn keyboard_navigation_skips_disabled_rows_by_stable_identity(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     let table = harness.read_with(cx, |harness, _| harness.table.clone());
@@ -491,7 +491,7 @@ fn keyboard_navigation_skips_disabled_rows_by_stable_identity(cx: &mut TestAppCo
 
 #[gpui::test]
 fn enter_activates_the_consumer_controlled_selected_row(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -519,7 +519,7 @@ fn enter_activates_the_consumer_controlled_selected_row(cx: &mut TestAppContext)
 
 #[gpui::test]
 fn named_pointer_activation_control_emits_the_same_stable_row_event(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -543,7 +543,7 @@ fn named_pointer_activation_control_emits_the_same_stable_row_event(cx: &mut Tes
 
 #[gpui::test]
 fn wide_records_construct_only_visible_cells_and_reach_the_last_column_id(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -606,7 +606,7 @@ fn wide_records_construct_only_visible_cells_and_reach_the_last_column_id(cx: &m
 
 #[gpui::test]
 fn column_anchor_survives_prepend_by_stable_id(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));
@@ -669,7 +669,7 @@ fn column_anchor_survives_prepend_by_stable_id(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn disabled_records_reject_pointer_keyboard_and_activation_intent(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(RecordsEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(720.), px(360.)));

@@ -5,7 +5,7 @@ use gpui::{
     Modifiers, MouseButton, ParentElement as _, Render, Styled as _, Subscription, TestAppContext,
     VisualTestContext, Window, point, px, size,
 };
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     ComparisonFeature, ComparisonItem, ComparisonItemState, ComparisonSnapshot,
     ComparisonSnapshotError, ComparisonTable, ComparisonTableEvent, ComparisonValue, Progressive,
 };
@@ -90,7 +90,7 @@ fn comparison_snapshot_rejects_duplicate_ids_dangling_values_and_unbounded_shape
 
 #[gpui::test]
 fn controlled_item_selection_survives_reorder_and_clears_when_disabled(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx
         .add_window_view(|window, cx| ComparisonTable::new("plans", "Plan comparison", window, cx));
 
@@ -249,7 +249,7 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
 
 #[gpui::test]
 fn pointer_and_keyboard_selection_emit_stable_item_identity(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(ComparisonEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(560.), px(320.)));
@@ -289,7 +289,7 @@ fn pointer_and_keyboard_selection_emit_stable_item_identity(cx: &mut TestAppCont
 
 #[gpui::test]
 fn long_bounded_comparison_keeps_the_last_item_horizontally_reachable(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| {
         ComparisonTable::new("wide-plans", "Wide plan comparison", window, cx)
     });
@@ -350,7 +350,7 @@ fn long_bounded_comparison_keeps_the_last_item_horizontally_reachable(cx: &mut T
 fn maximum_feature_snapshot_keeps_the_final_stable_feature_vertically_reachable(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| {
         ComparisonTable::new("tall-plans", "Tall plan comparison", window, cx)
     });
@@ -419,7 +419,7 @@ fn maximum_feature_snapshot_keeps_the_final_stable_feature_vertically_reachable(
 
 #[gpui::test]
 fn comparison_values_export_literal_selected_text(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (_, cx) = cx.add_window_view(ComparisonSelectionHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(520.), px(260.)));

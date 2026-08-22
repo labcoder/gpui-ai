@@ -1,5 +1,5 @@
 [package]
-name = "mighty-gpui"
+name = "gpui-ai"
 description = "AI-native UI components for GPUI applications, built on gpui-component."
 version.workspace = true
 edition.workspace = true

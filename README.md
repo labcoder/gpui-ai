@@ -1,4 +1,4 @@
-# mighty-gpui
+# gpui-ai
 
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
@@ -8,7 +8,7 @@ AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from 
 
 Building an AI application means building the same interface patterns over and over: streamed answers, visible reasoning, tool calls, approval gates, live task status, chat composers with @-mentions and /-commands. Web developers get these from libraries like [Beautiful UI](https://www.beautifului.dev) and [AIcss](https://www.aicss.dev). Rust and GPUI developers currently build them by hand.
 
-mighty-gpui is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
+gpui-ai is that missing layer: a set of opinionated, composed components for AI applications, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui. Every component styles itself exclusively through gpui-component's semantic theme tokens, so light/dark modes, custom themes, and live token editing flow through without component-specific overrides.
 
 Available today: streaming text (markdown, typed inline citations, sources, follow-ups), thinking traces (step and prose variants), code blocks with streaming reveal, tool chips, task rows, agent to-do lists, web-search results, image-generation frames, the pixel-grid loading state, the ambient orbs indicator, approval, recommendation, context, paged insight cards with charts, a hybrid-controlled prompt bar with native text editing, virtualized chat, stable-ID command search, filterable sidebar navigation, a controlled fine-tune inspector, virtualized records, diff, and filter tables, a bounded feature comparison table, and selection-anchored Ask/Explain/Rewrite actions over selectable Markdown.
 
@@ -29,7 +29,7 @@ Clone and build the workspace:
 
 ```sh
 git clone <this-repo>
-cd mighty-gpui
+cd gpui-ai
 cargo check --workspace
 ```
 
@@ -63,7 +63,7 @@ In your own app, components are fluent builders that render wherever an element 
 
 ```rust
 use gpui_component::v_flex;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 // inside a Render impl — `self.answer` is a StreamedContent you feed
 v_flex()
@@ -78,7 +78,7 @@ v_flex()
 Stateful composites are retained GPUI entities. Applications own durable data and asynchronous work; the component owns editor, focus, and overlay state and reports user intent through typed events:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let prompt = cx.new(|cx| PromptBar::new("agent-prompt", window, cx));
 prompt.update(cx, |prompt, cx| {
@@ -100,7 +100,7 @@ let _subscription = cx.subscribe(&prompt, |_, _, event: &PromptBarEvent, _| {
 
 ```rust
 use std::sync::Arc;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let prompt = cx.new(|cx| PromptBar::new("conversation-prompt", window, cx));
 let chat = cx.new(|cx| Chat::new("conversation", prompt, window, cx));
@@ -135,7 +135,7 @@ Chat uses GPUI's variable-height `ListState` so only visible rows are laid out a
 `CommandSearch` adapts gpui-component's native command palette without replacing its editor, filtering, focus, keyboard navigation, or virtual list. Applications replace stable-ID item snapshots and receive only typed application identity—never collection indices:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let search = cx.new(|cx| CommandSearch::new("workspace-commands", window, cx));
 search.update(cx, |search, cx| {
@@ -164,7 +164,7 @@ Title, subtitle, and keyword matching is case-insensitive. On native targets, ar
 
 ```rust
 use gpui_component::IconName;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let nav = cx.new(|cx| SidebarNav::new("workspace-nav", window, cx));
 nav.update(cx, |nav, cx| {
@@ -193,7 +193,7 @@ Filtering is case-insensitive and recursively retains matching descendants with 
 `FineTuneCard` is a controlled property inspector composed from retained upstream number-input, slider, color-picker, and popup-menu state. Width, height, radius, opacity, typeface, and optional accent remain application-owned; every intent carries the stable card ID and a typed value:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let values = FineTuneValues::new(320., 180., 24., 0.84, "inter-regular");
 let inspector = cx.new(|cx| {
@@ -221,7 +221,7 @@ Duplicate visible typeface labels are safe because selection and events use stab
 
 ```rust
 use std::sync::Arc;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let records = cx.new(|cx| RecordsTable::new("suppliers", "Supplier records", window, cx));
 records.update(cx, |records, cx| {
@@ -254,7 +254,7 @@ Pointer double-click, Enter/Space, and each row's named Open control converge on
 
 ```rust
 use std::sync::Arc;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let proposals = cx.new(|cx| {
     DiffTable::new("menu-cleanup", "Proposed menu cleanup", window, cx)
@@ -289,7 +289,7 @@ Every rendered value includes a readable change label and selectable prior/propo
 
 ```rust
 use std::sync::Arc;
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let tasks = cx.new(|cx| FilterTable::new("tasks", "Ice cream tasks", window, cx));
 tasks.update(cx, |table, cx| {
@@ -323,7 +323,7 @@ Filter controls expose active, inactive, count, and unavailable state semantical
 `ComparisonTable` uses an ordinary composed grid because its validated snapshot is intentionally bounded to 12 side-by-side items and 128 feature rows. It rejects duplicate IDs, dangling values, and larger shapes instead of truncating consumer data:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let snapshot = ComparisonSnapshot::try_new(
     [
@@ -349,7 +349,7 @@ Item highlighting, disabled state, progressive state, and selection stay applica
 Selection actions retain gpui-component's native Markdown selection and copy behavior. Stable action IDs and the selected-text snapshot are emitted for application-owned work:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let selection = cx.new(|cx| {
     SelectionActions::new("answer-selection", "Select any part of this answer.", window, cx)
@@ -366,7 +366,7 @@ selection.update(cx, |selection, cx| {
 Streaming answers resolve complete `[[cite:<stable-id>]]` markers against application-owned citation metadata. The inline Markdown stays selectable; activation emits the stable ID and opaque destination instead of opening it inside the library. At the current upstream pin, the inline Markdown glyph is pointer-only, so the adjacent named companion Link is the keyboard and AccessKit authority and emits the same typed event:
 
 ```rust
-use mighty_gpui::prelude::*;
+use gpui_ai::prelude::*;
 
 let answer = StreamedContent::complete(
     "Pistachio margins improved [[cite:margin-report]].".to_owned(),
@@ -386,14 +386,14 @@ let cited = StreamingText::new("answer", &answer)
     }));
 ```
 
-Using mighty-gpui as a dependency is early (pre-0.1, API in flux). The wiring looks like this:
+Using gpui-ai as a dependency is early (pre-0.1, API in flux). The wiring looks like this:
 
 ```toml
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-mighty-gpui = { git = "<this-repo>" }
+gpui-ai = { git = "<this-repo>" }
 ```
 
 ## Support
@@ -410,7 +410,7 @@ Issues and ideas are welcome now. The project is pre-0.1 and the component API i
 
 ## Acknowledgments
 
-- Design inspiration: [Beautiful UI](https://www.beautifului.dev) (MIT) and [AIcss](https://www.aicss.dev) — mighty-gpui reimplements these interface patterns for GPUI as original code with its own token-driven visual design.
+- Design inspiration: [Beautiful UI](https://www.beautifului.dev) (MIT) and [AIcss](https://www.aicss.dev) — gpui-ai reimplements these interface patterns for GPUI as original code with its own token-driven visual design.
 - Foundation: [gpui-component](https://github.com/longbridge/gpui-component) by Longbridge and [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) by Zed Industries.
 
 ## License

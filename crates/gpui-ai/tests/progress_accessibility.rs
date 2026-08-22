@@ -2,7 +2,7 @@ use gpui::{
     Element as _, IntoElement as _, Render, RenderOnce as _, Role, TestAppContext, Window,
     accesskit, canvas,
 };
-use mighty_gpui::{image_generation::ImageGeneration, loading::LoadingState};
+use gpui_ai::{image_generation::ImageGeneration, loading::LoadingState};
 use std::sync::{Arc, Mutex};
 
 struct CapturedNode {
@@ -61,7 +61,7 @@ impl Render for ProgressProbe {
 }
 
 fn capture(kind: ProgressProbeKind, cx: &mut TestAppContext) -> CapturedNode {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let captured = Arc::new(Mutex::new(None));
     let result = captured.clone();
     let (_, cx) = cx.add_window_view(move |_, _| ProgressProbe { kind, captured });

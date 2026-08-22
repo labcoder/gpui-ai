@@ -107,7 +107,7 @@ impl<T> Progressive<T> {
 /// # Example
 ///
 /// ```
-/// use mighty_gpui::stream::{ProgressState, StreamedContent};
+/// use gpui_ai::stream::{ProgressState, StreamedContent};
 ///
 /// let mut answer = StreamedContent::new();
 /// answer.append("Hello, ");

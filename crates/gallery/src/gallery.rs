@@ -1,4 +1,4 @@
-//! Native component gallery for mighty-gpui.
+//! Native component gallery for gpui-ai.
 //!
 //! One story per component, driven by simulated agent activity (fake token
 //! streams, task lifecycles). All simulation lives here — the library
@@ -8,6 +8,7 @@ use crate::{StoryId, sim};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
+use gpui_ai::prelude::*;
 use gpui_component::{
     ActiveTheme as _, IconName, Root, StyledExt as _,
     button::{Button, ButtonVariants as _},
@@ -17,7 +18,6 @@ use gpui_component::{
     theme::{Theme, ThemeMode, ThemeRegistry},
     v_flex,
 };
-use mighty_gpui::prelude::*;
 
 // Catalog keyboard actions: page and jump navigation for the story feed.
 actions!(
@@ -49,7 +49,7 @@ const LINE_HEIGHT_PX: f32 = 20.;
 use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration, time::Instant};
 
 const CONTRAST_THEME: &str = r##"{
-  "name": "mighty-gpui gallery themes",
+  "name": "gpui-ai gallery themes",
   "themes": [{
     "name": "Mighty Contrast",
     "mode": "dark",
@@ -3605,7 +3605,7 @@ impl Gallery {
                         .child(
                             TextView::markdown(
                                 "streaming-text-reference-note",
-                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups. mighty-gpui deliberately adds stable typed citation routing and keyboard/AccessKit companion links because the pinned Markdown glyph link is pointer-only.",
+                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups. gpui-ai deliberately adds stable typed citation routing and keyboard/AccessKit companion links because the pinned Markdown glyph link is pointer-only.",
                             )
                             .selectable(true),
                         )
@@ -4107,7 +4107,7 @@ impl Render for Gallery {
 
 /// Initializes the component and theme globals used by every gallery host.
 pub fn init(cx: &mut App) {
-    mighty_gpui::init(cx);
+    gpui_ai::init(cx);
     ThemeRegistry::global_mut(cx)
         .load_themes_from_str(CONTRAST_THEME)
         .expect("embedded gallery theme must be valid");
@@ -4163,11 +4163,11 @@ mod tests {
         Role, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit,
         point, px, size,
     };
-    use gpui_component::ActiveTheme as _;
-    use mighty_gpui::{
+    use gpui_ai::{
         prelude::{FilterRow, FilterSortDirection, FilterTableEvent},
         stream::StreamedContent,
     };
+    use gpui_component::ActiveTheme as _;
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     struct GalleryTestRoot {

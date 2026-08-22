@@ -77,7 +77,7 @@ impl CitationRef {
     }
 
     fn internal_url(&self) -> String {
-        format!("mighty-citation://{}", percent_encode_id(&self.id))
+        format!("gpui-ai-citation://{}", percent_encode_id(&self.id))
     }
 }
 
@@ -739,11 +739,11 @@ mod tests {
     fn complete_known_markers_become_internal_markdown_links() {
         assert_eq!(
             transform_citation_markers("See [[cite:pricing]].", &citations(), true),
-            "See [Pricing](mighty-citation://pricing \"Open pricing source\")."
+            "See [Pricing](gpui-ai-citation://pricing \"Open pricing source\")."
         );
         assert_eq!(
             transform_citation_markers("See [[cite:supplier notes]].", &citations(), true),
-            "See [Supplier \\[notes\\]](mighty-citation://supplier%20notes \"Open \\\"supplier\\\" notes\")."
+            "See [Supplier \\[notes\\]](gpui-ai-citation://supplier%20notes \"Open \\\"supplier\\\" notes\")."
         );
     }
 
@@ -775,7 +775,7 @@ mod tests {
             "~~~\n[[cite:pricing]]\n~~~\n"
         );
         let expected = concat!(
-            "Outside [Pricing](mighty-citation://pricing \"Open pricing source\") and `inline [[cite:pricing]]`.\n\n",
+            "Outside [Pricing](gpui-ai-citation://pricing \"Open pricing source\") and `inline [[cite:pricing]]`.\n\n",
             "```text\n[[cite:pricing]]\n```\n",
             "~~~\n[[cite:pricing]]\n~~~\n"
         );
@@ -801,7 +801,7 @@ mod tests {
             "```not-a-close\n",
             "[[cite:pricing]]\n",
             "```\n",
-            "Outside [Pricing](mighty-citation://pricing \"Open pricing source\")."
+            "Outside [Pricing](gpui-ai-citation://pricing \"Open pricing source\")."
         );
 
         assert_eq!(
@@ -822,7 +822,7 @@ mod tests {
             "> ```rust\n",
             "> [[cite:pricing]]\n",
             "> ````\n",
-            "Outside [Pricing](mighty-citation://pricing \"Open pricing source\")."
+            "Outside [Pricing](gpui-ai-citation://pricing \"Open pricing source\")."
         );
 
         assert_eq!(
@@ -839,7 +839,7 @@ mod tests {
         ];
 
         assert_eq!(
-            citation_event_for_url("mighty-citation://second", &refs),
+            citation_event_for_url("gpui-ai-citation://second", &refs),
             Some(StreamingTextEvent::CitationActivated {
                 id: "second".into(),
                 destination: "app://second".into(),

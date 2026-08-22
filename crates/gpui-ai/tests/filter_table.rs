@@ -4,7 +4,7 @@ use gpui::{
     AppContext as _, Context, Entity, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
     Subscription, TestAppContext, VisualTestContext, Window, px, size,
 };
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     FilterCell, FilterColumn, FilterDefinition, FilterRow, FilterSortDirection, FilterTable,
     FilterTableEvent, Progressive,
 };
@@ -26,7 +26,7 @@ fn filter_definitions_keep_stable_identity_count_and_controlled_state() {
 fn duplicate_filter_identity_is_rejected_without_replacing_controlled_state(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) =
         cx.add_window_view(|window, cx| FilterTable::new("tasks", "Tasks", window, cx));
     let valid = [
@@ -88,7 +88,7 @@ fn task_row(id: &str, name: &str, status: &str) -> FilterRow {
 
 #[gpui::test]
 fn controlled_filter_selection_survives_reorder_and_clears_when_removed(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) =
         cx.add_window_view(|window, cx| FilterTable::new("task-board", "Task board", window, cx));
     cx.update(|window, cx| {
@@ -138,7 +138,7 @@ fn controlled_filter_selection_survives_reorder_and_clears_when_removed(cx: &mut
 fn malformed_filter_row_identity_is_rejected_without_replacing_controlled_state(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) =
         cx.add_window_view(|window, cx| FilterTable::new("tasks", "Tasks", window, cx));
     cx.update(|window, cx| {
@@ -185,7 +185,7 @@ fn malformed_filter_row_identity_is_rejected_without_replacing_controlled_state(
 fn controlled_sort_rejects_invalid_columns_and_clears_when_the_column_is_removed(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) =
         cx.add_window_view(|window, cx| FilterTable::new("tasks", "Tasks", window, cx));
     cx.update(|window, cx| {
@@ -290,7 +290,7 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
 
 #[gpui::test]
 fn pointer_filter_activation_and_records_actions_emit_stable_typed_intent(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(FilterEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(760.), px(420.)));
@@ -359,7 +359,7 @@ fn pointer_filter_activation_and_records_actions_emit_stable_typed_intent(cx: &m
 
 #[gpui::test]
 fn thousand_filtered_rows_construct_a_bounded_range_and_reach_the_last_id(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) =
         cx.add_window_view(|window, cx| FilterTable::new("tasks", "Filtered tasks", window, cx));
     let cx: &mut VisualTestContext = cx;
@@ -414,7 +414,7 @@ fn thousand_filtered_rows_construct_a_bounded_range_and_reach_the_last_id(cx: &m
 
 #[gpui::test]
 fn overflowing_filter_controls_keep_the_last_stable_filter_reachable(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(FilterEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(420.), px(280.)));

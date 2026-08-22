@@ -1,7 +1,7 @@
 {
-  "name": "mighty-gpui",
+  "name": "gpui-ai",
   "private": true,
-  "description": "Task runner for the mighty-gpui workspace. Rust does the real work; these scripts are the front door.",
+  "description": "Task runner for the gpui-ai workspace. Rust does the real work; these scripts are the front door.",
   "scripts": {
     "dev": "cargo run -p gallery",
     "dev:fast": "cargo run -p gallery --profile dev-fast",
@@ -15,7 +15,7 @@
     "check": "npm run check:format && npm run check:clippy && npm run check:scripts && npm run test && npm run check:docs",
     "check:format": "cargo fmt --all -- --check",
     "check:clippy": "cargo clippy --workspace -- --deny warnings",
-    "check:docs": "cargo rustdoc -p mighty-gpui --lib -- -D warnings",
+    "check:docs": "cargo rustdoc -p gpui-ai --lib -- -D warnings",
     "check:native": "cargo check --workspace",
     "check:scripts": "node script/test-run-bash.mjs",
     "check:web": "npm --prefix crates/gallery-web/www test && npm run check:site && npm run check:web:release",

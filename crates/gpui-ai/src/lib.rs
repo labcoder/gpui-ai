@@ -1,6 +1,6 @@
 //! AI-native UI components for GPUI applications.
 //!
-//! `mighty-gpui` sits on top of [`gpui_component`] the way Beautiful UI sits on
+//! `gpui-ai` sits on top of [`gpui_component`] the way Beautiful UI sits on
 //! top of shadcn/ui: opinionated, composed components for AI applications —
 //! streaming text, thinking traces, tool calls, approval gates — that inherit
 //! gpui-component's semantic-token theming. Every component resolves all of
@@ -47,7 +47,7 @@ mod theme;
 pub mod thinking;
 pub mod todo_list;
 
-/// Convenient single-import surface: `use mighty_gpui::prelude::*;`.
+/// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
     pub use crate::approval::{ApprovalCard, ApprovalEvent};
     pub use crate::chat::{Chat, ChatEvent, ChatMessage, ChatRole};
@@ -108,7 +108,7 @@ pub(crate) mod handlers {
 
 use gpui::App;
 
-/// Initializes mighty-gpui.
+/// Initializes gpui-ai.
 ///
 /// Call once at application startup, before creating any windows that use
 /// these components. This also initializes the underlying [`gpui_component`]

@@ -2121,10 +2121,10 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "gpui",
+ "gpui-ai",
  "gpui-component",
  "gpui-component-assets",
  "gpui_platform",
- "mighty-gpui",
  "windows-sys 0.61.2",
 ]
 
@@ -2409,6 +2409,15 @@ dependencies = [
  "zed-font-kit",
  "zed-scap",
  "ztracing",
+]
+
+[[package]]
+name = "gpui-ai"
+version = "0.0.1"
+dependencies = [
+ "gpui",
+ "gpui-base",
+ "gpui-component",
 ]
 
 [[package]]
@@ -3882,15 +3891,6 @@ dependencies = [
  "log",
  "objc",
  "paste",
-]
-
-[[package]]
-name = "mighty-gpui"
-version = "0.0.1"
-dependencies = [
- "gpui",
- "gpui-base",
- "gpui-component",
 ]
 
 [[package]]

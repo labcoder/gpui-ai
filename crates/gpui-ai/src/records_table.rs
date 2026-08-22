@@ -27,7 +27,7 @@ use crate::{
 
 const RECORDS_TABLE_CONTEXT: &str = "MightyRecordsTable";
 gpui::actions!(
-    mighty_records_table,
+    gpui_ai_records_table,
     [
         /// Activates the consumer-controlled selected record.
         ActivateRecord

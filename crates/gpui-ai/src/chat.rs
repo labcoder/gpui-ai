@@ -1,4 +1,4 @@
-//! Controlled, virtualized chat transcript composed from mighty-gpui primitives.
+//! Controlled, virtualized chat transcript composed from gpui-ai primitives.
 
 use crate::{
     control::outlined_control,

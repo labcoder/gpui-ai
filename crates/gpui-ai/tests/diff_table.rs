@@ -4,7 +4,7 @@ use gpui::{
     AppContext as _, Context, Entity, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
     Subscription, TestAppContext, VisualTestContext, Window, px, size,
 };
-use mighty_gpui::prelude::{
+use gpui_ai::prelude::{
     DiffCell, DiffChangeKind, DiffColumn, DiffProposalAction, DiffProposalState, DiffRow,
     DiffSortDirection, DiffTable, DiffTableEvent, Progressive,
 };
@@ -66,7 +66,7 @@ fn diff_rows_keep_stable_identity_and_controlled_proposal_state() {
 
 #[gpui::test]
 fn controlled_diff_selection_survives_reorder_and_clears_when_disabled(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| {
         DiffTable::new("menu-cleanup", "Proposed menu cleanup", window, cx)
     });
@@ -131,7 +131,7 @@ fn controlled_diff_selection_survives_reorder_and_clears_when_disabled(cx: &mut 
 fn malformed_diff_row_identity_is_rejected_without_replacing_controlled_state(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (table, cx) = cx.add_window_view(|window, cx| DiffTable::new("diff", "Diff", window, cx));
     cx.update(|window, cx| {
         table.update(cx, |table, cx| {
@@ -250,7 +250,7 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
 
 #[gpui::test]
 fn pointer_and_keyboard_diff_actions_emit_stable_typed_intent(cx: &mut TestAppContext) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(DiffEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(760.), px(420.)));
@@ -319,7 +319,7 @@ fn pointer_and_keyboard_diff_actions_emit_stable_typed_intent(cx: &mut TestAppCo
 fn thousand_diff_rows_construct_only_a_bounded_range_and_reach_the_last_id(
     cx: &mut TestAppContext,
 ) {
-    cx.update(mighty_gpui::init);
+    cx.update(gpui_ai::init);
     let (harness, cx) = cx.add_window_view(DiffEventHarness::new);
     let cx: &mut VisualTestContext = cx;
     cx.simulate_resize(size(px(760.), px(360.)));

@@ -1,6 +1,6 @@
 [package]
 name = "gallery-web"
-description = "WebAssembly adapter for the mighty-gpui component gallery."
+description = "WebAssembly adapter for the gpui-ai component gallery."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

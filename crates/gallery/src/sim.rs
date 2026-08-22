@@ -3,7 +3,7 @@
 //! Fake token streams live here, outside the library, so components only
 //! ever consume real [`StreamedContent`] values.
 
-use mighty_gpui::stream::StreamedContent;
+use gpui_ai::stream::StreamedContent;
 use std::time::Duration;
 
 /// Interval between deterministic gallery simulation ticks.

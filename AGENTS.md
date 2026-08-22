@@ -13,7 +13,7 @@ A layer of AI-native components above gpui-component, exactly as Beautiful UI la
 ## Architecture boundaries
 
 - **Never fork or copy upstream components.** Compose gpui-component's styled components; when their styling is too opinionated for a design, drop down to `gpui-base` behaviors and own the presentation. If neither works, write a custom element — do not vendor upstream code.
-- **All presentation comes from theme tokens.** Every color, radius, spacing, shadow, and type style resolves through `cx.theme()`. Zero hardcoded colors in `crates/mighty-gpui`. This rule is what makes the entire theme system (light/dark, bundled themes, custom JSON themes, live color editing) work for free — it is not negotiable.
+- **All presentation comes from theme tokens.** Every color, radius, spacing, shadow, and type style resolves through `cx.theme()`. Zero hardcoded colors in `crates/gpui-ai`. This rule is what makes the entire theme system (light/dark, bundled themes, custom JSON themes, live color editing) work for free — it is not negotiable.
 - **Progress is modeled once.** Components that display progressive work consume `Progressive<T>` and `ProgressState`. Do not add per-component timers or bespoke lifecycle enums.
 - **Demo data stays out of the library.** Simulated token streams, fake transcripts, and fixtures live in `crates/gallery`. Library components take real data types.
 - **The site is plain web tech.** Page chrome (nav, docs, code panels) is HTML/JS in `site/`; only component examples run as WASM, via a single shared gallery binary. Do not build page chrome in WASM.
