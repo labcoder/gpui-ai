@@ -680,8 +680,6 @@ fn gallery_typefaces() -> Vec<FineTuneTypeface> {
 
 struct FineTuneStory {
     populated: Entity<FineTuneCard>,
-    replacement: Entity<FineTuneCard>,
-    no_accent: Entity<FineTuneCard>,
     constrained: Entity<FineTuneCard>,
     values: HashMap<SharedString, FineTuneValues>,
     last_event: SharedString,
@@ -692,37 +690,12 @@ impl FineTuneStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let populated_values =
             FineTuneValues::new(320., 180., 24., 0.84, "inter-regular").accent(cx.theme().info);
-        let replacement_values =
-            FineTuneValues::new(640., 360., 32., 0.55, "inter-display").accent(cx.theme().warning);
-        let no_accent_values = FineTuneValues::new(280., 180., 14., 1., "jetbrains-mono");
         let constrained_values =
             FineTuneValues::new(420., 260., 20., 0.68, "inter-regular").accent(cx.theme().success);
         let populated = cx.new(|cx| {
             FineTuneCard::new(
                 "gallery-fine-tune-populated",
                 populated_values.clone(),
-                gallery_typefaces(),
-                window,
-                cx,
-            )
-        });
-        let replacement = cx.new(|cx| {
-            FineTuneCard::new(
-                "gallery-fine-tune-replacement",
-                FineTuneValues::new(240., 160., 8., 1., "inter-regular"),
-                [FineTuneTypeface::new("inter-regular", "Inter")],
-                window,
-                cx,
-            )
-        });
-        replacement.update(cx, |card, cx| {
-            card.set_values(replacement_values.clone(), window, cx);
-            card.set_typefaces(gallery_typefaces(), cx);
-        });
-        let no_accent = cx.new(|cx| {
-            FineTuneCard::new(
-                "gallery-fine-tune-no-accent",
-                no_accent_values.clone(),
                 gallery_typefaces(),
                 window,
                 cx,
@@ -737,7 +710,7 @@ impl FineTuneStory {
                 cx,
             )
         });
-        let subscriptions = [&populated, &replacement, &no_accent, &constrained]
+        let subscriptions = [&populated, &constrained]
             .into_iter()
             .map(|card| {
                 cx.subscribe_in(
@@ -751,15 +724,11 @@ impl FineTuneStory {
             .collect();
         let values = HashMap::from([
             ("gallery-fine-tune-populated".into(), populated_values),
-            ("gallery-fine-tune-replacement".into(), replacement_values),
-            ("gallery-fine-tune-no-accent".into(), no_accent_values),
             ("gallery-fine-tune-constrained".into(), constrained_values),
         ]);
 
         Self {
             populated,
-            replacement,
-            no_accent,
             constrained,
             values,
             last_event: "Edit a property, choose a typeface, or apply the snapshot.".into(),
@@ -3503,7 +3472,11 @@ impl Gallery {
                                         .gap(tokens.spacing.xs)
                                         .child(
                                             div()
-                                                .id(("orbs-variant", variant.slug()))
+                                                .id(ElementId::NamedInteger(
+                                                    format!("orbs-variant-{}", variant.slug())
+                                                        .into(),
+                                                    0,
+                                                ))
                                                 .p(tokens.spacing.md)
                                                 .rounded(tokens.radius.lg)
                                                 .border_1()
