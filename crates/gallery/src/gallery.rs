@@ -362,15 +362,23 @@ impl ChatStory {
 impl Render for ChatStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // A chat panel needs vertical room to show a real conversation —
+        // transcript history, tool results, the streaming answer, and the
+        // composer. 232px crushed all of that into ~1.5 visible messages;
+        // 480px shows the full story arc the way the reference demos do.
         v_flex()
             .gap(tokens.spacing.xs)
             .child(
                 div()
                     .id("chat-story-host")
                     .debug_selector(|| "chat-story-host".into())
-                    .h(px(232.))
-                    .max_h(px(232.))
-                    .flex_none()
+                    .h(px(480.))
+                    .max_h(px(480.))
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(tokens.radius.lg)
+                    .overflow_hidden()
+                    .bg(tokens.colors.surface)
                     .child(self.chat.clone()),
             )
             .child(
