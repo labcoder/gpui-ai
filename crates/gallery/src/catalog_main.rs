@@ -226,8 +226,26 @@ fn current_focus(gallery: &Entity<Gallery>, cx: &AsyncApp) -> usize {
     gallery.read_with(cx, |gallery: &Gallery, _| gallery.scan_focus_region())
 }
 
+/// Milliseconds the idle probe waits after parking before counting frames,
+/// letting post-materialization parse bursts drain.
+const IDLE_SETTLE_MS: u64 = 5_000;
+
 /// Counts drawn frames over a three-second park for idle-demand diagnosis.
+///
+/// A settle delay runs first and its draws are discarded: parking directly
+/// after bulk story materialization catches the known decaying invalidation
+/// burst from the async Markdown pipeline draining its parse queue (measured
+/// 2026-08-21, reconfirmed after the 2026-08-22 upstream bump). Steady-state
+/// demand is what this probe exists to catch.
 async fn count_park_draws(collector: &mut FrameTimingCollector, cx: &mut AsyncApp) -> u64 {
+    let settle_until = Instant::now() + Duration::from_millis(IDLE_SETTLE_MS);
+    while Instant::now() < settle_until {
+        cx.background_executor()
+            .timer(Duration::from_millis(IDLE_PROBE_MS))
+            .await;
+        let _ = collector.collect_unseen();
+    }
+
     let mut draws = 0u64;
     let probe_started = Instant::now();
     while probe_started.elapsed() < Duration::from_secs(3) {
