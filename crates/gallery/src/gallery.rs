@@ -27,26 +27,7 @@ actions!(
 
 /// Distance scrolled by one Page Up/Down, as a fraction of one story row.
 const PAGE_FRACTION: f32 = 3.0;
-/// Maximum autoscroll speed in pixels per second.
-const MAX_AUTOSCROLL_SPEED_PX_PER_SEC: f32 = 900.;
-/// Pointer distance from the anchor at which autoscroll reaches full speed.
-const AUTOSCROLL_FULL_SPEED_DISTANCE_PX: f32 = 140.;
-/// Base multiplier applied to wheel line deltas, matching Zed's editor
-/// `scroll_sensitivity` default of 1.0.
-const WHEEL_SENSITIVITY: f32 = 1.0;
-/// Multiplier applied while Alt is held, matching Zed's editor
-/// `fast_scroll_sensitivity` default.
-const WHEEL_FAST_SENSITIVITY: f32 = 4.0;
-/// Consecutive same-direction wheel events before acceleration reaches full
-/// strength. Windows conventions ramp over a handful of notches.
-const WHEEL_ACCEL_EVENTS_TO_FULL: f32 = 5.;
-/// Peak wheel acceleration multiplier at full cadence.
-const WHEEL_ACCEL_MAX_MULTIPLIER: f32 = 3.0;
-/// Wheel cadence decays to rest after this many seconds without a notch.
-const WHEEL_ACCEL_DECAY_SECONDS: f32 = 0.35;
-/// Pixels per scroll line for wheel deltas, matching gpui's List conversion.
-const LINE_HEIGHT_PX: f32 = 20.;
-use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration, time::Instant};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 const CONTRAST_THEME: &str = r##"{
   "name": "gpui-ai gallery themes",
@@ -2860,24 +2841,15 @@ pub struct Gallery {
     trace_open: bool,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
-    autoscroll: Option<AutoscrollSession>,
-    /// Rolling same-direction notch count feeding wheel acceleration.
-    wheel_cadence: f32,
-    /// Time of the last wheel event, used to decay acceleration.
-    last_wheel_at: Option<Instant>,
+    autoscroll: Option<Autoscroll>,
+    /// Wheel acceleration state for the catalog feed.
+    wheel: WheelAccelerator,
     /// Frame driver for an active autoscroll session.
     #[cfg(any(test, feature = "performance"))]
     scan_simulation_suspended: bool,
 }
 
 /// One middle-click autoscroll gesture anchored to a window position.
-#[derive(Debug, Clone, Copy)]
-struct AutoscrollSession {
-    anchor: Point<Pixels>,
-    /// Latest known pointer position, updated by hover events.
-    pointer: Point<Pixels>,
-}
-
 impl Gallery {
     /// Creates the gallery for one selected story or the complete catalog.
     pub fn new(selected: StoryId, cx: &mut Context<Self>) -> Self {
@@ -2933,8 +2905,7 @@ impl Gallery {
                 }
             }),
             autoscroll: None,
-            wheel_cadence: 0.,
-            last_wheel_at: None,
+            wheel: WheelAccelerator::new(),
             #[cfg(any(test, feature = "performance"))]
             scan_simulation_suspended: false,
         }
@@ -3125,12 +3096,10 @@ impl Gallery {
 
     /// Handles a wheel event over the catalog feed.
     ///
-    /// Mirrors Zed's editor wheel model: discrete `Lines` notches get a
-    /// sensitivity multiplier plus cadence-based acceleration so fast
-    /// successive scrolling moves farther, and Alt+wheel applies Zed's
-    /// fast-scroll multiplier. Trackpad `Pixels` deltas are left entirely to
-    /// the `List` element — they are already OS-scaled and were already
-    /// applied before this bubble-phase handler runs.
+    /// Discrete `Lines` notches get cadence acceleration from the library's
+    /// [`WheelAccelerator`], applied on top of the base scroll the `List`
+    /// element already performed. Trackpad `Pixels` deltas pass through
+    /// untouched.
     fn handle_catalog_wheel(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
         if self.selected != StoryId::All {
             return;
@@ -3138,31 +3107,9 @@ impl Gallery {
         let ScrollDelta::Lines(lines) = event.delta else {
             return;
         };
-        let now = Instant::now();
-        // Decay acceleration after a pause between notches.
-        if let Some(last) = self.last_wheel_at {
-            let elapsed = now.duration_since(last).as_secs_f32();
-            if elapsed > WHEEL_ACCEL_DECAY_SECONDS {
-                self.wheel_cadence = 0.;
-            }
-        }
-        self.last_wheel_at = Some(now);
-        // Direction reversal resets acceleration.
-        if lines.y * self.wheel_cadence < 0. {
-            self.wheel_cadence = 0.;
-        }
-        self.wheel_cadence += lines.y.signum();
-        let strength = (self.wheel_cadence.abs() / WHEEL_ACCEL_EVENTS_TO_FULL).min(1.);
-        let accel = 1. + (WHEEL_ACCEL_MAX_MULTIPLIER - 1.) * strength;
-        let sensitivity = if event.modifiers.alt {
-            WHEEL_FAST_SENSITIVITY
-        } else {
-            WHEEL_SENSITIVITY
-        };
-        let boost_y = -lines.y * sensitivity * (accel - 1.);
-        // Wheel dy < 0 means scroll down; scroll_by takes positive-for-down.
-        if boost_y.abs() > f32::EPSILON {
-            self.catalog_list.scroll_by(px(boost_y * LINE_HEIGHT_PX));
+        let boost = self.wheel.line_notch(lines.y, event.modifiers.alt);
+        if boost != Pixels::ZERO {
+            self.catalog_list.scroll_by(boost);
             cx.notify();
         }
     }
@@ -3175,14 +3122,7 @@ impl Gallery {
         if self.selected != StoryId::All {
             return;
         }
-        if self
-            .autoscroll
-            .replace(AutoscrollSession {
-                anchor,
-                pointer: anchor,
-            })
-            .is_none()
-        {
+        if self.autoscroll.replace(Autoscroll::start(anchor)).is_none() {
             cx.spawn(async move |this, cx| {
                 loop {
                     cx.background_executor()
@@ -3208,7 +3148,7 @@ impl Gallery {
     /// Records the current pointer position for an active autoscroll session.
     pub fn track_autoscroll_pointer(&mut self, position: Point<Pixels>, _cx: &mut Context<Self>) {
         if let Some(session) = self.autoscroll.as_mut() {
-            session.pointer = position;
+            session.track(position);
         }
     }
 
@@ -3221,25 +3161,20 @@ impl Gallery {
 
     /// Advances autoscroll by `delta_seconds` toward the tracked pointer.
     ///
-    /// Speed grows linearly with pointer distance from the anchor up to
-    /// [`MAX_AUTOSCROLL_SPEED_PX_PER_SEC`], matching Windows conventions.
+    /// Distance comes from the library's [`Autoscroll`] speed curve; the
+    /// gallery only applies it to its list.
     fn tick_autoscroll(&mut self, delta_seconds: f32, cx: &mut Context<Self>) {
         if self.selected != StoryId::All {
             return;
         }
-        let Some(session) = self.autoscroll else {
+        let Some(session) = &mut self.autoscroll else {
             return;
         };
-        let offset = session.pointer.y - session.anchor.y;
-        let distance = offset.abs();
-        if distance < px(1.) {
+        let distance = session.tick(delta_seconds);
+        if distance == Pixels::ZERO {
             return;
         }
-        let direction = offset.signum();
-        let speed = ((distance / px(AUTOSCROLL_FULL_SPEED_DISTANCE_PX)).min(1.)
-            * MAX_AUTOSCROLL_SPEED_PX_PER_SEC) as f32;
-        self.catalog_list
-            .scroll_by(px(direction * speed * delta_seconds));
+        self.catalog_list.scroll_by(distance);
         let first = self.catalog_list.logical_scroll_top().item_ix;
         self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
         cx.notify();

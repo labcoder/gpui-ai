@@ -37,6 +37,7 @@ pub mod orbs;
 pub mod prompt_bar;
 pub mod recommendation;
 pub mod records_table;
+pub mod scrolling;
 pub mod search_results;
 pub mod selection_actions;
 pub mod sidebar_nav;
@@ -83,6 +84,11 @@ pub mod prelude {
     pub use crate::records_table::{
         RecordCell, RecordCellKind, RecordColumn, RecordColumnAlignment, RecordRow,
         RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent,
+    };
+    pub use crate::scrolling::{
+        AUTOSCROLL_FULL_SPEED_DISTANCE_PX, Autoscroll, LINE_HEIGHT_PX,
+        MAX_AUTOSCROLL_SPEED_PX_PER_SEC, WHEEL_ACCEL_DECAY_SECONDS, WHEEL_ACCEL_MAX_MULTIPLIER,
+        WHEEL_ACCEL_NOTCHES_TO_FULL, WHEEL_FAST_SENSITIVITY, WHEEL_SENSITIVITY, WheelAccelerator,
     };
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
