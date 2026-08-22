@@ -75,8 +75,18 @@ npm run check:web           # web host tests
 npm run dev                 # look at it — visual review is part of done
 npm run prod                # optimized native gallery for performance review
 npm run test:perf           # hardware-dependent optimized native frame-budget gate
+npm run test:catalog        # hardware-dependent catalog-scroll gate: whole-catalog
+                            # traversal, stalls, latency, memory, idle demand
 npm run dev:web             # inspect the real WASM gallery in a browser
 ```
+
+`npm run test:perf` measures prepared isolated story viewports (steady draws
+per component, driven Filter Table transitions). `npm run test:catalog`
+additionally scrolls the real complete-catalog view end to end and fails on
+any story region with a draw at or above 100 ms, on invalidation-to-draw
+latency p99 above 150 ms, on peak working set above 400 MB, or on idle frames
+scheduled while parked on a static story. Both are hardware-dependent and
+stay outside `npm run check`; run both before claiming performance changes.
 
 The root `package.json` is a task runner only (no JavaScript dependencies); the scripts shell out to cargo. Add new workflows there so they stay discoverable. Keep hardware-dependent performance gates outside `npm run check`, and make performance claims from optimized builds rather than debug runs.
 
