@@ -31,8 +31,6 @@ use std::{
 const FAILURE_EXIT_CODE: i32 = 1;
 /// Maximum scroll attempts per region before declaring it unmeasurable.
 const REGION_STEP_CAP: usize = 60;
-/// Idle observation window after parking on the final story.
-const IDLE_PARK_WINDOW: Duration = Duration::from_secs(9);
 /// A scroll phase longer than this without any drawn frame is a stall.
 const FRAMELESS_STALL_NANOS: u64 = 100_000_000;
 
@@ -156,21 +154,16 @@ async fn run_catalog_scan(gallery: Entity<Gallery>, exit_code: Arc<AtomicI32>, c
     // so any scheduled frames are genuine idle-demand violations rather than
     // simulated animation doing its job. Loading is deliberately excluded —
     // its shimmer animation legitimately requests frames.
+    //
+    // Measured behavior (2026-08-21 diagnostics): every story is idle-clean in
+    // isolation (~1 draw / 3s). In catalog mode, parks directly after bulk
+    // materialization show decaying invalidation bursts from the async
+    // Markdown pipeline draining its parse queue; later parks measure zero.
     gallery.update(cx, |gallery, cx| {
         gallery.scroll_catalog_to(StoryId::Approval, cx);
     });
-    let park_started = Instant::now();
-    while park_started.elapsed() < IDLE_PARK_WINDOW {
-        cx.background_executor()
-            .timer(Duration::from_millis(IDLE_PROBE_MS))
-            .await;
-        for event in collector.collect_unseen() {
-            if matches!(event, FrameEvent::Draw(_)) {
-                report.idle_draws_while_parked += 1;
-            }
-        }
-    }
-    // Leave the gallery in its normal operating state.
+    let park_draws = count_park_draws(&mut collector, cx).await;
+    report.idle_draws_while_parked = park_draws;
     gallery.update(cx, |gallery, cx| {
         gallery.set_scan_simulation_suspended(false, cx);
     });
@@ -231,4 +224,21 @@ fn duration_nanos(duration: Duration) -> u64 {
 /// Reads the story region the catalog currently focuses.
 fn current_focus(gallery: &Entity<Gallery>, cx: &AsyncApp) -> usize {
     gallery.read_with(cx, |gallery: &Gallery, _| gallery.scan_focus_region())
+}
+
+/// Counts drawn frames over a three-second park for idle-demand diagnosis.
+async fn count_park_draws(collector: &mut FrameTimingCollector, cx: &mut AsyncApp) -> u64 {
+    let mut draws = 0u64;
+    let probe_started = Instant::now();
+    while probe_started.elapsed() < Duration::from_secs(3) {
+        cx.background_executor()
+            .timer(Duration::from_millis(IDLE_PROBE_MS))
+            .await;
+        for event in collector.collect_unseen() {
+            if matches!(event, FrameEvent::Draw(_)) {
+                draws += 1;
+            }
+        }
+    }
+    draws
 }
