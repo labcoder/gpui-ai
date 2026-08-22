@@ -6,10 +6,11 @@
 
 use crate::{StoryId, sim};
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, IconName, Root, StyledExt as _,
-    button::Button,
+    button::{Button, ButtonVariants as _},
     h_flex,
     scroll::ScrollableElement as _,
     text::TextView,
@@ -83,6 +84,88 @@ fn story_needs_simulation(story: StoryId) -> bool {
             | StoryId::Chat
             | StoryId::CodeBlock
     )
+}
+
+/// One demonstrable state of a seven-state table story.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TableStoryState {
+    Populated,
+    Loading,
+    Error,
+    Empty,
+    Disabled,
+    Selected,
+    Constrained,
+}
+
+impl TableStoryState {
+    /// Every demonstrated state in switcher order.
+    const ALL: [Self; 7] = [
+        Self::Populated,
+        Self::Loading,
+        Self::Error,
+        Self::Empty,
+        Self::Disabled,
+        Self::Selected,
+        Self::Constrained,
+    ];
+
+    /// Switcher labels parallel to [`Self::ALL`].
+    const LABELS: &'static [(&'static str, &'static str)] = &[
+        ("populated", "Populated"),
+        ("loading", "Loading"),
+        ("error", "Error"),
+        ("empty", "Empty"),
+        ("disabled", "Disabled"),
+        ("selected", "Selected"),
+        ("constrained", "Constrained"),
+    ];
+
+    /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
+    fn index(self) -> usize {
+        Self::ALL.iter().position(|kind| *kind == self).unwrap_or(0)
+    }
+}
+
+/// Builds the shared state-switcher toolbar for a multi-state story.
+///
+/// Only the active state's content is rendered; switching notifies the owning
+/// story entity through `apply`.
+fn story_state_switcher<T: 'static>(
+    owner: gpui::WeakEntity<T>,
+    slug: &'static str,
+    states: &'static [(&'static str, &'static str)],
+    active_index: usize,
+    apply: fn(&mut T, usize, &mut Context<T>),
+) -> Stateful<Div> {
+    h_flex()
+        .id(format!("{slug}-state-switcher"))
+        .debug_selector(move || format!("{slug}-state-switcher"))
+        .flex_none()
+        .flex_wrap()
+        .gap_1()
+        .role(Role::Toolbar)
+        .aria_label("Demonstrated state")
+        .children(
+            states
+                .iter()
+                .enumerate()
+                .map(|(index, (state_slug, label))| {
+                    let owner = owner.clone();
+                    let is_active = index == active_index;
+                    div()
+                        .debug_selector(move || format!("{slug}-state-{state_slug}"))
+                        .child(
+                            Button::new(format!("{slug}-state-{state_slug}"))
+                                .when(is_active, |button| button.primary())
+                                .when(!is_active, |button| button.outline())
+                                .label(*label)
+                                .on_click(move |_, _, cx| {
+                                    let _ = owner.update(cx, |story, cx| apply(story, index, cx));
+                                }),
+                        )
+                }),
+        )
 }
 
 fn visible_range_needs_simulation(range: Range<usize>) -> bool {
@@ -1218,9 +1301,19 @@ struct RecordsTableStory {
     disabled: Entity<RecordsTable>,
     selected: Entity<RecordsTable>,
     constrained: Entity<RecordsTable>,
+    active_state: TableStoryState,
     records: Vec<RecordRow>,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
+}
+
+impl RecordsTableStory {
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(state) = TableStoryState::ALL.get(index).copied() {
+            self.active_state = state;
+            cx.notify();
+        }
+    }
 }
 
 impl RecordsTableStory {
@@ -1347,6 +1440,7 @@ impl RecordsTableStory {
             records: records_story_rows(),
             last_event: "Select a row or sort a column to inspect its typed event.".into(),
             _subscriptions: subscriptions,
+            active_state: TableStoryState::Populated,
         }
     }
 
@@ -1373,17 +1467,68 @@ impl RecordsTableStory {
 }
 
 impl Render for RecordsTableStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let switcher = story_state_switcher(
+            cx.weak_entity(),
+            "records-story",
+            TableStoryState::LABELS,
+            self.active_state.index(),
+            Self::set_active_state,
+        );
+        let active: AnyElement = match self.active_state {
+            TableStoryState::Populated => Self::state(
+                "records-story-populated",
+                "POPULATED AND SORTABLE",
+                self.populated.clone(),
+            )
+            .into_any_element(),
+            TableStoryState::Loading => {
+                Self::state("records-story-loading", "LOADING", self.loading.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Error => {
+                Self::state("records-story-error", "ERROR", self.failed.clone()).into_any_element()
+            }
+            TableStoryState::Empty => {
+                Self::state("records-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+            }
+            TableStoryState::Disabled => Self::state(
+                "records-story-disabled",
+                "DISABLED ROW",
+                self.disabled.clone(),
+            )
+            .into_any_element(),
+            TableStoryState::Selected => Self::state(
+                "records-story-selected",
+                "CONTROLLED SELECTION",
+                self.selected.clone(),
+            )
+            .into_any_element(),
+            TableStoryState::Constrained => v_flex()
+                .id("records-story-constrained")
+                .debug_selector(|| "records-story-constrained".into())
+                .flex_none()
+                .gap_1()
+                .child(
+                    div()
+                        .id("records-story-constrained-heading")
+                        .role(Role::Heading)
+                        .aria_label("Constrained height and width")
+                        .text_xs()
+                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                )
+                .child(
+                    div()
+                        .w(px(520.))
+                        .h(px(180.))
+                        .child(self.constrained.clone()),
+                )
+                .into_any_element(),
+        };
+
         v_flex().gap_3()
-            .child(Self::state("records-story-populated", "POPULATED AND SORTABLE", self.populated.clone()))
-            .child(Self::state("records-story-loading", "LOADING", self.loading.clone()))
-            .child(Self::state("records-story-error", "ERROR", self.failed.clone()))
-            .child(Self::state("records-story-empty", "EMPTY", self.empty.clone()))
-            .child(Self::state("records-story-disabled", "DISABLED ROW", self.disabled.clone()))
-            .child(Self::state("records-story-selected", "CONTROLLED SELECTION", self.selected.clone()))
-            .child(v_flex().id("records-story-constrained").debug_selector(|| "records-story-constrained".into()).flex_none().gap_1()
-                .child(div().id("records-story-constrained-heading").role(Role::Heading).aria_label("Constrained height and width").text_xs().child("CONSTRAINED HEIGHT AND WIDTH"))
-                .child(div().w(px(520.)).h(px(180.)).child(self.constrained.clone())))
+            .child(switcher)
+            .child(active)
             .child(TextView::markdown("records-story-event-log", format!("**Last typed event.** {}", self.last_event)).selectable(true))
             .child(div().id("records-story-reference-note").debug_selector(|| "records-story-reference-note".into())
                 .child(TextView::markdown("records-story-reference-copy", "**Reference comparison.** Beautiful UI's records table establishes the compact density and pinned identity column. This GPUI version keeps application-owned sorting and selection, stable row and column IDs, selectable cells, semantic state, and two-axis virtualization.").selectable(true)))
@@ -1491,9 +1636,19 @@ struct DiffTableStory {
     disabled: Entity<DiffTable>,
     selected: Entity<DiffTable>,
     constrained: Entity<DiffTable>,
+    active_state: TableStoryState,
     rows: Vec<DiffRow>,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
+}
+
+impl DiffTableStory {
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(state) = TableStoryState::ALL.get(index).copied() {
+            self.active_state = state;
+            cx.notify();
+        }
+    }
 }
 
 impl DiffTableStory {
@@ -1640,6 +1795,7 @@ impl DiffTableStory {
             rows: diff_story_rows(),
             last_event: "Select, sort, review, accept, or reject a proposal.".into(),
             _subscriptions: subscriptions,
+            active_state: TableStoryState::Populated,
         }
     }
 
@@ -1666,60 +1822,69 @@ impl DiffTableStory {
 }
 
 impl Render for DiffTableStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .child(Self::state(
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let switcher = story_state_switcher(
+            cx.weak_entity(),
+            "diff-story",
+            TableStoryState::LABELS,
+            self.active_state.index(),
+            Self::set_active_state,
+        );
+        let active: AnyElement = match self.active_state {
+            TableStoryState::Populated => Self::state(
                 "diff-story-populated",
                 "POPULATED AND SORTABLE",
                 self.populated.clone(),
-            ))
-            .child(Self::state(
-                "diff-story-loading",
-                "LOADING",
-                self.loading.clone(),
-            ))
-            .child(Self::state(
-                "diff-story-error",
-                "ERROR",
-                self.failed.clone(),
-            ))
-            .child(Self::state(
-                "diff-story-empty",
-                "EMPTY",
-                self.empty.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Loading => {
+                Self::state("diff-story-loading", "LOADING", self.loading.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Error => {
+                Self::state("diff-story-error", "ERROR", self.failed.clone()).into_any_element()
+            }
+            TableStoryState::Empty => {
+                Self::state("diff-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+            }
+            TableStoryState::Disabled => Self::state(
                 "diff-story-disabled",
                 "DISABLED PROPOSAL",
                 self.disabled.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Selected => Self::state(
                 "diff-story-selected",
                 "CONTROLLED SELECTION AND DECISION",
                 self.selected.clone(),
-            ))
-            .child(
-                v_flex()
-                    .id("diff-story-constrained")
-                    .debug_selector(|| "diff-story-constrained".into())
-                    .flex_none()
-                    .gap_1()
-                    .child(
-                        div()
-                            .id("diff-story-constrained-heading")
-                            .role(Role::Heading)
-                            .aria_label("Constrained height and width")
-                            .text_xs()
-                            .child("CONSTRAINED HEIGHT AND WIDTH"),
-                    )
-                    .child(
-                        div()
-                            .w(px(520.))
-                            .h(px(180.))
-                            .child(self.constrained.clone()),
-                    ),
             )
+            .into_any_element(),
+            TableStoryState::Constrained => v_flex()
+                .id("diff-story-constrained")
+                .debug_selector(|| "diff-story-constrained".into())
+                .flex_none()
+                .gap_1()
+                .child(
+                    div()
+                        .id("diff-story-constrained-heading")
+                        .role(Role::Heading)
+                        .aria_label("Constrained height and width")
+                        .text_xs()
+                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                )
+                .child(
+                    div()
+                        .w(px(520.))
+                        .h(px(180.))
+                        .child(self.constrained.clone()),
+                )
+                .into_any_element(),
+        };
+
+        v_flex()
+            .gap_3()
+            .child(switcher)
+            .child(active)
             .child(
                 TextView::markdown(
                     "diff-story-event-log",
@@ -1970,6 +2135,7 @@ struct FilterTableStory {
     selected: Entity<FilterTable>,
     constrained: Entity<FilterTable>,
     performance_only: bool,
+    active_state: TableStoryState,
     rows: Vec<FilterRow>,
     #[cfg(feature = "performance")]
     performance_rows: Arc<[FilterRow]>,
@@ -2135,6 +2301,7 @@ impl FilterTableStory {
             selected,
             constrained,
             performance_only: false,
+            active_state: TableStoryState::Populated,
             rows,
             #[cfg(feature = "performance")]
             performance_rows: many_rows,
@@ -2148,6 +2315,13 @@ impl FilterTableStory {
     fn set_performance_only(&mut self, cx: &mut Context<Self>) {
         if !self.performance_only {
             self.performance_only = true;
+            cx.notify();
+        }
+    }
+
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(state) = TableStoryState::ALL.get(index).copied() {
+            self.active_state = state;
             cx.notify();
         }
     }
@@ -2204,7 +2378,7 @@ impl FilterTableStory {
 }
 
 impl Render for FilterTableStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.performance_only {
             return Self::state(
                 "filter-story-constrained",
@@ -2214,59 +2388,68 @@ impl Render for FilterTableStory {
             .into_any_element();
         }
 
-        v_flex()
-            .gap_3()
-            .child(Self::state(
+        let switcher = story_state_switcher(
+            cx.weak_entity(),
+            "filter-story",
+            TableStoryState::LABELS,
+            self.active_state.index(),
+            Self::set_active_state,
+        );
+        let active: AnyElement = match self.active_state {
+            TableStoryState::Populated => Self::state(
                 "filter-story-populated",
                 "POPULATED, FILTERABLE, AND SORTABLE",
                 self.populated.clone(),
-            ))
-            .child(Self::state(
-                "filter-story-loading",
-                "LOADING",
-                self.loading.clone(),
-            ))
-            .child(Self::state(
-                "filter-story-error",
-                "ERROR",
-                self.failed.clone(),
-            ))
-            .child(Self::state(
-                "filter-story-empty",
-                "EMPTY",
-                self.empty.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Loading => {
+                Self::state("filter-story-loading", "LOADING", self.loading.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Error => {
+                Self::state("filter-story-error", "ERROR", self.failed.clone()).into_any_element()
+            }
+            TableStoryState::Empty => {
+                Self::state("filter-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+            }
+            TableStoryState::Disabled => Self::state(
                 "filter-story-disabled",
                 "DISABLED FILTER AND ROW",
                 self.disabled.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Selected => Self::state(
                 "filter-story-selected",
                 "CONTROLLED SELECTION",
                 self.selected.clone(),
-            ))
-            .child(
-                v_flex()
-                    .id("filter-story-constrained")
-                    .debug_selector(|| "filter-story-constrained".into())
-                    .flex_none()
-                    .gap_1()
-                    .child(
-                        div()
-                            .id("filter-story-constrained-heading")
-                            .role(Role::Heading)
-                            .aria_label("Constrained height and width")
-                            .text_xs()
-                            .child("CONSTRAINED HEIGHT AND WIDTH"),
-                    )
-                    .child(
-                        div()
-                            .w(px(520.))
-                            .h(px(190.))
-                            .child(self.constrained.clone()),
-                    ),
             )
+            .into_any_element(),
+            TableStoryState::Constrained => v_flex()
+                .id("filter-story-constrained")
+                .debug_selector(|| "filter-story-constrained".into())
+                .flex_none()
+                .gap_1()
+                .child(
+                    div()
+                        .id("filter-story-constrained-heading")
+                        .role(Role::Heading)
+                        .aria_label("Constrained height and width")
+                        .text_xs()
+                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                )
+                .child(
+                    div()
+                        .w(px(520.))
+                        .h(px(190.))
+                        .child(self.constrained.clone()),
+                )
+                .into_any_element(),
+        };
+
+        v_flex()
+            .gap_3()
+            .child(switcher)
+            .child(active)
             .child(
                 TextView::markdown(
                     "filter-story-event-log",
@@ -2352,9 +2535,22 @@ struct ComparisonTableStory {
     empty: Entity<ComparisonTable>,
     disabled: Entity<ComparisonTable>,
     selected: Entity<ComparisonTable>,
-    constrained: Entity<ComparisonTable>,
+    /// Built lazily: the maximum 12×128 grid costs hundreds of milliseconds
+    /// per draw and is only materialized when its state is selected.
+    constrained: Option<Entity<ComparisonTable>>,
+    active_state: TableStoryState,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
+}
+
+impl ComparisonTableStory {
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(state) = TableStoryState::ALL.get(index).copied() else {
+            return;
+        };
+        self.active_state = state;
+        cx.notify();
+    }
 }
 
 impl ComparisonTableStory {
@@ -2431,44 +2627,6 @@ impl ComparisonTableStory {
                 cx,
             )
         });
-        let wide_items = (0..12).map(|index| {
-            ComparisonItem::new(
-                format!("wide-{index}"),
-                format!("Regional plan {} with a long name", index + 1),
-            )
-            .state(if index == 9 {
-                ComparisonItemState::Highlighted
-            } else {
-                ComparisonItemState::Default
-            })
-        });
-        let wide_snapshot = ComparisonSnapshot::try_new(
-            wide_items,
-            (0..128).map(|feature_index| {
-                ComparisonFeature::new(
-                    format!("wide-feature-{feature_index}"),
-                    format!("Regional capability {}", feature_index + 1),
-                )
-                .description("Selectable supporting detail for this capability")
-                .values((0..12).map(|item_index| {
-                    ComparisonValue::new(
-                        format!("wide-{item_index}"),
-                        format!("Tier {}", feature_index + item_index + 1),
-                    )
-                }))
-            }),
-        )
-        .expect("the maximum-width gallery comparison must remain bounded");
-        let constrained = cx.new(|cx| {
-            configured_comparison_table(
-                "gallery-comparison-constrained",
-                "Constrained plan comparison",
-                Progressive::complete(wide_snapshot),
-                None,
-                window,
-                cx,
-            )
-        });
 
         let mut subscriptions = Vec::new();
         for table in [&populated, &selected] {
@@ -2493,7 +2651,8 @@ impl ComparisonTableStory {
             empty,
             disabled,
             selected,
-            constrained,
+            constrained: None,
+            active_state: TableStoryState::Populated,
             last_event: "Choose a plan.".into(),
             _subscriptions: subscriptions,
         }
@@ -2521,41 +2680,94 @@ impl ComparisonTableStory {
     }
 }
 
+/// Builds the maximum 12-item by 128-feature gallery snapshot on demand.
+fn comparison_story_max_grid() -> ComparisonSnapshot {
+    let wide_items = (0..12).map(|index| {
+        ComparisonItem::new(
+            format!("wide-{index}"),
+            format!("Regional plan {} with a long name", index + 1),
+        )
+        .state(if index == 9 {
+            ComparisonItemState::Highlighted
+        } else {
+            ComparisonItemState::Default
+        })
+    });
+    ComparisonSnapshot::try_new(
+        wide_items,
+        (0..128).map(|feature_index| {
+            ComparisonFeature::new(
+                format!("wide-feature-{feature_index}"),
+                format!("Regional capability {}", feature_index + 1),
+            )
+            .description("Selectable supporting detail for this capability")
+            .values((0..12).map(|item_index| {
+                ComparisonValue::new(
+                    format!("wide-{item_index}"),
+                    format!("Tier {}", feature_index + item_index + 1),
+                )
+            }))
+        }),
+    )
+    .expect("the maximum-width gallery comparison must remain bounded")
+}
+
 impl Render for ComparisonTableStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .child(Self::state(
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let owner = cx.weak_entity();
+        let switcher = story_state_switcher(
+            owner,
+            "comparison-story",
+            TableStoryState::LABELS,
+            self.active_state.index(),
+            Self::set_active_state,
+        );
+        let active: AnyElement = match self.active_state {
+            TableStoryState::Populated => Self::state(
                 "comparison-story-populated",
                 "POPULATED AND HIGHLIGHTED",
                 self.populated.clone(),
-            ))
-            .child(Self::state(
-                "comparison-story-loading",
-                "LOADING",
-                self.loading.clone(),
-            ))
-            .child(Self::state(
-                "comparison-story-error",
-                "ERROR",
-                self.failed.clone(),
-            ))
-            .child(Self::state(
-                "comparison-story-empty",
-                "EMPTY",
-                self.empty.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Loading => {
+                Self::state("comparison-story-loading", "LOADING", self.loading.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Error => {
+                Self::state("comparison-story-error", "ERROR", self.failed.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Empty => {
+                Self::state("comparison-story-empty", "EMPTY", self.empty.clone())
+                    .into_any_element()
+            }
+            TableStoryState::Disabled => Self::state(
                 "comparison-story-disabled",
                 "DISABLED ITEM",
                 self.disabled.clone(),
-            ))
-            .child(Self::state(
+            )
+            .into_any_element(),
+            TableStoryState::Selected => Self::state(
                 "comparison-story-selected",
                 "CONTROLLED SELECTION",
                 self.selected.clone(),
-            ))
-            .child(
+            )
+            .into_any_element(),
+            TableStoryState::Constrained => {
+                let constrained = self.constrained.clone().unwrap_or_else(|| {
+                    let snapshot = comparison_story_max_grid();
+                    cx.new(|cx| {
+                        configured_comparison_table(
+                            "gallery-comparison-constrained",
+                            "Constrained plan comparison",
+                            Progressive::complete(snapshot),
+                            None,
+                            window,
+                            cx,
+                        )
+                    })
+                });
+                self.constrained = Some(constrained.clone());
                 v_flex()
                     .id("comparison-story-constrained")
                     .debug_selector(|| "comparison-story-constrained".into())
@@ -2565,10 +2777,18 @@ impl Render for ComparisonTableStory {
                             .id("comparison-story-constrained-heading")
                             .role(Role::Heading)
                             .aria_label("Constrained width and height")
+                            .text_xs()
                             .child("CONSTRAINED WIDTH AND HEIGHT"),
                     )
-                    .child(div().w(px(520.)).h(px(190.)).child(self.constrained.clone())),
-            )
+                    .child(div().w(px(520.)).h(px(190.)).child(constrained))
+                    .into_any_element()
+            }
+        };
+
+        v_flex()
+            .gap_3()
+            .child(switcher)
+            .child(active)
             .child(
                 TextView::markdown(
                     "comparison-story-event-log",
@@ -3676,8 +3896,9 @@ mod tests {
     };
     use crate::StoryId;
     use gpui::{
-        AppContext as _, Context, Element as _, IntoElement as _, Render, Role, ScrollDelta,
-        ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit, point, px, size,
+        AppContext as _, Context, Element as _, IntoElement as _, Modifiers, MouseButton, Render,
+        Role, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit,
+        point, px, size,
     };
     use gpui_component::ActiveTheme as _;
     use mighty_gpui::{
@@ -3758,10 +3979,10 @@ mod tests {
         cx.simulate_resize(size(px(900.), px(560.)));
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.run_until_parked();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        for selector in [
+        // Only the active state renders; every state must be reachable
+        // through the switcher toolbar.
+        for (index, selector) in [
             "records-story-populated",
             "records-story-loading",
             "records-story-error",
@@ -3769,13 +3990,48 @@ mod tests {
             "records-story-disabled",
             "records-story-selected",
             "records-story-constrained",
-            "records-story-reference-note",
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if index > 0 {
+                activate_story_state(cx, "records-story", index);
+            }
             assert!(
                 cx.debug_bounds(selector).is_some(),
                 "records story should exercise {selector}"
             );
         }
+        assert!(
+            cx.debug_bounds("records-story-reference-note").is_some(),
+            "records story should exercise records-story-reference-note"
+        );
+    }
+
+    /// Clicks one switcher control and settles the redraw.
+    fn activate_story_state(cx: &mut VisualTestContext, slug: &str, index: usize) {
+        let labels = [
+            "Populated",
+            "Loading",
+            "Error",
+            "Empty",
+            "Disabled",
+            "Selected",
+            "Constrained",
+        ];
+        // debug_bounds requires a 'static str; leaking in a test is fine.
+        let selector: &'static str =
+            Box::leak(format!("{slug}-state-{}", labels[index].to_lowercase()).into_boxed_str());
+        let bounds = cx
+            .debug_bounds(selector)
+            .unwrap_or_else(|| panic!("switcher control {} should be visible", labels[index]));
+        let center = bounds.center();
+        cx.run_until_parked();
+        cx.simulate_mouse_move(center, None, Modifiers::default());
+        cx.simulate_mouse_down(center, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(center, MouseButton::Left, Modifiers::default());
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
     }
 
     #[gpui::test]
@@ -3830,10 +4086,10 @@ mod tests {
         cx.simulate_resize(size(px(900.), px(560.)));
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.run_until_parked();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        for selector in [
+        // Only the active state renders; every state must be reachable
+        // through the switcher toolbar.
+        for (index, selector) in [
             "diff-story-populated",
             "diff-story-loading",
             "diff-story-error",
@@ -3841,13 +4097,22 @@ mod tests {
             "diff-story-disabled",
             "diff-story-selected",
             "diff-story-constrained",
-            "diff-story-reference-note",
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if index > 0 {
+                activate_story_state(cx, "diff-story", index);
+            }
             assert!(
                 cx.debug_bounds(selector).is_some(),
                 "diff story should exercise {selector}"
             );
         }
+        assert!(
+            cx.debug_bounds("diff-story-reference-note").is_some(),
+            "diff story should exercise diff-story-reference-note"
+        );
     }
 
     #[gpui::test]
@@ -3902,10 +4167,10 @@ mod tests {
         cx.simulate_resize(size(px(900.), px(560.)));
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.run_until_parked();
-        cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        for selector in [
+        // Only the active state renders; every state must be reachable
+        // through the switcher toolbar.
+        for (index, selector) in [
             "filter-story-populated",
             "filter-story-loading",
             "filter-story-error",
@@ -3913,13 +4178,22 @@ mod tests {
             "filter-story-disabled",
             "filter-story-selected",
             "filter-story-constrained",
-            "filter-story-reference-note",
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if index > 0 {
+                activate_story_state(cx, "filter-story", index);
+            }
             assert!(
                 cx.debug_bounds(selector).is_some(),
                 "filter story should exercise {selector}"
             );
         }
+        assert!(
+            cx.debug_bounds("filter-story-reference-note").is_some(),
+            "filter story should exercise filter-story-reference-note"
+        );
     }
 
     #[gpui::test]
@@ -3972,7 +4246,10 @@ mod tests {
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        for selector in [
+        // Only the active state renders; every state must be reachable
+        // through the switcher toolbar. The constrained state lazily builds
+        // the maximum 12x128 grid.
+        for (index, selector) in [
             "comparison-story-populated",
             "comparison-story-loading",
             "comparison-story-error",
@@ -3980,13 +4257,22 @@ mod tests {
             "comparison-story-disabled",
             "comparison-story-selected",
             "comparison-story-constrained",
-            "comparison-story-reference-note",
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if index > 0 {
+                activate_story_state(cx, "comparison-story", index);
+            }
             assert!(
                 cx.debug_bounds(selector).is_some(),
                 "comparison story should exercise {selector}"
             );
         }
+        assert!(
+            cx.debug_bounds("comparison-story-reference-note").is_some(),
+            "comparison story should exercise comparison-story-reference-note"
+        );
     }
 
     #[gpui::test]
