@@ -37,13 +37,17 @@ pub(crate) fn outlined_control_with_label(
         .flex()
         .items_center()
         .justify_center()
+        // Compact pill geometry shared by every small control in the
+        // library — filter chips, row CTAs, toggles. One height, one radius,
+        // one text style so controls look like one family next to tables.
+        .min_h(tokens.spacing.lg)
         .px(tokens.spacing.sm)
         .py(tokens.spacing.xxs)
         .border_1()
         .border_color(cx.theme().border)
-        .rounded(tokens.radius.sm)
+        .rounded(tokens.radius.md)
         .bg(cx.theme().transparent)
-        .text_token(tokens.typography.xs)
+        .text_token(tokens.typography.sm)
         .text_color(cx.theme().foreground)
         .hover(|style| style.bg(cx.theme().button_hover))
         .active(|style| style.bg(cx.theme().button_active))

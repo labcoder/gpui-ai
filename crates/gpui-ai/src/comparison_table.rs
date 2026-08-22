@@ -1,13 +1,16 @@
 //! Bounded, feature-oriented comparison table values and presentation.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Role, ScrollHandle, ScrollWheelEvent, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    Animation, AnimationExt as _, App, Context, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, ScrollHandle,
+    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
-use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView};
+use gpui_component::{
+    ActiveTheme as _, Icon, IconName, h_flex, scroll::ScrollableElement as _, text::TextView,
+};
 
 use crate::{
     control::outlined_control_with_label,
@@ -636,7 +639,6 @@ fn comparison_status_frame(
         .role(role)
         .aria_label(label)
 }
-
 fn comparison_feature_row_frame(
     table_id: &str,
     feature: &ComparisonFeature,
@@ -727,16 +729,57 @@ impl Render for ComparisonTable {
             .border_color(cx.theme().border)
             .rounded(tokens.radius.md)
             .when_some(status, |surface, (role, label): (Role, SharedString)| {
+                // Status states carry the same semantic color language as
+                // Task Rows: info for in-flight work, danger for failures,
+                // muted for empty. A spinner accompanies loading so the
+                // state is visible, not just readable.
+                fn status_visuals(role: Role, cx: &App) -> (Hsla, IconName) {
+                    match role {
+                        Role::ProgressIndicator => (cx.theme().info, IconName::LoaderCircle),
+                        Role::Alert => (cx.theme().danger, IconName::CircleX),
+                        _ => (cx.theme().muted_foreground, IconName::Dash),
+                    }
+                }
+                let spinner = role == Role::ProgressIndicator;
+                let (color, text) = (status_visuals(role, cx).0, label.clone());
                 surface.child(
                     comparison_status_frame(&self.id, role, label.clone())
                         .p(tokens.spacing.md)
-                        .text_token(tokens.typography.sm)
                         .child(
-                            TextView::markdown(
-                                format!("comparison-table-status-copy:{}", self.id),
-                                escape_markdown_text(&label),
-                            )
-                            .selectable(true),
+                            h_flex()
+                                .gap(tokens.spacing.sm)
+                                .items_center()
+                                .when(spinner, |row| {
+                                    // The animated element must be the direct
+                                    // child; wrap the rotating icon in a
+                                    // fixed-size slot so layout stays stable.
+                                    let icon = status_visuals(role, cx).1;
+                                    row.child(
+                                        div().size_4().child(
+                                            Icon::new(icon)
+                                                .text_color(color)
+                                                .with_animation(
+                                                    "comparison-status-spinner",
+                                                    Animation::new(Duration::from_millis(900))
+                                                        .repeat(),
+                                                    |this, delta| {
+                                                        this.rotate(gpui::percentage(delta))
+                                                    },
+                                                )
+                                                .into_any_element(),
+                                        ),
+                                    )
+                                })
+                                .when(!spinner, |row| {
+                                    let icon = status_visuals(role, cx).1;
+                                    row.child(Icon::new(icon).size_4().text_color(color))
+                                })
+                                .child(
+                                    div()
+                                        .text_token(tokens.typography.sm)
+                                        .text_color(color)
+                                        .child(text),
+                                ),
                         ),
                 )
             })
