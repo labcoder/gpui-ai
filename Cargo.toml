@@ -39,3 +39,10 @@ wasm-bindgen = "0.2.113"
 dbg_macro = "deny"
 todo = "deny"
 unwrap_used = "deny"
+
+# Gallery performance tuning: the component gallery is the project's
+# demonstration surface, so release builds optimize for steady frame times.
+# Measured against the catalog-scan gate (npm run test:catalog).
+[profile.release]
+codegen-units = 16
+lto = "thin"
