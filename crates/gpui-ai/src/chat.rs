@@ -3,6 +3,7 @@
 use crate::{
     control::outlined_control,
     prompt_bar::{PromptBar, PromptBarEvent},
+    scrolling::ScrollRoom,
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
     theme::SemanticStyledExt as _,
@@ -10,8 +11,9 @@ use crate::{
 use gpui::{
     AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, FollowMode,
     InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset, ListState,
-    ParentElement as _, Render, Role, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div, list, prelude::FluentBuilder as _, px,
+    ParentElement as _, Render, Role, ScrollWheelEvent, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, list,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_base::Button;
 use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView, v_flex};
@@ -627,6 +629,22 @@ impl Render for Chat {
 
         chat_frame(&self.id)
             .gap(tokens.spacing.sm)
+            // Native scroll chaining: when the pointer is over the
+            // transcript and it can still move, the wheel belongs to this
+            // component. Only when the transcript is pinned at the edge in
+            // the scroll direction does the event chain to the page.
+            .on_scroll_wheel(cx.listener(|chat, event: &ScrollWheelEvent, _, cx| {
+                let delta_y = event.delta.pixel_delta(px(20.)).y;
+                if delta_y == px(0.) {
+                    return;
+                }
+                let offset = chat.list_state.scroll_px_offset_for_scrollbar().y;
+                let max_offset = chat.list_state.max_offset_for_scrollbar().y;
+                let room = ScrollRoom::new(offset, max_offset);
+                if room.can_absorb(delta_y) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 transcript_frame(transcript_id)
                     .flex_1()

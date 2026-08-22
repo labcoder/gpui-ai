@@ -87,8 +87,9 @@ pub mod prelude {
     };
     pub use crate::scrolling::{
         AUTOSCROLL_FULL_SPEED_DISTANCE_PX, Autoscroll, LINE_HEIGHT_PX,
-        MAX_AUTOSCROLL_SPEED_PX_PER_SEC, WHEEL_ACCEL_DECAY_SECONDS, WHEEL_ACCEL_MAX_MULTIPLIER,
-        WHEEL_ACCEL_NOTCHES_TO_FULL, WHEEL_FAST_SENSITIVITY, WHEEL_SENSITIVITY, WheelAccelerator,
+        MAX_AUTOSCROLL_SPEED_PX_PER_SEC, ScrollRoom, WHEEL_ACCEL_DECAY_SECONDS,
+        WHEEL_ACCEL_MAX_MULTIPLIER, WHEEL_ACCEL_NOTCHES_TO_FULL, WHEEL_FAST_SENSITIVITY,
+        WHEEL_SENSITIVITY, WheelAccelerator,
     };
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};

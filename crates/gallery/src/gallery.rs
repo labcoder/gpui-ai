@@ -1160,8 +1160,10 @@ impl Render for SelectionActionsStory {
             )
             .child(
                 div()
-                    .h(px(168.))
-                    .max_h(px(168.))
+                    // Room for the selectable passage plus the action
+                    // toolbar without clipping either.
+                    .h(px(220.))
+                    .max_h(px(220.))
                     .flex_none()
                     .child(self.selection.clone()),
             )
@@ -3862,8 +3864,10 @@ impl Gallery {
                     v_flex()
                         .id("insight-story-scroll")
                         .debug_selector(|| "insight-story-scroll".into())
-                        .h(px(256.))
-                        .max_h(px(256.))
+                        // 256px clipped the sparkline charts mid-curve; 420px
+                        // shows the full card — metrics, charts, and footer.
+                        .h(px(420.))
+                        .max_h(px(420.))
                         .flex_none()
                         .gap_2()
                         .track_scroll(&self.insight_scroll)

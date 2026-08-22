@@ -5,8 +5,9 @@ use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, AppContext as _, Bounds, ElementId, Entity, EventEmitter, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, Role, ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement as _,
-    Styled, Subscription, Window, div, point, prelude::FluentBuilder as _,
+    Render, Role, ScrollHandle, ScrollWheelEvent, SharedString, Size, Stateful,
+    StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, ElementExt as _,
@@ -467,6 +468,18 @@ impl Render for SelectionActions {
             .size_full()
             .min_h(tokens.spacing.xxl * 3.)
             .overflow_y_scroll()
+            // Native scroll chaining: trap the wheel while the surface can
+            // still scroll in the wheel's direction.
+            .on_scroll_wheel({
+                let scroll_handle = self.toolbar_scroll.clone();
+                move |event: &ScrollWheelEvent, _, cx| {
+                    let delta_y = event.delta.pixel_delta(gpui::px(20.)).y;
+                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
+                    {
+                        cx.stop_propagation();
+                    }
+                }
+            })
             .p(tokens.spacing.md)
             .border_1()
             .border_color(tokens.colors.border)

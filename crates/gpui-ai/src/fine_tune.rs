@@ -6,8 +6,8 @@ use gpui::Hsla;
 use gpui::{
     AccessibleAction, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable as _,
     InteractiveElement as _, IntoElement, MouseButton, Orientation, ParentElement as _, Render,
-    Role, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
-    prelude::FluentBuilder as _, relative,
+    Role, ScrollHandle, ScrollWheelEvent, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::{
     Decrement, Increment, SliderIndicator, SliderThumb, SliderTrack, StepAction, step_value,
@@ -268,6 +268,8 @@ pub struct FineTuneCard {
     id: SharedString,
     values: FineTuneValues,
     typefaces: Arc<[FineTuneTypeface]>,
+    /// Scroll position of the card body when its height is constrained.
+    scroll_handle: ScrollHandle,
     width_input: Entity<InputState>,
     height_input: Entity<InputState>,
     radius_input: Entity<InputState>,
@@ -392,6 +394,7 @@ impl FineTuneCard {
             opacity_slider,
             opacity_slider_focus,
             accent_picker,
+            scroll_handle: ScrollHandle::new(),
             _subscriptions: vec![
                 width_subscription,
                 height_subscription,
@@ -1002,6 +1005,19 @@ impl Render for FineTuneCard {
             .h_full()
             .max_h_full()
             .overflow_y_scroll()
+            .track_scroll(&self.scroll_handle)
+            // Native scroll chaining: trap the wheel while this card has
+            // scroll room in the scroll direction; release at the edges.
+            .on_scroll_wheel({
+                let scroll_handle = self.scroll_handle.clone();
+                move |event: &ScrollWheelEvent, _, cx| {
+                    let delta_y = event.delta.pixel_delta(px(20.)).y;
+                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
+                    {
+                        cx.stop_propagation();
+                    }
+                }
+            })
             .gap(tokens.spacing.md)
             .p(tokens.spacing.md)
             .rounded(tokens.radius.md)

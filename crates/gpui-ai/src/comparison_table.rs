@@ -4,14 +4,15 @@ use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, div, prelude::FluentBuilder as _,
+    ParentElement as _, Render, Role, ScrollHandle, ScrollWheelEvent, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView};
 
 use crate::{
     control::outlined_control_with_label,
     records_table::escape_markdown_text,
+    scrolling::ScrollRoom,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -705,6 +706,20 @@ impl Render for ComparisonTable {
             .min_h_0()
             .flex()
             .flex_col()
+            // Native scroll chaining: while either axis of the table has
+            // room in the wheel's direction, the wheel belongs to the table.
+            .on_scroll_wheel({
+                let horizontal = self.horizontal_scroll.clone();
+                let vertical = self.feature_scroll.clone();
+                move |event: &ScrollWheelEvent, _, cx| {
+                    let delta = event.delta.pixel_delta(px(20.));
+                    let vertical_room = ScrollRoom::from_handle(&vertical).can_absorb(delta.y);
+                    let horizontal_room = ScrollRoom::from_handle(&horizontal).can_absorb(delta.x);
+                    if vertical_room || horizontal_room {
+                        cx.stop_propagation();
+                    }
+                }
+            })
             .overflow_x_scroll()
             .track_scroll(&self.horizontal_scroll)
             .horizontal_scrollbar(&self.horizontal_scroll)

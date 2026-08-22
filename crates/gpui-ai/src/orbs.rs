@@ -191,12 +191,19 @@ impl RenderOnce for Orbs {
         let tokens = cx.theme().semantic_tokens();
         let scale = self.diameter.as_f32() / STAGE;
         let dot = px(4.2 * scale);
+        // Center-to-center spacing between lattice dots.
+        let pitch = px(6.5 * scale);
         let colors = [cx.theme().primary, cx.theme().info, cx.theme().cyan];
         let variant = self.variant;
         let variant_index = OrbVariant::ALL
             .iter()
             .position(|candidate| *candidate == variant)
             .unwrap_or_default() as u64;
+        // Lattice geometry: center the N×N grid of dots inside the cluster.
+        // Cell pitch keeps a dot-gap-dot rhythm; the whole block is offset so
+        // the lattice is centered regardless of diameter.
+        let span = px((N - 1) as f32 * pitch.as_f32());
+        let origin = (self.diameter - span - dot) / 2.0;
 
         div()
             .relative()
@@ -215,6 +222,8 @@ impl RenderOnce for Orbs {
                     };
                     div()
                         .absolute()
+                        .left(origin + pitch * x)
+                        .top(origin + pitch * y)
                         .size(dot)
                         .rounded(tokens.radius.full)
                         .bg(color)

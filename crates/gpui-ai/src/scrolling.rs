@@ -36,7 +36,7 @@
 //! assert!(distance > Pixels::ZERO);
 //! ```
 
-use gpui::Pixels;
+use gpui::{Pixels, px};
 
 /// Base multiplier applied to wheel line deltas, matching Zed's editor
 /// `scroll_sensitivity` default of 1.0.
@@ -181,6 +181,67 @@ impl Autoscroll {
     }
 }
 
+/// Whether a vertically scrollable region can still absorb wheel motion in
+/// the direction the user is scrolling.
+///
+/// This is the containment test behind native scroll chaining: an inner
+/// component traps the wheel while it has room, and releases it to the
+/// surrounding page once it bottoms out or tops up. `offset` and `max_offset`
+/// use the GPUI convention where the offset is zero at the top of the
+/// content and `-max_offset` at the bottom.
+#[derive(Debug, Clone, Copy)]
+pub struct ScrollRoom {
+    /// Current vertical scroll offset (zero or negative).
+    pub offset: Pixels,
+    /// Maximum magnitude of the offset (zero means nothing to scroll).
+    pub max_offset: Pixels,
+}
+
+impl ScrollRoom {
+    /// Builds a room snapshot from a GPUI scroll handle's reported state.
+    pub fn new(offset: Pixels, max_offset: Pixels) -> Self {
+        Self {
+            offset,
+            max_offset: max_offset.max(px(0.)),
+        }
+    }
+
+    /// True when scrolling by `delta_y` (negative = down) would move this
+    /// region: it has scrollable content and is not already pinned against
+    /// the edge in that direction.
+    pub fn can_absorb(&self, delta_y: Pixels) -> bool {
+        let zero = Pixels::ZERO;
+        if self.max_offset <= zero {
+            return false;
+        }
+        if delta_y < zero {
+            // Scrolling toward the bottom: room remains unless pinned there.
+            self.offset > -self.max_offset + px(0.5)
+        } else if delta_y > zero {
+            // Scrolling back toward the top.
+            self.offset < -px(0.5)
+        } else {
+            false
+        }
+    }
+
+    /// Snapshots the room from a GPUI [`ScrollHandle`](gpui::ScrollHandle).
+    ///
+    /// This is the form used by components whose scrolling lives in a
+    /// `div().overflow_y_scroll().track_scroll(&handle)` container.
+    pub fn from_handle(handle: &gpui::ScrollHandle) -> Self {
+        Self::new(handle.offset().y, handle.max_offset().y)
+    }
+
+    /// Snapshots the room from a GPUI [`ListState`](gpui::ListState).
+    pub fn from_list_state(state: &gpui::ListState) -> Self {
+        Self::new(
+            state.scroll_px_offset_for_scrollbar().y,
+            state.max_offset_for_scrollbar().y,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +344,31 @@ mod tests {
         assert!(px_f(session.tick(0.016)) > 0.0);
         session.track(gpui::point(gpui::px(50.), gpui::px(400.)));
         assert!(px_f(session.tick(0.016)) < 0.0);
+    }
+
+    #[test]
+    fn scroll_room_absorbs_only_when_room_remains_in_direction() {
+        // Mid-scroll: absorbs both directions.
+        let mid = ScrollRoom::new(px(-100.), px(300.));
+        assert!(mid.can_absorb(px(-40.)));
+        assert!(mid.can_absorb(px(40.)));
+
+        // Pinned at the top: only downward motion is absorbed.
+        let at_top = ScrollRoom::new(px(0.), px(300.));
+        assert!(!at_top.can_absorb(px(40.)), "at top, upward must chain out");
+        assert!(at_top.can_absorb(px(-40.)));
+
+        // Pinned at the bottom: only upward motion is absorbed.
+        let at_bottom = ScrollRoom::new(px(-300.), px(300.));
+        assert!(
+            !at_bottom.can_absorb(px(-40.)),
+            "at bottom, downward must chain out"
+        );
+        assert!(at_bottom.can_absorb(px(40.)));
+
+        // Nothing to scroll at all: never absorbs.
+        let empty = ScrollRoom::new(px(0.), px(0.));
+        assert!(!empty.can_absorb(px(-40.)));
+        assert!(!empty.can_absorb(px(40.)));
     }
 }
