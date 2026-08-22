@@ -24,7 +24,20 @@ performance = ["gpui/profiler", "dep:windows-sys"]
 anyhow.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
-gpui-component.workspace = true
+# Syntax highlighting for Markdown code fences in CodeBlock stories. Without
+# this feature upstream's TextView falls back to an inert highlighter and
+# renders fenced code as a single flat color. (json is bundled in the base
+# "tree-sitter" feature, so it needs no separate entry.)
+gpui-component = { workspace = true, features = [
+    "tree-sitter-rust",
+    "tree-sitter-typescript",
+    "tree-sitter-tsx",
+    "tree-sitter-python",
+    "tree-sitter-markdown",
+    "tree-sitter-bash",
+    "tree-sitter-css",
+    "tree-sitter-html",
+] }
 gpui-component-assets.workspace = true
 gpui-ai.workspace = true
 
