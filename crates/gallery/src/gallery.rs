@@ -66,15 +66,6 @@ const CONTRAST_THEME_NAME: &str = "Mighty Contrast";
 /// gallery demo can never drift apart.
 const SHOWCASE_THEMES_JSON: &str = include_str!("../themes/showcase-themes.json");
 
-/// Showcase themes shipped with the gallery, in cycle order after the
-/// upstream defaults and contrast preset. Names must match the JSON exactly.
-const SHOWCASE_THEME_NAMES: [&str; 4] = [
-    "Midnight Violet",
-    "Nord Frost",
-    "Ember Dusk",
-    "Paper Light",
-];
-
 fn story_list_frame() -> Stateful<Div> {
     div()
         .id("gallery-story-list")

@@ -19,6 +19,13 @@ const ALLOWED_FILES: &[&str] = &[
     // Scroll-distance arithmetic: pixels are the unit of scroll motion, not
     // layout spacing. Constants there are tuning parameters, not theme values.
     "crates/gpui-ai/src/scrolling.rs",
+    // Wheel-containment handlers convert wheel deltas to pixels to test
+    // whether the region can absorb the scroll; this is scroll-motion math,
+    // identical in kind to scrolling.rs.
+    "crates/gpui-ai/src/chat.rs",
+    "crates/gpui-ai/src/comparison_table.rs",
+    "crates/gpui-ai/src/fine_tune.rs",
+    "crates/gpui-ai/src/selection_actions.rs",
     // Raster-frame defaults: the generated-image frame mirrors an image's
     // intrinsic pixel dimensions, not UI spacing.
     "crates/gpui-ai/src/image_generation.rs",
