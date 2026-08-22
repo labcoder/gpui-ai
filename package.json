@@ -4,6 +4,7 @@
   "description": "Task runner for the mighty-gpui workspace. Rust does the real work; these scripts are the front door.",
   "scripts": {
     "dev": "cargo run -p gallery",
+    "dev:fast": "cargo run -p gallery --profile dev-fast",
     "prod": "cargo run -p gallery --release",
     "test:perf": "cargo run -p gallery --release --features performance --bin gallery-performance",
     "test:catalog": "cargo run -p gallery --release --features performance --bin gallery-catalog-scan",

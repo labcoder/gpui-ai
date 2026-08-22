@@ -46,3 +46,13 @@ unwrap_used = "deny"
 [profile.release]
 codegen-units = 16
 lto = "thin"
+
+# Optimized development profile: dependency crates (gpui, gpui-component, and
+# their stacks) dominate frame-time cost, so they compile with optimizations
+# while workspace crates stay unoptimized for fast iteration. Use through
+# `npm run dev:fast`. First build recompiles every dependency once.
+[profile.dev-fast]
+inherits = "dev"
+
+[profile.dev-fast.package."*"]
+opt-level = 2
