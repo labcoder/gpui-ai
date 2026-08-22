@@ -14,12 +14,9 @@ use gpui::{
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use std::time::Duration;
 
-/// Lattice is N×N dots.
+/// Lattice is N×N dots. Dot positions derive from the cluster diameter and
+/// dot size; no separate pitch constant is needed.
 const N: usize = 3;
-
-/// Center-to-center spacing between lattice dots, in stage pixels. The whole
-/// geometry is tuned on [`STAGE`] and scales to the requested size.
-const PITCH: f32 = 6.0;
 
 /// Stage edge length the geometry is tuned on.
 const STAGE: f32 = 28.0;
@@ -193,7 +190,6 @@ impl RenderOnce for Orbs {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let scale = self.diameter.as_f32() / STAGE;
-        let pitch = px(PITCH * scale);
         let dot = px(4.2 * scale);
         let colors = [cx.theme().primary, cx.theme().info, cx.theme().cyan];
         let variant = self.variant;
