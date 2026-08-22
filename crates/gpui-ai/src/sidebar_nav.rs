@@ -5,8 +5,8 @@ use std::{collections::HashSet, sync::Arc};
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, EventEmitter,
     Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity,
-    Window, div, percentage, prelude::FluentBuilder as _,
+    ScrollHandle, ScrollWheelEvent, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Subscription, WeakEntity, Window, div, percentage, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Collapsible, Icon, IconName, h_flex,
@@ -917,6 +917,9 @@ pub struct SidebarNav {
     query: SharedString,
     input: Entity<InputState>,
     expanded: HashSet<SharedString>,
+    /// Scroll position of the nav body; owns wheel chaining so scrolling
+    /// over the sidebar scrolls the sidebar, not the page behind it.
+    scroll_handle: ScrollHandle,
     _input_subscription: Subscription,
 }
 
@@ -939,6 +942,7 @@ impl SidebarNav {
             query: "".into(),
             input,
             expanded: HashSet::new(),
+            scroll_handle: ScrollHandle::new(),
             _input_subscription: subscription,
         }
     }
@@ -1208,46 +1212,65 @@ impl Render for SidebarNav {
             .h_full()
             .min_h_0()
             .overflow_hidden()
+            // Native scroll chaining: the nav body owns the wheel while it
+            // has scroll room; only at the edges does it chain to the page.
+            .on_scroll_wheel({
+                let scroll_handle = self.scroll_handle.clone();
+                move |event: &ScrollWheelEvent, _, cx| {
+                    let delta_y = event.delta.pixel_delta(gpui::px(20.)).y;
+                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
+                    {
+                        cx.stop_propagation();
+                    }
+                }
+            })
             .child(
-                Sidebar::new((ElementId::from(self.id.clone()), "sidebar"))
-                    .collapsed(collapsed)
-                    .w(tokens.spacing.xxl * 8.)
-                    .header(header)
-                    .children(stable_sections)
-                    .when(sections.is_empty(), |this| {
-                        this.child(StableSection {
-                            section: SidebarSection::new("empty", ""),
-                            tree: StableMenuTree {
-                                component_id: self.id.clone(),
-                                section_id: "empty".into(),
-                                section_label: "Navigation status".into(),
-                                items: Arc::from([]),
-                                active_item: None,
-                                expanded: Arc::new(HashSet::new()),
-                                owner: cx.weak_entity(),
-                                collapsed,
-                                filtering,
-                            },
-                            collapsed,
-                        })
-                    })
-                    .footer(
-                        div()
-                            .id((ElementId::from(self.id.clone()), "empty-status"))
-                            .when(sections.is_empty() && !collapsed, |this| {
-                                this.debug_selector(move || {
-                                    if empty_selector {
-                                        "sidebar-nav-empty".to_owned()
-                                    } else {
-                                        "sidebar-nav-no-results".to_owned()
-                                    }
+                div()
+                    .id((ElementId::from(self.id.clone()), "nav-scroll"))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.scroll_handle)
+                    .size_full()
+                    .child(
+                        Sidebar::new((ElementId::from(self.id.clone()), "sidebar"))
+                            .collapsed(collapsed)
+                            .w(tokens.spacing.xxl * 8.)
+                            .header(header)
+                            .children(stable_sections)
+                            .when(sections.is_empty(), |this| {
+                                this.child(StableSection {
+                                    section: SidebarSection::new("empty", ""),
+                                    tree: StableMenuTree {
+                                        component_id: self.id.clone(),
+                                        section_id: "empty".into(),
+                                        section_label: "Navigation status".into(),
+                                        items: Arc::from([]),
+                                        active_item: None,
+                                        expanded: Arc::new(HashSet::new()),
+                                        owner: cx.weak_entity(),
+                                        collapsed,
+                                        filtering,
+                                    },
+                                    collapsed,
                                 })
-                                .role(Role::Status)
-                                .aria_label(empty_message.clone())
-                                .text_token(tokens.typography.sm)
-                                .text_color(cx.theme().muted_foreground)
-                                .child(empty_message)
-                            }),
+                            })
+                            .footer(
+                                div()
+                                    .id((ElementId::from(self.id.clone()), "empty-status"))
+                                    .when(sections.is_empty() && !collapsed, |this| {
+                                        this.debug_selector(move || {
+                                            if empty_selector {
+                                                "sidebar-nav-empty".to_owned()
+                                            } else {
+                                                "sidebar-nav-no-results".to_owned()
+                                            }
+                                        })
+                                        .role(Role::Status)
+                                        .aria_label(empty_message.clone())
+                                        .text_token(tokens.typography.sm)
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(empty_message)
+                                    }),
+                            ),
                     ),
             )
     }

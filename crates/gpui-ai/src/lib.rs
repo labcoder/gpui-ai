@@ -51,7 +51,10 @@ pub mod todo_list;
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
     pub use crate::approval::{ApprovalCard, ApprovalEvent};
-    pub use crate::chat::{Chat, ChatEvent, ChatMessage, ChatRole};
+    pub use crate::chat::{
+        Chat, ChatEvent, ChatMessage, ChatMessageAppearance, ChatRole, MessageAlignment,
+        MessageBubble,
+    };
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
     pub use crate::command_search::{CommandSearch, CommandSearchEvent, CommandSearchItem};

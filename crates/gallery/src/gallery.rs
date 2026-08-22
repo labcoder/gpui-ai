@@ -307,20 +307,36 @@ impl ChatStory {
             StreamedContent::done(
                 "Beautiful UI keeps Chat compact and bottom-pinned. This original GPUI composition additionally virtualizes by stable application IDs, preserves the top item and pixel offset while reading history, exposes unread state, and delegates every async producer to the application.",
             ),
-        )];
+        )
+        .with_appearance(ChatMessageAppearance::new(
+            MessageAlignment::Leading,
+            MessageBubble::Plain,
+        ))];
         for index in 0..18 {
             let role = if index % 2 == 0 {
                 ChatRole::User
             } else {
                 ChatRole::Assistant
             };
-            messages.push(ChatMessage::new(
-                format!("history-{index}"),
-                role,
-                StreamedContent::done(format!(
-                    "Historical message {index}: compare unit price, delivery window, and inventory risk."
-                )),
-            ));
+            // Role-driven presentation: user messages trail in a filled
+            // bubble, assistant replies lead unframed — the composition the
+            // reference demos use. Applications choose per message.
+            let appearance = match role {
+                ChatRole::User => {
+                    ChatMessageAppearance::new(MessageAlignment::Trailing, MessageBubble::Filled)
+                }
+                _ => ChatMessageAppearance::new(MessageAlignment::Leading, MessageBubble::Plain),
+            };
+            messages.push(
+                ChatMessage::new(
+                    format!("history-{index}"),
+                    role,
+                    StreamedContent::done(format!(
+                        "Historical message {index}: compare unit price, delivery window, and inventory risk."
+                    )),
+                )
+                .with_appearance(appearance),
+            );
         }
         messages.extend([
             ChatMessage::new(
@@ -342,8 +358,16 @@ impl ChatStory {
                 "latest-question",
                 ChatRole::User,
                 StreamedContent::done("Which supplier is the safest choice this week?"),
-            ),
+            )
+            .with_appearance(ChatMessageAppearance::new(
+                MessageAlignment::Trailing,
+                MessageBubble::Filled,
+            )),
             ChatMessage::new("live-answer", ChatRole::Assistant, live_answer)
+                .with_appearance(ChatMessageAppearance::new(
+                    MessageAlignment::Leading,
+                    MessageBubble::Plain,
+                ))
                 .citations([CitationRef::new(
                     "pricing",
                     "Pricing report",

@@ -62,6 +62,64 @@ pub struct ChatMessage {
     sources: Vec<SharedString>,
     follow_ups: Vec<FollowUp>,
     retryable: bool,
+    appearance: ChatMessageAppearance,
+}
+
+/// Application-controlled presentation for one message.
+///
+/// Chat deliberately does not prescribe how a message looks: consumers decide
+/// alignment and bubble treatment per message (typically by role), so a
+/// right-aligned user / left-aligned agent layout is one configuration away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChatMessageAppearance {
+    alignment: MessageAlignment,
+    bubble: MessageBubble,
+}
+
+impl Default for ChatMessageAppearance {
+    fn default() -> Self {
+        Self {
+            alignment: MessageAlignment::Leading,
+            bubble: MessageBubble::Bordered,
+        }
+    }
+}
+
+/// Horizontal placement of a message within the transcript.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageAlignment {
+    /// Hug the transcript's leading edge (default).
+    Leading,
+    /// Push toward the transcript's trailing edge.
+    Trailing,
+}
+
+/// Surface treatment of the message frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageBubble {
+    /// Card with border and surface background (default).
+    Bordered,
+    /// Filled tint with no border (chat-bubble look).
+    Filled,
+    /// No frame at all; content sits directly on the transcript.
+    Plain,
+}
+
+impl ChatMessageAppearance {
+    /// Creates an appearance with explicit alignment and bubble treatment.
+    pub fn new(alignment: MessageAlignment, bubble: MessageBubble) -> Self {
+        Self { alignment, bubble }
+    }
+
+    /// Horizontal placement of this message.
+    pub fn alignment(&self) -> MessageAlignment {
+        self.alignment
+    }
+
+    /// Surface treatment of this message.
+    pub fn bubble(&self) -> MessageBubble {
+        self.bubble
+    }
 }
 
 impl ChatMessage {
@@ -76,7 +134,19 @@ impl ChatMessage {
             sources: Vec::new(),
             follow_ups: Vec::new(),
             retryable: false,
+            appearance: ChatMessageAppearance::default(),
         }
+    }
+
+    /// Sets this message's presentation (alignment and bubble treatment).
+    pub fn with_appearance(mut self, appearance: ChatMessageAppearance) -> Self {
+        self.appearance = appearance;
+        self
+    }
+
+    /// This message's presentation.
+    pub fn appearance(&self) -> &ChatMessageAppearance {
+        &self.appearance
     }
 
     /// Adds an optional visible author name.
@@ -577,18 +647,40 @@ impl Chat {
             "heading",
         ));
 
-        message_frame(&self.id, &message)
+        // Presentation is application-controlled per message. Alignment
+        // pushes the frame to the trailing edge; bubble treatment selects
+        // border+surface, filled tint, or no frame. Role only supplies
+        // defaults for the tint color.
+        let appearance = message.appearance();
+        let base = message_frame(&self.id, &message)
             .track_focus(&message_focus_handle)
             .gap(tokens.spacing.sm)
             .px(tokens.spacing.md)
-            .py(tokens.spacing.md)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
-            .bg(match message.role {
+            .py(tokens.spacing.md);
+        let framed = match appearance.bubble() {
+            MessageBubble::Bordered => base
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.md)
+                .bg(match message.role {
+                    ChatRole::User => cx.theme().secondary,
+                    ChatRole::Assistant | ChatRole::System | ChatRole::Tool => {
+                        cx.theme().background
+                    }
+                }),
+            MessageBubble::Filled => base.rounded(tokens.radius.md).bg(match message.role {
                 ChatRole::User => cx.theme().secondary,
                 ChatRole::Assistant | ChatRole::System | ChatRole::Tool => cx.theme().background,
-            })
+            }),
+            MessageBubble::Plain => base,
+        };
+        let framed = if appearance.alignment() == MessageAlignment::Trailing {
+            framed.items_end()
+        } else {
+            framed.items_start()
+        };
+
+        framed
             .child(
                 div()
                     .id(heading_id)
