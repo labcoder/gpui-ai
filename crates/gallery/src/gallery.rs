@@ -3489,16 +3489,51 @@ impl Gallery {
                 story,
                 "Orbs",
                 || {
-                    h_flex()
-                        .items_center()
-                        .gap_6()
-                        .child(Orbs::new())
-                        .child(Orbs::new().diameter(px(64.)))
+                    let tokens = cx.theme().semantic_tokens();
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .flex_wrap()
+                                .gap(tokens.spacing.lg)
+                                .children(OrbVariant::ALL.map(|variant| {
+                                    v_flex()
+                                        .items_center()
+                                        .gap(tokens.spacing.xs)
+                                        .child(
+                                            div()
+                                                .id(("orbs-variant", variant.slug()))
+                                                .p(tokens.spacing.md)
+                                                .rounded(tokens.radius.lg)
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .bg(tokens.colors.surface)
+                                                .child(
+                                                    Orbs::new()
+                                                        .variant(variant)
+                                                        .diameter(px(56.)),
+                                                ),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(match variant {
+                                                    OrbVariant::Radial => "Radial",
+                                                    OrbVariant::Diagonal => "Diagonal",
+                                                    OrbVariant::Comet => "Comet",
+                                                    OrbVariant::Column => "Column",
+                                                    OrbVariant::Scattered => "Scattered",
+                                                }),
+                                        )
+                                })),
+                        )
                         .child(
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("ambient thinking indicator"),
+                                .child("ambient thinking indicator — pick the choreography that matches your product's voice"),
                         )
                 },
                 cx,

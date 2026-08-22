@@ -75,7 +75,7 @@ pub mod prelude {
         InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend,
     };
     pub use crate::loading::LoadingState;
-    pub use crate::orbs::Orbs;
+    pub use crate::orbs::{OrbVariant, Orbs};
     pub use crate::prompt_bar::{
         PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
         PromptSubmission,
