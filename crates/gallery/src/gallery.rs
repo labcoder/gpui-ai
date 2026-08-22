@@ -61,6 +61,20 @@ const CONTRAST_THEME: &str = r##"{
 
 const CONTRAST_THEME_NAME: &str = "Mighty Contrast";
 
+/// Curated showcase themes, embedded as the same JSON the website shares.
+/// Keeping this file in-repo means the downloadable theme pack and the
+/// gallery demo can never drift apart.
+const SHOWCASE_THEMES_JSON: &str = include_str!("../themes/showcase-themes.json");
+
+/// Showcase themes shipped with the gallery, in cycle order after the
+/// upstream defaults and contrast preset. Names must match the JSON exactly.
+const SHOWCASE_THEME_NAMES: [&str; 4] = [
+    "Midnight Violet",
+    "Nord Frost",
+    "Ember Dusk",
+    "Paper Light",
+];
+
 fn story_list_frame() -> Stateful<Div> {
     div()
         .id("gallery-story-list")
@@ -1193,6 +1207,14 @@ pub enum GalleryTheme {
     Dark,
     /// The bundled high-contrast review theme.
     Contrast,
+    /// Deep violet-on-ink showcase theme.
+    MidnightViolet,
+    /// Muted Nordic blue-grey showcase theme.
+    NordFrost,
+    /// Warm ember-and-charcoal showcase theme.
+    EmberDusk,
+    /// Warm paper-white teal-accent light showcase theme.
+    PaperLight,
 }
 
 impl GalleryTheme {
@@ -1200,7 +1222,11 @@ impl GalleryTheme {
         match self {
             Self::Light => Self::Dark,
             Self::Dark => Self::Contrast,
-            Self::Contrast => Self::Light,
+            Self::Contrast => Self::MidnightViolet,
+            Self::MidnightViolet => Self::NordFrost,
+            Self::NordFrost => Self::EmberDusk,
+            Self::EmberDusk => Self::PaperLight,
+            Self::PaperLight => Self::Light,
         }
     }
 
@@ -1209,6 +1235,23 @@ impl GalleryTheme {
             Self::Light => "Light",
             Self::Dark => "Dark",
             Self::Contrast => "Contrast",
+            Self::MidnightViolet => "Midnight Violet",
+            Self::NordFrost => "Nord Frost",
+            Self::EmberDusk => "Ember Dusk",
+            Self::PaperLight => "Paper Light",
+        }
+    }
+
+    /// The registered registry name for this preset, if it is a bundled
+    /// JSON theme rather than an upstream default.
+    fn registry_name(self) -> Option<&'static str> {
+        match self {
+            Self::Light | Self::Dark => None,
+            Self::Contrast => Some(CONTRAST_THEME_NAME),
+            Self::MidnightViolet => Some("Midnight Violet"),
+            Self::NordFrost => Some("Nord Frost"),
+            Self::EmberDusk => Some("Ember Dusk"),
+            Self::PaperLight => Some("Paper Light"),
         }
     }
 }
@@ -1224,15 +1267,21 @@ pub fn apply_gallery_theme(preset: GalleryTheme, window: Option<&mut Window>, cx
             ThemeMode::Dark,
             ThemeRegistry::global(cx).default_dark_theme().clone(),
         ),
-        GalleryTheme::Contrast => {
-            let Some(config) = ThemeRegistry::global(cx)
-                .themes()
-                .get(CONTRAST_THEME_NAME)
-                .cloned()
-            else {
+        other => {
+            let Some(name) = other.registry_name() else {
                 return;
             };
-            (ThemeMode::Dark, config)
+            let Some(config) = ThemeRegistry::global(cx).themes().get(name).cloned() else {
+                return;
+            };
+            (
+                if config.mode == ThemeMode::Light {
+                    ThemeMode::Light
+                } else {
+                    ThemeMode::Dark
+                },
+                config,
+            )
         }
     };
 
@@ -4104,6 +4153,10 @@ pub fn init(cx: &mut App) {
     ThemeRegistry::global_mut(cx)
         .load_themes_from_str(CONTRAST_THEME)
         .expect("embedded gallery theme must be valid");
+    // Showcase themes share the website's downloadable theme pack.
+    ThemeRegistry::global_mut(cx)
+        .load_themes_from_str(SHOWCASE_THEMES_JSON)
+        .expect("embedded showcase themes must be valid");
     cx.bind_keys([
         KeyBinding::new("pageup", PageUp, Some("gallery-scroll")),
         KeyBinding::new("pagedown", PageDown, Some("gallery-scroll")),
@@ -4203,9 +4256,24 @@ mod tests {
 
     #[test]
     fn gallery_theme_cycle_covers_all_review_presets() {
-        assert_eq!(GalleryTheme::Light.next(), GalleryTheme::Dark);
-        assert_eq!(GalleryTheme::Dark.next(), GalleryTheme::Contrast);
-        assert_eq!(GalleryTheme::Contrast.next(), GalleryTheme::Light);
+        let expected: [GalleryTheme; 7] = [
+            GalleryTheme::Light,
+            GalleryTheme::Dark,
+            GalleryTheme::Contrast,
+            GalleryTheme::MidnightViolet,
+            GalleryTheme::NordFrost,
+            GalleryTheme::EmberDusk,
+            GalleryTheme::PaperLight,
+        ];
+        for pair in expected.windows(2) {
+            assert_eq!(pair[0].next(), pair[1]);
+        }
+        // The cycle closes.
+        assert_eq!(
+            expected[expected.len() - 1].next(),
+            expected[0],
+            "the theme cycle must return to Light"
+        );
     }
 
     #[gpui::test]

@@ -8,10 +8,10 @@ members = [
 default-members = ["crates/gpui-ai", "crates/gallery", "crates/gallery-web"]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
-publish = false
+publish = false  # workspace default: demo crates stay local; gpui-ai overrides
 
 [workspace.dependencies]
 gpui-ai = { path = "crates/gpui-ai" }

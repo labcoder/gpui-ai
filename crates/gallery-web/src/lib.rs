@@ -21,6 +21,10 @@ fn parse_theme(theme: Option<String>) -> Result<GalleryTheme, String> {
     match theme.as_deref() {
         Some("dark") => Ok(GalleryTheme::Dark),
         Some("contrast") => Ok(GalleryTheme::Contrast),
+        Some("midnight-violet") => Ok(GalleryTheme::MidnightViolet),
+        Some("nord-frost") => Ok(GalleryTheme::NordFrost),
+        Some("ember-dusk") => Ok(GalleryTheme::EmberDusk),
+        Some("paper-light") => Ok(GalleryTheme::PaperLight),
         Some("light") | None => Ok(GalleryTheme::Light),
         Some(theme) => Err(format!("unknown gallery theme: {theme}")),
     }
@@ -91,6 +95,10 @@ pub fn gallery_theme() -> Option<String> {
             GalleryTheme::Light => "light".to_owned(),
             GalleryTheme::Dark => "dark".to_owned(),
             GalleryTheme::Contrast => "contrast".to_owned(),
+            GalleryTheme::MidnightViolet => "midnight-violet".to_owned(),
+            GalleryTheme::NordFrost => "nord-frost".to_owned(),
+            GalleryTheme::EmberDusk => "ember-dusk".to_owned(),
+            GalleryTheme::PaperLight => "paper-light".to_owned(),
         })
     })
 }
