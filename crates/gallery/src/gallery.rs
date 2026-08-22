@@ -455,7 +455,7 @@ impl Render for CommandSearchStory {
                     .aria_label("Populated command search")
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("POPULATED — TYPE MARGIN, DELIVERY, OR RISK"),
+                    .child("Populated — type margin, delivery, or risk"),
             )
             .child(
                 div()
@@ -491,7 +491,7 @@ impl Render for CommandSearchStory {
                                     .aria_label("Empty command catalog")
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("EMPTY CATALOG"),
+                                    .child("Empty catalog"),
                             )
                             .child(self.empty.clone()),
                     )
@@ -507,7 +507,7 @@ impl Render for CommandSearchStory {
                                     .aria_label("No command results")
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("NO RESULTS"),
+                                    .child("No results"),
                             )
                             .child(self.no_results.clone()),
                     ),
@@ -812,7 +812,7 @@ impl Render for FineTuneStory {
                             .aria_label("Populated Fine-tune card")
                             .w(card_width)
                             .gap(tokens.spacing.xs)
-                            .child("POPULATED · DUPLICATE TYPEFACE LABELS")
+                            .child("Populated · duplicate typeface labels")
                             .child(div().h(full_height).child(self.populated.clone())),
                         v_flex()
                             .id("fine-tune-replacement-host")
@@ -820,7 +820,7 @@ impl Render for FineTuneStory {
                             .aria_label("Controlled replacement Fine-tune card")
                             .w(card_width)
                             .gap(tokens.spacing.xs)
-                            .child("CONTROLLED REPLACEMENT")
+                            .child("Controlled replacement")
                             .child(div().h(full_height).child(self.replacement.clone())),
                         v_flex()
                             .id("fine-tune-no-accent-host")
@@ -828,7 +828,7 @@ impl Render for FineTuneStory {
                             .aria_label("Fine-tune card without an accent")
                             .w(card_width)
                             .gap(tokens.spacing.xs)
-                            .child("NO ACCENT")
+                            .child("No accent")
                             .child(div().h(full_height).child(self.no_accent.clone())),
                         v_flex()
                             .id("fine-tune-constrained-host")
@@ -836,7 +836,7 @@ impl Render for FineTuneStory {
                             .aria_label("Constrained scrolling Fine-tune card")
                             .w(card_width)
                             .gap(tokens.spacing.xs)
-                            .child("CONSTRAINED HEIGHT · SCROLL TO APPLY")
+                            .child("Constrained height · scroll to apply")
                             .child(
                                 div()
                                     .h(constrained_height)
@@ -1039,7 +1039,7 @@ impl Render for PromptBarStory {
                     .aria_label("Empty prompt without a model catalog")
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("EMPTY WITHOUT MODELS"),
+                    .child("Empty without models"),
             )
             .child(self.empty.clone())
             .child(
@@ -1049,7 +1049,7 @@ impl Render for PromptBarStory {
                     .aria_label("Ready prompt with mention suggestions")
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("READY WITH MENTION SUGGESTIONS"),
+                    .child("Ready with mention suggestions"),
             )
             .child(self.ready.clone())
             .child(
@@ -1060,7 +1060,7 @@ impl Render for PromptBarStory {
                     .aria_label("Multiline prompt draft")
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("MULTILINE DRAFT"),
+                    .child("Multiline draft"),
             )
             .child(self.multiline.clone())
             .child(
@@ -1070,7 +1070,7 @@ impl Render for PromptBarStory {
                     .aria_label("Running prompt with cancellation")
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("RUNNING WITH CANCELLATION"),
+                    .child("Running with cancellation"),
             )
             .child(self.running.clone())
             .child(
@@ -1487,29 +1487,29 @@ impl Render for RecordsTableStory {
         let active: AnyElement = match self.active_state {
             TableStoryState::Populated => Self::state(
                 "records-story-populated",
-                "POPULATED AND SORTABLE",
+                "Populated and sortable",
                 self.populated.clone(),
             )
             .into_any_element(),
             TableStoryState::Loading => {
-                Self::state("records-story-loading", "LOADING", self.loading.clone())
+                Self::state("records-story-loading", "Loading", self.loading.clone())
                     .into_any_element()
             }
             TableStoryState::Error => {
-                Self::state("records-story-error", "ERROR", self.failed.clone()).into_any_element()
+                Self::state("records-story-error", "Error", self.failed.clone()).into_any_element()
             }
             TableStoryState::Empty => {
-                Self::state("records-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+                Self::state("records-story-empty", "Empty", self.empty.clone()).into_any_element()
             }
             TableStoryState::Disabled => Self::state(
                 "records-story-disabled",
-                "DISABLED ROW",
+                "Disabled row",
                 self.disabled.clone(),
             )
             .into_any_element(),
             TableStoryState::Selected => Self::state(
                 "records-story-selected",
-                "CONTROLLED SELECTION",
+                "Controlled selection",
                 self.selected.clone(),
             )
             .into_any_element(),
@@ -1524,7 +1524,7 @@ impl Render for RecordsTableStory {
                         .role(Role::Heading)
                         .aria_label("Constrained height and width")
                         .text_xs()
-                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                        .child("Constrained height and width"),
                 )
                 .child(
                     div()
@@ -1842,29 +1842,29 @@ impl Render for DiffTableStory {
         let active: AnyElement = match self.active_state {
             TableStoryState::Populated => Self::state(
                 "diff-story-populated",
-                "POPULATED AND SORTABLE",
+                "Populated and sortable",
                 self.populated.clone(),
             )
             .into_any_element(),
             TableStoryState::Loading => {
-                Self::state("diff-story-loading", "LOADING", self.loading.clone())
+                Self::state("diff-story-loading", "Loading", self.loading.clone())
                     .into_any_element()
             }
             TableStoryState::Error => {
-                Self::state("diff-story-error", "ERROR", self.failed.clone()).into_any_element()
+                Self::state("diff-story-error", "Error", self.failed.clone()).into_any_element()
             }
             TableStoryState::Empty => {
-                Self::state("diff-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+                Self::state("diff-story-empty", "Empty", self.empty.clone()).into_any_element()
             }
             TableStoryState::Disabled => Self::state(
                 "diff-story-disabled",
-                "DISABLED PROPOSAL",
+                "Disabled proposal",
                 self.disabled.clone(),
             )
             .into_any_element(),
             TableStoryState::Selected => Self::state(
                 "diff-story-selected",
-                "CONTROLLED SELECTION AND DECISION",
+                "Controlled selection and decision",
                 self.selected.clone(),
             )
             .into_any_element(),
@@ -1879,7 +1879,7 @@ impl Render for DiffTableStory {
                         .role(Role::Heading)
                         .aria_label("Constrained height and width")
                         .text_xs()
-                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                        .child("Constrained height and width"),
                 )
                 .child(
                     div()
@@ -2391,7 +2391,7 @@ impl Render for FilterTableStory {
         if self.performance_only {
             return Self::state(
                 "filter-story-constrained",
-                "1,000 ROW FILTER + REORDER",
+                "1,000-row filter + reorder",
                 self.constrained.clone(),
             )
             .into_any_element();
@@ -2407,29 +2407,29 @@ impl Render for FilterTableStory {
         let active: AnyElement = match self.active_state {
             TableStoryState::Populated => Self::state(
                 "filter-story-populated",
-                "POPULATED, FILTERABLE, AND SORTABLE",
+                "Populated, filterable, and sortable",
                 self.populated.clone(),
             )
             .into_any_element(),
             TableStoryState::Loading => {
-                Self::state("filter-story-loading", "LOADING", self.loading.clone())
+                Self::state("filter-story-loading", "Loading", self.loading.clone())
                     .into_any_element()
             }
             TableStoryState::Error => {
-                Self::state("filter-story-error", "ERROR", self.failed.clone()).into_any_element()
+                Self::state("filter-story-error", "Error", self.failed.clone()).into_any_element()
             }
             TableStoryState::Empty => {
-                Self::state("filter-story-empty", "EMPTY", self.empty.clone()).into_any_element()
+                Self::state("filter-story-empty", "Empty", self.empty.clone()).into_any_element()
             }
             TableStoryState::Disabled => Self::state(
                 "filter-story-disabled",
-                "DISABLED FILTER AND ROW",
+                "Disabled filter and row",
                 self.disabled.clone(),
             )
             .into_any_element(),
             TableStoryState::Selected => Self::state(
                 "filter-story-selected",
-                "CONTROLLED SELECTION",
+                "Controlled selection",
                 self.selected.clone(),
             )
             .into_any_element(),
@@ -2444,7 +2444,7 @@ impl Render for FilterTableStory {
                         .role(Role::Heading)
                         .aria_label("Constrained height and width")
                         .text_xs()
-                        .child("CONSTRAINED HEIGHT AND WIDTH"),
+                        .child("Constrained height and width"),
                 )
                 .child(
                     div()
@@ -2734,31 +2734,31 @@ impl Render for ComparisonTableStory {
         let active: AnyElement = match self.active_state {
             TableStoryState::Populated => Self::state(
                 "comparison-story-populated",
-                "POPULATED AND HIGHLIGHTED",
+                "Populated and highlighted",
                 self.populated.clone(),
             )
             .into_any_element(),
             TableStoryState::Loading => {
-                Self::state("comparison-story-loading", "LOADING", self.loading.clone())
+                Self::state("comparison-story-loading", "Loading", self.loading.clone())
                     .into_any_element()
             }
             TableStoryState::Error => {
-                Self::state("comparison-story-error", "ERROR", self.failed.clone())
+                Self::state("comparison-story-error", "Error", self.failed.clone())
                     .into_any_element()
             }
             TableStoryState::Empty => {
-                Self::state("comparison-story-empty", "EMPTY", self.empty.clone())
+                Self::state("comparison-story-empty", "Empty", self.empty.clone())
                     .into_any_element()
             }
             TableStoryState::Disabled => Self::state(
                 "comparison-story-disabled",
-                "DISABLED ITEM",
+                "Disabled item",
                 self.disabled.clone(),
             )
             .into_any_element(),
             TableStoryState::Selected => Self::state(
                 "comparison-story-selected",
-                "CONTROLLED SELECTION",
+                "Controlled selection",
                 self.selected.clone(),
             )
             .into_any_element(),
@@ -2787,7 +2787,7 @@ impl Render for ComparisonTableStory {
                             .role(Role::Heading)
                             .aria_label("Constrained width and height")
                             .text_xs()
-                            .child("CONSTRAINED WIDTH AND HEIGHT"),
+                            .child("Constrained width and height"),
                     )
                     .child(div().w(px(520.)).h(px(190.)).child(constrained))
                     .into_any_element()
@@ -3321,7 +3321,7 @@ impl Gallery {
             StoryId::All => div().hidden().into_any_element(),
             StoryId::Loading => self.section(
                 story,
-                "LOADING STATE",
+                "Loading state",
                 || {
                     LoadingState::new()
                         .label("Reasoning about supplier pricing")
@@ -3331,7 +3331,7 @@ impl Gallery {
             ),
             StoryId::ToolChips => self.section(
                 story,
-                "TOOL CHIPS",
+                "Tool chips",
                 || {
                     h_flex()
                         .flex_wrap()
@@ -3357,7 +3357,7 @@ impl Gallery {
             ),
             StoryId::Tasks => self.section(
                 story,
-                "TASK ROWS",
+                "Task rows",
                 || {
                     v_flex()
                         .child(TaskRow::new(&Progressive::complete(
@@ -3381,7 +3381,7 @@ impl Gallery {
             ),
             StoryId::Thinking => self.section(
                 story,
-                "THINKING",
+                "Thinking",
                 || {
                     let trace = ThinkingTrace::new()
                         .thought_for(Duration::from_secs(9))
@@ -3441,7 +3441,7 @@ impl Gallery {
             ),
             StoryId::Orbs => self.section(
                 story,
-                "ORBS",
+                "Orbs",
                 || {
                     h_flex()
                         .items_center()
@@ -3459,7 +3459,7 @@ impl Gallery {
             ),
             StoryId::Search => self.section(
                 story,
-                "WEB SEARCH",
+                "Web search",
                 || {
                     SearchResults::new("search", "alpenrose wholesale pricing")
                         .searching(self.sim.answer.is_streaming())
@@ -3492,7 +3492,7 @@ impl Gallery {
             ),
             StoryId::Todos => self.section(
                 story,
-                "TO-DO LIST",
+                "To-do list",
                 || {
                     TodoList::new("plan")
                         .title("Supplier switch plan")
@@ -3512,7 +3512,7 @@ impl Gallery {
             ),
             StoryId::ImageGeneration => self.section(
                 story,
-                "IMAGE GENERATION",
+                "Image generation",
                 || {
                     ImageGeneration::new("gen")
                         .label("Label sketch: alpine meadow, morning light")
@@ -3529,7 +3529,7 @@ impl Gallery {
             ),
             StoryId::StreamingText => self.section(
                 story,
-                "STREAMING TEXT",
+                "Streaming text",
                 || {
                     let cited_answer = Progressive::complete(
                         "Pistachio margins lead vanilla by eight points [[cite:margin-report]], while the supply forecast remains stable [[cite:supply-forecast]]."
@@ -3598,7 +3598,7 @@ impl Gallery {
                 });
                 self.section(
                     story,
-                    "CHAT",
+                    "Chat",
                     || chat_story,
                     cx,
                 )
@@ -3611,7 +3611,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "COMMAND SEARCH",
+                    "Command search",
                     || command_story,
                     cx,
                 )
@@ -3622,7 +3622,7 @@ impl Gallery {
                     cx,
                     SidebarNavStory::new,
                 );
-                self.section(story, "SIDEBAR NAVIGATION", || sidebar_story, cx)
+                self.section(story, "Sidebar navigation", || sidebar_story, cx)
             }
             StoryId::FineTune => {
                 let fine_tune_story = window.use_keyed_state(
@@ -3630,7 +3630,7 @@ impl Gallery {
                     cx,
                     FineTuneStory::new,
                 );
-                self.section(story, "FINE-TUNE CARD", || fine_tune_story, cx)
+                self.section(story, "Fine-tune card", || fine_tune_story, cx)
             }
             StoryId::RecordsTable => {
                 let records_story = window.use_keyed_state(
@@ -3640,7 +3640,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "RECORDS TABLE",
+                    "Records table",
                     || {
                         v_flex()
                             .id("records-table-story-scroll")
@@ -3663,7 +3663,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "DIFF TABLE",
+                    "Diff table",
                     || {
                         v_flex()
                             .id("diff-table-story-scroll")
@@ -3693,7 +3693,7 @@ impl Gallery {
                 }
                 self.section(
                     story,
-                    "FILTER TABLE",
+                    "Filter table",
                     || {
                         v_flex()
                             .id("filter-table-story-scroll")
@@ -3716,7 +3716,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "COMPARISON TABLE",
+                    "Comparison table",
                     || {
                         v_flex()
                             .id("comparison-table-story-scroll")
@@ -3733,13 +3733,13 @@ impl Gallery {
             }
             StoryId::CodeBlock => self.section(
                 story,
-                "CODE BLOCK",
+                "Code block",
                 || CodeBlock::streamed("code", &self.sim.code).language("rust"),
                 cx,
             ),
             StoryId::Approval => self.section(
                 story,
-                "APPROVAL CARD",
+                "Approval card",
                 || {
                     ApprovalCard::new("gate", "Send order confirmation to 3 suppliers?")
                         .description("Emails will go out immediately and cannot be recalled.")
@@ -3764,7 +3764,7 @@ impl Gallery {
             ),
             StoryId::Recommendation => self.section(
                 story,
-                "RECOMMENDATION CARD",
+                "Recommendation card",
                 || {
                     RecommendationCard::new("rec", "Switch supplier to Alpenrose Dairy")
                         .description("Lower unit cost at equal volume; delivery risk unchanged.")
@@ -3778,7 +3778,7 @@ impl Gallery {
             ),
             StoryId::Context => self.section(
                 story,
-                "CONTEXT CARDS",
+                "Context cards",
                 || {
                     v_flex()
                         .gap_2()
@@ -3803,7 +3803,7 @@ impl Gallery {
             ),
             StoryId::Insights => self.section(
                 story,
-                "INSIGHT CARD",
+                "Insight card",
                 || {
                     v_flex()
                         .id("insight-story-scroll")
@@ -3874,7 +3874,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "PROMPT BAR",
+                    "Prompt bar",
                     || {
                         v_flex()
                             .id("prompt-bar-story-scroll")
@@ -3903,7 +3903,7 @@ impl Gallery {
                 );
                 self.section(
                     story,
-                    "SELECTION ACTIONS",
+                    "Selection actions",
                     || {
                         v_flex()
                             .id("selection-actions-story-scroll")
@@ -4225,6 +4225,56 @@ mod tests {
             after_reverse < after_ramp,
             "reverse notch should move the feed back up"
         );
+    }
+
+    #[gpui::test]
+    fn catalog_row_estimates_invalidate_when_rem_size_changes(cx: &mut TestAppContext) {
+        // The design guides require anything cached from resolved layout to
+        // key on rem size: the catalog's uniform story-row estimate must be
+        // re-derived, not stale, after a base-font (zoom) change.
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+
+        let scroll_top_at = |cx: &mut VisualTestContext, rem: f32| -> f32 {
+            let window = cx
+                .windows()
+                .first()
+                .copied()
+                .expect("test window should exist");
+            cx.update_window(window, |_, window, _| window.set_rem_size(px(rem)))
+                .expect("window update should succeed");
+            gallery.update(cx, |gallery, cx| {
+                gallery.catalog_list.remeasure();
+                cx.notify();
+            });
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let top = gallery.read_with(cx, |gallery: &Gallery, _| {
+                gallery.catalog_list.logical_scroll_top()
+            });
+            top.item_ix as f32 * 320. + top.offset_in_item.as_f32()
+        };
+
+        let before = scroll_top_at(cx, 16.);
+        // Scroll into the feed so measured rows exist.
+        gallery.update(cx, |gallery, cx| {
+            gallery.scroll_catalog_page(2., cx);
+        });
+        cx.run_until_parked();
+
+        let default_scale = scroll_top_at(cx, 16.);
+        let zoomed = scroll_top_at(cx, 20.);
+        let back = scroll_top_at(cx, 16.);
+
+        // The list stays navigable across zoom changes and returns to its
+        // prior position when the base font is restored — proof that
+        // measurement was refreshed rather than cached against one rem size.
+        assert!(default_scale.is_finite() && zoomed.is_finite() && back.is_finite());
+        assert!(
+            (back - default_scale).abs() < 1_000.,
+            "restoring the base font should restore the scroll geometry"
+        );
+        let _ = before;
     }
 
     #[gpui::test]

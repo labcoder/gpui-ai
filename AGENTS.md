@@ -14,9 +14,13 @@ A layer of AI-native components above gpui-component, exactly as Beautiful UI la
 
 - **Never fork or copy upstream components.** Compose gpui-component's styled components; when their styling is too opinionated for a design, drop down to `gpui-base` behaviors and own the presentation. If neither works, write a custom element — do not vendor upstream code.
 - **All presentation comes from theme tokens.** Every color, radius, spacing, shadow, and type style resolves through `cx.theme()`. Zero hardcoded colors in `crates/gpui-ai`. This rule is what makes the entire theme system (light/dark, bundled themes, custom JSON themes, live color editing) work for free — it is not negotiable.
+- **Layout resolves through tokens and the rem scale, not raw pixels.** Application layout must not call `px(...)` directly: use semantic spacing tokens (`tokens.spacing.*`) or GPUI's rem-based scale helpers (`p_2`, `gap_3`, `text_sm`). Raw pixels are reserved for physical boundaries — measured geometry math, animation distances from rest, raster-frame dimensions, virtual-list overdraw, theme definitions themselves. The `pixel_discipline` test in `crates/gpui-ai` enforces this; extend its documented allowlist only with a written justification.
+- **Cached layout must invalidate on rem changes.** Anything derived from resolved layout (row estimates, wrapped text measurement, popup geometry) keys on `window.rem_size()`; upstream's base-font zoom is the window's rem. The gallery's `catalog_row_estimates_invalidate_when_rem_size_changes` test is the regression guard.
+- **Notify the narrowest owner.** After a coherent state change, notify the entity that owns it — not the root. Never mutate state or notify unconditionally inside `render`.
 - **Progress is modeled once.** Components that display progressive work consume `Progressive<T>` and `ProgressState`. Do not add per-component timers or bespoke lifecycle enums.
 - **Demo data stays out of the library.** Simulated token streams, fake transcripts, and fixtures live in `crates/gallery`. Library components take real data types.
 - **The site is plain web tech.** Page chrome (nav, docs, code panels) is HTML/JS in `site/`; only component examples run as WASM, via a single shared gallery binary. Do not build page chrome in WASM.
+- **Follow the ecosystem naming vocabulary** (gpui-component coding guide): `<Control>State` for retained models, `<Control>Event` for notifications, `on_<intent>` callbacks, `with_` builders vs `set_` mutation, `is_` boolean readers, `_ix` zero-based indices, verbs for commands, nouns for destinations. Search gpui/gpui-base/gpui-component for the established term before coining one.
 
 ## Dependency policy (read before touching any Cargo.toml)
 

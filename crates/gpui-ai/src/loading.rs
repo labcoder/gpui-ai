@@ -4,7 +4,7 @@ use crate::theme::SemanticStyledExt as _;
 use gpui::{
     Animation, AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
 use std::panic::Location;
@@ -84,21 +84,27 @@ impl RenderOnce for LoadingState {
         let grid = div()
             .flex()
             .flex_col()
-            .gap(px(2.))
+            .gap(tokens.spacing.xxs)
             .children((0..ROWS).map(|row| {
-                h_flex().gap(px(2.)).children((0..COLS).map(move |col| {
-                    // Each cell's pulse is phase-shifted along the diagonal,
-                    // producing a sweep from the top-left corner.
-                    let phase = (row + col) as f32 / ((ROWS + COLS) as f32);
-                    div().size(px(5.)).rounded(px(1.)).bg(color).with_animation(
-                        ("loading-cell", (row * COLS + col) as u64),
-                        Animation::new(SWEEP).repeat(),
-                        move |this, delta| {
-                            let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
-                            this.opacity(0.15 + 0.85 * wave)
-                        },
-                    )
-                }))
+                h_flex()
+                    .gap(tokens.spacing.xxs)
+                    .children((0..COLS).map(move |col| {
+                        // Each cell's pulse is phase-shifted along the diagonal,
+                        // producing a sweep from the top-left corner.
+                        let phase = (row + col) as f32 / ((ROWS + COLS) as f32);
+                        div()
+                            .size(tokens.spacing.xs)
+                            .rounded(tokens.spacing.xxs)
+                            .bg(color)
+                            .with_animation(
+                                ("loading-cell", (row * COLS + col) as u64),
+                                Animation::new(SWEEP).repeat(),
+                                move |this, delta| {
+                                    let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
+                                    this.opacity(0.15 + 0.85 * wave)
+                                },
+                            )
+                    }))
             }));
 
         h_flex()

@@ -507,6 +507,8 @@ impl TableDelegate for RecordsDelegate {
             }
             let offset = transition(
                 (transition_id, "position"),
+                // Reorder motion starts from rest; zero is the animation's
+                // physical origin, not a spacing value.
                 gpui::px(0.),
                 Transition::new(duration),
                 window,
@@ -1270,6 +1272,8 @@ impl RecordsTable {
                     if !(new_visible_start..new_visible_end).contains(&new_ix) {
                         return None;
                     }
+                    // Motion offsets default to rest; zero is animation
+                    // geometry, not a spacing value.
                     let prior_offset = current_offsets
                         .get(row_id)
                         .copied()
