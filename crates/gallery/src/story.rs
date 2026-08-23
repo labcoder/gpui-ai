@@ -31,6 +31,8 @@ pub enum StoryId {
     Chat,
     /// Starter and follow-up suggestion chips.
     Suggestions,
+    /// Context-window usage meter.
+    ContextMeter,
     /// Stable-ID command palette.
     CommandSearch,
     /// Stable-ID filterable sidebar navigation.
@@ -76,6 +78,7 @@ impl StoryId {
         Self::StreamingText,
         Self::Chat,
         Self::Suggestions,
+        Self::ContextMeter,
         Self::CommandSearch,
         Self::SidebarNav,
         Self::FineTune,
@@ -108,6 +111,7 @@ impl StoryId {
             Self::StreamingText => "streaming-text",
             Self::Chat => "chat",
             Self::Suggestions => "suggestions",
+            Self::ContextMeter => "context-meter",
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
             Self::FineTune => "fine-tune",
@@ -141,6 +145,7 @@ impl StoryId {
             Self::StreamingText => "Streaming text",
             Self::Chat => "Chat",
             Self::Suggestions => "Suggestions",
+            Self::ContextMeter => "Context meter",
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
             Self::FineTune => "Fine-tune card",

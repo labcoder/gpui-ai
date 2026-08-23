@@ -199,6 +199,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
         | StoryId::Suggestions
+        | StoryId::ContextMeter
         | StoryId::ToolChips
         | StoryId::Orbs
         | StoryId::Todos
@@ -3852,6 +3853,66 @@ impl Gallery {
                             TextView::markdown(
                                 "suggestions-reference-note",
                                 "**Reference comparison.** AI Elements and assistant-ui show starter prompts as a single scrolling row that sends on click. gpui-ai wraps chips onto the available width, ripples them in with a staggered reveal, keeps every chip a named keyboard-reachable button, and reports a stable ID so the application decides whether to send or merely fill the composer.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
+            StoryId::ContextMeter => self.section(
+                story,
+                "Context meter",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let comfortable = ContextUsage::new(84_300, 200_000)
+                        .input(61_000)
+                        .output(19_800)
+                        .cached(3_500)
+                        .cost("$0.42");
+                    let elevated = ContextUsage::new(148_000, 200_000)
+                        .input(120_000)
+                        .output(22_000)
+                        .reasoning(6_000)
+                        .cost("$0.91");
+                    let critical = ContextUsage::new(186_500, 200_000)
+                        .input(150_000)
+                        .output(30_000)
+                        .reasoning(6_500)
+                        .cost("$1.28");
+                    let row = |label: &'static str, variant: ContextMeterVariant| {
+                        h_flex()
+                            .items_center()
+                            .flex_wrap()
+                            .gap(tokens.spacing.lg)
+                            .child(
+                                div()
+                                    .w(tokens.spacing.xxl * 2.0)
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(label),
+                            )
+                            .child(
+                                ContextMeter::new(format!("ctx-{label}-comfortable"), &comfortable)
+                                    .variant(variant),
+                            )
+                            .child(
+                                ContextMeter::new(format!("ctx-{label}-elevated"), &elevated)
+                                    .variant(variant),
+                            )
+                            .child(
+                                ContextMeter::new(format!("ctx-{label}-critical"), &critical)
+                                    .variant(variant),
+                            )
+                    };
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(row("Ring", ContextMeterVariant::Ring))
+                        .child(row("Bar", ContextMeterVariant::Bar))
+                        .child(row("Text", ContextMeterVariant::Text))
+                        .child(
+                            TextView::markdown(
+                                "context-meter-reference-note",
+                                "**Reference comparison.** AI Elements and assistant-ui show token usage as a ring that turns amber past 65% and red past 85%, with a hover breakdown of input, output, reasoning, cached tokens, and cost. gpui-ai keeps those thresholds, exposes the same numbers as a named progress indicator with a spoken description, and offers ring, bar, and text forms that share one tone scale.",
                             )
                             .selectable(true),
                         )
