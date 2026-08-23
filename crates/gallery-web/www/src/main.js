@@ -64,6 +64,16 @@ function watchTheme(initialTheme) {
   };
 }
 
+// Upstream's WASM asset source fetches `<endpoint>/assets/icons/<name>.svg`
+// through reqwest, which rejects relative URLs, so resolve the page's own base
+// against the document. That keeps the icons on this origin wherever the host
+// is mounted — a dev server, the built gallery, or a subpath on Pages.
+function assetEndpoint() {
+  const configured = document.body.dataset.assetBase;
+  if (!configured) return undefined;
+  return new URL(configured, window.location.href).href.replace(/\/+$/, '');
+}
+
 async function initEmbed() {
   const options = parseEmbedOptions(window.location.search);
   const theme = preferredTheme(options.theme);
@@ -78,7 +88,7 @@ async function initEmbed() {
     const wasm = await import('./wasm/gallery_web.js');
     await wasm.default();
     wasm.validate_story(options.story);
-    await wasm.run(options.story, themeChannel.current(), document.body.dataset.assetBase || undefined);
+    await wasm.run(options.story, themeChannel.current(), assetEndpoint());
     themeChannel.connect(wasm);
     window.gpuiAi = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
     document.getElementById('loading')?.remove();

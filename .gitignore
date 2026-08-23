@@ -13,3 +13,6 @@ dist/
 
 # OS noise
 .DS_Store
+
+# Upstream icon set copied into the web host by copy-icons.mjs
+/crates/gallery-web/www/public/

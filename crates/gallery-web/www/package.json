@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node ../scripts/copy-icons.mjs",
     "dev": "vite",
+    "prebuild": "node ../scripts/copy-icons.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test src/*.test.mjs"
