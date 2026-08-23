@@ -1,5 +1,6 @@
 //! Human-in-the-loop approval gates for agent actions.
 
+use crate::cues::{self, Cue};
 use crate::handlers::SharedHandler;
 use crate::surface::{card, description, inset, title};
 use gpui::{
@@ -143,6 +144,7 @@ impl RenderOnce for ApprovalCard {
                                 .accessibility_id(format!("{}-approve", self.id))
                                 .label(self.approve_label)
                                 .on_click(move |_: &ClickEvent, window, cx| {
+                                    cues::emit(cx, Cue::Decided { approved: true });
                                     handler(&approve_event, window, cx)
                                 }),
                         )
@@ -155,6 +157,7 @@ impl RenderOnce for ApprovalCard {
                                 .accessibility_id(format!("{}-reject", self.id))
                                 .label(self.reject_label)
                                 .on_click(move |_: &ClickEvent, window, cx| {
+                                    cues::emit(cx, Cue::Decided { approved: false });
                                     handler(&reject_event, window, cx)
                                 }),
                         )

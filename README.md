@@ -159,7 +159,7 @@ Keyboard action dispatch in the browser WASM gallery is limited by the pinned up
 
 All components style themselves through gpui-component's semantic theme tokens, so light/dark, bundled themes, custom JSON themes, and live token editing work without per-component overrides.
 
-Shared building blocks are public too: `gpui_ai::motion` (reduced-motion-aware text shimmer, one-shot reveals, breathing) and `gpui_ai::status` (the one tone scale and status pill every lifecycle uses).
+Shared building blocks are public too: `gpui_ai::motion` (reduced-motion-aware text shimmer, one-shot reveals, breathing), `gpui_ai::status` (the one tone scale and status pill every lifecycle uses), and `gpui_ai::cues` (typed interaction cues — message arrived, response settled, copied, submitted, decided — that an application can observe in one place to play sounds or haptics; gpui-ai never plays audio itself).
 
 ## Theming
 

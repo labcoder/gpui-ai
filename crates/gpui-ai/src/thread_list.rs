@@ -6,6 +6,7 @@
 //! actions expanded. Every intent — selecting, creating, renaming,
 //! archiving, deleting — is a typed [`ThreadListEvent`] keyed by stable ID.
 
+use crate::cues::{self, Cue};
 use crate::{
     control::{composed_button, outlined_control},
     motion::{reveal, reveal_staggered},
@@ -429,6 +430,7 @@ impl ThreadList {
                         cx.emit(ThreadListEvent::Selected {
                             id: select_id.clone(),
                         });
+                        cues::emit(cx, Cue::ThreadSelected);
                     })),
             )
             .child(

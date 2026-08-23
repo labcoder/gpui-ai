@@ -8,6 +8,7 @@ use crate::{StoryId, sim};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
+use gpui_ai::cues::{self, Cue, CueSubscription};
 use gpui_ai::prelude::*;
 use gpui_component::{
     ActiveTheme as _, IconName, Root, StyledExt as _,
@@ -225,7 +226,9 @@ struct ChatStory {
     answer: Option<StreamedContent>,
     last_event: SharedString,
     show_welcome: bool,
+    last_cue: Option<Cue>,
     _subscription: Subscription,
+    _cues: CueSubscription,
 }
 
 /// Switcher labels for the two demonstrated chat states.
@@ -326,13 +329,30 @@ impl ChatStory {
                 cx.notify();
             },
         );
+        // Cues arrive while the emitting entity is still borrowed, so the
+        // readout updates on the next turn of the loop.
+        let story = cx.weak_entity();
+        let cue_subscription = cues::observe(cx, move |cue, cx| {
+            let cue = cue.clone();
+            let story = story.clone();
+            cx.defer(move |cx| {
+                story
+                    .update(cx, |this, cx| {
+                        this.last_cue = Some(cue);
+                        cx.notify();
+                    })
+                    .ok();
+            });
+        });
         Self {
             chat,
             answer: None,
             last_event: "Hover a message for actions, or try Retry, a citation, or the composer."
                 .into(),
             show_welcome: false,
+            last_cue: None,
             _subscription: subscription,
+            _cues: cue_subscription,
         }
     }
 
@@ -462,6 +482,10 @@ impl ChatStory {
 impl Render for ChatStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let cue_label = self.last_cue.as_ref().map_or_else(
+            || "none yet (sound hooks fire here)".to_owned(),
+            describe_cue,
+        );
         // A chat panel needs vertical room to show a real conversation —
         // transcript history, tool results, the streaming answer, and the
         // composer. 232px crushed all of that into ~1.5 visible messages;
@@ -497,6 +521,35 @@ impl Render for ChatStory {
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
             )
+            .child(
+                div()
+                    .id("chat-story-cue")
+                    .debug_selector(|| "chat-story-cue".into())
+                    .role(Role::Status)
+                    .aria_label(format!("Last cue: {cue_label}"))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last cue: {cue_label}")),
+            )
+    }
+}
+
+/// Human wording for the cue readout under the chat story.
+fn describe_cue(cue: &Cue) -> String {
+    match cue {
+        Cue::MessageArrived { message_id } => format!("message {message_id} arrived"),
+        Cue::ResponseSettled {
+            message_id,
+            succeeded: true,
+        } => format!("response {message_id} completed"),
+        Cue::ResponseSettled { message_id, .. } => format!("response {message_id} failed"),
+        Cue::Copied => "copied".to_owned(),
+        Cue::Submitted => "submitted".to_owned(),
+        Cue::Cancelled => "cancelled".to_owned(),
+        Cue::SuggestionSelected => "suggestion selected".to_owned(),
+        Cue::ThreadSelected => "thread selected".to_owned(),
+        Cue::Decided { approved: true } => "approved".to_owned(),
+        Cue::Decided { approved: false } => "rejected".to_owned(),
     }
 }
 

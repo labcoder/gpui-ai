@@ -2,6 +2,8 @@
 
 use crate::{
     control::outlined_control,
+    cues::{self, Cue},
+    motion::reveal,
     orbs::Orbs,
     prompt_bar::{PromptBar, PromptBarEvent},
     scrolling::list_scroll_mask,
@@ -533,6 +535,9 @@ pub struct Chat {
     visible_range: Range<usize>,
     pinned_to_bottom: bool,
     unread_message_ids: HashSet<SharedString>,
+    /// Messages appended to a live transcript; they settle in with one
+    /// reveal, while a freshly loaded history appears at rest.
+    arrivals: HashSet<SharedString>,
     welcome: Option<ChatWelcome>,
     copied_message: Option<SharedString>,
     copied_reset: Option<Task<()>>,
@@ -580,6 +585,7 @@ impl Chat {
             visible_range: 0..0,
             pinned_to_bottom: true,
             unread_message_ids: HashSet::new(),
+            arrivals: HashSet::new(),
             welcome: None,
             copied_message: None,
             copied_reset: None,
@@ -617,6 +623,7 @@ impl Chat {
         }
 
         let was_following = self.list_state.is_following_tail() && self.pinned_to_bottom;
+        let was_empty = self.messages.is_empty();
         let old_offset = self.list_state.logical_scroll_top();
         let old_anchor = self
             .messages
@@ -635,6 +642,31 @@ impl Chat {
             .skip(last_retained_index.map_or(0, |index| index + 1))
             .filter(|message| !old_by_id.contains_key(&message.id))
             .map(|message| message.id.clone())
+            .collect::<Vec<_>>();
+        // Only messages appended to a live transcript animate in and cue;
+        // a freshly loaded history settles silently.
+        let arrived = if was_empty {
+            Vec::new()
+        } else {
+            appended_ids.clone()
+        };
+        let settled = messages
+            .iter()
+            .filter(|message| {
+                old_by_id
+                    .get(&message.id)
+                    .is_some_and(|old| old.content.is_streaming())
+                    && matches!(
+                        message.content.state(),
+                        ProgressState::Complete | ProgressState::Failed(_)
+                    )
+            })
+            .map(|message| {
+                (
+                    message.id.clone(),
+                    *message.content.state() == ProgressState::Complete,
+                )
+            })
             .collect::<Vec<_>>();
         let (old_range, new_count) = structural_splice(&self.messages, &messages);
         let structural_new_range = old_range.start..old_range.start + new_count;
@@ -700,6 +732,21 @@ impl Chat {
                 });
             }
             self.unread_message_ids.extend(appended_ids);
+        }
+        self.arrivals
+            .retain(|message_id| new_ids.contains(message_id));
+        self.arrivals.extend(arrived.iter().cloned());
+        for message_id in arrived {
+            cues::emit(cx, Cue::MessageArrived { message_id });
+        }
+        for (message_id, succeeded) in settled {
+            cues::emit(
+                cx,
+                Cue::ResponseSettled {
+                    message_id,
+                    succeeded,
+                },
+            );
         }
         cx.notify();
     }
@@ -795,6 +842,7 @@ impl Chat {
             .ok();
         }));
         cx.emit(ChatEvent::MessageCopied { message_id });
+        cues::emit(cx, Cue::Copied);
         cx.notify();
     }
 
@@ -818,7 +866,7 @@ impl Chat {
         is_last: bool,
         message_focus_handle: &FocusHandle,
         group_name: SharedString,
-        window: &Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let actions = message.message_actions();
@@ -851,23 +899,28 @@ impl Chat {
             .when(actions.copy, |bar| {
                 let id = message_id.clone();
                 let debug_id = message_id.to_string();
-                bar.child(
-                    icon_button(
-                        (base_id.clone(), "copy"),
-                        if copied {
-                            IconName::Check
-                        } else {
-                            IconName::Copy
-                        },
-                        if copied { "Copied" } else { "Copy message" },
-                        cx,
-                    )
-                    .debug_selector(move || format!("chat-action-copy-{debug_id}"))
-                    .when(copied, |button| button.text_color(cx.theme().success))
-                    .on_click(cx.listener(move |chat, _, _, cx| {
-                        chat.copy_message(id.clone(), cx);
-                    })),
+                let copy_button = icon_button(
+                    (base_id.clone(), "copy"),
+                    if copied {
+                        IconName::Check
+                    } else {
+                        IconName::Copy
+                    },
+                    if copied { "Copied" } else { "Copy message" },
+                    cx,
                 )
+                .debug_selector(move || format!("chat-action-copy-{debug_id}"))
+                .when(copied, |button| button.text_color(cx.theme().success))
+                .on_click(cx.listener(move |chat, _, _, cx| {
+                    chat.copy_message(id.clone(), cx);
+                }));
+                // The check pops in once per copy: its keyed reveal state is
+                // dropped with the icon, so the next copy replays it.
+                bar.child(if copied {
+                    reveal(copy_button, (base_id.clone(), "copied"), window, cx)
+                } else {
+                    copy_button
+                })
             })
             .when(actions.regenerate, |bar| {
                 let id = message_id.clone();
@@ -1122,7 +1175,12 @@ impl Chat {
             row.items_start()
         };
 
-        row.child(
+        let arrived = self.arrivals.contains(&message_id);
+        let arrival_id = ElementId::from((
+            ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
+            "arrival",
+        ));
+        let row = row.child(
             bubble
                 .child(
                     div()
@@ -1144,8 +1202,12 @@ impl Chat {
                     )
                 })
                 .children(actions),
-        )
-        .into_any_element()
+        );
+        if arrived {
+            reveal(row, arrival_id, window, cx).into_any_element()
+        } else {
+            row.into_any_element()
+        }
     }
 }
 

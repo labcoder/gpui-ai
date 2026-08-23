@@ -10,6 +10,8 @@
 //! Both are controlled: the application owns every invocation as a
 //! [`Progressive<ToolInvocation>`] and decides what each typed event means.
 
+use crate::cues::{self, Cue};
+use crate::motion::reveal_staggered;
 use crate::{
     code_block::CodeBlock,
     control::composed_button,
@@ -437,6 +439,10 @@ impl RenderOnce for ToolCall {
                                                     .accessibility_id(format!("{id}-allow"))
                                                     .label("Allow")
                                                     .on_click(move |_: &ClickEvent, window, cx| {
+                                                        cues::emit(
+                                                            cx,
+                                                            Cue::Decided { approved: true },
+                                                        );
                                                         handler(
                                                             &ToolCallEvent::Approved {
                                                                 id: approve_id.clone(),
@@ -462,6 +468,10 @@ impl RenderOnce for ToolCall {
                                                     .accessibility_id(format!("{id}-deny"))
                                                     .label("Deny")
                                                     .on_click(move |_: &ClickEvent, window, cx| {
+                                                        cues::emit(
+                                                            cx,
+                                                            Cue::Decided { approved: false },
+                                                        );
                                                         handler(
                                                             &ToolCallEvent::Rejected {
                                                                 id: reject_id.clone(),
@@ -652,11 +662,25 @@ impl Styled for ToolGroup {
 }
 
 impl RenderOnce for ToolGroup {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let open = self.is_open();
         let title = self.resolved_title();
         let root_id = ElementId::from(self.id.clone());
+        // Calls cascade in when the group opens; the keyed reveal state is
+        // dropped while closed, so every open replays the cascade.
+        let mut calls = Vec::with_capacity(if open { self.children.len() } else { 0 });
+        if open {
+            for (index, child) in self.children.into_iter().enumerate() {
+                calls.push(reveal_staggered(
+                    div().w_full().min_w_0().child(child),
+                    (root_id.clone(), format!("call-{index}")),
+                    index,
+                    window,
+                    cx,
+                ));
+            }
+        }
         let interactive = self.on_event.is_some();
         let header = h_flex()
             .items_center()
@@ -739,7 +763,7 @@ impl RenderOnce for ToolGroup {
                         .ml(tokens.spacing.xs)
                         .border_l_1()
                         .border_color(cx.theme().border)
-                        .children(self.children),
+                        .children(calls),
                 )
             })
             .refine_style(&self.style)

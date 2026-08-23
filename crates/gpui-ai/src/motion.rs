@@ -190,6 +190,12 @@ where
     apply_reveal(element, reveal_progress(id, Duration::ZERO, window, cx))
 }
 
+/// The per-item delay of a staggered reveal, capped so long lists settle
+/// in a bounded time.
+fn stagger_delay(index: usize) -> Duration {
+    REVEAL_STAGGER * index.min(12) as u32
+}
+
 /// Like [`reveal`], but item `index` waits `index` stagger beats before it
 /// starts, so a list of chips or rows ripples into place.
 pub fn reveal_staggered<E>(
@@ -202,7 +208,7 @@ pub fn reveal_staggered<E>(
 where
     E: Styled,
 {
-    let delay = REVEAL_STAGGER * index.min(12) as u32;
+    let delay = stagger_delay(index);
     apply_reveal(element, reveal_progress(id, delay, window, cx))
 }
 
@@ -239,13 +245,16 @@ mod tests {
         // At the end of travel it sits entirely right of the label.
         let end = -SHIMMER_BAND + 1.0 * (1.0 + SHIMMER_BAND);
         assert!(end >= 1.0);
-        assert!(SHIMMER_TRAVEL < 1.0, "a rest beat must follow each sweep");
+        const {
+            assert!(SHIMMER_TRAVEL < 1.0, "a rest beat must follow each sweep");
+        }
     }
 
     #[test]
     fn stagger_is_bounded_so_long_lists_do_not_wait_forever() {
-        let far = REVEAL_STAGGER * 12u32;
-        let capped = REVEAL_STAGGER * 100usize.min(12) as u32;
+        let far = stagger_delay(12);
+        let capped = stagger_delay(100);
         assert_eq!(far, capped);
+        assert!(stagger_delay(1) < far);
     }
 }

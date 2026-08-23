@@ -2,6 +2,7 @@
 
 use crate::context_meter::format_tokens;
 use crate::control::composed_button;
+use crate::cues::{self, Cue};
 use crate::stream::ProgressState;
 use crate::surface::{eyebrow, meta};
 use crate::theme::SemanticStyledExt as _;
@@ -951,6 +952,7 @@ impl PromptBar {
             id: self.id.clone(),
             submission,
         });
+        cues::emit(cx, Cue::Submitted);
         self.last_draft.clear();
         self.editor.update(cx, |editor, cx| {
             editor.set_value("", window, cx);
@@ -1275,6 +1277,7 @@ impl Render for PromptBar {
                                     cx.emit(PromptBarEvent::CancelRequested {
                                         id: this.id.clone(),
                                     });
+                                    cues::emit(cx, Cue::Cancelled);
                                 } else {
                                     this.submit(window, cx);
                                 }

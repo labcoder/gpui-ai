@@ -5,6 +5,7 @@
 //! application decides whether a selection is sent immediately or merely
 //! populates the composer.
 
+use crate::cues::{self, Cue};
 use crate::{
     control::composed_button, handlers::SharedHandler, motion::reveal_staggered,
     theme::SemanticStyledExt as _,
@@ -155,7 +156,10 @@ impl RenderOnce for Suggestions {
                             .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
                             .focus_visible(|style| style.border_color(cx.theme().ring))
                             .child(div().child(item.label))
-                            .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                            .on_click(move |_: &ClickEvent, window, cx| {
+                                cues::emit(cx, Cue::SuggestionSelected);
+                                handler(&event, window, cx)
+                            })
                             .into_any_element()
                     }
                     None => div()
