@@ -9,6 +9,7 @@ dist/
 /docs/internal/
 /crates/gallery-web/www/src/wasm/
 /.superpowers/
+.claude
 
 # OS noise
 .DS_Store
