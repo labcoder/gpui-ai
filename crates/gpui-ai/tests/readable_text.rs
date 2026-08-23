@@ -300,7 +300,10 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
 
     let bounds = cx
         .debug_bounds(if surface == Surface::ChatUser {
-            "chat-message-readable-chat-user"
+            // The semantic row spans the transcript, but trailing messages
+            // now paint a bounded bubble. Drag inside the visible selectable
+            // surface instead of relying on the former full-row background.
+            "chat-message-bubble-readable-chat-user"
         } else {
             "readable-surface"
         })
@@ -323,11 +326,11 @@ fn select_text(surface: Surface, cx: &mut TestAppContext) -> String {
         ),
         Surface::Insight => (bounds.left() + px(17.), bounds.top() + px(80.)),
         Surface::SelectionActions => (bounds.left() + px(14.), bounds.top() + px(14.)),
-        Surface::ChatUser => (bounds.left() + px(20.), bounds.top() + px(48.)),
+        Surface::ChatUser => (bounds.left() + px(14.), bounds.top() + px(48.)),
     };
     let from = point(content_x, content_y);
     let to = if surface == Surface::ChatUser {
-        point(bounds.right() - px(20.), bounds.bottom() - px(14.))
+        point(bounds.right() - px(14.), bounds.bottom() - px(14.))
     } else {
         point(bounds.left() + px(600.), bounds.bottom() - px(1.))
     };

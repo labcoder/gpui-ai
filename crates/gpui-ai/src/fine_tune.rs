@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use gpui::Hsla;
 use gpui::{
-    AccessibleAction, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable as _,
-    InteractiveElement as _, IntoElement, MouseButton, Orientation, ParentElement as _, Render,
-    Role, ScrollHandle, ScrollWheelEvent, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px, relative,
+    AccessibleAction, AppContext as _, Axis, Context, Entity, EventEmitter, FocusHandle,
+    Focusable as _, InteractiveElement as _, IntoElement, MouseButton, Orientation,
+    ParentElement as _, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, relative,
 };
 use gpui_base::{
     Decrement, Increment, SliderIndicator, SliderThumb, SliderTrack, StepAction, step_value,
@@ -20,6 +20,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     label::Label,
     menu::{DropdownMenu as _, PopupMenuItem},
+    scroll::ScrollableMask,
     slider::{SliderEvent, SliderState},
     v_flex,
 };
@@ -996,7 +997,7 @@ impl Render for FineTuneCard {
             .map(|accent| accent.to_hex().into())
             .unwrap_or_else(|| "No accent selected".into());
         let has_accent = self.local_accent.is_some();
-        v_flex()
+        let card = v_flex()
             .id(root_id.clone())
             .debug_selector(move || format!("fine-tune-card-{root_id}"))
             .role(Role::Group)
@@ -1006,18 +1007,6 @@ impl Render for FineTuneCard {
             .max_h_full()
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
-            // Native scroll chaining: trap the wheel while this card has
-            // scroll room in the scroll direction; release at the edges.
-            .on_scroll_wheel({
-                let scroll_handle = self.scroll_handle.clone();
-                move |event: &ScrollWheelEvent, _, cx| {
-                    let delta_y = event.delta.pixel_delta(px(20.)).y;
-                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
-                    {
-                        cx.stop_propagation();
-                    }
-                }
-            })
             .gap(tokens.spacing.md)
             .p(tokens.spacing.md)
             .rounded(tokens.radius.md)
@@ -1190,7 +1179,14 @@ impl Render for FineTuneCard {
                         })),
                     ),
             )
-            .child(div().hidden())
+            .child(div().hidden());
+
+        div().relative().size_full().child(card).child(
+            ScrollableMask::new(Axis::Vertical, &self.scroll_handle).id((
+                gpui::ElementId::from(self.id.clone()),
+                "content-scroll-mask",
+            )),
+        )
     }
 }
 

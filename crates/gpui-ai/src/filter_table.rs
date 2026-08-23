@@ -3,12 +3,15 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use gpui::{
-    App, AppContext as _, Context, Div, EventEmitter, FocusHandle, Focusable,
+    App, AppContext as _, Axis, Context, Div, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, ParentElement as _, Render, Role, ScrollHandle, SharedString,
     Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Window, accesskit, div,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _};
+use gpui_component::{
+    ActiveTheme as _,
+    scroll::{ScrollableElement as _, ScrollableMask},
+};
 
 use crate::{
     control::outlined_control_with_label,
@@ -514,40 +517,53 @@ impl Render for FilterTable {
             .role(Role::Group)
             .aria_label(self.label.clone())
             .child(
-                filter_controls_frame(&self.id, &self.label)
+                div()
+                    .relative()
                     .w_full()
-                    .min_w_0()
                     .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(tokens.spacing.xs)
-                    .overflow_x_scroll()
-                    .track_scroll(&self.filter_scroll)
-                    .horizontal_scrollbar(&self.filter_scroll)
-                    .children(self.filters.iter().map(|filter| {
-                        let filter_id = filter.id.clone();
-                        let handler_owner = owner.clone();
-                        let is_focused = self.focused_filter_id.as_ref() == Some(&filter.id);
-                        filter_control(&self.id, filter, cx)
-                            .tab_stop(is_focused)
-                            .when(is_focused, |button| button.track_focus(&self.filter_focus))
-                            .on_click(move |_, _, cx| {
-                                let _ = handler_owner.update(cx, |table, cx| {
-                                    table.request_filter(filter_id.clone(), cx);
+                    .child(
+                        filter_controls_frame(&self.id, &self.label)
+                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap(tokens.spacing.xs)
+                            .overflow_x_scroll()
+                            .restrict_scroll_to_axis()
+                            .track_scroll(&self.filter_scroll)
+                            .horizontal_scrollbar(&self.filter_scroll)
+                            .children(self.filters.iter().map(|filter| {
+                                let filter_id = filter.id.clone();
+                                let handler_owner = owner.clone();
+                                let is_focused =
+                                    self.focused_filter_id.as_ref() == Some(&filter.id);
+                                filter_control(&self.id, filter, cx)
+                                    .tab_stop(is_focused)
+                                    .when(is_focused, |button| {
+                                        button.track_focus(&self.filter_focus)
+                                    })
+                                    .on_click(move |_, _, cx| {
+                                        let _ = handler_owner.update(cx, |table, cx| {
+                                            table.request_filter(filter_id.clone(), cx);
+                                        });
+                                    })
+                            }))
+                            .on_key_down(move |event, window, cx| {
+                                let delta = match event.keystroke.key.as_str() {
+                                    "left" => -1,
+                                    "right" => 1,
+                                    _ => return,
+                                };
+                                let _ = navigation_owner.update(cx, |table, cx| {
+                                    table.move_filter_focus(delta, window, cx);
                                 });
-                            })
-                    }))
-                    .on_key_down(move |event, window, cx| {
-                        let delta = match event.keystroke.key.as_str() {
-                            "left" => -1,
-                            "right" => 1,
-                            _ => return,
-                        };
-                        let _ = navigation_owner.update(cx, |table, cx| {
-                            table.move_filter_focus(delta, window, cx);
-                        });
-                        cx.stop_propagation();
-                    }),
+                                cx.stop_propagation();
+                            }),
+                    )
+                    .child(
+                        ScrollableMask::new(Axis::Horizontal, &self.filter_scroll)
+                            .id((gpui::ElementId::from(self.id.clone()), "filter-scroll-mask")),
+                    ),
             )
             .child(
                 filter_results_frame(&self.id, result_label.clone())

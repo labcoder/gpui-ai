@@ -19,12 +19,8 @@ const ALLOWED_FILES: &[&str] = &[
     // Scroll-distance arithmetic: pixels are the unit of scroll motion, not
     // layout spacing. Constants there are tuning parameters, not theme values.
     "crates/gpui-ai/src/scrolling.rs",
-    // Wheel-containment handlers convert wheel deltas to pixels to test
-    // whether the region can absorb the scroll; this is scroll-motion math,
-    // identical in kind to scrolling.rs.
-    "crates/gpui-ai/src/chat.rs",
-    "crates/gpui-ai/src/comparison_table.rs",
-    "crates/gpui-ai/src/fine_tune.rs",
+    // Semantic horizontal padding is applied with GPUI's `.px(token)` style
+    // helper. The source contains `px(` text, but no raw pixel literal.
     "crates/gpui-ai/src/selection_actions.rs",
     // Raster-frame defaults: the generated-image frame mirrors an image's
     // intrinsic pixel dimensions, not UI spacing.
@@ -37,6 +33,7 @@ const ALLOWED_FILES: &[&str] = &[
     "crates/gpui-ai/src/records_table.rs",
     // Virtual-list overdraw is a measured performance parameter (how far past
     // the viewport to keep rendered rows), independent of the type scale.
+    // The same file also applies semantic padding with `.px(token)`.
     "crates/gpui-ai/src/chat.rs",
     // Theme definitions are where pixel values legitimately live; they feed
     // the token system rather than bypassing it.

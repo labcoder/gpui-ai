@@ -4,19 +4,21 @@ use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, EventEmitter,
-    Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
-    ScrollHandle, ScrollWheelEvent, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Subscription, WeakEntity, Window, div, percentage, prelude::FluentBuilder as _,
+    Focusable as _, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    ParentElement as _, Pixels, Render, Role, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, div, list,
+    percentage, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Collapsible, Icon, IconName, h_flex,
     input::{Input, InputEvent, InputState},
-    sidebar::{Sidebar, SidebarGroup, SidebarItem, SidebarMenuItem},
+    scroll::ScrollableElement as _,
+    sidebar::{SidebarGroup, SidebarItem, SidebarMenuItem},
     tooltip::Tooltip,
     v_flex,
 };
 
-use crate::theme::SemanticStyledExt as _;
+use crate::{scrolling::list_scroll_mask, theme::SemanticStyledExt as _};
 
 /// One application-owned recursive sidebar item.
 ///
@@ -396,7 +398,10 @@ fn sidebar_section_container(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Element as _, RenderOnce as _, TestAppContext, accesskit, canvas};
+    use gpui::{
+        Element as _, ListAlignment, ListState, RenderOnce as _, ScrollDelta, ScrollWheelEvent,
+        TestAppContext, VisualTestContext, accesskit, canvas, list, px,
+    };
     use std::sync::{Arc, Mutex};
 
     type CapturedSemanticNodes = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;
@@ -407,6 +412,55 @@ mod tests {
 
     struct CollapsedParentSemanticsProbe {
         captured: CapturedSemanticNodes,
+    }
+
+    struct SidebarInCatalogProbe {
+        nav: Entity<SidebarNav>,
+        catalog: ListState,
+    }
+
+    impl SidebarInCatalogProbe {
+        fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+            let nav = cx.new(|cx| {
+                let mut nav = SidebarNav::new("nested-nav", window, cx);
+                nav.set_sections(
+                    [
+                        SidebarSection::new("workspace", "Workspace").items((0..30).map(|index| {
+                            SidebarNavItem::new(
+                                format!("destination-{index}"),
+                                format!("Destination {index}"),
+                            )
+                        })),
+                    ],
+                    cx,
+                );
+                nav
+            });
+            Self {
+                nav,
+                catalog: ListState::new(8, ListAlignment::Top, px(0.)),
+            }
+        }
+    }
+
+    impl Render for SidebarInCatalogProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let nav = self.nav.clone();
+            div().w(px(320.)).h(px(260.)).child(
+                list(self.catalog.clone(), move |index, _, _| {
+                    if index == 0 {
+                        div()
+                            .w(px(280.))
+                            .h(px(180.))
+                            .child(nav.clone())
+                            .into_any_element()
+                    } else {
+                        div().w(px(280.)).h(px(100.)).into_any_element()
+                    }
+                })
+                .size_full(),
+            )
+        }
     }
 
     impl Render for SemanticsProbe {
@@ -615,6 +669,55 @@ mod tests {
         assert_eq!(parent.is_selected(), Some(true));
         assert_eq!(parent.description(), Some("Contains selected item"));
         assert_eq!(parent.is_expanded(), Some(false));
+    }
+
+    #[gpui::test]
+    fn wheel_over_scrollable_sidebar_moves_sidebar_before_catalog(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SidebarInCatalogProbe::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let nav_bounds = cx
+            .debug_bounds("sidebar-nav-nested-nav")
+            .expect("the nested sidebar should render");
+        let (nav_list, catalog) = probe.read_with(cx, |probe, cx| {
+            (
+                probe.nav.read(cx).section_list.clone(),
+                probe.catalog.clone(),
+            )
+        });
+        assert!(nav_list.max_offset_for_scrollbar().y > px(0.));
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: nav_bounds.center(),
+            delta: ScrollDelta::Pixels(gpui::point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        assert_eq!(nav_list.scroll_px_offset_for_scrollbar().y, px(-40.));
+        let catalog_top = catalog.logical_scroll_top();
+        assert_eq!(
+            (catalog_top.item_ix, catalog_top.offset_in_item),
+            (0, px(0.))
+        );
+
+        nav_list.scroll_by(nav_list.max_offset_for_scrollbar().y);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let bottom = nav_list.scroll_px_offset_for_scrollbar().y;
+        cx.simulate_event(ScrollWheelEvent {
+            position: nav_bounds.center(),
+            delta: ScrollDelta::Pixels(gpui::point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        assert_eq!(nav_list.scroll_px_offset_for_scrollbar().y, bottom);
+        let catalog_top = catalog.logical_scroll_top();
+        assert_ne!(
+            (catalog_top.item_ix, catalog_top.offset_in_item),
+            (0, px(0.))
+        );
     }
 }
 
@@ -917,9 +1020,8 @@ pub struct SidebarNav {
     query: SharedString,
     input: Entity<InputState>,
     expanded: HashSet<SharedString>,
-    /// Scroll position of the nav body; owns wheel chaining so scrolling
-    /// over the sidebar scrolls the sidebar, not the page behind it.
-    scroll_handle: ScrollHandle,
+    /// Virtualized section list and the nav body's sole scroll owner.
+    section_list: ListState,
     _input_subscription: Subscription,
 }
 
@@ -942,9 +1044,14 @@ impl SidebarNav {
             query: "".into(),
             input,
             expanded: HashSet::new(),
-            scroll_handle: ScrollHandle::new(),
+            section_list: ListState::new(0, ListAlignment::Top, Pixels::ZERO),
             _input_subscription: subscription,
         }
+    }
+
+    fn reset_visible_sections(&self) {
+        self.section_list
+            .reset(filtered_sections(&self.sections, &self.query).len());
     }
 
     /// Replace the controlled section snapshot.
@@ -974,6 +1081,7 @@ impl SidebarNav {
             .extend(new_parents.difference(&old_parents).cloned());
 
         self.sections = sections;
+        self.reset_visible_sections();
         cx.notify();
     }
 
@@ -982,6 +1090,7 @@ impl SidebarNav {
         let item_id = item_id.into();
         if self.active_item.as_ref() != Some(&item_id) {
             self.active_item = Some(item_id);
+            self.section_list.remeasure();
             cx.notify();
         }
     }
@@ -992,6 +1101,7 @@ impl SidebarNav {
             return;
         }
         self.collapsed = collapsed;
+        self.section_list.remeasure();
         cx.emit(SidebarNavEvent::CollapsedChanged {
             id: self.id.clone(),
             collapsed,
@@ -1014,6 +1124,7 @@ impl SidebarNav {
         self.input.update(cx, |input, cx| {
             input.set_value(query.to_string(), window, cx)
         });
+        self.reset_visible_sections();
         self.emit_query_changed(query, cx);
         // InputState intentionally suppresses Change for programmatic values,
         // and it may be unmounted while collapsed, so the owner must invalidate
@@ -1047,6 +1158,7 @@ impl SidebarNav {
             return;
         }
         self.query = query.clone();
+        self.reset_visible_sections();
         self.emit_query_changed(query, cx);
         cx.notify();
     }
@@ -1075,6 +1187,7 @@ impl SidebarNav {
             if !self.expanded.remove(&item_id) {
                 self.expanded.insert(item_id.clone());
             }
+            self.section_list.remeasure();
             cx.notify();
         }
         cx.emit(SidebarNavEvent::Selected {
@@ -1199,6 +1312,8 @@ impl Render for SidebarNav {
                         ),
                 )
             });
+        let visible_sections: Arc<[StableSection]> = stable_sections.into();
+        let section_list = self.section_list.clone();
 
         div()
             .id((ElementId::from(self.id.clone()), "frame"))
@@ -1211,67 +1326,73 @@ impl Render for SidebarNav {
             .aria_label("Workspace navigation")
             .h_full()
             .min_h_0()
-            .overflow_hidden()
-            // Native scroll chaining: the nav body owns the wheel while it
-            // has scroll room; only at the edges does it chain to the page.
-            .on_scroll_wheel({
-                let scroll_handle = self.scroll_handle.clone();
-                move |event: &ScrollWheelEvent, _, cx| {
-                    let delta_y = event.delta.pixel_delta(gpui::px(20.)).y;
-                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
-                    {
-                        cx.stop_propagation();
-                    }
-                }
+            .w(if collapsed {
+                tokens.spacing.xxl * 1.5
+            } else {
+                tokens.spacing.xxl * 8.
             })
+            .flex()
+            .flex_col()
+            .flex_none()
+            .overflow_hidden()
+            .bg(cx.theme().sidebar)
+            .text_color(cx.theme().sidebar_foreground)
+            .border_r_1()
+            .border_color(cx.theme().sidebar_border)
             .child(
                 div()
-                    .id((ElementId::from(self.id.clone()), "nav-scroll"))
-                    .overflow_y_scroll()
-                    .track_scroll(&self.scroll_handle)
-                    .size_full()
-                    .child(
-                        Sidebar::new((ElementId::from(self.id.clone()), "sidebar"))
-                            .collapsed(collapsed)
-                            .w(tokens.spacing.xxl * 8.)
-                            .header(header)
-                            .children(stable_sections)
-                            .when(sections.is_empty(), |this| {
-                                this.child(StableSection {
-                                    section: SidebarSection::new("empty", ""),
-                                    tree: StableMenuTree {
-                                        component_id: self.id.clone(),
-                                        section_id: "empty".into(),
-                                        section_label: "Navigation status".into(),
-                                        items: Arc::from([]),
-                                        active_item: None,
-                                        expanded: Arc::new(HashSet::new()),
-                                        owner: cx.weak_entity(),
-                                        collapsed,
-                                        filtering,
-                                    },
-                                    collapsed,
-                                })
-                            })
-                            .footer(
-                                div()
-                                    .id((ElementId::from(self.id.clone()), "empty-status"))
-                                    .when(sections.is_empty() && !collapsed, |this| {
-                                        this.debug_selector(move || {
-                                            if empty_selector {
-                                                "sidebar-nav-empty".to_owned()
-                                            } else {
-                                                "sidebar-nav-no-results".to_owned()
-                                            }
-                                        })
-                                        .role(Role::Status)
-                                        .aria_label(empty_message.clone())
-                                        .text_token(tokens.typography.sm)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(empty_message)
-                                    }),
-                            ),
-                    ),
+                    .w_full()
+                    .flex_none()
+                    .p(tokens.spacing.sm)
+                    .child(header),
             )
+            .child(
+                div()
+                    .relative()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        v_flex()
+                            .size_full()
+                            .px(tokens.spacing.sm)
+                            .child(
+                                list(section_list.clone(), move |index, window, cx| {
+                                    visible_sections
+                                        .get(index)
+                                        .cloned()
+                                        .map(|section| {
+                                            section.render(index, window, cx).into_any_element()
+                                        })
+                                        .unwrap_or_else(|| div().hidden().into_any_element())
+                                })
+                                .size_full(),
+                            )
+                            .vertical_scrollbar(&section_list),
+                    )
+                    // Capture-phase containment wins over an ancestor catalog
+                    // list and releases the wheel at either nav edge.
+                    .child(list_scroll_mask(&self.section_list)),
+            )
+            .when(sections.is_empty() && !collapsed, |this| {
+                this.child(
+                    div()
+                        .id((ElementId::from(self.id.clone()), "empty-status"))
+                        .debug_selector(move || {
+                            if empty_selector {
+                                "sidebar-nav-empty".to_owned()
+                            } else {
+                                "sidebar-nav-no-results".to_owned()
+                            }
+                        })
+                        .flex_none()
+                        .p(tokens.spacing.sm)
+                        .role(Role::Status)
+                        .aria_label(empty_message.clone())
+                        .text_token(tokens.typography.sm)
+                        .text_color(cx.theme().muted_foreground)
+                        .child(empty_message),
+                )
+            })
     }
 }

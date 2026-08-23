@@ -20,7 +20,7 @@ use gpui_component::{
 };
 
 use crate::{
-    control::composed_button,
+    control::{composed_button, outlined_control_with_label},
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -842,26 +842,16 @@ fn record_activation_button(
     row: &RecordRow,
     cx: &mut App,
 ) -> gpui_base::Button {
-    let tokens = cx.theme().semantic_tokens();
     let debug_id = scoped_records_id("activate", component_id, &row.id);
     let label = if row.disabled {
         format!("Unavailable: {activation_label} {}", row.label)
     } else {
         format!("{activation_label} {}", row.label)
     };
-    composed_button(debug_id.clone(), label)
+    outlined_control_with_label(debug_id.clone(), label, activation_label.to_owned(), cx)
         .debug_selector(move || debug_id.clone())
         .flex_none()
         .disabled(row.disabled)
-        .px(tokens.spacing.xs)
-        .py(tokens.spacing.xxs)
-        .rounded(tokens.radius.sm)
-        .border_1()
-        .border_color(cx.theme().border)
-        .bg(cx.theme().transparent)
-        .text_token(tokens.typography.xs)
-        .focus_visible(|style| style.border_color(cx.theme().ring))
-        .child(activation_label.to_owned())
 }
 
 fn records_state_frame(

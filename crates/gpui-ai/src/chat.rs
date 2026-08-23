@@ -3,7 +3,7 @@
 use crate::{
     control::outlined_control,
     prompt_bar::{PromptBar, PromptBarEvent},
-    scrolling::ScrollRoom,
+    scrolling::list_scroll_mask,
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
     theme::SemanticStyledExt as _,
@@ -11,9 +11,8 @@ use crate::{
 use gpui::{
     AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, FollowMode,
     InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset, ListState,
-    ParentElement as _, Render, Role, ScrollWheelEvent, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, list,
-    prelude::FluentBuilder as _, px,
+    ParentElement as _, Render, Role, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, list, prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::Button;
 use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView, v_flex};
@@ -647,18 +646,30 @@ impl Chat {
             "heading",
         ));
 
-        // Presentation is application-controlled per message. Alignment
-        // pushes the frame to the trailing edge; bubble treatment selects
-        // border+surface, filled tint, or no frame. Role only supplies
-        // defaults for the tint color.
+        // The semantic list item spans the transcript, while the visual
+        // bubble is a constrained child. That separation lets alignment move
+        // the actual painted surface instead of merely right-aligning content
+        // inside a full-width background.
         let appearance = message.appearance();
-        let base = message_frame(&self.id, &message)
+        let bubble_debug_id = message_id.clone();
+        let row = message_frame(&self.id, &message)
             .track_focus(&message_focus_handle)
+            .px(tokens.spacing.md)
+            .py(tokens.spacing.sm);
+        let bubble = v_flex()
+            .id((
+                ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
+                "bubble",
+            ))
+            .debug_selector(move || format!("chat-message-bubble-{bubble_debug_id}"))
+            .min_w_0()
             .gap(tokens.spacing.sm)
             .px(tokens.spacing.md)
             .py(tokens.spacing.md);
-        let framed = match appearance.bubble() {
-            MessageBubble::Bordered => base
+        let bubble = match appearance.bubble() {
+            MessageBubble::Bordered => bubble
+                .w_auto()
+                .max_w(relative(0.82))
                 .border_1()
                 .border_color(cx.theme().border)
                 .rounded(tokens.radius.md)
@@ -668,39 +679,45 @@ impl Chat {
                         cx.theme().background
                     }
                 }),
-            MessageBubble::Filled => base.rounded(tokens.radius.md).bg(match message.role {
-                ChatRole::User => cx.theme().secondary,
-                ChatRole::Assistant | ChatRole::System | ChatRole::Tool => cx.theme().background,
-            }),
-            MessageBubble::Plain => base,
+            MessageBubble::Filled => bubble
+                .w_auto()
+                .max_w(relative(0.82))
+                .rounded(tokens.radius.md)
+                .bg(match message.role {
+                    ChatRole::User => cx.theme().secondary,
+                    ChatRole::Assistant | ChatRole::System | ChatRole::Tool => cx.theme().muted,
+                }),
+            MessageBubble::Plain => bubble.w_full(),
         };
-        let framed = if appearance.alignment() == MessageAlignment::Trailing {
-            framed.items_end()
+        let row = if appearance.alignment() == MessageAlignment::Trailing {
+            row.items_end()
         } else {
-            framed.items_start()
+            row.items_start()
         };
 
-        framed
-            .child(
-                div()
-                    .id(heading_id)
-                    .role(Role::Heading)
-                    .aria_label(author.clone())
-                    .text_token(tokens.typography.sm)
-                    .text_color(cx.theme().foreground)
-                    .child(author),
-            )
-            .child(content)
-            .when(retryable_failure, |this| {
-                this.child(
-                    retry_button(&self.id, &message_id, cx).on_click(cx.listener(
-                        move |chat, _, _, cx| {
-                            chat.retry(message_id.clone(), cx);
-                        },
-                    )),
+        row.child(
+            bubble
+                .child(
+                    div()
+                        .id(heading_id)
+                        .role(Role::Heading)
+                        .aria_label(author.clone())
+                        .text_token(tokens.typography.sm)
+                        .text_color(cx.theme().foreground)
+                        .child(author),
                 )
-            })
-            .into_any_element()
+                .child(content)
+                .when(retryable_failure, |this| {
+                    this.child(
+                        retry_button(&self.id, &message_id, cx).on_click(cx.listener(
+                            move |chat, _, _, cx| {
+                                chat.retry(message_id.clone(), cx);
+                            },
+                        )),
+                    )
+                }),
+        )
+        .into_any_element()
     }
 }
 
@@ -721,24 +738,9 @@ impl Render for Chat {
 
         chat_frame(&self.id)
             .gap(tokens.spacing.sm)
-            // Native scroll chaining: when the pointer is over the
-            // transcript and it can still move, the wheel belongs to this
-            // component. Only when the transcript is pinned at the edge in
-            // the scroll direction does the event chain to the page.
-            .on_scroll_wheel(cx.listener(|chat, event: &ScrollWheelEvent, _, cx| {
-                let delta_y = event.delta.pixel_delta(px(20.)).y;
-                if delta_y == px(0.) {
-                    return;
-                }
-                let offset = chat.list_state.scroll_px_offset_for_scrollbar().y;
-                let max_offset = chat.list_state.max_offset_for_scrollbar().y;
-                let room = ScrollRoom::new(offset, max_offset);
-                if room.can_absorb(delta_y) {
-                    cx.stop_propagation();
-                }
-            }))
             .child(
                 transcript_frame(transcript_id)
+                    .relative()
                     .flex_1()
                     .overflow_hidden()
                     .when(self.messages.is_empty(), |this| {
@@ -759,6 +761,7 @@ impl Render for Chat {
                                 .size_full(),
                         )
                         .vertical_scrollbar(&self.list_state)
+                        .child(list_scroll_mask(&self.list_state))
                     }),
             )
             .when(show_jump, |this| {
@@ -963,6 +966,53 @@ mod tests {
         assert_eq!(jump.role, Some(Role::Button));
         assert_eq!(jump.node.label(), Some("Jump to latest, 2 unread messages"));
         assert!(jump.node.supports_action(accesskit::Action::Click));
+    }
+
+    #[gpui::test]
+    fn trailing_filled_message_moves_a_bounded_bubble_surface(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(
+            &harness,
+            Arc::from([
+                ChatMessage::new(
+                    "assistant",
+                    ChatRole::Assistant,
+                    Progressive::complete("A concise answer".to_owned()),
+                )
+                .with_appearance(ChatMessageAppearance::new(
+                    MessageAlignment::Leading,
+                    MessageBubble::Plain,
+                )),
+                ChatMessage::new(
+                    "user",
+                    ChatRole::User,
+                    Progressive::complete("A short question".to_owned()),
+                )
+                .with_appearance(ChatMessageAppearance::new(
+                    MessageAlignment::Trailing,
+                    MessageBubble::Filled,
+                )),
+            ]),
+            cx,
+        );
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let row = cx
+            .debug_bounds("chat-message-user")
+            .expect("the user message row should render");
+        let bubble = cx
+            .debug_bounds("chat-message-bubble-user")
+            .expect("the user bubble should render");
+        let left_space = bubble.left() - row.left();
+        let right_space = row.right() - bubble.right();
+
+        assert!(
+            bubble.size.width < row.size.width,
+            "row={row:?}, bubble={bubble:?}"
+        );
+        assert!(left_space > right_space, "row={row:?}, bubble={bubble:?}");
+        assert!(bubble.right() <= row.right());
     }
 
     #[gpui::test]

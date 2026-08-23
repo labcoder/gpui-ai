@@ -52,7 +52,11 @@ pub(crate) fn outlined_control_with_label(
         .hover(|style| style.bg(cx.theme().button_hover))
         .active(|style| style.bg(cx.theme().button_active))
         .focus_visible(|style| style.border_color(cx.theme().ring))
-        .child(div().child(visible_label.into()))
+        // Compact controls are often placed in fixed-width table columns.
+        // Keep their visible label inside the control instead of allowing a
+        // long title to paint over the adjacent column; the full accessible
+        // label remains on the Button.
+        .child(div().min_w_0().truncate().child(visible_label.into()))
 }
 
 #[cfg(test)]

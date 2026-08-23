@@ -36,7 +36,41 @@
 //! assert!(distance > Pixels::ZERO);
 //! ```
 
-use gpui::{Pixels, px};
+use gpui::{
+    HitboxBehavior, IntoElement as _, ListState, Pixels, ScrollWheelEvent, Styled as _, canvas, px,
+};
+
+/// Covers a retained list viewport with capture-phase wheel containment.
+///
+/// GPUI lists consume wheel input during bubbling. When a list is nested in
+/// another list, the ancestor may therefore run before the descendant. This
+/// mask moves the descendant directly during capture while it has room and
+/// releases the event at either edge so ordinary scroll chaining resumes.
+pub(crate) fn list_scroll_mask(state: &ListState) -> impl gpui::IntoElement {
+    let state = state.clone();
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            let line_height = window.line_height();
+            let view_id = window.current_view();
+            let hitbox_id = hitbox.id;
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if !(phase.capture() && hitbox_id.should_handle_scroll(window)) {
+                    return;
+                }
+                let delta_y = event.delta.pixel_delta(line_height).y;
+                if ScrollRoom::from_list_state(&state).can_absorb(delta_y) {
+                    state.scroll_by(-delta_y);
+                    cx.notify(view_id);
+                    cx.stop_propagation();
+                }
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
+    .into_any_element()
+}
 
 /// Base multiplier applied to wheel line deltas, matching Zed's editor
 /// `scroll_sensitivity` default of 1.0.

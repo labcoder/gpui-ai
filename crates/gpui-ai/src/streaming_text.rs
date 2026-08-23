@@ -4,13 +4,14 @@ use crate::stream::{ProgressState, StreamedContent};
 use crate::theme::SemanticStyledExt as _;
 use crate::{control::outlined_control, handlers::SharedHandler};
 use gpui::{
-    App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    App, Axis, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, text::TextView, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, scroll::ScrollableMask,
+    text::TextView, v_flex,
 };
 use std::rc::Rc;
 
@@ -614,23 +615,39 @@ impl RenderOnce for StreamingText {
                             .tab_group()
                             .gap(tokens.spacing.xxs)
                             .child(
-                                h_flex()
-                                    .id((root_id.clone(), "inline-citation-scroll"))
-                                    .debug_selector(|| "streaming-citation-scroll".to_owned())
+                                div()
+                                    .relative()
                                     .w_full()
-                                    .max_w_full()
-                                    .min_w_0()
-                                    .overflow_x_scroll()
-                                    .track_scroll(&citation_scroll_handle)
-                                    .gap(tokens.spacing.xs)
-                                    .children(referenced_citations.into_iter().map(|citation| {
-                                        citation_companion_link(
-                                            root_id.clone(),
-                                            citation,
-                                            handler.clone(),
-                                            cx,
+                                    .child(
+                                        h_flex()
+                                            .id((root_id.clone(), "inline-citation-scroll"))
+                                            .debug_selector(|| {
+                                                "streaming-citation-scroll".to_owned()
+                                            })
+                                            .w_full()
+                                            .max_w_full()
+                                            .min_w_0()
+                                            .overflow_x_scroll()
+                                            .track_scroll(&citation_scroll_handle)
+                                            .gap(tokens.spacing.xs)
+                                            .children(referenced_citations.into_iter().map(
+                                                |citation| {
+                                                    citation_companion_link(
+                                                        root_id.clone(),
+                                                        citation,
+                                                        handler.clone(),
+                                                        cx,
+                                                    )
+                                                },
+                                            )),
+                                    )
+                                    .child(
+                                        ScrollableMask::new(
+                                            Axis::Horizontal,
+                                            &citation_scroll_handle,
                                         )
-                                    })),
+                                        .id((root_id.clone(), "inline-citation-scroll-mask")),
+                                    ),
                             ),
                     )
                 })

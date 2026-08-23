@@ -3,19 +3,20 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, App, Context, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, ScrollHandle,
-    ScrollWheelEvent, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px,
+    Animation, AnimationExt as _, App, Axis, Context, ElementId, EventEmitter, FocusHandle,
+    Focusable, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
+    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, h_flex, scroll::ScrollableElement as _, text::TextView,
+    ActiveTheme as _, Icon, IconName, h_flex,
+    scroll::{ScrollableElement as _, ScrollableMask},
+    text::TextView,
 };
 
 use crate::{
     control::outlined_control_with_label,
     records_table::escape_markdown_text,
-    scrolling::ScrollRoom,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -589,6 +590,7 @@ fn comparison_item_header_frame(
     item: &ComparisonItem,
     selected: bool,
 ) -> gpui::Stateful<gpui::Div> {
+    let debug_id: SharedString = format!("comparison-item-header:{table_id}:{}", item.id).into();
     let state_label = match item.state {
         ComparisonItemState::Default => None,
         ComparisonItemState::Highlighted => Some("Recommended"),
@@ -599,7 +601,8 @@ fn comparison_item_header_frame(
         .unwrap_or_else(|| item.label.to_string())
         .into();
     div()
-        .id(format!("comparison-item-header:{table_id}:{}", item.id))
+        .id(debug_id.clone())
+        .debug_selector(move || debug_id.to_string())
         .role(Role::ColumnHeader)
         .aria_label(accessible_label)
         .aria_selected(selected)
@@ -706,155 +709,179 @@ impl Render for ComparisonTable {
         comparison_table_frame(&self.id, self.label.clone())
             .size_full()
             .min_h_0()
-            .flex()
-            .flex_col()
-            // Native scroll chaining: while either axis of the table has
-            // room in the wheel's direction, the wheel belongs to the table.
-            .on_scroll_wheel({
-                let horizontal = self.horizontal_scroll.clone();
-                let vertical = self.feature_scroll.clone();
-                move |event: &ScrollWheelEvent, _, cx| {
-                    let delta = event.delta.pixel_delta(px(20.));
-                    let vertical_room = ScrollRoom::from_handle(&vertical).can_absorb(delta.y);
-                    let horizontal_room = ScrollRoom::from_handle(&horizontal).can_absorb(delta.x);
-                    if vertical_room || horizontal_room {
-                        cx.stop_propagation();
-                    }
-                }
-            })
-            .overflow_x_scroll()
-            .track_scroll(&self.horizontal_scroll)
-            .horizontal_scrollbar(&self.horizontal_scroll)
+            .relative()
+            .overflow_hidden()
             .border_1()
             .border_color(cx.theme().border)
             .rounded(tokens.radius.md)
-            .when_some(status, |surface, (role, label): (Role, SharedString)| {
-                // Status states carry the same semantic color language as
-                // Task Rows: info for in-flight work, danger for failures,
-                // muted for empty. A spinner accompanies loading so the
-                // state is visible, not just readable.
-                fn status_visuals(role: Role, cx: &App) -> (Hsla, IconName) {
-                    match role {
-                        Role::ProgressIndicator => (cx.theme().info, IconName::LoaderCircle),
-                        Role::Alert => (cx.theme().danger, IconName::CircleX),
-                        _ => (cx.theme().muted_foreground, IconName::Dash),
-                    }
-                }
-                let spinner = role == Role::ProgressIndicator;
-                let (color, text) = (status_visuals(role, cx).0, label.clone());
-                surface.child(
-                    comparison_status_frame(&self.id, role, label.clone())
-                        .p(tokens.spacing.md)
-                        .child(
-                            h_flex()
-                                .gap(tokens.spacing.sm)
-                                .items_center()
-                                .when(spinner, |row| {
-                                    // The animated element must be the direct
-                                    // child; wrap the rotating icon in a
-                                    // fixed-size slot so layout stays stable.
-                                    let icon = status_visuals(role, cx).1;
-                                    row.child(
-                                        div().size_4().child(
-                                            Icon::new(icon)
-                                                .text_color(color)
-                                                .with_animation(
-                                                    "comparison-status-spinner",
-                                                    Animation::new(Duration::from_millis(900))
-                                                        .repeat(),
-                                                    |this, delta| {
-                                                        this.rotate(gpui::percentage(delta))
-                                                    },
-                                                )
-                                                .into_any_element(),
-                                        ),
-                                    )
-                                })
-                                .when(!spinner, |row| {
-                                    let icon = status_visuals(role, cx).1;
-                                    row.child(Icon::new(icon).size_4().text_color(color))
-                                })
-                                .child(
-                                    div()
-                                        .text_token(tokens.typography.sm)
-                                        .text_color(color)
-                                        .child(text),
-                                ),
-                        ),
-                )
-            })
             .child(
                 div()
-                    .id(format!("comparison-table-rows:{}", self.id))
-                    .w_full()
-                    .flex_1()
+                    .id(format!("comparison-table-scroll:{}", self.id))
+                    .size_full()
                     .min_h_0()
-                    // The grid's intrinsic width is feature column + N item
-                    // columns; horizontal overflow scrolls here (shared with
-                    // the outer x-scroll handle) so headers and cells always
-                    // stay aligned on one canvas.
-                    .min_w(feature_width + item_width * items.len() as f32)
-                    .overflow_scroll()
-                    .track_scroll(&self.feature_scroll)
-                    .vertical_scrollbar(&self.feature_scroll)
-                    .role(Role::RowGroup)
+                    .flex()
+                    .flex_col()
+                    .overflow_x_scroll()
+                    .restrict_scroll_to_axis()
+                    .track_scroll(&self.horizontal_scroll)
+                    .horizontal_scrollbar(&self.horizontal_scroll)
+                    .when_some(status, |surface, (role, label): (Role, SharedString)| {
+                        // Status states carry the same semantic color language as
+                        // Task Rows: info for in-flight work, danger for failures,
+                        // muted for empty. A spinner accompanies loading so the
+                        // state is visible, not just readable.
+                        fn status_visuals(role: Role, cx: &App) -> (Hsla, IconName) {
+                            match role {
+                                Role::ProgressIndicator => {
+                                    (cx.theme().info, IconName::LoaderCircle)
+                                }
+                                Role::Alert => (cx.theme().danger, IconName::CircleX),
+                                _ => (cx.theme().muted_foreground, IconName::Dash),
+                            }
+                        }
+                        let spinner = role == Role::ProgressIndicator;
+                        let (color, text) = (status_visuals(role, cx).0, label.clone());
+                        surface.child(
+                            comparison_status_frame(&self.id, role, label.clone())
+                                .p(tokens.spacing.md)
+                                .child(
+                                    h_flex()
+                                        .gap(tokens.spacing.sm)
+                                        .items_center()
+                                        .when(spinner, |row| {
+                                            // The animated element must be the direct
+                                            // child; wrap the rotating icon in a
+                                            // fixed-size slot so layout stays stable.
+                                            let icon = status_visuals(role, cx).1;
+                                            row.child(
+                                                div().size_4().child(
+                                                    Icon::new(icon)
+                                                        .text_color(color)
+                                                        .with_animation(
+                                                            "comparison-status-spinner",
+                                                            Animation::new(Duration::from_millis(
+                                                                900,
+                                                            ))
+                                                            .repeat(),
+                                                            |this, delta| {
+                                                                this.rotate(gpui::percentage(delta))
+                                                            },
+                                                        )
+                                                        .into_any_element(),
+                                                ),
+                                            )
+                                        })
+                                        .when(!spinner, |row| {
+                                            let icon = status_visuals(role, cx).1;
+                                            row.child(Icon::new(icon).size_4().text_color(color))
+                                        })
+                                        .child(
+                                            div()
+                                                .text_token(tokens.typography.sm)
+                                                .text_color(color)
+                                                .child(text),
+                                        ),
+                                ),
+                        )
+                    })
                     .child(
                         div()
-                            .id(format!("comparison-table-header-row:{}", self.id))
-                            .flex()
-                            .role(Role::Row)
+                            .relative()
+                            .w_full()
+                            .flex_1()
+                            .min_h_0()
+                            // The grid's intrinsic width is feature column + N item
+                            // columns. Only the outer viewport owns horizontal
+                            // movement, keeping keyboard reveal, scrollbar drag,
+                            // headers, and cells on one canvas.
+                            .min_w(feature_width + item_width * items.len() as f32)
                             .child(
                                 div()
-                                    .id(format!("comparison-feature-header:{}", self.id))
-                                    .w(feature_width)
-                                    .flex_none()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(tokens.spacing.xxs)
-                                    .p(tokens.spacing.sm)
-                                    .role(Role::ColumnHeader)
-                                    .aria_label("Feature"),
-                            )
-                            .children(items.iter().map(|item| {
-                                let item_id = item.id.clone();
-                                let handler_owner = owner.clone();
-                                let selected = self.selected_item_id.as_ref() == Some(&item.id);
-                                let focused = self.focused_item_id.as_ref() == Some(&item.id);
-                                let state_label = match item.state {
-                                    ComparisonItemState::Default => None,
-                                    ComparisonItemState::Highlighted => Some("Recommended"),
-                                    ComparisonItemState::Disabled => Some("Unavailable"),
-                                };
-                                comparison_item_header_frame(&self.id, item, selected)
-                                    .w(item_width)
-                                    .min_h(header_height)
-                                    .flex_none()
-                                    .p(tokens.spacing.sm)
-                                    .border_l_1()
-                                    .border_color(cx.theme().border)
-                                    .when(
-                                        item.state == ComparisonItemState::Highlighted,
-                                        |header| header.bg(cx.theme().accent),
-                                    )
-                                    .when(selected, |header| {
-                                        header.border_2().border_color(cx.theme().ring)
-                                    })
+                                    .id(format!("comparison-table-rows:{}", self.id))
+                                    .size_full()
+                                    .min_h_0()
+                                    .overflow_y_scroll()
+                                    .track_scroll(&self.feature_scroll)
+                                    .vertical_scrollbar(&self.feature_scroll)
+                                    .role(Role::RowGroup)
                                     .child(
-                                        comparison_item_control(&self.id, item, cx)
-                                            .w_full()
-                                            .tab_stop(focused)
-                                            .when(focused, |button| {
-                                                button.track_focus(&self.focus_handle)
-                                            })
-                                            .on_click(move |_, window, cx| {
-                                                let _ = handler_owner.update(cx, |table, cx| {
-                                                    table.focus_item(&item_id, window, cx);
-                                                    table.request_selection(item_id.clone(), cx);
-                                                });
-                                            }),
-                                    )
-                                    .when_some(item.description.clone(), |header, description| {
-                                        header.child(
+                                        div()
+                                            .id(format!("comparison-table-header-row:{}", self.id))
+                                            .flex()
+                                            .role(Role::Row)
+                                            .child(
+                                                div()
+                                                    .id(format!(
+                                                        "comparison-feature-header:{}",
+                                                        self.id
+                                                    ))
+                                                    .w(feature_width)
+                                                    .flex_none()
+                                                    .flex()
+                                                    .flex_col()
+                                                    .gap(tokens.spacing.xxs)
+                                                    .p(tokens.spacing.sm)
+                                                    .role(Role::ColumnHeader)
+                                                    .aria_label("Feature"),
+                                            )
+                                            .children(items.iter().map(|item| {
+                                                let item_id = item.id.clone();
+                                                let handler_owner = owner.clone();
+                                                let selected = self.selected_item_id.as_ref()
+                                                    == Some(&item.id);
+                                                let focused =
+                                                    self.focused_item_id.as_ref() == Some(&item.id);
+                                                let state_label = match item.state {
+                                                    ComparisonItemState::Default => None,
+                                                    ComparisonItemState::Highlighted => {
+                                                        Some("Recommended")
+                                                    }
+                                                    ComparisonItemState::Disabled => {
+                                                        Some("Unavailable")
+                                                    }
+                                                };
+                                                comparison_item_header_frame(
+                                                    &self.id, item, selected,
+                                                )
+                                                .w(item_width)
+                                                .min_h(header_height)
+                                                .flex_none()
+                                                .p(tokens.spacing.sm)
+                                                .border_l_1()
+                                                .border_color(cx.theme().border)
+                                                .when(
+                                                    item.state == ComparisonItemState::Highlighted,
+                                                    |header| header.bg(cx.theme().accent),
+                                                )
+                                                .when(selected, |header| {
+                                                    header.border_2().border_color(cx.theme().ring)
+                                                })
+                                                .child(
+                                                    comparison_item_control(&self.id, item, cx)
+                                                        .w_full()
+                                                        .tab_stop(focused)
+                                                        .when(focused, |button| {
+                                                            button.track_focus(&self.focus_handle)
+                                                        })
+                                                        .on_click(move |_, window, cx| {
+                                                            let _ = handler_owner.update(
+                                                                cx,
+                                                                |table, cx| {
+                                                                    table.focus_item(
+                                                                        &item_id, window, cx,
+                                                                    );
+                                                                    table.request_selection(
+                                                                        item_id.clone(),
+                                                                        cx,
+                                                                    );
+                                                                },
+                                                            );
+                                                        }),
+                                                )
+                                                .when_some(
+                                                    item.description.clone(),
+                                                    |header, description| {
+                                                        header.child(
                                             TextView::markdown(
                                                 format!(
                                                     "comparison-item-description:{}:{}",
@@ -864,61 +891,62 @@ impl Render for ComparisonTable {
                                             )
                                             .selectable(true),
                                         )
-                                    })
-                                    .when_some(state_label, |header, state| {
-                                        header.child(
-                                            div()
-                                                .mt(tokens.spacing.xs)
-                                                .text_token(tokens.typography.xs)
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child(state),
-                                        )
-                                    })
-                                    .when(selected, |header| {
-                                        header.child(
-                                            div()
-                                                .mt(tokens.spacing.xs)
-                                                .text_token(tokens.typography.xs)
-                                                .child("Selected"),
-                                        )
-                                    })
-                            }))
-                            .on_key_down(move |event, window, cx| {
-                                let delta = match event.keystroke.key.as_str() {
-                                    "left" => -1,
-                                    "right" => 1,
-                                    _ => return,
-                                };
-                                let _ = navigation_owner.update(cx, |table, cx| {
-                                    table.move_item_focus(delta, window, cx);
-                                });
-                                cx.stop_propagation();
-                            }),
-                    )
-                    .children(features.iter().map(|feature| {
-                        comparison_feature_row_frame(&self.id, feature)
-                            .flex()
-                            .border_t_1()
-                            .border_color(cx.theme().border)
-                            .child(
-                                comparison_feature_header_frame(&self.id, feature)
-                                    .w(feature_width)
-                                    .flex_none()
-                                    .p(tokens.spacing.sm)
-                                    .child(
-                                        TextView::markdown(
-                                            format!(
-                                                "comparison-feature-copy:{}:{}",
-                                                self.id, feature.id
-                                            ),
-                                            escape_markdown_text(&feature.label),
-                                        )
-                                        .selectable(true),
+                                                    },
+                                                )
+                                                .when_some(state_label, |header, state| {
+                                                    header.child(
+                                                        div()
+                                                            .mt(tokens.spacing.xs)
+                                                            .text_token(tokens.typography.xs)
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .child(state),
+                                                    )
+                                                })
+                                                .when(selected, |header| {
+                                                    header.child(
+                                                        div()
+                                                            .mt(tokens.spacing.xs)
+                                                            .text_token(tokens.typography.xs)
+                                                            .child("Selected"),
+                                                    )
+                                                })
+                                            }))
+                                            .on_key_down(move |event, window, cx| {
+                                                let delta = match event.keystroke.key.as_str() {
+                                                    "left" => -1,
+                                                    "right" => 1,
+                                                    _ => return,
+                                                };
+                                                let _ = navigation_owner.update(cx, |table, cx| {
+                                                    table.move_item_focus(delta, window, cx);
+                                                });
+                                                cx.stop_propagation();
+                                            }),
                                     )
-                                    .when_some(
-                                        feature.description.clone(),
-                                        |header, description| {
-                                            header.child(
+                                    .children(features.iter().map(|feature| {
+                                        comparison_feature_row_frame(&self.id, feature)
+                                            .flex()
+                                            .border_t_1()
+                                            .border_color(cx.theme().border)
+                                            .child(
+                                                comparison_feature_header_frame(&self.id, feature)
+                                                    .w(feature_width)
+                                                    .flex_none()
+                                                    .p(tokens.spacing.sm)
+                                                    .child(
+                                                        TextView::markdown(
+                                                            format!(
+                                                                "comparison-feature-copy:{}:{}",
+                                                                self.id, feature.id
+                                                            ),
+                                                            escape_markdown_text(&feature.label),
+                                                        )
+                                                        .selectable(true),
+                                                    )
+                                                    .when_some(
+                                                        feature.description.clone(),
+                                                        |header, description| {
+                                                            header.child(
                                                 TextView::markdown(
                                                     format!(
                                                         "comparison-feature-description:{}:{}",
@@ -928,35 +956,51 @@ impl Render for ComparisonTable {
                                                 )
                                                 .selectable(true),
                                             )
-                                        },
-                                    ),
+                                                        },
+                                                    ),
+                                            )
+                                            .children(items.iter().map(|item| {
+                                                let value = feature.value(&item.id);
+                                                let display: SharedString = value
+                                                    .map(|value| value.display.clone())
+                                                    .unwrap_or_else(|| "Not specified".into());
+                                                comparison_cell_frame(
+                                                    &self.id,
+                                                    &feature.id,
+                                                    item,
+                                                    display.clone(),
+                                                )
+                                                .w(item_width)
+                                                .flex_none()
+                                                .p(tokens.spacing.sm)
+                                                .border_l_1()
+                                                .border_color(cx.theme().border)
+                                                .when(
+                                                    item.state == ComparisonItemState::Highlighted,
+                                                    |cell| cell.bg(cx.theme().accent),
+                                                )
+                                                .child(
+                                                    TextView::markdown(
+                                                        format!(
+                                                            "comparison-cell-copy:{}:{}:{}",
+                                                            self.id, feature.id, item.id
+                                                        ),
+                                                        escape_markdown_text(&display),
+                                                    )
+                                                    .selectable(true),
+                                                )
+                                            }))
+                                    })),
                             )
-                            .children(items.iter().map(|item| {
-                                let value = feature.value(&item.id);
-                                let display: SharedString = value
-                                    .map(|value| value.display.clone())
-                                    .unwrap_or_else(|| "Not specified".into());
-                                comparison_cell_frame(&self.id, &feature.id, item, display.clone())
-                                    .w(item_width)
-                                    .flex_none()
-                                    .p(tokens.spacing.sm)
-                                    .border_l_1()
-                                    .border_color(cx.theme().border)
-                                    .when(item.state == ComparisonItemState::Highlighted, |cell| {
-                                        cell.bg(cx.theme().accent)
-                                    })
-                                    .child(
-                                        TextView::markdown(
-                                            format!(
-                                                "comparison-cell-copy:{}:{}:{}",
-                                                self.id, feature.id, item.id
-                                            ),
-                                            escape_markdown_text(&display),
-                                        )
-                                        .selectable(true),
-                                    )
-                            }))
-                    })),
+                            .child(
+                                ScrollableMask::new(Axis::Vertical, &self.feature_scroll)
+                                    .id((ElementId::from(self.id.clone()), "vertical-scroll-mask")),
+                            ),
+                    ),
+            )
+            .child(
+                ScrollableMask::new(Axis::Horizontal, &self.horizontal_scroll)
+                    .id((ElementId::from(self.id.clone()), "horizontal-scroll-mask")),
             )
     }
 }

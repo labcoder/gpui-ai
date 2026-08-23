@@ -3,14 +3,14 @@
 use crate::control::composed_button;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, AppContext as _, Bounds, ElementId, Entity, EventEmitter, InteractiveElement as _,
+    App, AppContext as _, Axis, Bounds, ElementId, Entity, EventEmitter, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, Role, ScrollHandle, ScrollWheelEvent, SharedString, Size, Stateful,
-    StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
-    prelude::FluentBuilder as _,
+    Render, Role, ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement as _,
+    Styled, Subscription, Window, div, point, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, ElementExt as _,
+    scroll::ScrollableMask,
     text::{TextView, TextViewState},
 };
 
@@ -144,9 +144,11 @@ fn selection_toolbar_frame(
     anchor: Point<Pixels>,
     maximum_size: Size<Pixels>,
     scroll_handle: &ScrollHandle,
+    buttons: Vec<gpui_base::Button>,
     cx: &mut App,
 ) -> Stateful<gpui::Div> {
     let tokens = cx.theme().semantic_tokens();
+    let scroll_id = id.clone();
     div()
         .id((ElementId::from(id), "toolbar"))
         .debug_selector(|| "selection-actions-toolbar".to_owned())
@@ -159,17 +161,29 @@ fn selection_toolbar_frame(
         .top(anchor.y)
         .max_w(maximum_size.width)
         .max_h(maximum_size.height)
-        .overflow_x_scroll()
-        .track_scroll(scroll_handle)
-        .flex()
-        .items_center()
-        .gap(tokens.spacing.xs)
         .p(tokens.spacing.xs)
         .border_1()
         .border_color(tokens.colors.border)
         .rounded(tokens.radius.md)
         .bg(tokens.colors.surface)
         .shadow(tokens.shadow.md.clone())
+        .child(
+            div()
+                .id((ElementId::from(scroll_id.clone()), "toolbar-scroll"))
+                .max_w_full()
+                .min_w_0()
+                .overflow_x_scroll()
+                .restrict_scroll_to_axis()
+                .track_scroll(scroll_handle)
+                .flex()
+                .items_center()
+                .gap(tokens.spacing.xs)
+                .children(buttons),
+        )
+        .child(
+            ScrollableMask::new(Axis::Horizontal, scroll_handle)
+                .id((ElementId::from(scroll_id), "toolbar-scroll-mask")),
+        )
 }
 
 fn defer_selection_settle(
@@ -212,6 +226,7 @@ pub struct SelectionActions {
     pointer_anchor: Option<Point<Pixels>>,
     root_bounds: Option<Bounds<Pixels>>,
     toolbar_scroll: ScrollHandle,
+    content_scroll: ScrollHandle,
     toolbar_pointer_active: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -258,6 +273,7 @@ impl SelectionActions {
             pointer_anchor: None,
             root_bounds: None,
             toolbar_scroll: ScrollHandle::new(),
+            content_scroll: ScrollHandle::new(),
             toolbar_pointer_active: false,
             _subscriptions: vec![observation],
         }
@@ -394,6 +410,7 @@ impl SelectionActions {
             self.toolbar_anchor(maximum_size, inset),
             maximum_size,
             &self.toolbar_scroll,
+            buttons,
             cx,
         )
         .on_mouse_up_out(
@@ -402,7 +419,6 @@ impl SelectionActions {
                 this.toolbar_pointer_active = false;
             }),
         )
-        .children(buttons)
     }
 
     fn toolbar_anchor(&self, overlay_size: Size<Pixels>, inset: Pixels) -> Point<Pixels> {
@@ -467,20 +483,7 @@ impl Render for SelectionActions {
             .relative()
             .size_full()
             .min_h(tokens.spacing.xxl * 3.)
-            .overflow_y_scroll()
-            // Native scroll chaining: trap the wheel while the surface can
-            // still scroll in the wheel's direction.
-            .on_scroll_wheel({
-                let scroll_handle = self.toolbar_scroll.clone();
-                move |event: &ScrollWheelEvent, _, cx| {
-                    let delta_y = event.delta.pixel_delta(gpui::px(20.)).y;
-                    if crate::scrolling::ScrollRoom::from_handle(&scroll_handle).can_absorb(delta_y)
-                    {
-                        cx.stop_propagation();
-                    }
-                }
-            })
-            .p(tokens.spacing.md)
+            .overflow_hidden()
             .border_1()
             .border_color(tokens.colors.border)
             .rounded(tokens.radius.lg)
@@ -498,7 +501,19 @@ impl Render for SelectionActions {
                     }
                 });
             })
-            .child(text_surface)
+            .child(
+                div()
+                    .id((ElementId::from(self.id.clone()), "content-scroll"))
+                    .size_full()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.content_scroll)
+                    .p(tokens.spacing.md)
+                    .child(text_surface),
+            )
+            .child(
+                ScrollableMask::new(Axis::Vertical, &self.content_scroll)
+                    .id((ElementId::from(self.id.clone()), "content-scroll-mask")),
+            )
             .when(
                 !self.drag_active && !self.selected_text.is_empty() && !self.actions.is_empty(),
                 |surface| surface.child(self.toolbar(cx)),
@@ -578,6 +593,7 @@ mod tests {
                         point(px(0.), px(0.)),
                         size(px(240.), px(64.)),
                         &ScrollHandle::new(),
+                        Vec::new(),
                         cx,
                     )
                     .into_element();

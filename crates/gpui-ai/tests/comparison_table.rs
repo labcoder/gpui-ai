@@ -344,6 +344,18 @@ fn long_bounded_comparison_keeps_the_last_item_horizontally_reachable(cx: &mut T
         last.left() >= viewport.left() && last.right() <= viewport.right(),
         "last={last:?}, viewport={viewport:?}"
     );
+    let header = cx
+        .debug_bounds("comparison-item-header:wide-plans:plan-11")
+        .expect("the final header should remain mounted");
+    let cell = cx
+        .debug_bounds("comparison-cell:wide-plans:price:plan-11")
+        .expect("the final value cell should remain mounted");
+    assert!(
+        (header.left() - cell.left()).abs() <= px(1.)
+            && (header.right() - cell.right()).abs() <= px(1.),
+        "header={header:?}, cell={cell:?}"
+    );
+    assert!(last.left() >= header.left() && last.right() <= header.right());
 }
 
 #[gpui::test]
