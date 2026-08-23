@@ -65,8 +65,8 @@ pub mod prelude {
         format_bytes,
     };
     pub use crate::chat::{
-        Chat, ChatEvent, ChatMessage, ChatMessageAppearance, ChatRole, ChatWelcome, MessageActions,
-        MessageAlignment, MessageBubble,
+        BranchPosition, Chat, ChatEvent, ChatMessage, ChatMessageAppearance, ChatRole, ChatWelcome,
+        MessageActions, MessageAlignment, MessageBubble,
     };
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;

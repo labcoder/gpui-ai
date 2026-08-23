@@ -149,12 +149,11 @@ fn copy_action_writes_the_clipboard_and_reports_the_message(cx: &mut TestAppCont
 }
 
 #[gpui::test]
-fn regenerate_edit_and_feedback_report_typed_intent_by_stable_id(cx: &mut TestAppContext) {
+fn regenerate_and_feedback_report_typed_intent_by_stable_id(cx: &mut TestAppContext) {
     let (view, events, cx) = harness(cx);
     set_messages(&view, settled_conversation(), cx);
 
     click(cx, "chat-action-regenerate-a-1");
-    click(cx, "chat-action-edit-q-1");
     click(cx, "chat-action-helpful-a-1");
     assert_eq!(
         events.borrow().as_slice(),
@@ -162,15 +161,15 @@ fn regenerate_edit_and_feedback_report_typed_intent_by_stable_id(cx: &mut TestAp
             ChatEvent::RegenerateRequested {
                 message_id: "a-1".into()
             },
-            ChatEvent::EditRequested {
-                message_id: "q-1".into()
-            },
             ChatEvent::FeedbackSubmitted {
                 message_id: "a-1".into(),
                 positive: true
             },
         ]
     );
+    // The edit action opens the in-place editor; `tests/chat_branching.rs`
+    // covers it, since focusing the editor needs a platform window.
+    assert!(cx.debug_bounds("chat-action-edit-q-1").is_some());
     // User prompts never offer regeneration or ratings; assistant replies never offer editing.
     assert!(cx.debug_bounds("chat-action-regenerate-q-1").is_none());
     assert!(cx.debug_bounds("chat-action-helpful-q-1").is_none());

@@ -2,7 +2,7 @@
 
 use crate::{
     attachment::{Attachment, AttachmentEvent, AttachmentStrip},
-    control::outlined_control,
+    control::{outlined_control, outlined_control_with_label},
     cues::{self, Cue},
     motion::reveal,
     orbs::Orbs,
@@ -11,19 +11,25 @@ use crate::{
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
     suggestions::{Suggestion, Suggestions, SuggestionsEvent},
-    surface::icon_button,
+    surface::{icon_button, meta},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnyElement, App, ClipboardItem, Context, ElementId, Entity, EventEmitter, FocusHandle,
-    FollowMode, FontWeight, InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset,
-    ListState, ParentElement as _, Render, Role, SharedString, Stateful,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, Entity, EventEmitter,
+    FocusHandle, Focusable as _, FollowMode, FontWeight, InteractiveElement as _, IntoElement as _,
+    ListAlignment, ListOffset, ListState, ParentElement as _, Render, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div, list,
     prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, IconName, h_flex, scroll::ScrollableElement as _, text::TextView, v_flex,
+    ActiveTheme as _, IconName, Sizable as _,
+    button::{Button as LabeledButton, ButtonVariants as _},
+    h_flex,
+    input::{Escape, InputEvent, Textarea, TextareaState},
+    scroll::ScrollableElement as _,
+    text::TextView,
+    v_flex,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -31,6 +37,47 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
+/// Where a message sits among its sibling versions (regenerations or edits).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BranchPosition {
+    index: usize,
+    count: usize,
+}
+
+impl BranchPosition {
+    /// Creates a position; `index` is zero-based and clamped below `count`
+    /// (which is at least one).
+    pub fn new(index: usize, count: usize) -> Self {
+        let count = count.max(1);
+        Self {
+            index: index.min(count - 1),
+            count,
+        }
+    }
+
+    /// Zero-based index of the shown version.
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    /// Number of versions.
+    pub fn count(self) -> usize {
+        self.count
+    }
+
+    /// The accessible name of the version switcher.
+    pub fn label(self) -> String {
+        format!("Version {} of {}", self.index + 1, self.count)
+    }
+}
+
+/// The in-place editor for one message, alive only while editing.
+struct EditSession {
+    message_id: SharedString,
+    editor: Entity<TextareaState>,
+    _subscription: Subscription,
+}
 
 /// How long the copy action shows its "copied" confirmation.
 const COPIED_FEEDBACK: Duration = Duration::from_secs(2);
@@ -74,6 +121,7 @@ pub struct ChatMessage {
     sources: Vec<SharedString>,
     follow_ups: Vec<FollowUp>,
     attachments: Vec<Attachment>,
+    branch: Option<BranchPosition>,
     retryable: bool,
     appearance: ChatMessageAppearance,
     actions: Option<MessageActions>,
@@ -242,6 +290,7 @@ impl ChatMessage {
             sources: Vec::new(),
             follow_ups: Vec::new(),
             attachments: Vec::new(),
+            branch: None,
             retryable: false,
             appearance: ChatMessageAppearance::default(),
             actions: None,
@@ -302,6 +351,13 @@ impl ChatMessage {
         self
     }
 
+    /// Marks this message as one of several versions; the header shows a
+    /// switcher that reports [`ChatEvent::BranchSelected`].
+    pub fn branch(mut self, position: BranchPosition) -> Self {
+        self.branch = Some(position);
+        self
+    }
+
     /// Controls whether a failed message exposes a retry action.
     pub fn retryable(mut self, retryable: bool) -> Self {
         self.retryable = retryable;
@@ -346,6 +402,11 @@ impl ChatMessage {
     /// Returns the attachments carried by this message.
     pub fn attachment_refs(&self) -> &[Attachment] {
         &self.attachments
+    }
+
+    /// Returns where this message sits among its versions, if branched.
+    pub fn branch_position(&self) -> Option<BranchPosition> {
+        self.branch
     }
 
     /// Returns whether a failed message may be retried.
@@ -422,10 +483,30 @@ pub enum ChatEvent {
         /// Stable message identifier.
         message_id: SharedString,
     },
-    /// The user wants to edit (and resend) this message.
+    /// The user opened the in-place editor for this message.
     EditRequested {
         /// Stable message identifier.
         message_id: SharedString,
+    },
+    /// The user committed an in-place edit; the application decides
+    /// whether that resends, branches, or simply rewrites the message.
+    EditSubmitted {
+        /// Stable message identifier.
+        message_id: SharedString,
+        /// The edited text.
+        text: SharedString,
+    },
+    /// The user abandoned an in-place edit.
+    EditCancelled {
+        /// Stable message identifier.
+        message_id: SharedString,
+    },
+    /// The user moved to another version of a branched message.
+    BranchSelected {
+        /// Stable message identifier.
+        message_id: SharedString,
+        /// Zero-based index of the chosen version.
+        index: usize,
     },
     /// The user rated a response.
     FeedbackSubmitted {
@@ -564,6 +645,7 @@ pub struct Chat {
     copied_message: Option<SharedString>,
     copied_reset: Option<Task<()>>,
     feedback: HashMap<SharedString, bool>,
+    editing: Option<EditSession>,
     _prompt_subscription: Subscription,
 }
 
@@ -612,6 +694,7 @@ impl Chat {
             copied_message: None,
             copied_reset: None,
             feedback: HashMap::new(),
+            editing: None,
             _prompt_subscription: prompt_subscription,
         }
     }
@@ -842,6 +925,111 @@ impl Chat {
         cx.emit(ChatEvent::RetryRequested { message_id });
     }
 
+    /// Opens the in-place editor for a message, prefilled with its text, and
+    /// reports [`ChatEvent::EditRequested`]. Enter or Save reports
+    /// [`ChatEvent::EditSubmitted`]; Escape or Cancel reports
+    /// [`ChatEvent::EditCancelled`]. The message snapshot is untouched until
+    /// the application applies the edit.
+    pub fn begin_edit(
+        &mut self,
+        message_id: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let message_id = message_id.into();
+        let Some(message) = self
+            .messages
+            .iter()
+            .find(|message| message.id == message_id)
+        else {
+            return;
+        };
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|session| session.message_id == message_id)
+        {
+            return;
+        }
+        let text = message.content.text().to_owned();
+        let editor = cx.new(|cx| {
+            let mut state = TextareaState::new(window, cx)
+                .auto_grow(1, 8)
+                .submit_on_enter(true);
+            state.set_value(text, window, cx);
+            state
+        });
+        let subscription = cx.subscribe_in(
+            &editor,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { shift: false, .. } = event {
+                    this.submit_edit(window, cx);
+                    cx.stop_propagation();
+                }
+            },
+        );
+        let focus_handle = editor.read(cx).focus_handle(cx);
+        window.focus(&focus_handle, cx);
+        self.editing = Some(EditSession {
+            message_id: message_id.clone(),
+            editor,
+            _subscription: subscription,
+        });
+        cx.emit(ChatEvent::EditRequested { message_id });
+        cx.notify();
+    }
+
+    /// Replaces the in-place editor's draft.
+    pub fn set_edit_draft(
+        &mut self,
+        draft: impl Into<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(session) = &self.editing else {
+            return;
+        };
+        let draft = draft.into();
+        session.editor.update(cx, |editor, cx| {
+            editor.set_value(draft, window, cx);
+        });
+    }
+
+    /// Returns the message being edited in place, if any.
+    pub fn editing_message(&self) -> Option<&SharedString> {
+        self.editing.as_ref().map(|session| &session.message_id)
+    }
+
+    /// Commits the in-place edit. Empty drafts are ignored so a stray Enter
+    /// cannot erase a message.
+    pub fn submit_edit(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(session) = &self.editing else {
+            return;
+        };
+        let draft = session.editor.read(cx).value().to_string();
+        let text = draft.trim();
+        if text.is_empty() {
+            return;
+        }
+        let message_id = session.message_id.clone();
+        let text: SharedString = text.to_owned().into();
+        self.editing = None;
+        cx.emit(ChatEvent::EditSubmitted { message_id, text });
+        cx.notify();
+    }
+
+    /// Abandons the in-place edit.
+    pub fn cancel_edit(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(session) = self.editing.take() else {
+            return;
+        };
+        cx.emit(ChatEvent::EditCancelled {
+            message_id: session.message_id,
+        });
+        cx.notify();
+    }
+
     fn copy_message(&mut self, message_id: SharedString, cx: &mut Context<Self>) {
         let Some(message) = self
             .messages
@@ -892,6 +1080,13 @@ impl Chat {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let actions = message.message_actions();
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|session| session.message_id == message.id)
+        {
+            return None;
+        }
         let settled = matches!(
             message.content.state(),
             ProgressState::Complete | ProgressState::Failed(_)
@@ -973,10 +1168,8 @@ impl Chat {
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-edit-{debug_id}"))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ChatEvent::EditRequested {
-                            message_id: id.clone(),
-                        });
+                    .on_click(cx.listener(move |chat, _, window, cx| {
+                        chat.begin_edit(id.clone(), window, cx);
                     })),
                 )
             })
@@ -1126,6 +1319,14 @@ impl Chat {
                     .into_any_element()
             }
         };
+        let content = match self
+            .editing
+            .as_ref()
+            .filter(|session| session.message_id == message_id)
+        {
+            Some(session) => self.render_editor(&message_id, session.editor.clone(), cx),
+            None => content,
+        };
         let attachments = (!message.attachments.is_empty()).then(|| {
             let strip_id = ElementId::from((
                 ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
@@ -1222,17 +1423,27 @@ impl Chat {
             ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
             "arrival",
         ));
+        let heading = div()
+            .id(heading_id)
+            .role(Role::Heading)
+            .aria_label(author.clone())
+            .text_token(tokens.typography.sm)
+            .text_color(cx.theme().foreground)
+            .child(author);
+        let header = match message.branch {
+            Some(position) => h_flex()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .gap(tokens.spacing.sm)
+                .child(heading)
+                .child(self.render_branch_nav(&message_id, position, cx))
+                .into_any_element(),
+            None => heading.into_any_element(),
+        };
         let row = row.child(
             bubble
-                .child(
-                    div()
-                        .id(heading_id)
-                        .role(Role::Heading)
-                        .aria_label(author.clone())
-                        .text_token(tokens.typography.sm)
-                        .text_color(cx.theme().foreground)
-                        .child(author),
-                )
+                .child(header)
                 .children(attachments)
                 .child(content)
                 .when(retryable_failure, |this| {
@@ -1251,6 +1462,128 @@ impl Chat {
         } else {
             row.into_any_element()
         }
+    }
+}
+
+impl Chat {
+    fn render_editor(
+        &self,
+        message_id: &SharedString,
+        editor: Entity<TextareaState>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let tokens = cx.theme().semantic_tokens();
+        let base = ElementId::from((ElementId::from(self.id.clone()), message_id.clone()));
+        let editor_debug_id = message_id.to_string();
+        let cancel_debug_id = message_id.to_string();
+        let save_debug_id = message_id.to_string();
+        v_flex()
+            .id((base.clone(), "editor"))
+            .debug_selector(move || format!("chat-edit-editor-{editor_debug_id}"))
+            .w_full()
+            .min_w_0()
+            .gap(tokens.spacing.xs)
+            .capture_action(cx.listener(|chat, _: &Escape, window, cx| {
+                chat.cancel_edit(window, cx);
+            }))
+            .child(Textarea::new(&editor))
+            .child(
+                h_flex()
+                    .justify_end()
+                    .items_center()
+                    .gap(tokens.spacing.xs)
+                    .child(
+                        outlined_control_with_label(
+                            (base.clone(), "edit-cancel"),
+                            "Cancel edit",
+                            "Cancel",
+                            cx,
+                        )
+                        .debug_selector(move || format!("chat-edit-cancel-{cancel_debug_id}"))
+                        .on_click(cx.listener(|chat, _, window, cx| {
+                            chat.cancel_edit(window, cx);
+                        })),
+                    )
+                    .child(
+                        div()
+                            .debug_selector(move || format!("chat-edit-save-{save_debug_id}"))
+                            .child(
+                                LabeledButton::new((base, "edit-save"))
+                                    .primary()
+                                    .small()
+                                    .label("Save")
+                                    .on_click(cx.listener(|chat, _, window, cx| {
+                                        chat.submit_edit(window, cx);
+                                    })),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_branch_nav(
+        &self,
+        message_id: &SharedString,
+        position: BranchPosition,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let tokens = cx.theme().semantic_tokens();
+        let base = ElementId::from((ElementId::from(self.id.clone()), message_id.clone()));
+        let group_debug_id = message_id.to_string();
+        let prev_debug_id = message_id.to_string();
+        let next_debug_id = message_id.to_string();
+        let prev_id = message_id.clone();
+        let next_id = message_id.clone();
+        let label: SharedString = position.label().into();
+        h_flex()
+            .id((base.clone(), "branches"))
+            .role(Role::Group)
+            .aria_label(label)
+            .debug_selector(move || format!("chat-branches-{group_debug_id}"))
+            .flex_none()
+            .items_center()
+            .gap(tokens.spacing.xxs)
+            .child(
+                icon_button(
+                    (base.clone(), "branch-prev"),
+                    IconName::ChevronLeft,
+                    "Previous version",
+                    cx,
+                )
+                .disabled(position.index == 0)
+                .debug_selector(move || format!("chat-branch-prev-{prev_debug_id}"))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    if position.index > 0 {
+                        cx.emit(ChatEvent::BranchSelected {
+                            message_id: prev_id.clone(),
+                            index: position.index - 1,
+                        });
+                    }
+                })),
+            )
+            .child(meta(
+                format!("{} / {}", position.index + 1, position.count),
+                cx,
+            ))
+            .child(
+                icon_button(
+                    (base, "branch-next"),
+                    IconName::ChevronRight,
+                    "Next version",
+                    cx,
+                )
+                .disabled(position.index + 1 >= position.count)
+                .debug_selector(move || format!("chat-branch-next-{next_debug_id}"))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    if position.index + 1 < position.count {
+                        cx.emit(ChatEvent::BranchSelected {
+                            message_id: next_id.clone(),
+                            index: position.index + 1,
+                        });
+                    }
+                })),
+            )
+            .into_any_element()
     }
 }
 
@@ -1317,9 +1650,9 @@ mod tests {
         streaming_text::{CitationRef, FollowUp},
     };
     use gpui::{
-        AppContext as _, Context, Element as _, Entity, KeyDownEvent, KeyUpEvent, Keystroke,
-        ListOffset, Modifiers, Render, RenderOnce as _, Role, SharedString, Subscription,
-        TestAppContext, VisualTestContext, Window, accesskit, canvas, px, size,
+        Context, Element as _, Entity, KeyDownEvent, KeyUpEvent, Keystroke, ListOffset, Modifiers,
+        Render, RenderOnce as _, Role, SharedString, Subscription, TestAppContext,
+        VisualTestContext, Window, accesskit, canvas, px, size,
     };
     use std::{
         cell::RefCell,

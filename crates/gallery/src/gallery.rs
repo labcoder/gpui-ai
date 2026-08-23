@@ -230,9 +230,18 @@ struct ChatStory {
     last_event: SharedString,
     show_welcome: bool,
     last_cue: Option<Cue>,
+    question_version: usize,
+    question_text: Option<SharedString>,
     _subscription: Subscription,
     _cues: CueSubscription,
 }
+
+/// The versions a person might branch the latest question into.
+const QUESTION_VERSIONS: &[&str] = &[
+    "Which supplier is the safest choice this week?",
+    "Which supplier is the cheapest this week?",
+    "Which supplier can deliver by Friday?",
+];
 
 /// Switcher labels for the two demonstrated chat states.
 const CHAT_STORY_STATES: &[(&str, &str)] =
@@ -303,7 +312,20 @@ impl ChatStory {
                         });
                         this.show_welcome = false;
                     }
-                    ChatEvent::AttachmentActivated { .. } => {}
+                    ChatEvent::BranchSelected { message_id, index } => {
+                        if message_id.as_ref() == "latest-question" {
+                            this.question_version = *index;
+                            this.question_text = None;
+                            this.answer = None;
+                        }
+                    }
+                    ChatEvent::EditSubmitted { message_id, text } => {
+                        if message_id.as_ref() == "latest-question" {
+                            this.question_text = Some(text.clone());
+                            this.answer = None;
+                        }
+                    }
+                    ChatEvent::EditCancelled { .. } | ChatEvent::AttachmentActivated { .. } => {}
                     ChatEvent::Prompt(PromptBarEvent::ModelChanged { model_id, .. }) => {
                         prompt.update(cx, |prompt, cx| {
                             prompt.set_selected_model(model_id.clone(), cx);
@@ -355,9 +377,19 @@ impl ChatStory {
                 .into(),
             show_welcome: false,
             last_cue: None,
+            question_version: 0,
+            question_text: None,
             _subscription: subscription,
             _cues: cue_subscription,
         }
+    }
+
+    /// The latest question: an in-place edit wins over the branch version.
+    fn question_text(&self) -> String {
+        self.question_text
+            .as_ref()
+            .map(|text| text.to_string())
+            .unwrap_or_else(|| QUESTION_VERSIONS[self.question_version].to_owned())
     }
 
     fn set_state(&mut self, index: usize, cx: &mut Context<Self>) {
@@ -452,8 +484,15 @@ impl ChatStory {
             ChatMessage::new(
                 "latest-question",
                 ChatRole::User,
-                StreamedContent::done("Which supplier is the safest choice this week?"),
+                StreamedContent::done(self.question_text()),
             )
+            .branch(BranchPosition::new(
+                self.question_version,
+                QUESTION_VERSIONS.len(),
+            ))
+            .attachments([Attachment::new("pricing", "pricing.md")
+                .size_bytes(12_300)
+                .detail("12 pages")])
             .with_appearance(ChatMessageAppearance::new(
                 MessageAlignment::Trailing,
                 MessageBubble::Filled,
