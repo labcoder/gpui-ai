@@ -1,10 +1,18 @@
 # gpui-ai
 
+[![CI](https://github.com/labcoder/gpui-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/labcoder/gpui-ai/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Demos: coming soon](https://img.shields.io/badge/demos-coming%20soon-lightgrey)
+
 AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
 
 Streamed answers, thinking traces, tool calls, approval gates, chat with @-mentions, live task status — the interface patterns every AI application rebuilds. Web developers get them from [Beautiful UI](https://www.beautifului.dev) and [AIcss](https://www.aicss.dev); **gpui-ai** brings them to Rust, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui.
 
-**Status:** early development, pre-1.0. The API moves; pin a revision.
+## Status
+
+Early development, pre-1.0. The API moves between revisions, so pin one. The crate is not on crates.io yet — see [Installation](#installation) — and [CHANGELOG.md](CHANGELOG.md) records what each version changed.
+
+**The native runtime is authoritative.** The browser gallery demonstrates the components; it does not prove them. It requires WebGPU, its keyboard action dispatch is limited by the pinned upstream GPUI revision, and browser accessibility is a separate capability that has not been claimed. Every component is verified natively — light, dark, and a third theme, AccessKit semantics, keyboard operation, and constrained-overflow behavior — and the browser build is checked afterwards. A demo running in a tab is not evidence that the same path works for a screen reader or a keyboard-only user there.
 
 ## Live demo
 
@@ -37,6 +45,10 @@ gpui = { git = "https://github.com/zed-industries/zed" }
 ```
 
 > **Why no version numbers?** crates.io publishing requires every dependency to have a crates.io version, and the published `gpui` release predates everything gpui-ai builds on. Once upstream starts releasing regularly, gpui-ai will publish to crates.io too.
+
+Pin gpui-ai by adding `rev = "<commit>"` or `tag = "<tag>"` to *its* line. Do not add one to the `gpui` line: gpui-component declares that dependency without a `rev`, and differing git specs make Cargo build two incompatible copies of gpui.
+
+Every release names the `gpui-component` and `zed` revision pair it supports on its release page. In a checkout, that pair lives in `Cargo.toml` and `Cargo.lock`, and `npm run check:upstream` verifies the two still agree.
 
 Requirements: Rust stable (edition 2024 — 1.85+). On Linux, run `script/install-linux.sh` for system dependencies first.
 
