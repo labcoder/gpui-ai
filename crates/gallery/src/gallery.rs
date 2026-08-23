@@ -8,6 +8,7 @@ use crate::{StoryId, sim};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
+use gpui::{Image, ImageFormat};
 use gpui_ai::cues::{self, Cue, CueSubscription};
 use gpui_ai::prelude::*;
 use gpui_component::{
@@ -19,6 +20,7 @@ use gpui_component::{
     theme::{Theme, ThemeMode, ThemeRegistry},
     v_flex,
 };
+use std::collections::HashSet;
 
 // Catalog keyboard actions: page and jump navigation for the story feed.
 actions!(
@@ -200,6 +202,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
         | StoryId::Suggestions
+        | StoryId::Attachments
         | StoryId::ContextMeter
         | StoryId::ThreadList
         | StoryId::ToolChips
@@ -300,6 +303,7 @@ impl ChatStory {
                         });
                         this.show_welcome = false;
                     }
+                    ChatEvent::AttachmentActivated { .. } => {}
                     ChatEvent::Prompt(PromptBarEvent::ModelChanged { model_id, .. }) => {
                         prompt.update(cx, |prompt, cx| {
                             prompt.set_selected_model(model_id.clone(), cx);
@@ -551,6 +555,38 @@ fn describe_cue(cue: &Cue) -> String {
         Cue::Decided { approved: true } => "approved".to_owned(),
         Cue::Decided { approved: false } => "rejected".to_owned(),
     }
+}
+
+/// Files a person might attach to a supplier question; shared by the
+/// composer and message strips so identity carries across.
+fn demo_attachments(thumbnail: &Arc<Image>) -> Vec<Attachment> {
+    vec![
+        Attachment::new("meadow", "meadow-sketch.png")
+            .size_bytes(248_000)
+            .detail("1280×720")
+            .thumbnail(thumbnail.clone()),
+        Attachment::new("pricing", "pricing.md")
+            .size_bytes(12_300)
+            .detail("12 pages"),
+        Attachment::new("sales", "sales-q2.csv").size_bytes(1_400_000),
+        Attachment::new("call", "vendor-call.m4a").detail("4:12"),
+    ]
+}
+
+/// The upload lifecycle as three tiles.
+fn demo_attachment_states() -> Vec<Attachment> {
+    vec![
+        Attachment::new("queued", "brief.pdf")
+            .size_bytes(820_000)
+            .state(ProgressState::Pending),
+        Attachment::new("uploading", "hero-render.png")
+            .size_bytes(3_200_000)
+            .state(ProgressState::Running)
+            .progress(0.4),
+        Attachment::new("too-large", "archive.zip")
+            .size_bytes(41_000_000)
+            .state(ProgressState::Failed("Larger than 25 MB".into())),
+    ]
 }
 
 fn demo_thread_sections() -> Vec<ThreadSection> {
@@ -3238,6 +3274,9 @@ pub struct Gallery {
     tool_group_open: Option<bool>,
     tool_approval: ToolApproval,
     last_suggestion: Option<SharedString>,
+    removed_attachments: HashSet<SharedString>,
+    last_attachment_event: Option<SharedString>,
+    demo_thumbnail: Arc<Image>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -3300,6 +3339,12 @@ impl Gallery {
             tool_group_open: None,
             tool_approval: ToolApproval::Requested,
             last_suggestion: None,
+            removed_attachments: HashSet::new(),
+            last_attachment_event: None,
+            demo_thumbnail: Arc::new(Image::from_bytes(
+                ImageFormat::Png,
+                include_bytes!("../assets/meadow-thumbnail.png").to_vec(),
+            )),
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -4104,6 +4149,81 @@ impl Gallery {
                             TextView::markdown(
                                 "suggestions-reference-note",
                                 "**Reference comparison.** AI Elements and assistant-ui show starter prompts as a single scrolling row that sends on click. gpui-ai wraps chips onto the available width, ripples them in with a staggered reveal, keeps every chip a named keyboard-reachable button, and reports a stable ID so the application decides whether to send or merely fill the composer.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Attachments => self.section(
+                story,
+                "Attachment previews",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let composer_items = demo_attachments(&self.demo_thumbnail)
+                        .into_iter()
+                        .filter(|item| !self.removed_attachments.contains(item.id()))
+                        .collect::<Vec<_>>();
+                    let status: SharedString = self
+                        .last_attachment_event
+                        .clone()
+                        .unwrap_or_else(|| "Remove a composer file or open a message file".into());
+                    let caption = |text: &'static str| {
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(text)
+                    };
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(caption("Composer: compact and removable"))
+                        .child(
+                            AttachmentStrip::new("composer-attachments")
+                                .label("Prompt attachments")
+                                .items(composer_items)
+                                .removable(true)
+                                .compact(true)
+                                .on_event(cx.listener(|this, event: &AttachmentEvent, _, cx| {
+                                    if let AttachmentEvent::Removed { id } = event {
+                                        this.removed_attachments.insert(id.clone());
+                                        this.last_attachment_event =
+                                            Some(format!("Removed {id}").into());
+                                        cx.notify();
+                                    }
+                                })),
+                        )
+                        .child(caption("Message: read-only, openable tiles"))
+                        .child(
+                            AttachmentStrip::new("message-attachments")
+                                .label("Message attachments")
+                                .items(demo_attachments(&self.demo_thumbnail))
+                                .on_event(cx.listener(|this, event: &AttachmentEvent, _, cx| {
+                                    if let AttachmentEvent::Opened { id } = event {
+                                        this.last_attachment_event =
+                                            Some(format!("Opened {id}").into());
+                                        cx.notify();
+                                    }
+                                })),
+                        )
+                        .child(caption("Upload lifecycle: queued, uploading, failed"))
+                        .child(
+                            AttachmentStrip::new("attachment-states")
+                                .label("Upload states")
+                                .items(demo_attachment_states()),
+                        )
+                        .child(
+                            div()
+                                .id("attachments-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "attachments-reference-note",
+                                "**Reference comparison.** AI Elements and assistant-ui render attachments as image thumbnails or file chips inside the composer and again inside the sent message. gpui-ai uses one `Attachment` value for both: the same ID, kind glyph, size, and thumbnail travel from the composer into the message, upload state is typed (`ProgressState`) rather than a boolean, every tile has an accessible name that reads the file name and its summary, and remove or open intent is reported by stable ID so the application owns bytes, uploads, and previews.",
                             )
                             .selectable(true),
                         )

@@ -1,5 +1,6 @@
 //! Hybrid-controlled prompt composition with native GPUI text editing.
 
+use crate::attachment::{AttachmentEvent, AttachmentStrip};
 use crate::context_meter::format_tokens;
 use crate::control::composed_button;
 use crate::cues::{self, Cue};
@@ -161,32 +162,9 @@ impl PromptCommand {
     }
 }
 
-/// An application-owned attachment displayed by a [`PromptBar`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromptAttachment {
-    id: SharedString,
-    label: SharedString,
-}
-
-impl PromptAttachment {
-    /// Creates an attachment with stable identity and a visible label.
-    pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Self {
-        Self {
-            id: id.into(),
-            label: label.into(),
-        }
-    }
-
-    /// Returns the stable attachment identifier.
-    pub fn id(&self) -> &SharedString {
-        &self.id
-    }
-
-    /// Returns the visible attachment label.
-    pub fn label(&self) -> &SharedString {
-        &self.label
-    }
-}
+/// The composer's attachment type: the shared [`Attachment`](crate::attachment::Attachment) so a file keeps
+/// one identity, kind, and thumbnail from the composer into the message.
+pub use crate::attachment::Attachment as PromptAttachment;
 
 /// A trimmed prompt snapshot emitted for application-owned submission work.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -352,7 +330,7 @@ fn build_submission(
     (!text.is_empty()).then(|| PromptSubmission {
         text: text.to_owned().into(),
         model_id,
-        attachment_ids: attachments.iter().map(|item| item.id.clone()).collect(),
+        attachment_ids: attachments.iter().map(|item| item.id().clone()).collect(),
     })
 }
 
@@ -1102,27 +1080,7 @@ impl Render for PromptBar {
                 );
             }
         }
-        let attachment_buttons = self
-            .attachments
-            .iter()
-            .map(|attachment| {
-                let attachment_id = attachment.id.clone();
-                prompt_control(
-                    (
-                        gpui::ElementId::from(root_id.clone()),
-                        format!("attachment-{}", attachment.id),
-                    ),
-                    format!("Remove {}", attachment.label),
-                    cx,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.emit(PromptBarEvent::AttachmentRemoved {
-                        id: this.id.clone(),
-                        attachment_id: attachment_id.clone(),
-                    });
-                }))
-            })
-            .collect::<Vec<_>>();
+        let attachments = self.attachments.clone();
         let selected_model_label: SharedString = self
             .selected_model
             .as_ref()
@@ -1153,15 +1111,21 @@ impl Render for PromptBar {
                 this.capture_suggestion_action(Some(1), cx);
             }))
             .capture_action(cx.listener(Self::capture_escape))
-            .when(!attachment_buttons.is_empty(), |this| {
+            .when(!attachments.is_empty(), |this| {
                 this.child(
-                    h_flex()
-                        .id((gpui::ElementId::from(root_id.clone()), "attachments"))
-                        .role(Role::Group)
-                        .aria_label("Prompt attachments")
-                        .flex_wrap()
-                        .gap(tokens.spacing.xs)
-                        .children(attachment_buttons),
+                    AttachmentStrip::new((gpui::ElementId::from(root_id.clone()), "attachments"))
+                        .label("Prompt attachments")
+                        .items(attachments)
+                        .removable(true)
+                        .compact(true)
+                        .on_event(cx.listener(|this, event: &AttachmentEvent, _, cx| {
+                            if let AttachmentEvent::Removed { id } = event {
+                                cx.emit(PromptBarEvent::AttachmentRemoved {
+                                    id: this.id.clone(),
+                                    attachment_id: id.clone(),
+                                });
+                            }
+                        })),
                 )
             })
             .child(Textarea::new(&self.editor))

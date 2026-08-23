@@ -144,6 +144,7 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `PromptBar` | entity | Composer: @ mentions, / commands, provider-grouped model picker with descriptions and context windows, attachments |
 | `Chat` | entity | Virtualized transcript + composer with hover-revealed message actions (copy, regenerate, edit, feedback), welcome state, unread & jump-to-latest |
 | `Suggestions` | stateless | Starter and follow-up prompt chips with staggered reveal and stable IDs |
+| `AttachmentStrip` / `AttachmentPreview` | stateless | Composer and message attachments with thumbnails, kind glyphs, typed upload state, and open/remove events by stable ID |
 | `ContextMeter` | stateless | Context-window usage ring / bar / text with severity tones and a hover breakdown |
 | `CommandSearch` | entity | Command palette with filtering and keyboard navigation |
 | `SidebarNav` | entity | Collapsible, filterable workspace navigation |

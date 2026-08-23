@@ -1,6 +1,7 @@
 //! Controlled, virtualized chat transcript composed from gpui-ai primitives.
 
 use crate::{
+    attachment::{Attachment, AttachmentEvent, AttachmentStrip},
     control::outlined_control,
     cues::{self, Cue},
     motion::reveal,
@@ -72,6 +73,7 @@ pub struct ChatMessage {
     citations: Vec<CitationRef>,
     sources: Vec<SharedString>,
     follow_ups: Vec<FollowUp>,
+    attachments: Vec<Attachment>,
     retryable: bool,
     appearance: ChatMessageAppearance,
     actions: Option<MessageActions>,
@@ -239,6 +241,7 @@ impl ChatMessage {
             citations: Vec::new(),
             sources: Vec::new(),
             follow_ups: Vec::new(),
+            attachments: Vec::new(),
             retryable: false,
             appearance: ChatMessageAppearance::default(),
             actions: None,
@@ -292,6 +295,13 @@ impl ChatMessage {
         self
     }
 
+    /// Attaches files shown read-only above the content; activating one
+    /// reports [`ChatEvent::AttachmentActivated`].
+    pub fn attachments(mut self, attachments: impl IntoIterator<Item = Attachment>) -> Self {
+        self.attachments = attachments.into_iter().collect();
+        self
+    }
+
     /// Controls whether a failed message exposes a retry action.
     pub fn retryable(mut self, retryable: bool) -> Self {
         self.retryable = retryable;
@@ -331,6 +341,11 @@ impl ChatMessage {
     /// Returns follow-up suggestions.
     pub fn follow_up_suggestions(&self) -> &[FollowUp] {
         &self.follow_ups
+    }
+
+    /// Returns the attachments carried by this message.
+    pub fn attachment_refs(&self) -> &[Attachment] {
+        &self.attachments
     }
 
     /// Returns whether a failed message may be retried.
@@ -380,6 +395,13 @@ pub enum ChatEvent {
         source_id: SharedString,
         /// The source location.
         url: SharedString,
+    },
+    /// The user activated an attachment carried by a message.
+    AttachmentActivated {
+        /// Stable message identifier.
+        message_id: SharedString,
+        /// Stable attachment identifier.
+        attachment_id: SharedString,
     },
     /// The user activated an inline citation attached to a message.
     CitationActivated {
@@ -1104,6 +1126,26 @@ impl Chat {
                     .into_any_element()
             }
         };
+        let attachments = (!message.attachments.is_empty()).then(|| {
+            let strip_id = ElementId::from((
+                ElementId::from((ElementId::from(self.id.clone()), message_id.clone())),
+                "attachments",
+            ));
+            AttachmentStrip::new(strip_id)
+                .label("Message attachments")
+                .items(message.attachments.iter().cloned())
+                .on_event(cx.listener({
+                    let message_id = message_id.clone();
+                    move |_, event: &AttachmentEvent, _, cx| {
+                        if let AttachmentEvent::Opened { id } = event {
+                            cx.emit(ChatEvent::AttachmentActivated {
+                                message_id: message_id.clone(),
+                                attachment_id: id.clone(),
+                            });
+                        }
+                    }
+                }))
+        });
         let retryable_failure =
             message.retryable && matches!(message.content.state(), ProgressState::Failed(_));
         let author = message
@@ -1191,6 +1233,7 @@ impl Chat {
                         .text_color(cx.theme().foreground)
                         .child(author),
                 )
+                .children(attachments)
                 .child(content)
                 .when(retryable_failure, |this| {
                     this.child(
