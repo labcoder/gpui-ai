@@ -82,6 +82,32 @@ pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
         .child(text.into())
 }
 
+/// A favicon-style badge: one uppercase initial on a primary tint. Sources,
+/// search results, and attachments share it so provenance scans at a glance.
+pub(crate) fn initial_badge(initial: impl Into<SharedString>, cx: &App) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    div()
+        .flex_none()
+        .size_4()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(tokens.radius.sm)
+        .bg(cx.theme().primary.opacity(0.14))
+        .text_token(tokens.typography.xs)
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(cx.theme().primary)
+        .child(initial.into())
+}
+
+/// First alphanumeric character of `text`, uppercased, for [`initial_badge`].
+pub(crate) fn initial_of(text: &str) -> String {
+    text.chars()
+        .find(|character| character.is_alphanumeric())
+        .map(|character| character.to_uppercase().collect())
+        .unwrap_or_else(|| "•".to_owned())
+}
+
 /// A quiet, square icon-only button with an accessible name.
 ///
 /// Rests muted, lifts to the foreground on hover, and shows the theme ring on

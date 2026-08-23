@@ -105,7 +105,7 @@ impl RenderOnce for CodeBlock {
             .when_some(accessibility_description, |this, description| {
                 this.aria_description(description)
             })
-            .bg(cx.theme().secondary.opacity(0.5))
+            .bg(tokens.colors.surface)
             .border_1()
             .border_color(cx.theme().border)
             .rounded(tokens.radius.md)
@@ -116,6 +116,7 @@ impl RenderOnce for CodeBlock {
                     .justify_between()
                     .px(tokens.spacing.md)
                     .py(tokens.spacing.xs)
+                    .bg(cx.theme().muted.opacity(0.35))
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(

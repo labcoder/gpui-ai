@@ -7,20 +7,22 @@ use std::{
 };
 
 use gpui::{
-    App, AppContext as _, Context, Div, EventEmitter, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, Context, Div, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement as _, KeyBinding, ParentElement as _, Pixels, Render,
     Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Subscription,
     WeakEntity, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{
-    ActiveTheme as _, Size,
+    ActiveTheme as _, Icon, IconName, Sizable as _, Size,
+    spinner::Spinner,
     table::{Column, DataTable, TableDelegate, TableEvent, TableState},
     text::TextView,
 };
 
 use crate::{
     control::{composed_button, outlined_control_with_label},
+    motion::Shimmer,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -685,8 +687,10 @@ impl TableDelegate for RecordsDelegate {
             ),
         };
 
-        records_state_frame(&self.component_id, id, role, label)
-            .text_color(cx.theme().muted_foreground)
+        records_state_frame(&self.component_id, id, role, label).text_color(match role {
+            Role::Alert => cx.theme().danger,
+            _ => cx.theme().muted_foreground,
+        })
     }
 
     fn render_loading(
@@ -871,15 +875,35 @@ fn records_state_frame(
         .flex()
         .items_center()
         .justify_center()
+        .gap(gpui::rems(0.5))
         .role(role)
         .aria_label(label.clone())
-        .child(
-            TextView::markdown(
-                format!("{scoped_id}-text"),
-                escape_markdown_text(label.as_ref()),
-            )
-            .selectable(true),
+        .child(records_state_glyph(role))
+        .child(records_state_text(&scoped_id, role, label))
+}
+
+/// A glyph that restates the state family without color: a spinner for
+/// in-flight work, a cross for failures, a dash for nothing to show.
+fn records_state_glyph(role: Role) -> AnyElement {
+    match role {
+        Role::ProgressIndicator => Spinner::new().xsmall().into_any_element(),
+        Role::Alert => Icon::new(IconName::CircleX).xsmall().into_any_element(),
+        _ => Icon::new(IconName::Dash).xsmall().into_any_element(),
+    }
+}
+
+/// Loading labels shimmer; settled states stay selectable prose.
+fn records_state_text(scoped_id: &str, role: Role, label: SharedString) -> AnyElement {
+    if role == Role::ProgressIndicator {
+        Shimmer::new(format!("{scoped_id}-shimmer"), label).into_any_element()
+    } else {
+        TextView::markdown(
+            format!("{scoped_id}-text"),
+            escape_markdown_text(label.as_ref()),
         )
+        .selectable(true)
+        .into_any_element()
+    }
 }
 
 fn records_inline_state_frame(
@@ -903,16 +927,15 @@ fn records_inline_state_frame(
         .items_center()
         .justify_center()
         .py(tokens.spacing.xxs)
+        .gap(tokens.spacing.xs)
         .role(role)
         .aria_label(label.clone())
-        .text_color(cx.theme().muted_foreground)
-        .child(
-            TextView::markdown(
-                format!("{scoped_id}-text"),
-                escape_markdown_text(label.as_ref()),
-            )
-            .selectable(true),
-        )
+        .text_color(match role {
+            Role::Alert => cx.theme().danger,
+            _ => cx.theme().muted_foreground,
+        })
+        .child(records_state_glyph(role))
+        .child(records_state_text(&scoped_id, role, label))
 }
 
 fn record_row_frame(component_id: &str, row: &RecordRow, selected: bool) -> Stateful<Div> {

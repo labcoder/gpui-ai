@@ -1009,10 +1009,10 @@ impl Render for FineTuneCard {
             .track_scroll(&self.scroll_handle)
             .gap(tokens.spacing.md)
             .p(tokens.spacing.md)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .border_1()
             .border_color(cx.theme().border)
-            .bg(cx.theme().background)
+            .bg(tokens.colors.surface)
             .child(
                 h_flex()
                     .w_full()

@@ -1141,8 +1141,8 @@ impl Render for PromptBar {
             .p(tokens.spacing.md)
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
-            .bg(cx.theme().background)
+            .rounded(tokens.radius.lg)
+            .bg(tokens.colors.surface)
             .capture_action(cx.listener(Self::capture_enter))
             .capture_action(cx.listener(|this, _: &MoveUp, _, cx| {
                 this.capture_suggestion_action(Some(-1), cx);

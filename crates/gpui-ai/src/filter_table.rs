@@ -609,7 +609,12 @@ fn filter_control(table_id: &str, filter: &FilterDefinition, cx: &mut App) -> gp
             accesskit::Toggled::False
         })
         .disabled(filter.disabled)
-        .when(filter.active, |button| button.bg(cx.theme().secondary))
+        .when(filter.active, |button| {
+            button
+                .bg(cx.theme().primary.opacity(0.12))
+                .border_color(cx.theme().primary)
+                .text_color(cx.theme().primary)
+        })
 }
 
 fn scoped_filter_id(kind: &str, table_id: &str, item_id: &str) -> SharedString {

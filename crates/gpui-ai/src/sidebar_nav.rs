@@ -356,7 +356,11 @@ fn sidebar_item_control(
         })
         .styles(|styles| {
             styles
-                .selected(|style| style.border_color(cx.theme().sidebar_border))
+                .selected(|style| {
+                    style
+                        .bg(cx.theme().sidebar_accent)
+                        .border_color(cx.theme().sidebar_border)
+                })
                 .disabled(|style| style.text_color(cx.theme().muted_foreground))
         })
 }

@@ -2,6 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::surface::{initial_badge, initial_of};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -140,10 +141,10 @@ impl RenderOnce for SearchResults {
             .id(self.id)
             .role(Role::Search)
             .aria_label(header.clone())
-            .bg(cx.theme().background)
+            .bg(tokens.colors.surface)
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .overflow_hidden()
             .child(
                 h_flex()
@@ -181,11 +182,15 @@ impl RenderOnce for SearchResults {
                                 .w_full()
                                 .items_center()
                                 .gap(tokens.spacing.sm)
-                                .child(
-                                    Icon::new(IconName::Globe)
+                                .child(match &result.domain {
+                                    Some(domain) => {
+                                        initial_badge(initial_of(domain), cx).into_any_element()
+                                    }
+                                    None => Icon::new(IconName::Globe)
                                         .xsmall()
-                                        .text_color(cx.theme().muted_foreground),
-                                )
+                                        .text_color(cx.theme().muted_foreground)
+                                        .into_any_element(),
+                                })
                                 .child(
                                     div()
                                         .flex_1()

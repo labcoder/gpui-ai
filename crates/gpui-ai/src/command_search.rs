@@ -8,7 +8,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, ElementExt as _, IndexPath,
+    ActiveTheme as _, Disableable as _, ElementExt as _, Icon, IconName, IndexPath,
     command::{Command, CommandItem, CommandState},
     h_flex,
     label::Label,
@@ -210,7 +210,9 @@ fn row_content(
                     .rounded(tokens.radius.sm)
                     .border_1()
                     .border_color(cx.theme().border)
+                    .bg(cx.theme().muted.opacity(0.4))
                     .text_token(tokens.typography.xs)
+                    .font_family(cx.theme().mono_font_family.clone())
                     .text_color(cx.theme().muted_foreground)
                     .child(Label::new(shortcut)),
             )
@@ -469,7 +471,12 @@ impl Render for CommandSearch {
                         .role(Role::Status)
                         .aria_label(message.clone())
                         .py(cx.theme().semantic_tokens().spacing.lg)
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap(cx.theme().semantic_tokens().spacing.xs)
                         .text_color(cx.theme().muted_foreground)
+                        .child(Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
                         .child(Label::new(message))
                 }
             })

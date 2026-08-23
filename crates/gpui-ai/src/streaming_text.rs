@@ -5,6 +5,7 @@ use crate::theme::SemanticStyledExt as _;
 use crate::{
     control::{composed_button, outlined_control},
     handlers::SharedHandler,
+    surface::initial_badge,
 };
 use gpui::{
     AnyElement, App, Axis, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
@@ -448,18 +449,7 @@ fn source_chip(
 ) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
     let accessibility_label = source.accessibility_label();
-    let badge = div()
-        .flex_none()
-        .size_4()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(tokens.radius.sm)
-        .bg(cx.theme().primary.opacity(0.14))
-        .text_token(tokens.typography.xs)
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(cx.theme().primary)
-        .child(source.initial());
+    let badge = initial_badge(source.initial(), cx);
     let content = h_flex()
         .items_center()
         .gap(tokens.spacing.xs)
@@ -586,12 +576,7 @@ impl SourceRef {
 
     /// One uppercase character standing in for a favicon.
     pub fn initial(&self) -> String {
-        self.domain()
-            .unwrap_or_else(|| self.title.to_string())
-            .chars()
-            .find(|character| character.is_alphanumeric())
-            .map(|character| character.to_uppercase().collect())
-            .unwrap_or_else(|| "•".to_owned())
+        crate::surface::initial_of(&self.domain().unwrap_or_else(|| self.title.to_string()))
     }
 
     fn accessibility_label(&self) -> SharedString {

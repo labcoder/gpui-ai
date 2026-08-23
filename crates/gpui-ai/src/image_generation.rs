@@ -113,7 +113,7 @@ impl RenderOnce for ImageGeneration {
                     .overflow_hidden()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(tokens.radius.md)
+                    .rounded(tokens.radius.lg)
                     .bg(cx.theme().muted.opacity(0.4))
                     .map(|this| match self.image {
                         Some(image) => this.child(div().size_full().child(image)),
@@ -158,6 +158,10 @@ impl RenderOnce for ImageGeneration {
                                 .absolute()
                                 .bottom(tokens.spacing.xs)
                                 .right(tokens.spacing.xs)
+                                .px(tokens.spacing.xs)
+                                .py(tokens.spacing.xxs)
+                                .rounded(tokens.radius.full)
+                                .bg(cx.theme().background.opacity(0.8))
                                 .text_token(tokens.typography.xs)
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_color(cx.theme().muted_foreground)
