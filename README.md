@@ -194,9 +194,9 @@ The gallery ships seven presets you can use as starting points — including fou
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md) for architecture rules, verification commands, and the definition of done, then open a PR. `npm run check` must pass before review.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the gates, and commit conventions, and [AGENTS.md](AGENTS.md) for architecture rules and the definition of done. `npm run check` must pass before review.
 
-What changed in each version is recorded in [CHANGELOG.md](CHANGELOG.md).
+What changed in each version is recorded in [CHANGELOG.md](CHANGELOG.md). Report vulnerabilities privately rather than in an issue — see [SECURITY.md](SECURITY.md).
 
 ## License
 
