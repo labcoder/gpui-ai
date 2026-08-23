@@ -1,0 +1,634 @@
+//! Plan cards: an agent's proposed steps as one reviewable card.
+//!
+//! A [`PlanCard`] lists ordered [`PlanStep`]s with per-step status glyphs,
+//! shows the plan's overall [`PlanState`] as a badge, and, while the plan is
+//! still proposed, offers Approve / Reject (and optionally Edit). Decisions
+//! and step activations are reported as [`PlanEvent`]s keyed by stable IDs;
+//! the application owns execution and feeds statuses back through the
+//! snapshot.
+
+use crate::{
+    control::composed_button,
+    cues::{self, Cue},
+    handlers::SharedHandler,
+    motion::reveal_staggered,
+    status::{StatusBadge, StatusTone},
+    surface::{card, description, eyebrow, meta, title},
+    theme::SemanticStyledExt as _,
+};
+use gpui::{
+    AnyElement, App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+};
+use gpui_component::{
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+    spinner::Spinner,
+    v_flex,
+};
+use std::rc::Rc;
+
+/// Where one step stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PlanStepStatus {
+    /// Not started.
+    #[default]
+    Pending,
+    /// In progress.
+    Running,
+    /// Finished successfully.
+    Done,
+    /// Stopped with an error.
+    Failed,
+    /// Deliberately not executed.
+    Skipped,
+}
+
+impl PlanStepStatus {
+    /// The short status word read to assistive technology.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Done => "done",
+            Self::Failed => "failed",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+/// One ordered step of a plan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanStep {
+    id: SharedString,
+    title: SharedString,
+    detail: Option<SharedString>,
+    status: PlanStepStatus,
+}
+
+impl PlanStep {
+    /// Creates a pending step with a stable identifier.
+    pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            detail: None,
+            status: PlanStepStatus::Pending,
+        }
+    }
+
+    /// Adds a supporting line (what the step touches, why it is needed).
+    pub fn detail(mut self, detail: impl Into<SharedString>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    /// Sets the status.
+    pub fn status(mut self, status: PlanStepStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    /// Returns the stable step identifier.
+    pub fn id(&self) -> &SharedString {
+        &self.id
+    }
+
+    /// Returns the step title.
+    pub fn title(&self) -> &SharedString {
+        &self.title
+    }
+
+    /// Returns the supporting line, if any.
+    pub fn detail_text(&self) -> Option<&SharedString> {
+        self.detail.as_ref()
+    }
+
+    /// Returns the status.
+    pub fn step_status(&self) -> PlanStepStatus {
+        self.status
+    }
+}
+
+/// The plan's overall lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PlanState {
+    /// Waiting for a decision; Approve / Reject are offered.
+    #[default]
+    Proposed,
+    /// Accepted, not yet started.
+    Approved,
+    /// Declined.
+    Rejected,
+    /// Steps are executing.
+    Running,
+    /// Every step finished.
+    Completed,
+    /// Execution stopped on a failure.
+    Failed,
+}
+
+impl PlanState {
+    /// The badge label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Proposed => "Proposed",
+            Self::Approved => "Approved",
+            Self::Rejected => "Rejected",
+            Self::Running => "Running",
+            Self::Completed => "Completed",
+            Self::Failed => "Failed",
+        }
+    }
+
+    fn tone(self) -> StatusTone {
+        match self {
+            Self::Proposed | Self::Running => StatusTone::Info,
+            Self::Approved | Self::Completed => StatusTone::Success,
+            Self::Rejected => StatusTone::Neutral,
+            Self::Failed => StatusTone::Danger,
+        }
+    }
+}
+
+/// An interaction emitted by [`PlanCard`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlanEvent {
+    /// The plan was approved.
+    Approved {
+        /// Stable plan identifier.
+        id: SharedString,
+    },
+    /// The plan was rejected.
+    Rejected {
+        /// Stable plan identifier.
+        id: SharedString,
+    },
+    /// The user asked to change the plan before deciding.
+    EditRequested {
+        /// Stable plan identifier.
+        id: SharedString,
+    },
+    /// The user activated one step (to inspect or jump to it).
+    StepActivated {
+        /// Stable plan identifier.
+        id: SharedString,
+        /// Stable step identifier.
+        step_id: SharedString,
+    },
+}
+
+/// A proposed plan with ordered steps, a state badge, and decision controls.
+///
+/// # Example
+///
+/// ```ignore
+/// PlanCard::new("rollout", "Switch bulk orders to Alpenrose")
+///     .description("Three steps; the last one sends email.")
+///     .steps([
+///         PlanStep::new("compare", "Compare unit prices").status(PlanStepStatus::Done),
+///         PlanStep::new("draft", "Draft the new order"),
+///         PlanStep::new("send", "Send confirmations").detail("Emails 3 suppliers"),
+///     ])
+///     .editable(true)
+///     .on_event(|event, _, _| { /* PlanEvent::Approved { id } … */ })
+/// ```
+#[derive(IntoElement)]
+pub struct PlanCard {
+    id: SharedString,
+    style: StyleRefinement,
+    title: SharedString,
+    description: Option<SharedString>,
+    steps: Vec<PlanStep>,
+    state: PlanState,
+    note: Option<SharedString>,
+    editable: bool,
+    on_event: Option<SharedHandler<PlanEvent>>,
+}
+
+impl PlanCard {
+    /// Creates a proposed plan.
+    pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
+        Self {
+            id: id.into(),
+            style: StyleRefinement::default(),
+            title: title.into(),
+            description: None,
+            steps: Vec::new(),
+            state: PlanState::Proposed,
+            note: None,
+            editable: false,
+            on_event: None,
+        }
+    }
+
+    /// Sets supporting detail under the title.
+    pub fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Sets the steps, in order.
+    pub fn steps(mut self, steps: impl IntoIterator<Item = PlanStep>) -> Self {
+        self.steps = steps.into_iter().collect();
+        self
+    }
+
+    /// Sets the lifecycle state (default [`PlanState::Proposed`]).
+    pub fn state(mut self, state: PlanState) -> Self {
+        self.state = state;
+        self
+    }
+
+    /// Adds a footnote shown once the plan is decided ("Approved by Oscar").
+    pub fn note(mut self, note: impl Into<SharedString>) -> Self {
+        self.note = Some(note.into());
+        self
+    }
+
+    /// Offers an Edit control while the plan is proposed.
+    pub fn editable(mut self, editable: bool) -> Self {
+        self.editable = editable;
+        self
+    }
+
+    /// Handles typed interactions. Without a handler the card is static.
+    pub fn on_event(
+        mut self,
+        handler: impl Fn(&PlanEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_event = Some(Rc::new(handler));
+        self
+    }
+
+    /// Counts finished steps.
+    fn done_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.status == PlanStepStatus::Done)
+            .count()
+    }
+}
+
+impl Styled for PlanCard {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for PlanCard {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let done = self.done_count();
+        let handler = self.on_event;
+        let plan_id = self.id.clone();
+        let total = self.steps.len();
+        let label: SharedString = format!(
+            "Plan: {}, {done} of {total} steps done, {}",
+            self.title,
+            self.state.label().to_ascii_lowercase()
+        )
+        .into();
+        let root_id = ElementId::from(self.id.clone());
+        let debug_id = self.id.to_string();
+
+        let mut steps = Vec::with_capacity(total);
+        for (index, step) in self.steps.iter().enumerate() {
+            steps.push(render_step(
+                &root_id,
+                &plan_id,
+                index,
+                total,
+                step,
+                handler.clone(),
+                window,
+                cx,
+            ));
+        }
+
+        let footer: Option<AnyElement> = match (self.state, handler) {
+            (PlanState::Proposed, Some(handler)) => {
+                let approve_id = plan_id.clone();
+                let reject_id = plan_id.clone();
+                let edit_id = plan_id.clone();
+                let approve_handler = handler.clone();
+                let reject_handler = handler.clone();
+                let approve_debug = debug_id.clone();
+                let reject_debug = debug_id.clone();
+                let edit_debug = debug_id.clone();
+                Some(
+                    h_flex()
+                        .items_center()
+                        .gap(tokens.spacing.sm)
+                        .child(
+                            div()
+                                .debug_selector(move || format!("plan-approve-{approve_debug}"))
+                                .child(
+                                    Button::new((root_id.clone(), "approve"))
+                                        .primary()
+                                        .small()
+                                        .accessibility_id(format!("{plan_id}-approve"))
+                                        .label("Approve plan")
+                                        .on_click(move |_: &ClickEvent, window, cx| {
+                                            cues::emit(cx, Cue::Decided { approved: true });
+                                            approve_handler(
+                                                &PlanEvent::Approved {
+                                                    id: approve_id.clone(),
+                                                },
+                                                window,
+                                                cx,
+                                            )
+                                        }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .debug_selector(move || format!("plan-reject-{reject_debug}"))
+                                .child(
+                                    Button::new((root_id.clone(), "reject"))
+                                        .outline()
+                                        .small()
+                                        .accessibility_id(format!("{plan_id}-reject"))
+                                        .label("Reject")
+                                        .on_click(move |_: &ClickEvent, window, cx| {
+                                            cues::emit(cx, Cue::Decided { approved: false });
+                                            reject_handler(
+                                                &PlanEvent::Rejected {
+                                                    id: reject_id.clone(),
+                                                },
+                                                window,
+                                                cx,
+                                            )
+                                        }),
+                                ),
+                        )
+                        .when(self.editable, |this| {
+                            this.child(
+                                div()
+                                    .debug_selector(move || format!("plan-edit-{edit_debug}"))
+                                    .child(
+                                        Button::new((root_id.clone(), "edit"))
+                                            .ghost()
+                                            .small()
+                                            .accessibility_id(format!("{plan_id}-edit"))
+                                            .label("Edit plan")
+                                            .on_click(move |_: &ClickEvent, window, cx| {
+                                                handler(
+                                                    &PlanEvent::EditRequested {
+                                                        id: edit_id.clone(),
+                                                    },
+                                                    window,
+                                                    cx,
+                                                )
+                                            }),
+                                    ),
+                            )
+                        })
+                        .into_any_element(),
+                )
+            }
+            _ => self
+                .note
+                .clone()
+                .map(|note| meta(note, cx).into_any_element()),
+        };
+
+        card(self.id.clone(), cx)
+            .role(Role::Group)
+            .aria_label(label)
+            .when_some(self.description.clone(), |this, text| {
+                this.aria_description(text)
+            })
+            .debug_selector(move || format!("plan-{debug_id}"))
+            .when(self.state == PlanState::Proposed, |this| {
+                this.border_color(cx.theme().warning)
+            })
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(tokens.spacing.sm)
+                    .child(eyebrow("Plan", cx))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap(tokens.spacing.sm)
+                            .child(meta(format!("{done} / {total}"), cx))
+                            .child(
+                                StatusBadge::new(
+                                    (ElementId::from(self.id.clone()), "state"),
+                                    self.state.label(),
+                                )
+                                .tone(self.state.tone())
+                                .active(self.state == PlanState::Running),
+                            ),
+                    ),
+            )
+            .child(title(self.title, cx))
+            .when_some(self.description, |this, text| {
+                this.child(description(text, cx))
+            })
+            .child(
+                v_flex()
+                    .id((ElementId::from(self.id.clone()), "steps"))
+                    .role(Role::List)
+                    .aria_label("Steps")
+                    .w_full()
+                    .min_w_0()
+                    .children(steps),
+            )
+            .children(footer)
+            .refine_style(&self.style)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_step(
+    root_id: &ElementId,
+    plan_id: &SharedString,
+    index: usize,
+    total: usize,
+    step: &PlanStep,
+    handler: Option<SharedHandler<PlanEvent>>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let tokens = cx.theme().semantic_tokens();
+    let step_id = ElementId::from((root_id.clone(), format!("step-{}", step.id)));
+    let debug_id = format!("{plan_id}-{}", step.id);
+    let label: SharedString = format!(
+        "Step {}: {}, {}",
+        index + 1,
+        step.title,
+        step.status.label()
+    )
+    .into();
+    let is_last = index + 1 == total;
+
+    let glyph_size = tokens.spacing.lg;
+    let (glyph, ring, fill): (AnyElement, gpui::Hsla, gpui::Hsla) = match step.status {
+        PlanStepStatus::Pending => (
+            div()
+                .text_token(tokens.typography.xs)
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(cx.theme().muted_foreground)
+                .child((index + 1).to_string())
+                .into_any_element(),
+            cx.theme().border,
+            cx.theme().transparent,
+        ),
+        PlanStepStatus::Running => (
+            Spinner::new().xsmall().into_any_element(),
+            cx.theme().primary,
+            cx.theme().primary.opacity(0.1),
+        ),
+        PlanStepStatus::Done => (
+            Icon::new(IconName::Check)
+                .xsmall()
+                .text_color(cx.theme().success)
+                .into_any_element(),
+            cx.theme().success.opacity(0.5),
+            cx.theme().success.opacity(0.12),
+        ),
+        PlanStepStatus::Failed => (
+            Icon::new(IconName::CircleX)
+                .xsmall()
+                .text_color(cx.theme().danger)
+                .into_any_element(),
+            cx.theme().danger.opacity(0.5),
+            cx.theme().danger.opacity(0.12),
+        ),
+        PlanStepStatus::Skipped => (
+            Icon::new(IconName::Dash)
+                .xsmall()
+                .text_color(cx.theme().muted_foreground)
+                .into_any_element(),
+            cx.theme().border,
+            cx.theme().muted.opacity(0.5),
+        ),
+    };
+    let rail = v_flex()
+        .flex_none()
+        .items_center()
+        .w(glyph_size)
+        .child(
+            div()
+                .flex_none()
+                .size(glyph_size)
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(tokens.radius.full)
+                .border_1()
+                .border_color(ring)
+                .bg(fill)
+                .child(glyph),
+        )
+        .when(!is_last, |this| {
+            this.child(
+                div()
+                    .flex_1()
+                    .min_h(tokens.spacing.sm)
+                    .border_l_1()
+                    .border_color(cx.theme().border),
+            )
+        });
+    let body = div()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .flex_1()
+        .gap(tokens.spacing.xxs)
+        .pb(if is_last {
+            tokens.spacing.xxs
+        } else {
+            tokens.spacing.sm
+        })
+        .child(
+            div()
+                .text_token(tokens.typography.sm)
+                .text_color(match step.status {
+                    PlanStepStatus::Skipped => cx.theme().muted_foreground,
+                    _ => cx.theme().foreground,
+                })
+                .child(step.title.clone()),
+        )
+        .when_some(step.detail.clone(), |this, detail| {
+            this.child(
+                div()
+                    .text_token(tokens.typography.xs)
+                    .text_color(cx.theme().muted_foreground)
+                    .child(detail),
+            )
+        });
+
+    let row = match handler {
+        Some(handler) => {
+            let event = PlanEvent::StepActivated {
+                id: plan_id.clone(),
+                step_id: step.id.clone(),
+            };
+            composed_button(step_id, label)
+                .debug_selector(move || format!("plan-step-{debug_id}"))
+                .flex()
+                .items_stretch()
+                .w_full()
+                .min_w_0()
+                .gap(tokens.spacing.sm)
+                .rounded(tokens.radius.sm)
+                .border_1()
+                .border_color(cx.theme().transparent)
+                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                .focus_visible(|style| style.border_color(cx.theme().ring))
+                .child(rail)
+                .child(body)
+                .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                .into_any_element()
+        }
+        None => h_flex()
+            .id(step_id)
+            .role(Role::ListItem)
+            .aria_label(label)
+            .debug_selector(move || format!("plan-step-{debug_id}"))
+            .items_stretch()
+            .w_full()
+            .min_w_0()
+            .gap(tokens.spacing.sm)
+            .child(rail)
+            .child(body)
+            .into_any_element(),
+    };
+    reveal_staggered(
+        div().w_full().min_w_0().child(row),
+        (root_id.clone(), format!("reveal-{}", step.id)),
+        index,
+        window,
+        cx,
+    )
+    .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_state_labels_and_tones_follow_the_lifecycle() {
+        assert_eq!(PlanState::Proposed.label(), "Proposed");
+        assert_eq!(PlanState::Completed.tone(), StatusTone::Success);
+        assert_eq!(PlanState::Failed.tone(), StatusTone::Danger);
+        assert_eq!(PlanState::Rejected.tone(), StatusTone::Neutral);
+    }
+
+    #[test]
+    fn done_steps_are_counted_for_the_accessible_name() {
+        let card = PlanCard::new("p", "Plan").steps([
+            PlanStep::new("a", "A").status(PlanStepStatus::Done),
+            PlanStep::new("b", "B").status(PlanStepStatus::Running),
+            PlanStep::new("c", "C"),
+        ]);
+        assert_eq!(card.done_count(), 1);
+    }
+}

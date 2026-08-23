@@ -138,7 +138,8 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `TodoList` | entity | Agent to-do list with progress |
 | `ImageGeneration` | stateless | Image-generation frame with progress |
 | `SearchResults` | stateless | Web-search result cards |
-| `ApprovalCard` | entity | Human-in-the-loop approval questions |
+| `ApprovalCard` | stateless | Human-in-the-loop gate with default and destructive tones, optional "Always allow", and resolved approved/rejected states |
+| `PlanCard` | stateless | An agent's proposed steps with typed per-step status, lifecycle badge, Approve/Reject/Edit while proposed, and step activation by stable ID |
 | `RecommendationCard` | entity | Agent suggestion with confidence meter |
 | `ContextCard` | stateless | Retrieved knowledge chunks with sources |
 | `InsightCard` | stateless | Paged insight cards with sparkline charts |

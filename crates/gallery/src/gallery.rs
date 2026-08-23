@@ -204,6 +204,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::CodeDiff
+        | StoryId::Plan
         | StoryId::ContextMeter
         | StoryId::ThreadList
         | StoryId::ToolChips
@@ -3323,6 +3324,10 @@ pub struct Gallery {
     diff_open: bool,
     hunk_reviews: HashMap<usize, HunkReview>,
     last_diff_event: Option<SharedString>,
+    approval_decisions: HashMap<SharedString, ApprovalDecision>,
+    last_approval_event: Option<SharedString>,
+    plan_state: PlanState,
+    last_plan_event: Option<SharedString>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -3394,6 +3399,10 @@ impl Gallery {
             diff_open: true,
             hunk_reviews: HashMap::new(),
             last_diff_event: None,
+            approval_decisions: HashMap::new(),
+            last_approval_event: None,
+            plan_state: PlanState::Proposed,
+            last_plan_event: None,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -4551,24 +4560,150 @@ impl Gallery {
                 story,
                 "Approval card",
                 || {
-                    ApprovalCard::new("gate", "Send order confirmation to 3 suppliers?")
-                        .description("Emails will go out immediately and cannot be recalled.")
+                    let tokens = cx.theme().semantic_tokens();
+                    let decision_of = |id: &str| {
+                        self.approval_decisions
+                            .get(id)
+                            .copied()
+                            .unwrap_or_default()
+                    };
+                    let make_handler = || {
+                        cx.listener(|this, event: &ApprovalEvent, _, cx| {
+                        let (id, decision) = match event {
+                            ApprovalEvent::Approved { id } | ApprovalEvent::ApprovedAlways { id } => {
+                                (id.clone(), ApprovalDecision::Approved)
+                            }
+                            ApprovalEvent::Rejected { id } => (id.clone(), ApprovalDecision::Rejected),
+                        };
+                        this.approval_decisions.insert(id, decision);
+                        this.last_approval_event = Some(format!("{event:?}").into());
+                        cx.notify();
+                        })
+                    };
+                    let status: SharedString = self
+                        .last_approval_event
+                        .clone()
+                        .unwrap_or_else(|| "Decide a gate to see its resolved state".into());
+                    let caption = |text: &'static str| {
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(text)
+                    };
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(caption("Default tone with a payload"))
                         .child(
-                            h_flex()
-                                .flex_wrap()
-                                .gap_1p5()
-                                .child(
-                                    ToolChip::new("gate-chip-1", "email alpenrose")
-                                        .status(ToolStatus::Pending),
+                            ApprovalCard::new("gate", "Send order confirmation to 3 suppliers?")
+                                .description(
+                                    "Emails will go out immediately and cannot be recalled.",
                                 )
+                                .decision(decision_of("gate"))
+                                .note("Decided in this session")
                                 .child(
-                                    ToolChip::new("gate-chip-2", "email tillamook")
-                                        .status(ToolStatus::Pending),
-                                ),
+                                    h_flex()
+                                        .flex_wrap()
+                                        .gap_1p5()
+                                        .child(
+                                            ToolChip::new("gate-chip-1", "email alpenrose")
+                                                .status(ToolStatus::Pending),
+                                        )
+                                        .child(
+                                            ToolChip::new("gate-chip-2", "email tillamook")
+                                                .status(ToolStatus::Pending),
+                                        ),
+                                )
+                                .on_event(make_handler()),
                         )
-                        .on_event(cx.listener(|_, event: &ApprovalEvent, _, _| {
-                            println!("approval event: {event:?}");
-                        }))
+                        .child(caption("Destructive tone with \"Always allow\""))
+                        .child(
+                            ApprovalCard::new("purge", "Delete 12 stale supplier records?")
+                                .description("Records older than 18 months are removed permanently.")
+                                .tone(ApprovalTone::Destructive)
+                                .approve_label("Delete records")
+                                .allow_always(true)
+                                .decision(decision_of("purge"))
+                                .note("Decided in this session")
+                                .on_event(make_handler()),
+                        )
+                        .child(
+                            div()
+                                .id("approval-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Plan => self.section(
+                story,
+                "Plan card",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let status: SharedString = self
+                        .last_plan_event
+                        .clone()
+                        .unwrap_or_else(|| "Approve, reject, or open a step".into());
+                    let steps = [
+                        PlanStep::new("compare", "Compare unit prices across suppliers")
+                            .detail("pricing.md · 3 suppliers")
+                            .status(PlanStepStatus::Done),
+                        PlanStep::new("risk", "Check delivery-window risk")
+                            .detail("Cold-chain capacity for the next two weeks")
+                            .status(PlanStepStatus::Done),
+                        PlanStep::new("draft", "Draft the revised bulk order")
+                            .status(match self.plan_state {
+                                PlanState::Approved | PlanState::Running => PlanStepStatus::Running,
+                                _ => PlanStepStatus::Pending,
+                            }),
+                        PlanStep::new("send", "Send confirmations")
+                            .detail("Emails 3 suppliers; needs its own approval"),
+                    ];
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            PlanCard::new("rollout", "Switch bulk orders to Alpenrose Dairy")
+                                .description(
+                                    "Four steps; the last one sends email and will ask again.",
+                                )
+                                .steps(steps)
+                                .state(self.plan_state)
+                                .note("Decided in this session")
+                                .editable(true)
+                                .on_event(cx.listener(|this, event: &PlanEvent, _, cx| {
+                                    match event {
+                                        PlanEvent::Approved { .. } => {
+                                            this.plan_state = PlanState::Approved;
+                                        }
+                                        PlanEvent::Rejected { .. } => {
+                                            this.plan_state = PlanState::Rejected;
+                                        }
+                                        PlanEvent::EditRequested { .. }
+                                        | PlanEvent::StepActivated { .. } => {}
+                                    }
+                                    this.last_plan_event = Some(format!("{event:?}").into());
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .id("plan-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "plan-reference-note",
+                                "**Reference comparison.** assistant-ui and AI Elements show agent plans as a static task list; Cursor and Claude Code gate plans behind an approve step. gpui-ai's plan card combines both: ordered steps with typed per-step status (pending, running, done, failed, skipped), a lifecycle badge, keyboard-reachable Approve / Reject / Edit while proposed, resolved states afterwards, and step activation by stable ID so the application can jump to the work.",
+                            )
+                            .selectable(true),
+                        )
                 },
                 cx,
             ),

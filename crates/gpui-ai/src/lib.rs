@@ -39,6 +39,7 @@ pub mod insight;
 pub mod loading;
 pub mod motion;
 pub mod orbs;
+pub mod plan;
 pub mod prompt_bar;
 pub mod recommendation;
 pub mod records_table;
@@ -60,7 +61,7 @@ pub mod tool_call;
 
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
-    pub use crate::approval::{ApprovalCard, ApprovalEvent};
+    pub use crate::approval::{ApprovalCard, ApprovalDecision, ApprovalEvent, ApprovalTone};
     pub use crate::attachment::{
         Attachment, AttachmentEvent, AttachmentKind, AttachmentPreview, AttachmentStrip,
         format_bytes,
@@ -99,6 +100,7 @@ pub mod prelude {
     pub use crate::loading::LoadingState;
     pub use crate::motion::{Shimmer, breathing, reveal, reveal_staggered};
     pub use crate::orbs::{OrbVariant, Orbs};
+    pub use crate::plan::{PlanCard, PlanEvent, PlanState, PlanStep, PlanStepStatus};
     pub use crate::prompt_bar::{
         PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
         PromptSubmission,

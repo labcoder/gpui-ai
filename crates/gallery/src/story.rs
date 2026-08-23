@@ -57,6 +57,8 @@ pub enum StoryId {
     CodeDiff,
     /// Human approval gate.
     Approval,
+    /// Proposed plan with steps and decisions.
+    Plan,
     /// Recommendation card.
     Recommendation,
     /// Context/source cards.
@@ -97,6 +99,7 @@ impl StoryId {
         Self::CodeBlock,
         Self::CodeDiff,
         Self::Approval,
+        Self::Plan,
         Self::Recommendation,
         Self::Context,
         Self::Insights,
@@ -133,6 +136,7 @@ impl StoryId {
             Self::CodeBlock => "code-block",
             Self::CodeDiff => "code-diff",
             Self::Approval => "approval",
+            Self::Plan => "plan",
             Self::Recommendation => "recommendation",
             Self::Context => "context",
             Self::Insights => "insights",
@@ -170,6 +174,7 @@ impl StoryId {
             Self::CodeBlock => "Code block",
             Self::CodeDiff => "Code diff",
             Self::Approval => "Approval card",
+            Self::Plan => "Plan card",
             Self::Recommendation => "Recommendation card",
             Self::Context => "Context cards",
             Self::Insights => "Insight card",
