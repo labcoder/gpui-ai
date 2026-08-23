@@ -37,6 +37,8 @@ pub enum StoryId {
     CommandSearch,
     /// Stable-ID filterable sidebar navigation.
     SidebarNav,
+    /// Controlled conversation list with search and row actions.
+    ThreadList,
     /// Controlled design-property inspector.
     FineTune,
     /// Controlled virtualized CRM-style records grid.
@@ -81,6 +83,7 @@ impl StoryId {
         Self::ContextMeter,
         Self::CommandSearch,
         Self::SidebarNav,
+        Self::ThreadList,
         Self::FineTune,
         Self::RecordsTable,
         Self::DiffTable,
@@ -114,6 +117,7 @@ impl StoryId {
             Self::ContextMeter => "context-meter",
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
+            Self::ThreadList => "thread-list",
             Self::FineTune => "fine-tune",
             Self::RecordsTable => "records-table",
             Self::DiffTable => "diff-table",
@@ -148,6 +152,7 @@ impl StoryId {
             Self::ContextMeter => "Context meter",
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
+            Self::ThreadList => "Thread list",
             Self::FineTune => "Fine-tune card",
             Self::RecordsTable => "Records table",
             Self::DiffTable => "Diff table",

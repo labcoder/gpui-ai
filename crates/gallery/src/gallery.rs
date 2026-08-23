@@ -200,6 +200,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::All
         | StoryId::Suggestions
         | StoryId::ContextMeter
+        | StoryId::ThreadList
         | StoryId::ToolChips
         | StoryId::Orbs
         | StoryId::Todos
@@ -488,6 +489,172 @@ impl Render for ChatStory {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
+            )
+    }
+}
+
+fn demo_thread_sections() -> Vec<ThreadSection> {
+    vec![
+        ThreadSection::new("today", "Today").items([
+            ThreadItem::new("supplier-pricing", "Supplier pricing review")
+                .subtitle("2 min ago · Alpenrose is 7% cheaper"),
+            ThreadItem::new("cold-chain", "Cold-chain capacity check").subtitle("1 h ago"),
+        ]),
+        ThreadSection::new("yesterday", "Yesterday").items([
+            ThreadItem::new("confirmations", "Draft order confirmations")
+                .subtitle("Yesterday · 3 suppliers"),
+            ThreadItem::new("delivery-windows", "Delivery window options").subtitle("Yesterday"),
+        ]),
+        ThreadSection::new("earlier", "Earlier").items([
+            ThreadItem::new("margins", "Q2 margin analysis").subtitle("Aug 12"),
+            ThreadItem::new("forecast", "Flavor demand forecast").subtitle("Aug 9"),
+            ThreadItem::new("packaging", "Packaging vendor shortlist")
+                .subtitle("Aug 3")
+                .archived(true),
+            ThreadItem::new("onboarding", "Onboarding checklist")
+                .subtitle("Jul 28")
+                .archived(true),
+        ]),
+    ]
+}
+
+struct ThreadListStory {
+    threads: Entity<ThreadList>,
+    sections: Vec<ThreadSection>,
+    created: usize,
+    last_event: SharedString,
+    _subscription: Subscription,
+}
+
+impl ThreadListStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let sections = demo_thread_sections();
+        let threads = cx.new(|cx| {
+            let mut list = ThreadList::new("gallery-threads", window, cx);
+            list.set_sections(sections.clone(), cx);
+            list.set_active(Some("supplier-pricing"), cx);
+            list
+        });
+        let subscription = cx.subscribe_in(
+            &threads,
+            window,
+            |this, threads, event: &ThreadListEvent, _, cx| {
+                this.last_event = format!("{event:?}").into();
+                match event {
+                    ThreadListEvent::Selected { id } => {
+                        let id = id.clone();
+                        threads.update(cx, |list, cx| list.set_active(Some(id), cx));
+                    }
+                    ThreadListEvent::NewRequested => {
+                        this.created += 1;
+                        let id = format!("new-{}", this.created);
+                        if let Some(today) = this.sections.first_mut() {
+                            let mut items = today.thread_items().to_vec();
+                            items.insert(
+                                0,
+                                ThreadItem::new(id.clone(), "New conversation")
+                                    .subtitle("Just now"),
+                            );
+                            *today = ThreadSection::new(today.id().clone(), today.label().clone())
+                                .items(items);
+                        }
+                        let sections = this.sections.clone();
+                        threads.update(cx, |list, cx| {
+                            list.set_sections(sections, cx);
+                            list.set_active(Some(id), cx);
+                        });
+                    }
+                    ThreadListEvent::ArchiveRequested { id }
+                    | ThreadListEvent::UnarchiveRequested { id } => {
+                        let archive = matches!(event, ThreadListEvent::ArchiveRequested { .. });
+                        this.sections = this
+                            .sections
+                            .iter()
+                            .map(|section| {
+                                ThreadSection::new(section.id().clone(), section.label().clone())
+                                    .items(section.thread_items().iter().map(|item| {
+                                        if item.id() == id {
+                                            item.clone().archived(archive)
+                                        } else {
+                                            item.clone()
+                                        }
+                                    }))
+                            })
+                            .collect();
+                        let sections = this.sections.clone();
+                        threads.update(cx, |list, cx| list.set_sections(sections, cx));
+                    }
+                    ThreadListEvent::DeleteRequested { id } => {
+                        this.sections = this
+                            .sections
+                            .iter()
+                            .map(|section| {
+                                ThreadSection::new(section.id().clone(), section.label().clone())
+                                    .items(
+                                        section
+                                            .thread_items()
+                                            .iter()
+                                            .filter(|item| item.id() != id)
+                                            .cloned(),
+                                    )
+                            })
+                            .collect();
+                        let sections = this.sections.clone();
+                        threads.update(cx, |list, cx| list.set_sections(sections, cx));
+                    }
+                    ThreadListEvent::RenameRequested { .. }
+                    | ThreadListEvent::QueryChanged { .. } => {}
+                }
+                cx.notify();
+            },
+        );
+        Self {
+            threads,
+            sections,
+            created: 0,
+            last_event: "Select a conversation, open its actions, or start a new chat.".into(),
+            _subscription: subscription,
+        }
+    }
+}
+
+impl Render for ThreadListStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.xs)
+            .child(
+                div()
+                    .id("thread-list-story-host")
+                    .debug_selector(|| "thread-list-story-host".into())
+                    // A sidebar-width, bounded host shows grouping, the
+                    // archived toggle, and scrolling within a real pane size.
+                    .w(px(300.))
+                    .h(px(380.))
+                    .max_h(px(380.))
+                    .p(tokens.spacing.sm)
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(tokens.radius.lg)
+                    .overflow_hidden()
+                    .bg(tokens.colors.surface)
+                    .child(self.threads.clone()),
+            )
+            .child(
+                div()
+                    .id("thread-list-story-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last thread event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
+            .child(
+                TextView::markdown(
+                    "thread-list-reference-note",
+                    "**Reference comparison.** assistant-ui and Beautiful UI keep a conversation list in the sidebar with new, switch, archive, and delete. gpui-ai groups threads into application-owned sections, keeps the active thread semantic, hides archived threads behind a named toggle, searches title and subtitle natively, and exposes rename / archive / delete as keyboard-reachable row actions that report typed events.",
+                )
+                .selectable(true),
             )
     }
 }
@@ -3939,6 +4106,11 @@ impl Gallery {
                     SidebarNavStory::new,
                 );
                 self.section(story, "Sidebar navigation", || sidebar_story, cx)
+            }
+            StoryId::ThreadList => {
+                let thread_story =
+                    window.use_keyed_state("thread-list-story-state", cx, ThreadListStory::new);
+                self.section(story, "Thread list", || thread_story, cx)
             }
             StoryId::FineTune => {
                 let fine_tune_story = window.use_keyed_state(

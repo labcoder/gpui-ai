@@ -51,6 +51,7 @@ mod surface;
 pub mod task;
 mod theme;
 pub mod thinking;
+pub mod thread_list;
 pub mod todo_list;
 pub mod tool_call;
 
@@ -113,6 +114,7 @@ pub mod prelude {
     pub use crate::suggestions::{Suggestion, Suggestions, SuggestionsEvent};
     pub use crate::task::{TaskRow, TaskSnapshot};
     pub use crate::thinking::{StepStatus, Thinking, ThinkingEvent, ThinkingStep, ThinkingTrace};
+    pub use crate::thread_list::{ThreadItem, ThreadList, ThreadListEvent, ThreadSection};
     pub use crate::todo_list::{TodoItem, TodoList, TodoListEvent, TodoStatus};
     pub use crate::tool_call::{
         ToolApproval, ToolCall, ToolCallEvent, ToolGroup, ToolGroupEvent, ToolInvocation,

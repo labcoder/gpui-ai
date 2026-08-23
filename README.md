@@ -147,6 +147,7 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `ContextMeter` | stateless | Context-window usage ring / bar / text with severity tones and a hover breakdown |
 | `CommandSearch` | entity | Command palette with filtering and keyboard navigation |
 | `SidebarNav` | entity | Collapsible, filterable workspace navigation |
+| `ThreadList` | entity | Grouped conversation list: new, switch, search, archived toggle, rename / archive / delete row actions |
 | `FineTuneCard` | entity | Design-property inspector (size, radius, opacity, typeface) |
 | `SelectionActions` | entity | Selection-anchored Ask / Explain / Rewrite actions |
 | `RecordsTable` | entity | CRM-style virtualized grid with sorting |
