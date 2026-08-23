@@ -131,6 +131,7 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `Thinking` | stateless | Reasoning disclosure that opens while streaming, shimmers, pins a live preview, then collapses to "Thought for Ns" |
 | `StreamingText` | stateless | Streaming markdown answer with hover-previewed citations, favicon-style source chips, follow-ups |
 | `CodeBlock` | stateless | Syntax-highlighted code with header, copy button, stream reveal |
+| `CodeDiff` | stateless | Unified patch viewer (`DiffFile::from_unified`) with rem-aligned gutters, change tints, per-hunk accept/reject by path and index, and a copyable source |
 | `ToolChip` | stateless | Compact tool-call / file-edit chips with status |
 | `ToolCall` / `ToolGroup` | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
 | `TaskRow` / `TaskSnapshot` | stateless | Live agent task status rows |

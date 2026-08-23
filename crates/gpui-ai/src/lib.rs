@@ -24,6 +24,7 @@ pub mod attachment;
 pub mod chat;
 pub mod chip;
 pub mod code_block;
+pub mod code_diff;
 pub mod command_search;
 pub mod comparison_table;
 pub mod context_card;
@@ -70,6 +71,9 @@ pub mod prelude {
     };
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
+    pub use crate::code_diff::{
+        CodeDiff, CodeDiffEvent, DiffFile, DiffHunk, DiffLine, DiffLineKind, DiffStats, HunkReview,
+    };
     pub use crate::command_search::{CommandSearch, CommandSearchEvent, CommandSearchItem};
     pub use crate::comparison_table::{
         ComparisonFeature, ComparisonItem, ComparisonItemState, ComparisonSnapshot,

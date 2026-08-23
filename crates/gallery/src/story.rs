@@ -53,6 +53,8 @@ pub enum StoryId {
     ComparisonTable,
     /// Streaming code block.
     CodeBlock,
+    /// Reviewable unified code diff.
+    CodeDiff,
     /// Human approval gate.
     Approval,
     /// Recommendation card.
@@ -93,6 +95,7 @@ impl StoryId {
         Self::FilterTable,
         Self::ComparisonTable,
         Self::CodeBlock,
+        Self::CodeDiff,
         Self::Approval,
         Self::Recommendation,
         Self::Context,
@@ -128,6 +131,7 @@ impl StoryId {
             Self::FilterTable => "filter-table",
             Self::ComparisonTable => "comparison-table",
             Self::CodeBlock => "code-block",
+            Self::CodeDiff => "code-diff",
             Self::Approval => "approval",
             Self::Recommendation => "recommendation",
             Self::Context => "context",
@@ -164,6 +168,7 @@ impl StoryId {
             Self::FilterTable => "Filter table",
             Self::ComparisonTable => "Comparison table",
             Self::CodeBlock => "Code block",
+            Self::CodeDiff => "Code diff",
             Self::Approval => "Approval card",
             Self::Recommendation => "Recommendation card",
             Self::Context => "Context cards",

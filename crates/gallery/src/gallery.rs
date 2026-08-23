@@ -203,6 +203,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::All
         | StoryId::Suggestions
         | StoryId::Attachments
+        | StoryId::CodeDiff
         | StoryId::ContextMeter
         | StoryId::ThreadList
         | StoryId::ToolChips
@@ -627,6 +628,9 @@ fn demo_attachment_states() -> Vec<Attachment> {
             .state(ProgressState::Failed("Larger than 25 MB".into())),
     ]
 }
+
+/// A small agent-proposed patch for the code diff story.
+const DEMO_PATCH: &str = "--- a/src/pricing.rs\n+++ b/src/pricing.rs\n@@ -12,7 +12,9 @@ impl Quote {\n     pub fn unit_price(&self) -> Money {\n-        self.total / self.units\n+        // Guard against empty orders reported by the catalog sync.\n+        let units = self.units.max(1);\n+        self.total / units\n     }\n \n     pub fn discount(&self) -> f32 {\n@@ -31,4 +33,4 @@ impl Quote {\n     fn volume_tier(&self) -> Tier {\n-        if self.units > 500 { Tier::Wholesale } else { Tier::Retail }\n+        if self.units >= 500 { Tier::Wholesale } else { Tier::Retail }\n     }\n }\n";
 
 fn demo_thread_sections() -> Vec<ThreadSection> {
     vec![
@@ -3316,6 +3320,9 @@ pub struct Gallery {
     removed_attachments: HashSet<SharedString>,
     last_attachment_event: Option<SharedString>,
     demo_thumbnail: Arc<Image>,
+    diff_open: bool,
+    hunk_reviews: HashMap<usize, HunkReview>,
+    last_diff_event: Option<SharedString>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -3384,6 +3391,9 @@ impl Gallery {
                 ImageFormat::Png,
                 include_bytes!("../assets/meadow-thumbnail.png").to_vec(),
             )),
+            diff_open: true,
+            hunk_reviews: HashMap::new(),
+            last_diff_event: None,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -4465,6 +4475,72 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::CodeDiff => self.section(
+                story,
+                "Code diff",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let mut file = DiffFile::from_unified(DEMO_PATCH).remove(0);
+                    let hunks: Vec<DiffHunk> = file
+                        .hunk_refs()
+                        .iter()
+                        .cloned()
+                        .enumerate()
+                        .map(|(index, hunk)| {
+                            hunk.review(
+                                self.hunk_reviews
+                                    .get(&index)
+                                    .copied()
+                                    .unwrap_or_default(),
+                            )
+                        })
+                        .collect();
+                    file = file.hunks(hunks);
+                    let status: SharedString = self
+                        .last_diff_event
+                        .clone()
+                        .unwrap_or_else(|| "Accept or reject a hunk, or collapse the file".into());
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            CodeDiff::new("proposed-patch", &file)
+                                .open(self.diff_open)
+                                .reviewable(true)
+                                .on_event(cx.listener(|this, event: &CodeDiffEvent, _, cx| {
+                                    match event {
+                                        CodeDiffEvent::Toggled { .. } => {
+                                            this.diff_open = !this.diff_open;
+                                        }
+                                        CodeDiffEvent::HunkAccepted { hunk, .. } => {
+                                            this.hunk_reviews.insert(*hunk, HunkReview::Accepted);
+                                        }
+                                        CodeDiffEvent::HunkRejected { hunk, .. } => {
+                                            this.hunk_reviews.insert(*hunk, HunkReview::Rejected);
+                                        }
+                                    }
+                                    this.last_diff_event = Some(format!("{event:?}").into());
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .id("code-diff-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "code-diff-reference-note",
+                                "**Reference comparison.** Cursor and Zed review agent edits inline with accept and reject per hunk; AI Elements ships a read-only code block. gpui-ai parses the unified patch a tool already produced, renders it through the upstream highlighted, selectable text view with rem-aligned gutters and change tints, keeps each hunk a named group with keyboard-reachable Accept and Reject, and reports decisions by path and hunk index so the application applies them.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
             StoryId::CodeBlock => self.section(
                 story,
                 "Code block",

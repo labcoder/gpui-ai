@@ -11,6 +11,7 @@ const componentEventTypes = Object.freeze({
   "fine-tune": "FineTuneEvent",
   "records-table": "RecordsTableEvent",
   "diff-table": "DiffTableEvent",
+  "code-diff": "CodeDiffEvent",
   "filter-table": "FilterTableEvent",
   "comparison-table": "ComparisonTableEvent",
   approval: "ApprovalEvent",
@@ -81,12 +82,13 @@ export const components = Object.freeze([
   component(21, "filter-table", "Filter table", "Data tables", "A controlled task grid with typed filters and stable-row reorder motion.", "filter_table", "FilterTable", 'FilterTable::new("tasks", "Tasks", window, cx)'),
   component(22, "comparison-table", "Comparison table", "Data tables", "A bounded feature matrix with semantic values and sticky context.", "comparison_table", "ComparisonTable", 'ComparisonTable::new("plans", "Plans", window, cx)'),
   component(23, "code-block", "Code block", "Readable output", "Selectable code with language context and progressive reveal.", "code_block", "CodeBlock", 'CodeBlock::new("patch", source).language("rust")'),
-  component(24, "approval", "Approval card", "Decisions", "An explicit, keyboard-operable human gate for consequential agent actions.", "approval", "ApprovalCard", 'ApprovalCard::new("deploy", "Deploy production?")', "tall"),
-  component(25, "recommendation", "Recommendation card", "Decisions", "A focused recommendation with rationale and typed actions.", "recommendation", "RecommendationCard", 'RecommendationCard::new("next-step", "Ship the fix")', "tall"),
-  component(26, "context", "Context cards", "Evidence", "Compact source context that preserves provenance and readable detail.", "context_card", "ContextCard", 'ContextCard::new("design-doc", "Architecture")', "tall"),
-  component(27, "insights", "Insight card", "Evidence", "Paged analytical findings with chart-ready, semantic values.", "insight", "InsightCard", 'InsightCard::new("retention", "Retention improved")'),
-  component(28, "prompt-bar", "Prompt bar", "Composites", "A hybrid-controlled composer with mentions, commands, models, and attachments.", "prompt_bar", "PromptBar", 'PromptBar::new("agent-prompt", window, cx)'),
-  component(29, "selection-actions", "Selection actions", "Readable output", "Ask, explain, and rewrite actions anchored to selected Markdown.", "selection_actions", "SelectionActions", 'SelectionActions::new("answer-actions", markdown, window, cx)'),
+  component(24, "code-diff", "Code diff", "Readable output", "A unified patch with line gutters, change tints, per-hunk accept or reject, and a copyable source.", "code_diff", "CodeDiff", 'CodeDiff::new("patch", &file).reviewable(true)', "tall"),
+  component(25, "approval", "Approval card", "Decisions", "An explicit, keyboard-operable human gate for consequential agent actions.", "approval", "ApprovalCard", 'ApprovalCard::new("deploy", "Deploy production?")', "tall"),
+  component(26, "recommendation", "Recommendation card", "Decisions", "A focused recommendation with rationale and typed actions.", "recommendation", "RecommendationCard", 'RecommendationCard::new("next-step", "Ship the fix")', "tall"),
+  component(27, "context", "Context cards", "Evidence", "Compact source context that preserves provenance and readable detail.", "context_card", "ContextCard", 'ContextCard::new("design-doc", "Architecture")', "tall"),
+  component(28, "insights", "Insight card", "Evidence", "Paged analytical findings with chart-ready, semantic values.", "insight", "InsightCard", 'InsightCard::new("retention", "Retention improved")'),
+  component(29, "prompt-bar", "Prompt bar", "Composites", "A hybrid-controlled composer with mentions, commands, models, and attachments.", "prompt_bar", "PromptBar", 'PromptBar::new("agent-prompt", window, cx)'),
+  component(30, "selection-actions", "Selection actions", "Readable output", "Ask, explain, and rewrite actions anchored to selected Markdown.", "selection_actions", "SelectionActions", 'SelectionActions::new("answer-actions", markdown, window, cx)'),
 ]);
 
 export const categories = Object.freeze([
