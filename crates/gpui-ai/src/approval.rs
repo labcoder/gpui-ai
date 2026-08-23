@@ -1,16 +1,15 @@
 //! Human-in-the-loop approval gates for agent actions.
 
 use crate::handlers::SharedHandler;
-use crate::theme::SemanticStyledExt as _;
+use crate::surface::{card, description, inset, title};
 use gpui::{
-    AnyElement, App, ClickEvent, FontWeight, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, ClickEvent, IntoElement, ParentElement, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    h_flex,
 };
 use std::rc::Rc;
 
@@ -111,41 +110,25 @@ impl RenderOnce for ApprovalCard {
         let accessibility_label = self.title.clone();
         let accessibility_description = self.description.clone();
 
-        v_flex()
-            .id(self.id.clone())
+        // A decision gate is the one card that earns a semantic accent: the
+        // warning border says "stop and decide" before any text is read.
+        card(self.id.clone(), cx)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
                 this.aria_description(description)
             })
-            .gap(tokens.spacing.md)
-            .p(tokens.spacing.lg)
-            .bg(cx.theme().background)
-            .border_1()
             .border_color(cx.theme().warning)
-            .rounded(tokens.radius.md)
-            .child(
-                div()
-                    .text_token(tokens.typography.sm)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(cx.theme().foreground)
-                    .child(self.title),
-            )
-            .when_some(self.description, |this, description| {
-                this.child(
-                    div()
-                        .text_token(tokens.typography.sm)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(description),
-                )
+            .child(title(self.title, cx))
+            .when_some(self.description, |this, text| {
+                this.child(description(text, cx))
             })
             .when(has_payload, |this| {
                 this.child(
-                    v_flex()
+                    inset(cx)
+                        .flex()
+                        .flex_col()
                         .gap(tokens.spacing.xs)
-                        .p(tokens.spacing.md)
-                        .bg(cx.theme().muted.opacity(0.3))
-                        .rounded(tokens.radius.md)
                         .children(self.children),
                 )
             })

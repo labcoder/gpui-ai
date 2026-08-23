@@ -301,8 +301,16 @@ mod tests {
     #[test]
     fn unvisited_and_stalling_regions_fail_the_gate() {
         let mut report = completed_report();
-        report.regions[13] = RegionMetrics::default();
-        report.regions[15].push(STALL_FRAME_NANOS + 1);
+        let records = StoryId::ALL
+            .iter()
+            .position(|story| *story == StoryId::RecordsTable)
+            .expect("records table is a catalog story");
+        let filter = StoryId::ALL
+            .iter()
+            .position(|story| *story == StoryId::FilterTable)
+            .expect("filter table is a catalog story");
+        report.regions[records] = RegionMetrics::default();
+        report.regions[filter].push(STALL_FRAME_NANOS + 1);
         let failures = report.gate_failures();
         assert!(failures.iter().any(|f| f.contains("records-table")));
         assert!(failures.iter().any(|f| f.contains("filter-table")));

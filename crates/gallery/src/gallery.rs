@@ -32,7 +32,7 @@ use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 const CONTRAST_THEME: &str = r##"{
   "name": "gpui-ai gallery themes",
   "themes": [{
-    "name": "Mighty Contrast",
+    "name": "gpui-ai Contrast",
     "mode": "dark",
     "radius": 8,
     "radius.lg": 12,
@@ -59,7 +59,7 @@ const CONTRAST_THEME: &str = r##"{
   }]
 }"##;
 
-const CONTRAST_THEME_NAME: &str = "Mighty Contrast";
+const CONTRAST_THEME_NAME: &str = "gpui-ai Contrast";
 
 /// Curated showcase themes, embedded as the same JSON the website shares.
 /// Keeping this file in-repo means the downloadable theme pack and the
@@ -97,6 +97,7 @@ fn story_needs_simulation(story: StoryId) -> bool {
             | StoryId::StreamingText
             | StoryId::Chat
             | StoryId::CodeBlock
+            | StoryId::ToolCalls
     )
 }
 
@@ -191,7 +192,7 @@ fn visible_range_needs_simulation(range: Range<usize>) -> bool {
 fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
     match story {
         StoryId::Loading | StoryId::Tasks => true,
-        StoryId::Thinking | StoryId::Search => delta.answer_phase_changed(),
+        StoryId::Thinking | StoryId::Search | StoryId::ToolCalls => delta.answer_phase_changed(),
         StoryId::ImageGeneration | StoryId::StreamingText | StoryId::Chat => {
             delta.answer_content_changed()
         }
@@ -2920,6 +2921,9 @@ pub struct Gallery {
     simulation_task: Option<Task<()>>,
     sim: sim::Simulation,
     trace_open: bool,
+    tool_call_open: HashMap<SharedString, bool>,
+    tool_group_open: Option<bool>,
+    tool_approval: ToolApproval,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -2978,6 +2982,9 @@ impl Gallery {
             simulation_task: simulation_needed.then(|| Self::spawn_simulation(cx)),
             sim: sim::Simulation::new(),
             trace_open: true,
+            tool_call_open: HashMap::new(),
+            tool_group_open: None,
+            tool_approval: ToolApproval::Requested,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -3388,6 +3395,22 @@ impl Gallery {
             return div().hidden().into_any_element();
         };
         self.render_story(story, window, cx)
+    }
+
+    fn handle_tool_call_event(
+        &mut self,
+        event: &ToolCallEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            ToolCallEvent::Toggled { id, open } => {
+                self.tool_call_open.insert(id.clone(), *open);
+            }
+            ToolCallEvent::Approved { .. } => self.tool_approval = ToolApproval::Approved,
+            ToolCallEvent::Rejected { .. } => self.tool_approval = ToolApproval::Rejected,
+        }
+        cx.notify();
     }
 
     fn render_story(
@@ -4018,6 +4041,98 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::ToolCalls => self.section(
+                story,
+                "Tool calls",
+                || {
+                    let running = self.sim.answer.is_streaming();
+                    let read = Progressive::complete(
+                        ToolInvocation::new("read-pricing", "read_file")
+                            .summary("pricing.md")
+                            .input("{\n  \"path\": \"pricing.md\",\n  \"range\": [1, 214]\n}")
+                            .output(
+                                "Read **214 lines**.\n\n| Supplier | Unit cost | Tier |\n|---|---|---|\n| Alpenrose Dairy | $3.12 | 500+ |\n| Tillamook | $3.36 | 500+ |",
+                            )
+                            .elapsed(Duration::from_millis(340)),
+                    );
+                    let search_call = ToolInvocation::new("search-suppliers", "web_search")
+                        .summary("alpenrose wholesale pricing")
+                        .icon(IconName::Globe)
+                        .input("{\n  \"query\": \"alpenrose wholesale pricing\",\n  \"limit\": 3\n}");
+                    let search = if running {
+                        Progressive::running(search_call)
+                    } else {
+                        Progressive::complete(
+                            search_call
+                                .output(
+                                    "3 results — alpenrose.com, dairyreport.org, nwfoodtrade.com",
+                                )
+                                .elapsed(Duration::from_millis(1800)),
+                        )
+                    };
+                    let email = Progressive::pending(
+                        ToolInvocation::new("send-confirmations", "send_email")
+                            .summary("3 suppliers")
+                            .input(
+                                "{\n  \"to\": [\"orders@alpenrose.com\", \"sales@tillamook.com\"],\n  \"subject\": \"Order confirmation — week 35\"\n}",
+                            )
+                            .approval(self.tool_approval),
+                    );
+                    let failed = Progressive::failed(
+                        ToolInvocation::new("query-prices", "query_db")
+                            .summary("prices-db")
+                            .input("SELECT unit_cost FROM prices WHERE week = 35")
+                            .input_language("sql")
+                            .elapsed(Duration::from_millis(2100)),
+                        "Connection timed out after 2s",
+                    );
+                    let configure = |mut call: ToolCall, id: &str| {
+                        if let Some(open) = self.tool_call_open.get(id) {
+                            call = call.open(*open);
+                        }
+                        call
+                    };
+                    let mut group = ToolGroup::new("tool-group").count(2).active(running);
+                    if let Some(open) = self.tool_group_open {
+                        group = group.open(open);
+                    }
+                    v_flex()
+                        .gap_4()
+                        .child(
+                            group
+                                .on_event(cx.listener(|this, event: &ToolGroupEvent, _, cx| {
+                                    let ToolGroupEvent::Toggled { open, .. } = event;
+                                    this.tool_group_open = Some(*open);
+                                    cx.notify();
+                                }))
+                                .child(
+                                    configure(ToolCall::new(&read), "read-pricing").on_event(
+                                        cx.listener(Self::handle_tool_call_event),
+                                    ),
+                                )
+                                .child(
+                                    configure(ToolCall::new(&search), "search-suppliers")
+                                        .on_event(cx.listener(Self::handle_tool_call_event)),
+                                ),
+                        )
+                        .child(
+                            configure(ToolCall::new(&email), "send-confirmations")
+                                .on_event(cx.listener(Self::handle_tool_call_event)),
+                        )
+                        .child(
+                            configure(ToolCall::new(&failed), "query-prices")
+                                .on_event(cx.listener(Self::handle_tool_call_event)),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "tool-calls-reference-note",
+                                "**Reference comparison.** AI Elements and assistant-ui render each tool call as a collapsible card with a status badge, input, output, and inline Allow/Deny. gpui-ai keeps that shape, shares one status vocabulary with chips and task rows, adds a controlled group whose title shimmers while calls run, opens automatically only when a call needs attention, and reports every decision as a typed event.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
             StoryId::SelectionActions => {
                 let selection_story = window.use_keyed_state(
                     "selection-actions-story-state",
@@ -5219,9 +5334,13 @@ mod tests {
             gallery.scroll_catalog_to(StoryId::StreamingText, cx);
         });
 
+        let streaming = StoryId::ALL
+            .iter()
+            .position(|story| *story == StoryId::StreamingText)
+            .expect("streaming text is a catalog story");
         gallery.read_with(cx, |gallery, _| {
-            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, 8);
-            assert_eq!(gallery.visible_range, 8..11);
+            assert_eq!(gallery.catalog_list.logical_scroll_top().item_ix, streaming);
+            assert_eq!(gallery.visible_range, streaming..streaming + 3);
             assert!(gallery.simulation_task.is_some());
         });
     }

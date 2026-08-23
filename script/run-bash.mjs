@@ -23,7 +23,7 @@ let args = [script, ...scriptArgs];
 
 if (process.platform === 'win32') {
   const candidates = [
-    process.env.MIGHTY_GPUI_BASH,
+    process.env.GPUI_AI_BASH,
     process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Git', 'bin', 'bash.exe'),
     process.env.LOCALAPPDATA &&
       path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'bin', 'bash.exe'),

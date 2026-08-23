@@ -164,7 +164,7 @@ impl RenderOnce for TodoList {
             .aria_label(accessibility_label)
             .p(tokens.spacing.md)
             .gap(tokens.spacing.xs)
-            .bg(cx.theme().background)
+            .bg(tokens.colors.surface)
             .border_1()
             .border_color(cx.theme().border)
             .rounded(tokens.radius.md)

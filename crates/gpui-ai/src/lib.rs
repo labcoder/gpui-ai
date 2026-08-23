@@ -33,6 +33,7 @@ pub mod fine_tune;
 pub mod image_generation;
 pub mod insight;
 pub mod loading;
+pub mod motion;
 pub mod orbs;
 pub mod prompt_bar;
 pub mod recommendation;
@@ -41,12 +42,15 @@ pub mod scrolling;
 pub mod search_results;
 pub mod selection_actions;
 pub mod sidebar_nav;
+pub mod status;
 pub mod stream;
 pub mod streaming_text;
+mod surface;
 pub mod task;
 mod theme;
 pub mod thinking;
 pub mod todo_list;
+pub mod tool_call;
 
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
@@ -78,6 +82,7 @@ pub mod prelude {
         InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend,
     };
     pub use crate::loading::LoadingState;
+    pub use crate::motion::{Shimmer, breathing, reveal, reveal_staggered};
     pub use crate::orbs::{OrbVariant, Orbs};
     pub use crate::prompt_bar::{
         PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
@@ -97,6 +102,7 @@ pub mod prelude {
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
     pub use crate::sidebar_nav::{SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarSection};
+    pub use crate::status::{StatusBadge, StatusTone};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};
     pub use crate::streaming_text::{
         CitationRef, FollowUp, SourceRef, StreamingText, StreamingTextEvent,
@@ -104,6 +110,9 @@ pub mod prelude {
     pub use crate::task::{TaskRow, TaskSnapshot};
     pub use crate::thinking::{StepStatus, Thinking, ThinkingEvent, ThinkingStep, ThinkingTrace};
     pub use crate::todo_list::{TodoItem, TodoList, TodoListEvent, TodoStatus};
+    pub use crate::tool_call::{
+        ToolApproval, ToolCall, ToolCallEvent, ToolGroup, ToolGroupEvent, ToolInvocation,
+    };
 }
 
 pub(crate) mod handlers {

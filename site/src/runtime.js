@@ -1,5 +1,5 @@
 export const themes = Object.freeze(["light", "dark", "contrast"]);
-export const themeStorageKey = "mighty-gpui-theme";
+export const themeStorageKey = "gpui-ai-theme";
 export const specimenOverdrawMargin = "400px 0px";
 
 export function normalizeTheme(search, systemDark = false, storedTheme) {

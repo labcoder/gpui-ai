@@ -25,7 +25,7 @@ use crate::{
     theme::SemanticStyledExt as _,
 };
 
-const RECORDS_TABLE_CONTEXT: &str = "MightyRecordsTable";
+const RECORDS_TABLE_CONTEXT: &str = "GpuiAiRecordsTable";
 gpui::actions!(
     gpui_ai_records_table,
     [

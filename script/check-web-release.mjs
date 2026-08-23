@@ -24,5 +24,5 @@ await run(process.execPath, [npmCli, "--prefix", "crates/gallery-web/www", "run"
 await run(
   process.execPath,
   ["--test", "--test-name-pattern=release WASM", "site/test/browser.test.mjs"],
-  { MIGHTY_RELEASE_INTEGRATION: "1" },
+  { GPUI_AI_RELEASE_INTEGRATION: "1" },
 );

@@ -28,6 +28,9 @@ const ALLOWED_FILES: &[&str] = &[
     // Orb diameter is a canvas-like decorative radius tuned in pixels; the
     // default is exposed through the builder for callers who need other sizes.
     "crates/gpui-ai/src/orbs.rs",
+    // Reveal rise distance is an animation offset from rest (px(0.)), not a
+    // layout value; the shared motion helpers own it for every component.
+    "crates/gpui-ai/src/motion.rs",
     // Row-reorder motion arithmetic: offsets are animation distances from
     // rest (px(0.)), not layout spacing.
     "crates/gpui-ai/src/records_table.rs",

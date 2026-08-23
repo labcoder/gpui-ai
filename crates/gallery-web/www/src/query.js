@@ -10,12 +10,12 @@ export function parseEmbedOptions(search) {
 }
 
 export function parseThemeMessage(data) {
-  if (data?.type !== 'mighty-gpui-theme') return undefined;
+  if (data?.type !== 'gpui-ai-theme') return undefined;
   return ['light', 'dark', 'contrast'].includes(data.theme) ? data.theme : undefined;
 }
 
 export function themeMessage(theme) {
-  return { type: 'mighty-gpui-theme', theme };
+  return { type: 'gpui-ai-theme', theme };
 }
 
 export function parseThemeEvent(event, parent, origin) {

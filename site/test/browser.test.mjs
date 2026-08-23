@@ -27,7 +27,7 @@ const browserCandidates = process.platform === "win32"
       "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ];
 const browserPath = browserCandidates.find((candidate) => candidate && existsSync(candidate));
-const releaseIntegrationRequested = process.env.MIGHTY_RELEASE_INTEGRATION === "1";
+const releaseIntegrationRequested = process.env.GPUI_AI_RELEASE_INTEGRATION === "1";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const releaseGalleryDir = path.join(repositoryRoot, "crates/gallery-web/www/dist");
 
@@ -312,9 +312,10 @@ test("real browser covers responsive navigation, search, copy, and semantics", {
     focus: document.activeElement.textContent.trim(),
     inert: document.querySelector('main').hasAttribute('inert')
   }))()`), { expanded: "true", focus: "Close", inert: true });
-  assert.equal(await cdp.evaluate(`document.querySelector('#site-nav-panel [aria-current="page"]').textContent.trim()`), "14Records table");
+  const recordsSequence = String(components.find(({ slug }) => slug === "records-table").sequence).padStart(2, "0");
+  assert.equal(await cdp.evaluate(`document.querySelector('#site-nav-panel [aria-current="page"]').textContent.trim()`), `${recordsSequence}Records table`);
   const drawerAccessibility = await cdp.send("Accessibility.getFullAXTree");
-  const drawerCurrent = drawerAccessibility.nodes.filter((node) => node.role?.value === "link" && node.name?.value === "14 Records table");
+  const drawerCurrent = drawerAccessibility.nodes.filter((node) => node.role?.value === "link" && node.name?.value === `${recordsSequence} Records table`);
   assert.equal(drawerCurrent.length, 1);
   await cdp.key("Tab", "Tab", 9, 8);
   assert.match(await cdp.evaluate(`document.activeElement.textContent.trim()`), /Insight card/);
@@ -467,10 +468,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await cdp.navigate(`${baseUrl}/components/loading/?theme=light`, 1280, 900);
   await waitForValue(cdp, `(() => {
     const frame = document.querySelector('[data-specimen-frame]');
-    return Boolean(frame?.contentDocument?.querySelector('canvas') && !frame.contentDocument.getElementById('loading') && frame.contentWindow.mightyGpui?.currentTheme() === 'light');
+    return Boolean(frame?.contentDocument?.querySelector('canvas') && !frame.contentDocument.getElementById('loading') && frame.contentWindow.gpuiAi?.currentTheme() === 'light');
   })()`);
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "light");
-  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.mightyGpui.currentTheme()`), "light");
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.gpuiAi.currentTheme()`), "light");
 
   for (const theme of ["dark", "contrast", "dark"]) {
     assert.equal(await cdp.evaluate(`(() => {
@@ -481,7 +482,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     await cdp.key(" ", "Space", 32);
     await waitForValue(cdp, `(() => {
       const frame = document.querySelector('[data-specimen-frame]');
-      return frame?.contentDocument?.documentElement.dataset.theme === '${theme}' && frame?.contentWindow?.mightyGpui?.currentTheme() === '${theme}';
+      return frame?.contentDocument?.documentElement.dataset.theme === '${theme}' && frame?.contentWindow?.gpuiAi?.currentTheme() === '${theme}';
     })()`);
     assert.equal(await cdp.evaluate(`document.documentElement.dataset.theme`), theme);
   }
@@ -491,10 +492,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await cdp.evaluate(`document.querySelector('[data-specimen-frame]').scrollIntoView({ block: 'center' })`);
   await waitForValue(cdp, `(() => {
     const frame = document.querySelector('[data-specimen-frame]');
-    return Boolean(frame?.contentDocument?.querySelector('canvas') && frame?.contentWindow?.mightyGpui?.currentTheme() === 'dark');
+    return Boolean(frame?.contentDocument?.querySelector('canvas') && frame?.contentWindow?.gpuiAi?.currentTheme() === 'dark');
   })()`);
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "dark");
-  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.mightyGpui.currentTheme()`), "dark");
+  assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.gpuiAi.currentTheme()`), "dark");
   assert.deepEqual(errors, []);
 
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {

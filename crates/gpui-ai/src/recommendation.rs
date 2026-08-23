@@ -1,11 +1,12 @@
 //! Agent suggestion cards with confidence and alternatives.
 
 use crate::handlers::Handler;
+use crate::surface::{card, description, eyebrow, title};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _, relative,
+    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, relative,
 };
 
 /// An interaction emitted by [`RecommendationCard`].
@@ -115,33 +116,15 @@ impl RenderOnce for RecommendationCard {
         };
         let accessibility_label = self.title.clone();
         let accessibility_description = self.description.clone();
-        v_flex()
-            .id(self.id.clone())
+        card(self.id.clone(), cx)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
                 this.aria_description(description)
             })
-            .gap(tokens.spacing.md)
-            .p(tokens.spacing.lg)
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
-            .child(
-                div()
-                    .text_token(tokens.typography.sm)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(cx.theme().foreground)
-                    .child(self.title),
-            )
-            .when_some(self.description, |this, description| {
-                this.child(
-                    div()
-                        .text_token(tokens.typography.sm)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(description),
-                )
+            .child(title(self.title, cx))
+            .when_some(self.description, |this, text| {
+                this.child(description(text, cx))
             })
             .when_some(self.confidence, |this, confidence| {
                 let meter_color = if confidence < 0.4 {
@@ -192,12 +175,7 @@ impl RenderOnce for RecommendationCard {
                         .role(Role::List)
                         .aria_label("Also considered")
                         .gap(tokens.spacing.xs)
-                        .child(
-                            div()
-                                .text_token(tokens.typography.xs)
-                                .text_color(cx.theme().muted_foreground)
-                                .child("Also considered"),
-                        )
+                        .child(eyebrow("Also considered", cx))
                         .children(self.alternatives.into_iter().enumerate().map(|(ix, alt)| {
                             let accessibility_label = alt.clone();
                             h_flex()

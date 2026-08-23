@@ -128,10 +128,11 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 |---|---|---|
 | `LoadingState` | stateless | Pixel-grid loader with shimmer and elapsed time |
 | `Orbs` | stateless | Ambient dot-lattice thinking indicator, five choreographies |
-| `Thinking` | stateless | Expandable reasoning traces — steps or prose |
+| `Thinking` | stateless | Reasoning disclosure that opens while streaming, shimmers, pins a live preview, then collapses to "Thought for Ns" |
 | `StreamingText` | stateless | Streaming markdown answer with citations, sources, follow-ups |
 | `CodeBlock` | stateless | Syntax-highlighted code with header, copy button, stream reveal |
 | `ToolChip` | stateless | Compact tool-call / file-edit chips with status |
+| `ToolCall` / `ToolGroup` | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
 | `TaskRow` / `TaskSnapshot` | stateless | Live agent task status rows |
 | `TodoList` | entity | Agent to-do list with progress |
 | `ImageGeneration` | stateless | Image-generation frame with progress |
@@ -154,6 +155,8 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 Keyboard action dispatch in the browser WASM gallery is limited by the pinned upstream GPUI revision: pointer activation works, while action-based keyboard paths such as Command Search navigation remain native-only until that upstream seam is fixed.
 
 All components style themselves through gpui-component's semantic theme tokens, so light/dark, bundled themes, custom JSON themes, and live token editing work without per-component overrides.
+
+Shared building blocks are public too: `gpui_ai::motion` (reduced-motion-aware text shimmer, one-shot reveals, breathing) and `gpui_ai::status` (the one tone scale and status pill every lifecycle uses).
 
 ## Theming
 

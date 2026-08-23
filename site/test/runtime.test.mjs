@@ -32,7 +32,7 @@ test("theme storage validates values and tolerates unavailable storage", () => {
   };
   assert.equal(persistTheme(storage, "contrast"), true);
   assert.equal(readStoredTheme(storage), "contrast");
-  values.set("mighty-gpui-theme", "neon");
+  values.set("gpui-ai-theme", "neon");
   assert.equal(readStoredTheme(storage), undefined);
   const blocked = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
   assert.equal(readStoredTheme(blocked), undefined);

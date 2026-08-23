@@ -16,7 +16,8 @@ test("catalog mirrors every stable Rust story exactly once", async () => {
     .filter((slug) => slug !== "all");
   const siteSlugs = components.map(({ slug }) => slug);
 
-  assert.equal(components.length, 24);
+  assert.equal(components.length, rustSlugs.length);
+  assert.ok(components.length >= 25);
   assert.deepEqual(siteSlugs, rustSlugs);
   assert.equal(new Set(siteSlugs).size, siteSlugs.length);
 });
@@ -32,7 +33,7 @@ test("every component has useful static documentation and a real source file", a
     assert.match(component.summary, /\S.*\S/);
     assert.match(component.usage, new RegExp(`${component.api}::new`));
     assert.doesNotMatch(component.usage, /\bpx\(/, "snippets import only the prelude");
-    assert.match(component.source, /^crates\/mighty-gpui\/src\/[a-z_]+\.rs$/);
+    assert.match(component.source, /^crates\/gpui-ai\/src\/[a-z_]+\.rs$/);
     const source = await readFile(new URL(component.source, repositoryRoot), "utf8");
     assert.match(source, new RegExp(`pub struct ${component.api}\\b`));
     assert.match(
@@ -46,7 +47,8 @@ test("catalog interaction metadata exactly matches public component event enums"
   for (const component of components) {
     const source = await readFile(new URL(component.source, repositoryRoot), "utf8");
     const publicEvents = [...source.matchAll(/pub enum ([A-Za-z0-9_]+Event)\b/g)].map((match) => match[1]);
-    assert.deepEqual(publicEvents, component.event ? [component.event] : [], component.slug);
-    assert.equal(/typed [A-Za-z0-9_]+Event contract/.test(component.behavior.interaction), Boolean(component.event), component.slug);
+    assert.deepEqual(publicEvents, component.events, component.slug);
+    assert.equal(component.event, component.events[0] ?? null, component.slug);
+    assert.equal(/typed .*Event contracts? and stable application IDs/.test(component.behavior.interaction), component.events.length > 0, component.slug);
   }
 });

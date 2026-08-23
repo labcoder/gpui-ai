@@ -28,7 +28,7 @@ test("build emits stable catalog routes and copies one shared gallery", async (c
   const home = await readFile(path.join(outDir, "index.html"), "utf8");
   const catalog = await readFile(path.join(outDir, "components", "index.html"), "utf8");
   assert.match(home, /<main/);
-  assert.match(catalog, /24 components/);
+  assert.match(catalog, new RegExp(`${components.length} components`));
   assert.equal(
     (catalog.match(/class="catalog-card"/g) ?? []).length,
     components.length,
@@ -146,7 +146,7 @@ test("home publishes honest build metadata, architecture, and repository links",
   const home = await readFile(path.join(outDir, "index.html"), "utf8");
 
   assert.match(home, /class="build-metadata" aria-label="Build metadata"/);
-  assert.match(home, /24 stable stories/);
+  assert.match(home, new RegExp(`${components.length} stable stories`));
   assert.match(home, /One shared release WASM/);
   assert.match(home, /Not published/);
   assert.match(home, /class="architecture-strip" aria-labelledby="architecture-title"/);
@@ -185,7 +185,7 @@ test("component pages expose a desktop rail, visible metadata, and behavior note
   const outDir = path.join(temporaryRoot, "site-output");
   await createGalleryFixture(galleryDir);
   await buildSite({ galleryDir, outDir });
-  const item = components[13];
+  const item = components.find(({ slug }) => slug === "records-table");
   const page = await readFile(path.join(outDir, "components", item.slug, "index.html"), "utf8");
 
   assert.match(page, /<body class="has-desktop-rail">/);

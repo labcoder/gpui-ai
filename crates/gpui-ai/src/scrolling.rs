@@ -267,7 +267,7 @@ impl ScrollRoom {
         Self::new(handle.offset().y, handle.max_offset().y)
     }
 
-    /// Snapshots the room from a GPUI [`ListState`](gpui::ListState).
+    /// Snapshots the room from a GPUI [`gpui::ListState`].
     pub fn from_list_state(state: &gpui::ListState) -> Self {
         Self::new(
             state.scroll_px_offset_for_scrollbar().y,

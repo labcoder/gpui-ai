@@ -11,6 +11,8 @@ pub enum StoryId {
     Loading,
     /// Tool-call chips.
     ToolChips,
+    /// Collapsible tool-call cards and groups.
+    ToolCalls,
     /// Progressive task rows.
     Tasks,
     /// Expandable thinking traces.
@@ -62,6 +64,7 @@ impl StoryId {
     pub const ALL: &'static [Self] = &[
         Self::Loading,
         Self::ToolChips,
+        Self::ToolCalls,
         Self::Tasks,
         Self::Thinking,
         Self::Orbs,
@@ -92,6 +95,7 @@ impl StoryId {
             Self::All => "all",
             Self::Loading => "loading",
             Self::ToolChips => "tool-chips",
+            Self::ToolCalls => "tool-calls",
             Self::Tasks => "tasks",
             Self::Thinking => "thinking",
             Self::Orbs => "orbs",
@@ -123,6 +127,7 @@ impl StoryId {
             Self::All => "All components",
             Self::Loading => "Loading state",
             Self::ToolChips => "Tool chips",
+            Self::ToolCalls => "Tool calls",
             Self::Tasks => "Task rows",
             Self::Thinking => "Thinking",
             Self::Orbs => "Orbs",

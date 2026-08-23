@@ -80,7 +80,7 @@ async function initEmbed() {
     wasm.validate_story(options.story);
     await wasm.run(options.story, themeChannel.current(), document.body.dataset.assetBase || undefined);
     themeChannel.connect(wasm);
-    window.mightyGpui = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
+    window.gpuiAi = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
     document.getElementById('loading')?.remove();
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));

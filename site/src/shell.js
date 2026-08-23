@@ -36,7 +36,7 @@ function applyTheme(theme, updateUrl = true, store = false) {
     const open = frame.closest("[data-story]").querySelector("[data-specimen-open]");
     if (open) open.href = nextSource;
     if (frame.hasAttribute("src")) {
-      frame.contentWindow?.postMessage({ type: "mighty-gpui-theme", theme }, window.location.origin);
+      frame.contentWindow?.postMessage({ type: "gpui-ai-theme", theme }, window.location.origin);
     }
   }
 }
