@@ -1,0 +1,42 @@
+{
+  "name": "Nord Frost",
+  "themes": [
+    {
+      "name": "Nord Frost",
+      "mode": "dark",
+      "radius": 6,
+      "radius.lg": 10,
+      "shadow": true,
+      "colors": {
+        "background": "#2e3440",
+        "foreground": "#eceff4",
+        "border": "#3b4252",
+        "input.border": "#434c5e",
+        "ring": "#88c0d0",
+        "primary.background": "#88c0d0",
+        "primary.foreground": "#2e3440",
+        "primary.hover.background": "#81a1c1",
+        "secondary.background": "#3b4252",
+        "secondary.foreground": "#e5e9f0",
+        "muted.background": "#3b4252",
+        "muted.foreground": "#a7b1c2",
+        "accent.background": "#434c5e",
+        "accent.foreground": "#eceff4",
+        "popover.background": "#333a47",
+        "popover.foreground": "#eceff4",
+        "sidebar.background": "#272c36",
+        "sidebar.border": "#3b4252",
+        "danger.background": "#bf616a",
+        "danger.foreground": "#eceff4",
+        "info.background": "#81a1c1",
+        "success.background": "#a3be8c",
+        "warning.background": "#ebcb8b",
+        "chart_1": "#88c0d0",
+        "chart_2": "#81a1c1",
+        "chart_3": "#b48ead",
+        "chart_4": "#a3be8c",
+        "chart_5": "#ebcb8b"
+      }
+    }
+  ]
+}

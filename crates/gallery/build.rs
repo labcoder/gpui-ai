@@ -1,0 +1,165 @@
+//! Turns the `themes/` directory into a compile-time preset table.
+//!
+//! Adding a JSON file under `themes/gpui-ai/` adds a gallery preset with no
+//! Rust change: this script rereads the directory, so Cargo rebuilds the table.
+//! `themes/upstream/` is vendored from the pinned gpui-component checkout by
+//! `script/vendor-themes.mjs`, and its files may hold several themes each.
+//!
+//! Slugs are the stable identity used in `?theme=` URLs, so they come from the
+//! file name for our own one-theme-per-file layout and from the theme name for
+//! upstream's multi-theme packs.
+
+use std::{env, fmt::Write as _, fs, path::Path};
+
+const OURS: &str = "gpui-ai";
+const UPSTREAM: &str = "gpui-component";
+
+fn kebab(value: &str) -> String {
+    let mut slug = String::with_capacity(value.len());
+    let mut pending_dash = false;
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_dash = false;
+            slug.push(character.to_ascii_lowercase());
+        } else {
+            pending_dash = true;
+        }
+    }
+    slug
+}
+
+struct Preset {
+    slug: String,
+    label: String,
+    registry_name: Option<String>,
+    group: &'static str,
+    dark: bool,
+}
+
+fn main() {
+    let manifest = env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    let themes = Path::new(&manifest)
+        .parent()
+        .and_then(Path::parent)
+        .expect("the gallery crate lives two directories below the workspace root")
+        .join("themes");
+
+    let mut files: Vec<String> = Vec::new();
+    // Light and Dark are gpui-component's own defaults: they carry no JSON and
+    // resolve through the registry's default theme for their mode.
+    let mut presets = vec![
+        Preset {
+            slug: "light".into(),
+            label: "Light".into(),
+            registry_name: None,
+            group: OURS,
+            dark: false,
+        },
+        Preset {
+            slug: "dark".into(),
+            label: "Dark".into(),
+            registry_name: None,
+            group: OURS,
+            dark: true,
+        },
+    ];
+
+    for (group, directory) in [
+        (OURS, themes.join("gpui-ai")),
+        (UPSTREAM, themes.join("upstream")),
+    ] {
+        println!("cargo:rerun-if-changed={}", directory.display());
+
+        let mut entries: Vec<_> = fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", directory.display()))
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .collect();
+        entries.sort();
+
+        for path in entries {
+            println!("cargo:rerun-if-changed={}", path.display());
+            let text = fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+            let pack: serde_json::Value = serde_json::from_str(&text)
+                .unwrap_or_else(|error| panic!("{} is not valid JSON: {error}", path.display()));
+            let bundled = pack["themes"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{} has no themes array", path.display()));
+
+            let stem = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or_else(|| panic!("{} has no usable file name", path.display()))
+                .to_owned();
+            if group == OURS && bundled.len() != 1 {
+                panic!(
+                    "{} must hold exactly one theme so its file name can be the slug",
+                    path.display()
+                );
+            }
+
+            files.push(path.display().to_string().replace('\\', "/"));
+
+            for theme in bundled {
+                let name = theme["name"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("a theme in {} has no name", path.display()));
+                presets.push(Preset {
+                    slug: if group == OURS {
+                        stem.clone()
+                    } else {
+                        kebab(name)
+                    },
+                    label: name.strip_prefix("gpui-ai ").unwrap_or(name).to_owned(),
+                    registry_name: Some(name.to_owned()),
+                    group,
+                    dark: theme["mode"].as_str() == Some("dark"),
+                });
+            }
+        }
+    }
+
+    let mut duplicates: Vec<&str> = presets.iter().map(|preset| preset.slug.as_str()).collect();
+    duplicates.sort_unstable();
+    duplicates.dedup();
+    assert_eq!(
+        duplicates.len(),
+        presets.len(),
+        "theme slugs must be unique across themes/gpui-ai and themes/upstream"
+    );
+
+    let mut generated = String::new();
+    generated.push_str("// @generated by build.rs from themes/. Do not edit.\n");
+
+    generated.push_str("pub(crate) const BUNDLED_THEME_FILES: &[&str] = &[\n");
+    for file in &files {
+        writeln!(generated, "    include_str!(r\"{file}\"),").expect("writing to a String");
+    }
+    generated.push_str("];\n\n");
+
+    generated.push_str("pub(crate) const BUNDLED_PRESETS: &[GalleryThemeEntry] = &[\n");
+    for preset in &presets {
+        let registry_name = match &preset.registry_name {
+            Some(name) => format!("Some({name:?})"),
+            None => "None".to_owned(),
+        };
+        writeln!(
+            generated,
+            "    GalleryThemeEntry {{ slug: {:?}, label: {:?}, registry_name: {registry_name}, group: {:?}, dark: {} }},",
+            preset.slug, preset.label, preset.group, preset.dark
+        )
+        .expect("writing to a String");
+    }
+    generated.push_str("];\n");
+
+    let out = Path::new(&env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("themes.rs");
+    fs::write(&out, generated).expect("the generated theme table must be writable");
+}

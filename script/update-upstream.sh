@@ -116,9 +116,13 @@ update_pair() {
   cargo update -p gpui-base --precise "$component_rev"
   cargo update -p gpui --precise "$zed_rev"
   check_local_pair >/dev/null
+
+  # The vendored theme pack has to track the pin it was copied from.
+  node script/vendor-themes.mjs
+
   cargo check --workspace
 
-  printf 'updated Cargo.toml and Cargo.lock; review the changes before committing\n'
+  printf 'updated Cargo.toml, Cargo.lock, and themes/upstream; review the changes before committing\n'
 }
 
 main() {

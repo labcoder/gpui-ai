@@ -34,42 +34,25 @@ actions!(
 const PAGE_FRACTION: f32 = 3.0;
 use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
-const CONTRAST_THEME: &str = r##"{
-  "name": "gpui-ai gallery themes",
-  "themes": [{
-    "name": "gpui-ai Contrast",
-    "mode": "dark",
-    "radius": 8,
-    "radius.lg": 12,
-    "shadow": true,
-    "colors": {
-      "background": "#050505",
-      "foreground": "#ffffff",
-      "border": "#525252",
-      "ring": "#facc15",
-      "primary": "#facc15",
-      "primary.foreground": "#171717",
-      "secondary": "#262626",
-      "secondary.foreground": "#ffffff",
-      "muted": "#262626",
-      "muted.foreground": "#d4d4d4",
-      "accent.background": "#404040",
-      "accent.foreground": "#ffffff",
-      "danger": "#fb7185",
-      "danger.foreground": "#171717",
-      "info": "#67e8f9",
-      "success": "#86efac",
-      "warning": "#fde047"
-    }
-  }]
-}"##;
+/// One preset in the generated theme table.
+///
+/// The table is produced by `build.rs` from the `themes/` directory, so adding
+/// a JSON file there adds a preset with no Rust change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GalleryThemeEntry {
+    slug: &'static str,
+    label: &'static str,
+    /// The name the theme registers under, or `None` for gpui-component's own
+    /// default light and dark themes.
+    registry_name: Option<&'static str>,
+    group: &'static str,
+    dark: bool,
+}
 
-const CONTRAST_THEME_NAME: &str = "gpui-ai Contrast";
+include!(concat!(env!("OUT_DIR"), "/themes.rs"));
 
-/// Curated showcase themes, embedded as the same JSON the website shares.
-/// Keeping this file in-repo means the downloadable theme pack and the
-/// gallery demo can never drift apart.
-const SHOWCASE_THEMES_JSON: &str = include_str!("../themes/showcase-themes.json");
+/// The group name for presets that ship with gpui-ai.
+pub const GPUI_AI_THEME_GROUP: &str = "gpui-ai";
 
 fn story_list_frame() -> Stateful<Div> {
     div()
@@ -1645,91 +1628,99 @@ impl Render for SelectionActionsStory {
     }
 }
 
-/// Theme presets available to native and web gallery hosts.
+/// A theme preset available to native and web gallery hosts.
+///
+/// The set is whatever `themes/` holds — gpui-component's default Light and
+/// Dark, gpui-ai's own JSON themes, and the vendored upstream pack — so adding
+/// a file adds a preset without touching this type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GalleryTheme {
-    /// The default light theme from gpui-component.
-    Light,
-    /// The default dark theme from gpui-component.
-    Dark,
-    /// The bundled high-contrast review theme.
-    Contrast,
-    /// Deep violet-on-ink showcase theme.
-    MidnightViolet,
-    /// Muted Nordic blue-grey showcase theme.
-    NordFrost,
-    /// Warm ember-and-charcoal showcase theme.
-    EmberDusk,
-    /// Warm paper-white teal-accent light showcase theme.
-    PaperLight,
-}
+pub struct GalleryTheme(usize);
 
 impl GalleryTheme {
-    fn next(self) -> Self {
-        match self {
-            Self::Light => Self::Dark,
-            Self::Dark => Self::Contrast,
-            Self::Contrast => Self::MidnightViolet,
-            Self::MidnightViolet => Self::NordFrost,
-            Self::NordFrost => Self::EmberDusk,
-            Self::EmberDusk => Self::PaperLight,
-            Self::PaperLight => Self::Light,
-        }
+    /// gpui-component's default light theme.
+    pub const LIGHT: Self = Self(0);
+    /// gpui-component's default dark theme.
+    pub const DARK: Self = Self(1);
+
+    /// Every preset, in table order: Light, Dark, gpui-ai's themes, then the
+    /// credited upstream pack.
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        (0..BUNDLED_PRESETS.len()).map(Self)
     }
 
-    fn label(self) -> &'static str {
-        match self {
-            Self::Light => "Light",
-            Self::Dark => "Dark",
-            Self::Contrast => "Contrast",
-            Self::MidnightViolet => "Midnight Violet",
-            Self::NordFrost => "Nord Frost",
-            Self::EmberDusk => "Ember Dusk",
-            Self::PaperLight => "Paper Light",
-        }
+    /// Resolves the slug used in `?theme=` URLs and the theme picker.
+    pub fn from_slug(slug: &str) -> Option<Self> {
+        BUNDLED_PRESETS
+            .iter()
+            .position(|entry| entry.slug == slug)
+            .map(Self)
     }
 
-    /// The registered registry name for this preset, if it is a bundled
-    /// JSON theme rather than an upstream default.
+    fn entry(self) -> &'static GalleryThemeEntry {
+        &BUNDLED_PRESETS[self.0]
+    }
+
+    /// The stable slug for this preset.
+    pub fn slug(self) -> &'static str {
+        self.entry().slug
+    }
+
+    /// The label shown on the theme control.
+    pub fn label(self) -> &'static str {
+        self.entry().label
+    }
+
+    /// Which group the preset belongs to: gpui-ai's own set, or the vendored
+    /// gpui-component pack that the site credits separately.
+    pub fn group(self) -> &'static str {
+        self.entry().group
+    }
+
+    /// Whether the preset asks for dark mode.
+    pub fn is_dark(self) -> bool {
+        self.entry().dark
+    }
+
+    /// The name this preset registers under, or `None` for gpui-component's
+    /// own defaults, which come from the registry's default theme per mode.
     fn registry_name(self) -> Option<&'static str> {
-        match self {
-            Self::Light | Self::Dark => None,
-            Self::Contrast => Some(CONTRAST_THEME_NAME),
-            Self::MidnightViolet => Some("Midnight Violet"),
-            Self::NordFrost => Some("Nord Frost"),
-            Self::EmberDusk => Some("Ember Dusk"),
-            Self::PaperLight => Some("Paper Light"),
+        self.entry().registry_name
+    }
+
+    /// The next preset in the review cycle.
+    ///
+    /// The cycle covers gpui-ai's own presets only. The upstream pack stays
+    /// reachable by slug and in the site's grouped picker, because stepping a
+    /// button through forty-odd themes is not a review workflow.
+    fn next(self) -> Self {
+        let count = BUNDLED_PRESETS.len();
+        let mut index = self.0;
+        for _ in 0..count {
+            index = (index + 1) % count;
+            if BUNDLED_PRESETS[index].group == GPUI_AI_THEME_GROUP {
+                return Self(index);
+            }
         }
+        Self::LIGHT
     }
 }
 
 /// Applies a complete gallery preset, including its registered token configuration.
 pub fn apply_gallery_theme(preset: GalleryTheme, window: Option<&mut Window>, cx: &mut App) {
-    let (mode, config) = match preset {
-        GalleryTheme::Light => (
-            ThemeMode::Light,
-            ThemeRegistry::global(cx).default_light_theme().clone(),
-        ),
-        GalleryTheme::Dark => (
-            ThemeMode::Dark,
-            ThemeRegistry::global(cx).default_dark_theme().clone(),
-        ),
-        other => {
-            let Some(name) = other.registry_name() else {
-                return;
-            };
-            let Some(config) = ThemeRegistry::global(cx).themes().get(name).cloned() else {
-                return;
-            };
-            (
-                if config.mode == ThemeMode::Light {
-                    ThemeMode::Light
-                } else {
-                    ThemeMode::Dark
-                },
-                config,
-            )
-        }
+    let registry = ThemeRegistry::global(cx);
+    let config = match preset.registry_name() {
+        None if preset.is_dark() => registry.default_dark_theme().clone(),
+        None => registry.default_light_theme().clone(),
+        Some(name) => match registry.themes().get(name) {
+            Some(config) => config.clone(),
+            None => return,
+        },
+    };
+
+    let mode = if preset.is_dark() {
+        ThemeMode::Dark
+    } else {
+        ThemeMode::Light
     };
 
     let theme = Theme::global_mut(cx);
@@ -3463,9 +3454,9 @@ impl Gallery {
             last_queue_event: None,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
-                    GalleryTheme::Dark
+                    GalleryTheme::DARK
                 } else {
-                    GalleryTheme::Light
+                    GalleryTheme::LIGHT
                 }
             }),
             autoscroll: None,
@@ -5411,13 +5402,14 @@ impl Render for Gallery {
 /// Initializes the component and theme globals used by every gallery host.
 pub fn init(cx: &mut App) {
     gpui_ai::init(cx);
-    ThemeRegistry::global_mut(cx)
-        .load_themes_from_str(CONTRAST_THEME)
-        .expect("embedded gallery theme must be valid");
-    // Showcase themes share the website's downloadable theme pack.
-    ThemeRegistry::global_mut(cx)
-        .load_themes_from_str(SHOWCASE_THEMES_JSON)
-        .expect("embedded showcase themes must be valid");
+    // Every pack under themes/ — gpui-ai's own presets and the vendored
+    // upstream set — is embedded by build.rs and registered here, so the
+    // picker and the website's downloadable themes cannot drift apart.
+    for pack in BUNDLED_THEME_FILES {
+        ThemeRegistry::global_mut(cx)
+            .load_themes_from_str(pack)
+            .expect("bundled theme packs must be valid JSON");
+    }
     cx.bind_keys([
         KeyBinding::new("pageup", PageUp, Some("gallery-scroll")),
         KeyBinding::new("pagedown", PageDown, Some("gallery-scroll")),
@@ -5516,24 +5508,62 @@ mod tests {
     }
 
     #[test]
-    fn gallery_theme_cycle_covers_all_review_presets() {
-        let expected: [GalleryTheme; 7] = [
-            GalleryTheme::Light,
-            GalleryTheme::Dark,
-            GalleryTheme::Contrast,
-            GalleryTheme::MidnightViolet,
-            GalleryTheme::NordFrost,
-            GalleryTheme::EmberDusk,
-            GalleryTheme::PaperLight,
-        ];
-        for pair in expected.windows(2) {
-            assert_eq!(pair[0].next(), pair[1]);
+    fn the_theme_table_starts_with_the_built_in_light_and_dark_presets() {
+        assert_eq!(GalleryTheme::LIGHT.slug(), "light");
+        assert!(!GalleryTheme::LIGHT.is_dark());
+        assert_eq!(GalleryTheme::DARK.slug(), "dark");
+        assert!(GalleryTheme::DARK.is_dark());
+    }
+
+    #[test]
+    fn every_bundled_theme_file_contributes_presets_with_unique_slugs() {
+        let mut slugs: Vec<&str> = GalleryTheme::all().map(GalleryTheme::slug).collect();
+        let total = slugs.len();
+        slugs.sort_unstable();
+        slugs.dedup();
+        assert_eq!(slugs.len(), total, "theme slugs must be unique");
+
+        // The directory drives the table: gpui-ai's own presets and the
+        // vendored upstream pack both have to be present.
+        assert!(GalleryTheme::from_slug("graphite").is_some());
+        assert!(GalleryTheme::from_slug("solstice").is_some());
+        assert!(
+            GalleryTheme::all().any(|theme| theme.group() == "gpui-component"),
+            "the vendored upstream pack must reach the picker"
+        );
+        assert!(!super::BUNDLED_THEME_FILES.is_empty());
+    }
+
+    #[test]
+    fn the_review_cycle_visits_every_gpui_ai_preset_and_closes() {
+        let expected: Vec<GalleryTheme> = GalleryTheme::all()
+            .filter(|theme| theme.group() == super::GPUI_AI_THEME_GROUP)
+            .collect();
+        assert!(expected.len() >= 3, "Light, Dark, and Contrast at minimum");
+
+        let mut visited = Vec::new();
+        let mut theme = GalleryTheme::LIGHT;
+        for _ in 0..expected.len() {
+            theme = theme.next();
+            visited.push(theme);
         }
-        // The cycle closes.
+        visited.sort_unstable_by_key(|theme| theme.slug());
+
+        let mut wanted = expected.clone();
+        wanted.sort_unstable_by_key(|theme| theme.slug());
+        assert_eq!(visited, wanted, "the cycle must visit each preset once");
+        assert_eq!(theme, GalleryTheme::LIGHT, "the cycle must close");
+    }
+
+    #[test]
+    fn the_review_cycle_skips_the_vendored_upstream_pack() {
+        let upstream = GalleryTheme::all()
+            .find(|theme| theme.group() == "gpui-component")
+            .expect("the upstream pack must be vendored");
         assert_eq!(
-            expected[expected.len() - 1].next(),
-            expected[0],
-            "the theme cycle must return to Light"
+            upstream.next().group(),
+            super::GPUI_AI_THEME_GROUP,
+            "stepping out of the upstream pack returns to the review cycle"
         );
     }
 
@@ -5541,11 +5571,19 @@ mod tests {
     fn contrast_theme_installs_the_contrast_registry_config(cx: &mut TestAppContext) {
         cx.update(super::init);
         cx.update(|cx| {
-            super::apply_gallery_theme(GalleryTheme::Contrast, None, cx);
-            assert_eq!(
-                cx.theme().dark_theme.name.as_ref(),
-                super::CONTRAST_THEME_NAME
-            );
+            let contrast = GalleryTheme::from_slug("contrast").expect("contrast is bundled");
+            super::apply_gallery_theme(contrast, None, cx);
+            assert_eq!(cx.theme().dark_theme.name.as_ref(), "gpui-ai Contrast");
+        });
+    }
+
+    #[gpui::test]
+    fn a_vendored_upstream_theme_applies_from_the_registry(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        cx.update(|cx| {
+            let tokyo = GalleryTheme::from_slug("tokyo-night").expect("upstream pack is vendored");
+            super::apply_gallery_theme(tokyo, None, cx);
+            assert_eq!(cx.theme().dark_theme.name.as_ref(), "Tokyo Night");
         });
     }
 

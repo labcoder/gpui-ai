@@ -19,14 +19,10 @@ fn parse_story(story: Option<String>) -> Result<StoryId, StoryLookupError> {
 
 fn parse_theme(theme: Option<String>) -> Result<GalleryTheme, String> {
     match theme.as_deref() {
-        Some("dark") => Ok(GalleryTheme::Dark),
-        Some("contrast") => Ok(GalleryTheme::Contrast),
-        Some("midnight-violet") => Ok(GalleryTheme::MidnightViolet),
-        Some("nord-frost") => Ok(GalleryTheme::NordFrost),
-        Some("ember-dusk") => Ok(GalleryTheme::EmberDusk),
-        Some("paper-light") => Ok(GalleryTheme::PaperLight),
-        Some("light") | None => Ok(GalleryTheme::Light),
-        Some(theme) => Err(format!("unknown gallery theme: {theme}")),
+        None => Ok(GalleryTheme::LIGHT),
+        Some(slug) => {
+            GalleryTheme::from_slug(slug).ok_or_else(|| format!("unknown gallery theme: {slug}"))
+        }
     }
 }
 
@@ -90,17 +86,7 @@ pub fn set_gallery_theme(theme: String) -> Result<bool, JsValue> {
 /// Returns the theme preset most recently applied by the running Rust gallery.
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub fn gallery_theme() -> Option<String> {
-    ACTIVE_THEME.with(|active| {
-        active.get().map(|theme| match theme {
-            GalleryTheme::Light => "light".to_owned(),
-            GalleryTheme::Dark => "dark".to_owned(),
-            GalleryTheme::Contrast => "contrast".to_owned(),
-            GalleryTheme::MidnightViolet => "midnight-violet".to_owned(),
-            GalleryTheme::NordFrost => "nord-frost".to_owned(),
-            GalleryTheme::EmberDusk => "ember-dusk".to_owned(),
-            GalleryTheme::PaperLight => "paper-light".to_owned(),
-        })
-    })
+    ACTIVE_THEME.with(|active| active.get().map(|theme| theme.slug().to_owned()))
 }
 
 /// Starts the gallery for an optional story slug.
@@ -132,10 +118,10 @@ pub fn run(
 
     let launch = move |cx: &mut App| {
         gallery::init(cx);
-        let mode = if theme == GalleryTheme::Light {
-            ThemeMode::Light
-        } else {
+        let mode = if theme.is_dark() {
             ThemeMode::Dark
+        } else {
+            ThemeMode::Light
         };
         apply_theme(mode, cx);
         let gallery = gallery::open_gallery_with_theme(selected, theme, cx);
@@ -157,7 +143,7 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::{gallery_theme, parse_story, parse_theme, set_gallery_theme};
-    use gallery::{GalleryTheme, StoryId};
+    use gallery::StoryId;
 
     #[test]
     fn missing_story_selects_the_catalog() {
@@ -180,10 +166,16 @@ mod tests {
 
     #[test]
     fn contrast_theme_selects_the_review_preset() {
-        assert_eq!(
-            parse_theme(Some("contrast".to_owned())),
-            Ok(GalleryTheme::Contrast)
-        );
+        let preset = parse_theme(Some("contrast".to_owned())).expect("contrast must resolve");
+        assert_eq!(preset.slug(), "contrast");
+        assert!(preset.is_dark());
+    }
+
+    #[test]
+    fn a_vendored_upstream_theme_resolves_by_slug() {
+        let preset =
+            parse_theme(Some("tokyo-night".to_owned())).expect("the upstream pack must resolve");
+        assert_eq!(preset.group(), "gpui-component");
     }
 
     #[test]

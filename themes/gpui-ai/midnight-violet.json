@@ -1,0 +1,42 @@
+{
+  "name": "Midnight Violet",
+  "themes": [
+    {
+      "name": "Midnight Violet",
+      "mode": "dark",
+      "radius": 10,
+      "radius.lg": 14,
+      "shadow": true,
+      "colors": {
+        "background": "#0d0b14",
+        "foreground": "#ece9f4",
+        "border": "#2b2540",
+        "input.border": "#352e4d",
+        "ring": "#a78bfa",
+        "primary.background": "#8b5cf6",
+        "primary.foreground": "#ffffff",
+        "primary.hover.background": "#7c3aed",
+        "secondary.background": "#1c1830",
+        "secondary.foreground": "#cfc9e6",
+        "muted.background": "#1a1626",
+        "muted.foreground": "#8f88ab",
+        "accent.background": "#241e3a",
+        "accent.foreground": "#ece9f4",
+        "popover.background": "#151221",
+        "popover.foreground": "#ece9f4",
+        "sidebar.background": "#090711",
+        "sidebar.border": "#211c33",
+        "danger.background": "#f43f5e",
+        "danger.foreground": "#ffffff",
+        "info.background": "#38bdf8",
+        "success.background": "#34d399",
+        "warning.background": "#fbbf24",
+        "chart_1": "#a78bfa",
+        "chart_2": "#f472b6",
+        "chart_3": "#38bdf8",
+        "chart_4": "#34d399",
+        "chart_5": "#fbbf24"
+      }
+    }
+  ]
+}

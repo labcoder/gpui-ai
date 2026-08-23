@@ -26,7 +26,7 @@ cd gpui-ai
 cargo run -p gallery        # or: npm run dev
 ```
 
-A native window opens showing all components with live simulated agent activity and a theme switcher (Light · Dark · Contrast · Midnight Violet · Nord Frost · Ember Dusk · Paper Light). Use `npm run prod` for the optimized build.
+A native window opens showing all components with live simulated agent activity and a theme switcher that cycles the gpui-ai presets (Light · Dark · Contrast · Midnight Violet · Nord Frost · Ember Dusk · Paper Light · Graphite · Solstice). Use `npm run prod` for the optimized build.
 
 ## Installation
 
@@ -190,7 +190,7 @@ ThemeRegistry::global_mut(cx)
     .load_themes_from_str(MY_THEME_JSON)?;
 ```
 
-The gallery ships seven presets you can use as starting points — including four original showcase themes ([Midnight Violet](crates/gallery/themes/showcase-themes.json), Nord Frost, Ember Dusk, Paper Light). Their JSON lives in [`crates/gallery/themes/`](crates/gallery/themes/showcase-themes.json) and is downloadable from the website.
+Nine gpui-ai presets ship as JSON in [`themes/gpui-ai/`](themes/gpui-ai) — Light and Dark come from gpui-component, and the rest are original: [Contrast](themes/gpui-ai/contrast.json), [Midnight Violet](themes/gpui-ai/midnight-violet.json), [Nord Frost](themes/gpui-ai/nord-frost.json), [Ember Dusk](themes/gpui-ai/ember-dusk.json), [Paper Light](themes/gpui-ai/paper-light.json), [Graphite](themes/gpui-ai/graphite.json), and [Solstice](themes/gpui-ai/solstice.json). Dropping another file in that directory adds it to the gallery with no code change. The gallery also registers gpui-component's own [vendored pack](themes/upstream) of 36 themes, credited under Apache-2.0.
 
 ## Contributing
 

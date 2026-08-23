@@ -113,7 +113,7 @@ fn main() {
         .run(move |cx| {
             init(cx);
             set_trace_enabled(true);
-            let gallery = open_gallery_with_theme(StoryId::All, GalleryTheme::Dark, cx);
+            let gallery = open_gallery_with_theme(StoryId::All, GalleryTheme::DARK, cx);
             let task = cx.spawn(async move |cx| {
                 run_performance_measurement(gallery, task_exit_code, cx).await;
             });

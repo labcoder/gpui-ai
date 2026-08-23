@@ -30,11 +30,23 @@ test('omits empty story and lets system theme decide', () => {
   });
 });
 
-test('accepts all named live theme messages and rejects legacy noise', () => {
+test('parses a bundled theme the host has no list for', () => {
+  // themes/ drives the registry, so the host must not gatekeep names.
+  assert.deepEqual(parseEmbedOptions('?story=approval&theme=graphite'), {
+    story: 'approval',
+    theme: 'graphite',
+  });
+});
+
+test('accepts any well-formed theme name and rejects malformed ones', () => {
   assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'light' }), 'light');
   assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'dark' }), 'dark');
   assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'contrast' }), 'contrast');
-  assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'neon' }), undefined);
+  assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'tokyo-night' }), 'tokyo-night');
+  // The gallery rejects names it does not know; the host only checks shape.
+  assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'Neon!' }), undefined);
+  assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: '-leading-dash' }), undefined);
+  assert.equal(parseThemeMessage({ type: 'gpui-ai-theme', theme: 'system' }), undefined);
   assert.equal(parseThemeMessage({ type: 'other', theme: 'dark' }), undefined);
 });
 

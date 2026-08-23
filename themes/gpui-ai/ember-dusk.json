@@ -1,0 +1,42 @@
+{
+  "name": "Ember Dusk",
+  "themes": [
+    {
+      "name": "Ember Dusk",
+      "mode": "dark",
+      "radius": 12,
+      "radius.lg": 16,
+      "shadow": true,
+      "colors": {
+        "background": "#141210",
+        "foreground": "#f2ede6",
+        "border": "#302a24",
+        "input.border": "#3b342c",
+        "ring": "#fb923c",
+        "primary.background": "#ea580c",
+        "primary.foreground": "#fff7ed",
+        "primary.hover.background": "#c2410c",
+        "secondary.background": "#241f19",
+        "secondary.foreground": "#ddd3c4",
+        "muted.background": "#201c17",
+        "muted.foreground": "#9c917f",
+        "accent.background": "#2b251d",
+        "accent.foreground": "#f2ede6",
+        "popover.background": "#1a1712",
+        "popover.foreground": "#f2ede6",
+        "sidebar.background": "#100e0c",
+        "sidebar.border": "#262019",
+        "danger.background": "#ef4444",
+        "danger.foreground": "#fff7ed",
+        "info.background": "#e8b04b",
+        "success.background": "#84cc16",
+        "warning.background": "#facc15",
+        "chart_1": "#fb923c",
+        "chart_2": "#f59e0b",
+        "chart_3": "#dc2626",
+        "chart_4": "#a3a635",
+        "chart_5": "#fde68a"
+      }
+    }
+  ]
+}

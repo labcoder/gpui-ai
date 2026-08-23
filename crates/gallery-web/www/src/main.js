@@ -25,6 +25,18 @@ function showFallback(error, expected = false) {
   }
 }
 
+// Only the basic presets have a mode the host knows without asking. Every
+// other theme's mode lives in the registry, so until the host is told, keep
+// the page chrome on the viewer's own preference rather than guessing dark:
+// the demo canvas paints itself from the real theme either way.
+const HOST_MODES = Object.freeze({ light: false, dark: true, contrast: true });
+
+function hostPrefersDark(theme) {
+  const known = HOST_MODES[theme];
+  if (known !== undefined) return known;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 function watchTheme(initialTheme) {
   let theme;
   let wasm;
@@ -33,7 +45,17 @@ function watchTheme(initialTheme) {
     if (!wasm || syncScheduled) return;
     syncScheduled = true;
     const attempt = () => {
-      if (wasm.set_gallery_theme(theme)) {
+      let applied = false;
+      try {
+        applied = wasm.set_gallery_theme(theme);
+      } catch (error) {
+        // The gallery is the authority on theme names; a name it rejects is
+        // host input, not a crash.
+        console.warn('gpui-ai: ignoring unknown theme', theme, error);
+        syncScheduled = false;
+        return;
+      }
+      if (applied) {
         syncScheduled = false;
       } else {
         window.requestAnimationFrame(attempt);
@@ -44,7 +66,7 @@ function watchTheme(initialTheme) {
   const apply = (next) => {
     if (next === theme) return;
     theme = next;
-    document.documentElement.classList.toggle('dark', theme !== 'light');
+    document.documentElement.classList.toggle('dark', hostPrefersDark(theme));
     document.documentElement.classList.toggle('contrast', theme === 'contrast');
     document.documentElement.dataset.theme = theme;
     sync();

@@ -1,0 +1,12 @@
+The JSON files in this directory are copied verbatim from gpui-component,
+which is licensed under Apache-2.0. They are vendored so the gallery and the
+website can offer the upstream theme set without a network fetch, and so a
+reviewer can see palette changes when the pinned revision moves.
+
+Source: https://github.com/longbridge/gpui-component (themes/)
+License: Apache-2.0 (see the upstream LICENSE-APACHE)
+Revision: pinned by this repository's Cargo.lock
+Regenerate: node script/vendor-themes.mjs (run by script/update-upstream.sh)
+
+Do not edit these by hand — a regeneration overwrites them. gpui-ai's own
+themes live in ../gpui-ai.
