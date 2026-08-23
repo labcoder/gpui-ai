@@ -686,8 +686,8 @@ impl Chat {
                     .id(heading_id)
                     .role(Role::Heading)
                     .aria_label(author.clone())
-                    .text_token(tokens.typography.xs)
-                    .text_color(cx.theme().muted_foreground)
+                    .text_token(tokens.typography.sm)
+                    .text_color(cx.theme().foreground)
                     .child(author),
             )
             .child(content)
