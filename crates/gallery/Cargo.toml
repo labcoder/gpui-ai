@@ -24,10 +24,17 @@ performance = ["gpui/profiler", "dep:windows-sys"]
 anyhow.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
-# Syntax highlighting for Markdown code fences in CodeBlock stories. Without
-# this feature upstream's TextView falls back to an inert highlighter and
-# renders fenced code as a single flat color. (json is bundled in the base
-# "tree-sitter" feature, so it needs no separate entry.)
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+gpui-ai.workspace = true
+
+# Syntax highlighting for Markdown code fences in native CodeBlock stories.
+# Upstream declares every tree-sitter dependency as native-only, so enabling
+# these features for wasm32 makes gpui-component compile code whose dependency
+# graph is intentionally absent. The browser gallery uses TextView's fallback
+# highlighter until upstream makes the language stack WASM-compatible. JSON is
+# bundled in the base `tree-sitter` feature, so it needs no separate entry.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 gpui-component = { workspace = true, features = [
     "tree-sitter-rust",
     "tree-sitter-typescript",
@@ -38,8 +45,6 @@ gpui-component = { workspace = true, features = [
     "tree-sitter-css",
     "tree-sitter-html",
 ] }
-gpui-component-assets.workspace = true
-gpui-ai.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", optional = true, features = [
