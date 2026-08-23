@@ -55,6 +55,22 @@ for (const file of files) {
   themes += (parsed.themes ?? []).length;
 }
 
+// gpui-component's own default Light and Dark live in the ui crate rather than
+// the theme pack, and several packs name their colours from its palette
+// ("blue-400") instead of writing hex. Both are needed to describe a theme
+// outside Rust, so vendor them into a subdirectory: the gallery's build script
+// only scans *.json directly under themes/, so these never become presets.
+const defaults = join(DESTINATION, "defaults");
+mkdirSync(defaults, { recursive: true });
+const uiTheme = join(dirname(component.manifest_path), "src", "theme");
+for (const file of ["default-theme.json", "default-colors.json"]) {
+  try {
+    copyFileSync(join(uiTheme, file), join(defaults, file));
+  } catch (error) {
+    fail(`could not vendor ${file} from ${uiTheme}: ${error.message}`);
+  }
+}
+
 writeFileSync(
   join(DESTINATION, "NOTICE"),
   `The JSON files in this directory are copied verbatim from gpui-component,
