@@ -11,8 +11,6 @@ revision.
 
 ## [0.1.0] - unreleased
 
-First release. The date is filled in when the `v0.1.0` tag is pushed.
-
 ### Added
 
 #### Components
