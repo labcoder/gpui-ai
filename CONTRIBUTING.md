@@ -18,6 +18,10 @@ Rust stable, edition 2024 (1.85+). `rust-toolchain.toml` pins the channel. The
 root `package.json` is a task runner with no JavaScript dependencies — the
 scripts shell out to cargo. Add new workflows there so they stay discoverable.
 
+Node 22 or newer, and CI runs 24. The site's browser test drives Chrome through
+the global `WebSocket`, which Node did not provide before 22, so an older
+runtime fails that test with a `ReferenceError` while everything else passes.
+
 For the browser gallery you also need a nightly toolchain with the
 `wasm32-unknown-unknown` target and `wasm-bindgen-cli` at the version recorded
 in `.github/workflows/ci.yml`.

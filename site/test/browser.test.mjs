@@ -203,15 +203,22 @@ async function launchBrowser(userDataDir) {
   try {
     const portFile = path.join(userDataDir, "DevToolsActivePort");
     let port;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    // Chromium creates DevToolsActivePort before it writes the port into it, so
+    // a successful read is not proof of a usable value. Keep waiting until the
+    // first line is non-empty, and allow for a cold start on a loaded machine.
+    for (let attempt = 0; attempt < 400; attempt += 1) {
       try {
-        [port] = (await readFile(portFile, "utf8")).trim().split(/\r?\n/);
-        break;
+        const [line] = (await readFile(portFile, "utf8")).trim().split(/\r?\n/);
+        if (line) {
+          port = line;
+          break;
+        }
       } catch {
-        await delay(50);
+        // The file only appears once Chromium has bound its debugging port.
       }
+      await delay(50);
     }
-    if (!port) throw new Error("Chromium DevTools port did not become ready");
+    if (!port) throw new Error("Chromium DevTools port did not become ready within 20s");
     const target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" }).then((response) => response.json());
     socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
