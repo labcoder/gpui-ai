@@ -46,6 +46,7 @@ Every window must call `gpui_component::init(cx)` before building UI, and its fi
 
 ```rust
 use gpui_ai::prelude::*;
+use gpui_component::Root;
 
 fn main() {
     gpui_platform::application().run(move |cx| {
@@ -68,6 +69,7 @@ Presentational components are fluent builders that render wherever an element fi
 
 ```rust
 use gpui_ai::prelude::*;
+use gpui_component::v_flex;
 
 v_flex()
     .gap_4()
@@ -118,7 +120,7 @@ chat.update(cx, |chat, cx| {
 });
 ```
 
-The full API is documented on each type — start from the [`gpui_ai` crate docs](https://docs.rs/gpui-ai) or `cargo doc --open`.
+The full API is documented on each type. Run `cargo doc --open` from a checkout to browse it while the Git-sourced dependency graph keeps the crate unpublished.
 
 ## Components
 
@@ -148,6 +150,8 @@ The full API is documented on each type — start from the [`gpui_ai` crate docs
 | `DiffTable` | entity | AI-proposed edits over tabular data |
 | `FilterTable` | entity | Status-chip filtered, reorderable table |
 | `ComparisonTable` | entity | Feature-by-plan comparison matrix |
+
+Keyboard action dispatch in the browser WASM gallery is limited by the pinned upstream GPUI revision: pointer activation works, while action-based keyboard paths such as Command Search navigation remain native-only until that upstream seam is fixed.
 
 All components style themselves through gpui-component's semantic theme tokens, so light/dark, bundled themes, custom JSON themes, and live token editing work without per-component overrides.
 

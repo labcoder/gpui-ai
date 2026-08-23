@@ -9,7 +9,7 @@ repository = "https://github.com/labcoder/gpui-ai"
 homepage = "https://labcoder.github.io/gpui-ai/"
 keywords = ["gpui", "ui", "ai", "components", "desktop"]
 categories = ["gui"]
-readme = "../README.md"
+readme = "../../README.md"
 
 [dependencies]
 gpui.workspace = true
