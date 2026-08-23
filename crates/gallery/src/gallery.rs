@@ -11,6 +11,8 @@ use gpui::*;
 use gpui::{Image, ImageFormat};
 use gpui_ai::cues::{self, Cue, CueSubscription};
 use gpui_ai::prelude::*;
+use gpui_component::Sizable as _;
+use gpui_component::resizable::{ResizableState, h_resizable, resizable_panel};
 use gpui_component::{
     ActiveTheme as _, IconName, Root, StyledExt as _,
     button::{Button, ButtonVariants as _},
@@ -203,6 +205,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::All
         | StoryId::Suggestions
         | StoryId::Attachments
+        | StoryId::Artifact
         | StoryId::CodeDiff
         | StoryId::Plan
         | StoryId::ContextMeter
@@ -632,6 +635,22 @@ fn demo_attachment_states() -> Vec<Attachment> {
 
 /// A small agent-proposed patch for the code diff story.
 const DEMO_PATCH: &str = "--- a/src/pricing.rs\n+++ b/src/pricing.rs\n@@ -12,7 +12,9 @@ impl Quote {\n     pub fn unit_price(&self) -> Money {\n-        self.total / self.units\n+        // Guard against empty orders reported by the catalog sync.\n+        let units = self.units.max(1);\n+        self.total / units\n     }\n \n     pub fn discount(&self) -> f32 {\n@@ -31,4 +33,4 @@ impl Quote {\n     fn volume_tier(&self) -> Tier {\n-        if self.units > 500 { Tier::Wholesale } else { Tier::Retail }\n+        if self.units >= 500 { Tier::Wholesale } else { Tier::Retail }\n     }\n }\n";
+
+/// Three versions of the generated comparison; the last is still streaming.
+const ARTIFACT_VERSIONS: &[(&str, &str)] = &[
+    (
+        "v1",
+        "# Supplier comparison\n\n| Supplier | Unit price | Delivery |\n| --- | --- | --- |\n| Alpenrose Dairy | $4.12 | 2 days |\n| Tillamook County Creamery | $4.43 | 3 days |\n| Cascade Cultured Foods | $4.37 | 4 days |\n\nAlpenrose is cheapest at the current volume.",
+    ),
+    (
+        "v2",
+        "# Supplier comparison\n\n| Supplier | Unit price | Delivery | Risk |\n| --- | --- | --- | --- |\n| Alpenrose Dairy | $4.12 | 2 days | Low |\n| Tillamook County Creamery | $4.43 | 3 days | Low |\n| Cascade Cultured Foods | $4.37 | 4 days | Medium |\n\n## Recommendation\n\nSwitch bulk orders to **Alpenrose Dairy**: 7% lower unit cost with the shortest delivery window and no change in cold-chain risk.",
+    ),
+    (
+        "v3",
+        "# Supplier comparison\n\n| Supplier | Unit price | Delivery | Risk |\n| --- | --- | --- | --- |\n| Alpenrose Dairy | $4.12 | 2 days | Low |\n| Tillamook County Creamery | $4.43 | 3 days | Low |\n| Cascade Cultured Foods | $4.37 | 4 days | Medium |\n\n## Recommendation\n\nSwitch bulk orders to **Alpenrose Dairy**.\n\n## Next steps\n\n1. Confirm the wholesale tier at 500 units.\n2. Draft the revised order",
+    ),
+];
 
 fn demo_thread_sections() -> Vec<ThreadSection> {
     vec![
@@ -3328,6 +3347,11 @@ pub struct Gallery {
     last_approval_event: Option<SharedString>,
     plan_state: PlanState,
     last_plan_event: Option<SharedString>,
+    artifact_view: ArtifactView,
+    artifact_version: usize,
+    artifact_open: bool,
+    last_artifact_event: Option<SharedString>,
+    artifact_split: Entity<ResizableState>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -3403,6 +3427,11 @@ impl Gallery {
             last_approval_event: None,
             plan_state: PlanState::Proposed,
             last_plan_event: None,
+            artifact_view: ArtifactView::Preview,
+            artifact_version: 1,
+            artifact_open: true,
+            last_artifact_event: None,
+            artifact_split: cx.new(|_| ResizableState::default()),
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -4282,6 +4311,128 @@ impl Gallery {
                             TextView::markdown(
                                 "attachments-reference-note",
                                 "**Reference comparison.** AI Elements and assistant-ui render attachments as image thumbnails or file chips inside the composer and again inside the sent message. gpui-ai uses one `Attachment` value for both: the same ID, kind glyph, size, and thumbnail travel from the composer into the message, upload state is typed (`ProgressState`) rather than a boolean, every tile has an accessible name that reads the file name and its summary, and remove or open intent is reported by stable ID so the application owns bytes, uploads, and previews.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Artifact => self.section(
+                story,
+                "Artifact panel",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let status: SharedString = self
+                        .last_artifact_event
+                        .clone()
+                        .unwrap_or_else(|| "Switch views or versions, run an action, or close the panel".into());
+                    let version = self.artifact_version.min(ARTIFACT_VERSIONS.len() - 1);
+                    let (version_id, source) = ARTIFACT_VERSIONS[version];
+                    let artifact = Artifact::new("comparison", "Supplier comparison", if version + 1 == ARTIFACT_VERSIONS.len() {
+                        StreamedContent::running(source.to_owned())
+                    } else {
+                        StreamedContent::done(source)
+                    })
+                    .kind(ArtifactKind::Markdown)
+                    .versions(ARTIFACT_VERSIONS.iter().enumerate().map(|(index, (id, _))| {
+                        ArtifactVersion::new(*id, format!("v{}", index + 1))
+                    }))
+                    .active_version(version_id);
+                    let conversation = v_flex()
+                        .size_full()
+                        .gap(tokens.spacing.sm)
+                        .p(tokens.spacing.md)
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Conversation"),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "artifact-conversation",
+                                "**User:** Compare the three suppliers for next month.\n\n**Agent:** I drafted a comparison as a document on the right; v3 is still being written.",
+                            )
+                            .selectable(true),
+                        )
+                        .when(!self.artifact_open, |this| {
+                            this.child(
+                                Button::new("artifact-reopen")
+                                    .outline()
+                                    .small()
+                                    .label("Reopen artifact")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.artifact_open = true;
+                                        this.last_artifact_event = Some("Reopened".into());
+                                        cx.notify();
+                                    })),
+                            )
+                        });
+                    let panel = ArtifactPanel::new("artifact-panel", &artifact)
+                        .view(self.artifact_view)
+                        .actions([
+                            ArtifactAction::new("open", "Open in editor"),
+                            ArtifactAction::new("export", "Export"),
+                        ])
+                        .on_event(cx.listener(|this, event: &ArtifactPanelEvent, _, cx| {
+                            match event {
+                                ArtifactPanelEvent::Closed { .. } => this.artifact_open = false,
+                                ArtifactPanelEvent::ViewSelected { view, .. } => {
+                                    this.artifact_view = *view;
+                                }
+                                ArtifactPanelEvent::VersionSelected { version_id, .. } => {
+                                    if let Some(index) = ARTIFACT_VERSIONS
+                                        .iter()
+                                        .position(|(id, _)| *id == version_id.as_ref())
+                                    {
+                                        this.artifact_version = index;
+                                    }
+                                }
+                                ArtifactPanelEvent::ActionActivated { .. } => {}
+                            }
+                            this.last_artifact_event = Some(format!("{event:?}").into());
+                            cx.notify();
+                        }));
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            div()
+                                .id("artifact-story-host")
+                                .h(px(440.))
+                                .w_full()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(tokens.radius.lg)
+                                .overflow_hidden()
+                                .child(
+                                    h_resizable("artifact-split")
+                                        .with_state(&self.artifact_split)
+                                        .child(
+                                            resizable_panel()
+                                                .size(px(220.))
+                                                .size_range(px(160.)..px(360.))
+                                                .child(conversation),
+                                        )
+                                        .child(
+                                            resizable_panel()
+                                                .visible(self.artifact_open)
+                                                .child(div().size_full().p(tokens.spacing.sm).child(panel)),
+                                        ),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("artifact-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "artifact-reference-note",
+                                "**Reference comparison.** Claude's Artifacts and ChatGPT's Canvas open generated documents beside the chat with a preview / code switch and version history. gpui-ai's panel carries the source as streamed content (so it renders while the agent writes), picks the preview from the artifact kind, keeps versions and actions typed by stable ID, and leaves width and docking to the application — here the upstream resizable group.",
                             )
                             .selectable(true),
                         )

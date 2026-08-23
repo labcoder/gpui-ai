@@ -20,6 +20,7 @@
 #![deny(missing_docs)]
 
 pub mod approval;
+pub mod artifact;
 pub mod attachment;
 pub mod chat;
 pub mod chip;
@@ -62,6 +63,10 @@ pub mod tool_call;
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
     pub use crate::approval::{ApprovalCard, ApprovalDecision, ApprovalEvent, ApprovalTone};
+    pub use crate::artifact::{
+        Artifact, ArtifactAction, ArtifactKind, ArtifactPanel, ArtifactPanelEvent, ArtifactVersion,
+        ArtifactView,
+    };
     pub use crate::attachment::{
         Attachment, AttachmentEvent, AttachmentKind, AttachmentPreview, AttachmentStrip,
         format_bytes,

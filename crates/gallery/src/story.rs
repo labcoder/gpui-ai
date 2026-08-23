@@ -33,6 +33,8 @@ pub enum StoryId {
     Suggestions,
     /// Composer and message attachment previews.
     Attachments,
+    /// Generated document or code beside the conversation.
+    Artifact,
     /// Context-window usage meter.
     ContextMeter,
     /// Stable-ID command palette.
@@ -87,6 +89,7 @@ impl StoryId {
         Self::Chat,
         Self::Suggestions,
         Self::Attachments,
+        Self::Artifact,
         Self::ContextMeter,
         Self::CommandSearch,
         Self::SidebarNav,
@@ -124,6 +127,7 @@ impl StoryId {
             Self::Chat => "chat",
             Self::Suggestions => "suggestions",
             Self::Attachments => "attachments",
+            Self::Artifact => "artifact",
             Self::ContextMeter => "context-meter",
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
@@ -162,6 +166,7 @@ impl StoryId {
             Self::Chat => "Chat",
             Self::Suggestions => "Suggestions",
             Self::Attachments => "Attachment previews",
+            Self::Artifact => "Artifact panel",
             Self::ContextMeter => "Context meter",
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
