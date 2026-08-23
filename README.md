@@ -184,6 +184,8 @@ The gallery ships seven presets you can use as starting points — including fou
 
 Read [AGENTS.md](AGENTS.md) for architecture rules, verification commands, and the definition of done, then open a PR. `npm run check` must pass before review.
 
+What changed in each version is recorded in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
