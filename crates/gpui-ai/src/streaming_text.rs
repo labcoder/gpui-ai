@@ -2,23 +2,33 @@
 
 use crate::stream::{ProgressState, StreamedContent};
 use crate::theme::SemanticStyledExt as _;
-use crate::{control::outlined_control, handlers::SharedHandler};
+use crate::{
+    control::{composed_button, outlined_control},
+    handlers::SharedHandler,
+};
 use gpui::{
-    App, Axis, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, Axis, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, Role, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, scroll::ScrollableMask,
-    text::TextView, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, hover_card::HoverCard,
+    scroll::ScrollableMask, text::TextView, v_flex,
 };
 use std::rc::Rc;
 
 /// A source backing a streamed answer, shown as a chip under the text.
-#[derive(Debug, Clone)]
+///
+/// A source with a URL becomes an activatable chip that reports
+/// [`StreamingTextEvent::SourceActivated`]; its domain initial doubles as a
+/// favicon-style badge so a row of sources scans at a glance.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceRef {
+    id: SharedString,
     title: SharedString,
+    url: Option<SharedString>,
 }
 
 /// A stable follow-up suggestion shown after an answer settles.
@@ -112,6 +122,13 @@ pub enum StreamingTextEvent {
         id: SharedString,
         /// Opaque application-owned navigation destination.
         destination: SharedString,
+    },
+    /// A source chip with a location was activated.
+    SourceActivated {
+        /// Stable source identifier.
+        id: SharedString,
+        /// The source location.
+        url: SharedString,
     },
 }
 
@@ -397,6 +414,103 @@ fn follow_up_button(
         })
 }
 
+fn citation_preview(title: SharedString, destination: SharedString, cx: &mut App) -> AnyElement {
+    let tokens = cx.theme().semantic_tokens();
+    v_flex()
+        .gap(tokens.spacing.xxs)
+        .max_w(tokens.spacing.xxl * 9.0)
+        .child(
+            div()
+                .text_token(tokens.typography.sm)
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(cx.theme().foreground)
+                .child(title),
+        )
+        .child(
+            div()
+                .text_token(tokens.typography.xs)
+                .font_family(cx.theme().mono_font_family.clone())
+                .text_color(cx.theme().muted_foreground)
+                .truncate()
+                .child(destination),
+        )
+        .into_any_element()
+}
+
+/// A source chip: favicon-style initial, title, and — with a URL and a
+/// handler — an activatable link glyph.
+fn source_chip(
+    root_id: ElementId,
+    index: usize,
+    source: SourceRef,
+    handler: Option<SharedHandler<StreamingTextEvent>>,
+    cx: &mut App,
+) -> AnyElement {
+    let tokens = cx.theme().semantic_tokens();
+    let accessibility_label = source.accessibility_label();
+    let badge = div()
+        .flex_none()
+        .size_4()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(tokens.radius.sm)
+        .bg(cx.theme().primary.opacity(0.14))
+        .text_token(tokens.typography.xs)
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(cx.theme().primary)
+        .child(source.initial());
+    let content = h_flex()
+        .items_center()
+        .gap(tokens.spacing.xs)
+        .text_token(tokens.typography.xs)
+        .text_color(cx.theme().foreground)
+        .child(badge)
+        .child(source.title.clone())
+        .when(source.url.is_some(), |this| {
+            this.child(
+                Icon::new(IconName::ExternalLink)
+                    .xsmall()
+                    .text_color(cx.theme().muted_foreground),
+            )
+        });
+    match (source.url.clone(), handler) {
+        (Some(url), Some(handler)) => {
+            let event = StreamingTextEvent::SourceActivated {
+                id: source.id.clone(),
+                url,
+            };
+            let debug_id = source.id.to_string();
+            composed_button((root_id, format!("source-{index}")), accessibility_label)
+                .debug_selector(move || format!("streaming-source-{debug_id}"))
+                .px(tokens.spacing.sm)
+                .py(tokens.spacing.xxs)
+                .bg(cx.theme().secondary)
+                .border_1()
+                .border_color(cx.theme().border)
+                .rounded(tokens.radius.full)
+                .hover(|style| style.bg(cx.theme().accent))
+                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .focus_visible(|style| style.border_color(cx.theme().ring))
+                .child(content)
+                .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                .into_any_element()
+        }
+        _ => h_flex()
+            .id((root_id, index.to_string()))
+            .role(Role::ListItem)
+            .aria_label(accessibility_label)
+            .px(tokens.spacing.sm)
+            .py(tokens.spacing.xxs)
+            .bg(cx.theme().secondary)
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(tokens.radius.full)
+            .child(content)
+            .into_any_element(),
+    }
+}
+
 struct CitationDispatcher {
     citations: Vec<CitationRef>,
     on_event: SharedHandler<StreamingTextEvent>,
@@ -416,10 +530,74 @@ impl CitationDispatcher {
 }
 
 impl SourceRef {
-    /// Creates a source chip with a display title.
+    /// Creates a source chip with a display title; the title doubles as its
+    /// stable identifier.
     pub fn new(title: impl Into<SharedString>) -> Self {
+        let title = title.into();
         Self {
+            id: title.clone(),
+            title,
+            url: None,
+        }
+    }
+
+    /// Creates a source with an explicit stable identifier.
+    pub fn with_id(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
+        Self {
+            id: id.into(),
             title: title.into(),
+            url: None,
+        }
+    }
+
+    /// Adds the source's location; the chip becomes activatable and shows
+    /// the domain's initial as its badge.
+    pub fn url(mut self, url: impl Into<SharedString>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    /// Returns the stable source identifier.
+    pub fn id(&self) -> &SharedString {
+        &self.id
+    }
+
+    /// Returns the display title.
+    pub fn title(&self) -> &SharedString {
+        &self.title
+    }
+
+    /// Returns the location, when set.
+    pub fn url_text(&self) -> Option<&SharedString> {
+        self.url.as_ref()
+    }
+
+    /// The host of the URL without a `www.` prefix, when a URL is set.
+    pub fn domain(&self) -> Option<String> {
+        let url = self.url.as_ref()?;
+        let rest = url
+            .split_once("://")
+            .map(|(_, rest)| rest)
+            .unwrap_or(url.as_ref());
+        let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+        let host = host.strip_prefix("www.").unwrap_or(host);
+        (!host.is_empty()).then(|| host.to_owned())
+    }
+
+    /// One uppercase character standing in for a favicon.
+    pub fn initial(&self) -> String {
+        self.domain()
+            .unwrap_or_else(|| self.title.to_string())
+            .chars()
+            .find(|character| character.is_alphanumeric())
+            .map(|character| character.to_uppercase().collect())
+            .unwrap_or_else(|| "•".to_owned())
+    }
+
+    fn accessibility_label(&self) -> SharedString {
+        match self.domain() {
+            Some(domain) => format!("{}, {domain}", self.title).into(),
+            None => self.title.clone(),
         }
     }
 }
@@ -632,12 +810,27 @@ impl RenderOnce for StreamingText {
                                             .gap(tokens.spacing.xs)
                                             .children(referenced_citations.into_iter().map(
                                                 |citation| {
-                                                    citation_companion_link(
+                                                    let preview_title = citation.title.clone();
+                                                    let preview_destination =
+                                                        citation.destination.clone();
+                                                    let card_id = ElementId::from((
                                                         root_id.clone(),
-                                                        citation,
-                                                        handler.clone(),
-                                                        cx,
-                                                    )
+                                                        format!("citation-card-{}", citation.id),
+                                                    ));
+                                                    HoverCard::new(card_id)
+                                                        .trigger(citation_companion_link(
+                                                            root_id.clone(),
+                                                            citation,
+                                                            handler.clone(),
+                                                            cx,
+                                                        ))
+                                                        .content(move |_, _, cx| {
+                                                            citation_preview(
+                                                                preview_title.clone(),
+                                                                preview_destination.clone(),
+                                                                cx,
+                                                            )
+                                                        })
                                                 },
                                             )),
                                     )
@@ -661,23 +854,7 @@ impl RenderOnce for StreamingText {
                         .flex_wrap()
                         .gap(tokens.spacing.xs)
                         .children(self.sources.into_iter().enumerate().map(|(ix, source)| {
-                            let accessibility_label = source.title.clone();
-                            h_flex()
-                                .id((root_id.clone(), ix.to_string()))
-                                .role(Role::ListItem)
-                                .aria_label(accessibility_label)
-                                .items_center()
-                                .gap(tokens.spacing.xs)
-                                .px(tokens.spacing.sm)
-                                .py(tokens.spacing.xxs)
-                                .text_token(tokens.typography.xs)
-                                .text_color(cx.theme().muted_foreground)
-                                .bg(cx.theme().secondary)
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded(tokens.radius.full)
-                                .child(Icon::new(IconName::File).xsmall())
-                                .child(source.title)
+                            source_chip(root_id.clone(), ix, source, on_event.clone(), cx)
                         })),
                 )
             })
@@ -734,6 +911,24 @@ mod tests {
                 *content.state()
             );
         }
+    }
+
+    #[test]
+    fn sources_derive_domains_and_initials() {
+        let web = SourceRef::new("Wholesale pricing").url("https://www.alpenrose.com/pricing?q=1");
+        assert_eq!(web.domain().as_deref(), Some("alpenrose.com"));
+        assert_eq!(web.initial(), "A");
+        assert_eq!(
+            web.accessibility_label(),
+            "Wholesale pricing, alpenrose.com"
+        );
+        let file = SourceRef::new("pricing.md");
+        assert_eq!(file.domain(), None);
+        assert_eq!(file.initial(), "P");
+        assert_eq!(file.id(), "pricing.md");
+        let custom = SourceRef::with_id("src-1", "(notes)");
+        assert_eq!(custom.initial(), "N");
+        assert_eq!(SourceRef::new("…").initial(), "•");
     }
 
     #[test]

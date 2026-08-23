@@ -316,6 +316,7 @@ impl ChatStory {
                     | ChatEvent::RetryRequested { .. }
                     | ChatEvent::FollowUpSelected { .. }
                     | ChatEvent::CitationActivated { .. }
+                    | ChatEvent::SourceActivated { .. }
                     | ChatEvent::MessageCopied { .. }
                     | ChatEvent::RegenerateRequested { .. }
                     | ChatEvent::EditRequested { .. }
@@ -3941,13 +3942,20 @@ impl Gallery {
                         .child(
                             TextView::markdown(
                                 "streaming-text-reference-note",
-                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups. gpui-ai deliberately adds stable typed citation routing and keyboard/AccessKit companion links because the pinned Markdown glyph link is pointer-only.",
+                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups; AI Elements and assistant-ui add favicon badges and a hover preview per citation. gpui-ai keeps stable typed citation routing with keyboard/AccessKit companion links (the pinned Markdown glyph link is pointer-only), previews each citation's title and destination on hover, and renders web sources as activatable chips with a domain initial in place of a favicon.",
                             )
                             .selectable(true),
                         )
                         .child(
                             StreamingText::new("answer", &self.sim.answer)
-                                .sources(["pricing.md", "suppliers.csv", "orders 2026"])
+                                .source_refs([
+                                    SourceRef::new("pricing.md"),
+                                    SourceRef::new("suppliers.csv"),
+                                    SourceRef::with_id("dairy-index", "2026 Dairy Price Index")
+                                        .url("https://dairyreport.org/index/2026"),
+                                    SourceRef::with_id("alpenrose", "Alpenrose wholesale programs")
+                                        .url("https://www.alpenrose.com/wholesale"),
+                                ])
                                 .follow_ups([
                                     FollowUp::new(
                                         "compare-delivery",

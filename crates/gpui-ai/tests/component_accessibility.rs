@@ -18,7 +18,7 @@ use gpui_ai::{
     search_results::{SearchResult, SearchResults},
     selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent},
     stream::{ProgressState, Progressive},
-    streaming_text::{CitationRef, StreamingText, StreamingTextEvent},
+    streaming_text::{CitationRef, SourceRef, StreamingText, StreamingTextEvent},
     task::{TaskRow, TaskSnapshot},
     thinking::{Thinking, ThinkingTrace},
     todo_list::{TodoItem, TodoList},
@@ -665,6 +665,61 @@ fn activate_key(cx: &mut VisualTestContext, key: &str) {
         prefer_character_input: false,
     });
     cx.simulate_event(KeyUpEvent { keystroke });
+}
+
+struct PublicSourceProbe {
+    events: Rc<RefCell<Vec<StreamingTextEvent>>>,
+}
+
+impl Render for PublicSourceProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        let events = self.events.clone();
+        div().size_full().child(
+            StreamingText::new("sourced", &Progressive::complete("Forty-two".into()))
+                .source_refs([
+                    SourceRef::new("pricing.md"),
+                    SourceRef::with_id("dairy-index", "Dairy index")
+                        .url("https://www.dairyreport.org/index"),
+                ])
+                .on_event(move |event, _, _| events.borrow_mut().push(event.clone())),
+        )
+    }
+}
+
+#[gpui::test]
+fn public_web_sources_activate_typed_events_while_files_stay_static(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let captured = events.clone();
+    let (_, cx) = cx.add_window_view(move |_, _| PublicSourceProbe { events });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(
+        cx.debug_bounds("streaming-source-pricing.md").is_none(),
+        "a source without a location is a static chip, never a dead button"
+    );
+    let chip = cx
+        .debug_bounds("streaming-source-dairy-index")
+        .expect("web source should be an activatable chip");
+    cx.simulate_click(chip.center(), Modifiers::default());
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::SourceActivated {
+            id: "dairy-index".into(),
+            url: "https://www.dairyreport.org/index".into(),
+        }]
+    );
+    captured.borrow_mut().clear();
+
+    cx.update(|window, cx| window.focus_next(cx));
+    activate_key(cx, "enter");
+    assert_eq!(
+        captured.borrow().as_slice(),
+        &[StreamingTextEvent::SourceActivated {
+            id: "dairy-index".into(),
+            url: "https://www.dairyreport.org/index".into(),
+        }]
+    );
 }
 
 #[gpui::test]

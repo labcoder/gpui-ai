@@ -370,6 +370,15 @@ pub enum ChatEvent {
         /// Stable follow-up identifier.
         follow_up_id: SharedString,
     },
+    /// The user activated a source chip attached to a message.
+    SourceActivated {
+        /// Stable message identifier.
+        message_id: SharedString,
+        /// Stable source identifier.
+        source_id: SharedString,
+        /// The source location.
+        url: SharedString,
+    },
     /// The user activated an inline citation attached to a message.
     CitationActivated {
         /// Stable message identifier.
@@ -748,6 +757,13 @@ impl Chat {
                     message_id,
                     citation_id: id.clone(),
                     destination: destination.clone(),
+                });
+            }
+            StreamingTextEvent::SourceActivated { id, url } => {
+                cx.emit(ChatEvent::SourceActivated {
+                    message_id,
+                    source_id: id.clone(),
+                    url: url.clone(),
                 });
             }
         }

@@ -129,7 +129,7 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `LoadingState` | stateless | Pixel-grid loader with shimmer and elapsed time |
 | `Orbs` | stateless | Ambient dot-lattice thinking indicator, five choreographies |
 | `Thinking` | stateless | Reasoning disclosure that opens while streaming, shimmers, pins a live preview, then collapses to "Thought for Ns" |
-| `StreamingText` | stateless | Streaming markdown answer with citations, sources, follow-ups |
+| `StreamingText` | stateless | Streaming markdown answer with hover-previewed citations, favicon-style source chips, follow-ups |
 | `CodeBlock` | stateless | Syntax-highlighted code with header, copy button, stream reveal |
 | `ToolChip` | stateless | Compact tool-call / file-edit chips with status |
 | `ToolCall` / `ToolGroup` | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
