@@ -1,17 +1,19 @@
 //! Hybrid-controlled prompt composition with native GPUI text editing.
 
+use crate::context_meter::format_tokens;
 use crate::control::composed_button;
 use crate::stream::ProgressState;
+use crate::surface::{eyebrow, meta};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, AppContext as _, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Subscription, Window, div,
     prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
 use gpui_component::{
-    ActiveTheme as _, h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, h_flex,
     input::{Enter, Escape, InputEvent, MoveDown, MoveUp, Textarea, TextareaState},
     scroll::ScrollableElement as _,
     v_flex,
@@ -19,10 +21,17 @@ use gpui_component::{
 use std::ops::Range;
 
 /// A selectable model offered by a [`PromptBar`].
+///
+/// Beyond its stable ID and label a model may carry a provider (options are
+/// grouped by it), a one-line description, and its context window, so the
+/// picker reads like a catalog rather than a bare list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptModel {
     id: SharedString,
     label: SharedString,
+    provider: Option<SharedString>,
+    description: Option<SharedString>,
+    context_window: Option<u64>,
     disabled: bool,
 }
 
@@ -32,14 +41,50 @@ impl PromptModel {
         Self {
             id: id.into(),
             label: label.into(),
+            provider: None,
+            description: None,
+            context_window: None,
             disabled: false,
         }
+    }
+
+    /// Sets the provider the model is grouped under (for example "Anthropic").
+    pub fn provider(mut self, provider: impl Into<SharedString>) -> Self {
+        self.provider = Some(provider.into());
+        self
+    }
+
+    /// Adds a one-line description shown under the label.
+    pub fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Records the context window in tokens, shown compactly (`200K`).
+    pub fn context_window(mut self, tokens: u64) -> Self {
+        self.context_window = Some(tokens);
+        self
     }
 
     /// Sets whether the model can be selected.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Returns the provider name, when set.
+    pub fn provider_name(&self) -> Option<&SharedString> {
+        self.provider.as_ref()
+    }
+
+    /// Returns the description, when set.
+    pub fn description_text(&self) -> Option<&SharedString> {
+        self.description.as_ref()
+    }
+
+    /// Returns the context window in tokens, when set.
+    pub fn context_window_tokens(&self) -> Option<u64> {
+        self.context_window
     }
 
     /// Returns the stable model identifier.
@@ -349,9 +394,86 @@ fn prompt_model_control(
     expanded: bool,
     cx: &mut App,
 ) -> Button {
-    prompt_control(id, label, cx)
-        .selected(expanded)
-        .aria_expanded(expanded)
+    let tokens = cx.theme().semantic_tokens();
+    let label = label.into();
+    let visible = label
+        .strip_prefix("Model: ")
+        .map(|visible| SharedString::from(visible.to_owned()))
+        .unwrap_or_else(|| label.clone());
+    prompt_option(
+        id,
+        label,
+        h_flex()
+            .items_center()
+            .gap(tokens.spacing.xs)
+            .child(
+                Icon::new(IconName::Cpu)
+                    .xsmall()
+                    .text_color(cx.theme().muted_foreground),
+            )
+            .child(visible)
+            .child(
+                Icon::new(if expanded {
+                    IconName::ChevronUp
+                } else {
+                    IconName::ChevronDown
+                })
+                .xsmall()
+                .text_color(cx.theme().muted_foreground),
+            ),
+        cx,
+    )
+    .selected(expanded)
+    .aria_expanded(expanded)
+}
+
+/// A menu row with custom content and the same geometry as [`prompt_control`].
+fn prompt_option(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
+    content: impl IntoElement,
+    cx: &mut App,
+) -> Button {
+    let tokens = cx.theme().semantic_tokens();
+    composed_button(id, accessibility_label)
+        .flex()
+        .items_center()
+        .justify_start()
+        .px(tokens.spacing.sm)
+        .py(tokens.spacing.xs)
+        .border_1()
+        .border_color(cx.theme().transparent)
+        .rounded(tokens.radius.sm)
+        .bg(cx.theme().transparent)
+        .text_token(tokens.typography.sm)
+        .text_color(cx.theme().foreground)
+        .hover(|style| style.bg(cx.theme().button_hover))
+        .active(|style| style.bg(cx.theme().button_active))
+        .focus_visible(|style| style.border_color(cx.theme().ring))
+        .styles(|styles| {
+            styles.disabled(|style| {
+                style
+                    .bg(cx.theme().muted)
+                    .text_color(cx.theme().muted_foreground)
+            })
+        })
+        .child(content)
+}
+
+/// Models grouped by provider in first-appearance order; ungrouped models
+/// keep their place under a `None` heading.
+fn model_groups(models: &[PromptModel]) -> Vec<(Option<SharedString>, Vec<&PromptModel>)> {
+    let mut groups: Vec<(Option<SharedString>, Vec<&PromptModel>)> = Vec::new();
+    for model in models {
+        match groups
+            .iter_mut()
+            .find(|(provider, _)| *provider == model.provider)
+        {
+            Some((_, members)) => members.push(model),
+            None => groups.push((model.provider.clone(), vec![model])),
+        }
+    }
+    groups
 }
 
 fn prompt_control_with_tone(
@@ -898,38 +1020,86 @@ impl Render for PromptBar {
                 )
             })
             .collect::<Vec<_>>();
-        let model_buttons = self
-            .models
-            .iter()
-            .map(|model| {
+        let mut model_buttons: Vec<AnyElement> = Vec::new();
+        for (provider, members) in model_groups(&self.models) {
+            if let Some(provider) = provider {
+                model_buttons.push(
+                    eyebrow(provider.clone(), cx)
+                        .px(tokens.spacing.sm)
+                        .pt(tokens.spacing.xs)
+                        .into_any_element(),
+                );
+            }
+            for model in members {
                 let model_id = model.id.clone();
                 let model_selector = format!("prompt-bar-model-option-{}", model.id);
                 let selected = self.selected_model.as_ref() == Some(&model.id);
-                prompt_control(
-                    (
-                        gpui::ElementId::from(root_id.clone()),
-                        format!("model-{}", model.id),
-                    ),
-                    model.label.clone(),
-                    cx,
-                )
-                .debug_selector(move || model_selector.clone())
-                .role(Role::ListBoxOption)
-                .disabled(model.disabled)
-                .selected(selected)
-                .aria_selected(selected)
-                .w_full()
-                .when(selected, |button| button.bg(cx.theme().accent))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.model_menu_open = false;
-                    cx.emit(PromptBarEvent::ModelChanged {
-                        id: this.id.clone(),
-                        model_id: model_id.clone(),
+                let content = h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .items_center()
+                    .gap(tokens.spacing.sm)
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .items_start()
+                            .child(div().child(model.label.clone()))
+                            .when_some(model.description.clone(), |this, description| {
+                                this.child(
+                                    div()
+                                        .w_full()
+                                        .truncate()
+                                        .text_token(tokens.typography.xs)
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                )
+                            }),
+                    )
+                    .when_some(model.context_window, |this, window_tokens| {
+                        this.child(
+                            meta(format!("{} ctx", format_tokens(window_tokens)), cx).flex_none(),
+                        )
+                    })
+                    .when(selected, |this| {
+                        this.child(
+                            Icon::new(IconName::Check)
+                                .xsmall()
+                                .text_color(cx.theme().primary),
+                        )
                     });
-                    cx.notify();
-                }))
-            })
-            .collect::<Vec<_>>();
+                model_buttons.push(
+                    prompt_option(
+                        (
+                            gpui::ElementId::from(root_id.clone()),
+                            format!("model-{}", model.id),
+                        ),
+                        model.label.clone(),
+                        content,
+                        cx,
+                    )
+                    .when_some(model.description.clone(), |button, description| {
+                        button.aria_description(description)
+                    })
+                    .debug_selector(move || model_selector.clone())
+                    .role(Role::ListBoxOption)
+                    .disabled(model.disabled)
+                    .selected(selected)
+                    .aria_selected(selected)
+                    .w_full()
+                    .when(selected, |button| button.bg(cx.theme().accent))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.model_menu_open = false;
+                        cx.emit(PromptBarEvent::ModelChanged {
+                            id: this.id.clone(),
+                            model_id: model_id.clone(),
+                        });
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+                );
+            }
+        }
         let attachment_buttons = self
             .attachments
             .iter()
@@ -1118,7 +1288,7 @@ impl Render for PromptBar {
                         (gpui::ElementId::from(root_id), "models").into(),
                         "Available models",
                     )
-                    .max_h(tokens.spacing.xxl + tokens.spacing.xxl + tokens.spacing.xxl)
+                    .max_h(tokens.spacing.xxl * 7.0)
                     .overflow_y_scrollbar()
                     .children(model_buttons),
                 )
@@ -1129,9 +1299,10 @@ impl Render for PromptBar {
 #[cfg(test)]
 mod tests {
     use super::{
-        ProgressState, PromptAttachment, PromptBar, PromptBarEvent, PromptMention, PromptTokenKind,
-        SuggestionKey, active_prompt_token, build_submission, prompt_control, prompt_frame,
-        prompt_listbox, prompt_model_control, prompt_status, retain_active_suggestion,
+        ProgressState, PromptAttachment, PromptBar, PromptBarEvent, PromptMention, PromptModel,
+        PromptTokenKind, SuggestionKey, active_prompt_token, build_submission, model_groups,
+        prompt_control, prompt_frame, prompt_listbox, prompt_model_control, prompt_status,
+        retain_active_suggestion,
     };
     use gpui::{
         AppContext as _, Element as _, Focusable as _, IntoElement as _, Render, RenderOnce as _,
@@ -1250,6 +1421,32 @@ mod tests {
                 |_, _, _, _| {},
             )
         }
+    }
+
+    #[test]
+    fn models_group_by_provider_in_first_appearance_order() {
+        let models = [
+            PromptModel::new("a", "A").provider("Anthropic"),
+            PromptModel::new("local", "Local"),
+            PromptModel::new("b", "B").provider("Anthropic"),
+            PromptModel::new("o", "O").provider("OpenAI"),
+        ];
+        let groups = model_groups(&models);
+        let providers: Vec<Option<&str>> = groups
+            .iter()
+            .map(|(provider, _)| provider.as_deref())
+            .collect();
+        assert_eq!(providers, [Some("Anthropic"), None, Some("OpenAI")]);
+        let anthropic: Vec<&str> = groups[0].1.iter().map(|model| model.id.as_ref()).collect();
+        assert_eq!(anthropic, ["a", "b"]);
+        assert_eq!(
+            PromptModel::new("x", "X")
+                .provider("Anthropic")
+                .description("Everyday")
+                .context_window(200_000)
+                .context_window_tokens(),
+            Some(200_000)
+        );
     }
 
     #[test]

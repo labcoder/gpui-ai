@@ -238,8 +238,14 @@ impl ChatStory {
             let mut prompt = PromptBar::new("gallery-chat-prompt", window, cx);
             prompt.set_models(
                 [
-                    PromptModel::new("balanced", "Balanced"),
-                    PromptModel::new("fast", "Fast"),
+                    PromptModel::new("balanced", "Balanced")
+                        .provider("Anthropic")
+                        .description("Claude Sonnet 5 · everyday work")
+                        .context_window(200_000),
+                    PromptModel::new("fast", "Fast")
+                        .provider("Anthropic")
+                        .description("Claude Haiku 4.5 · quick replies")
+                        .context_window(200_000),
                 ],
                 cx,
             );
@@ -1242,9 +1248,26 @@ impl PromptBarStory {
         let mut prompt = PromptBar::new(id, window, cx);
         prompt.set_models(
             [
-                PromptModel::new("balanced", "Balanced"),
-                PromptModel::new("fast", "Fast"),
-                PromptModel::new("offline", "Offline").disabled(true),
+                PromptModel::new("balanced", "Balanced")
+                    .provider("Anthropic")
+                    .description("Claude Sonnet 5 · everyday work")
+                    .context_window(200_000),
+                PromptModel::new("deep", "Deep")
+                    .provider("Anthropic")
+                    .description("Claude Opus 5 · long reasoning")
+                    .context_window(200_000),
+                PromptModel::new("fast", "Fast")
+                    .provider("Anthropic")
+                    .description("Claude Haiku 4.5 · quick replies")
+                    .context_window(200_000),
+                PromptModel::new("local", "Local")
+                    .provider("On device")
+                    .description("Private, no network")
+                    .context_window(32_000),
+                PromptModel::new("offline", "Offline")
+                    .provider("On device")
+                    .description("Unavailable until the model downloads")
+                    .disabled(true),
             ],
             cx,
         );
@@ -4372,9 +4395,10 @@ impl Gallery {
                         v_flex()
                             .id("prompt-bar-story-scroll")
                             .debug_selector(|| "prompt-bar-story-scroll".into())
-                            // 256px clipped suggestion rows mid-card.
-                            .h(px(360.))
-                            .max_h(px(360.))
+                            // 256px clipped suggestion rows mid-card; the grouped
+                            // model menu needs room to open below the composer.
+                            .h(px(560.))
+                            .max_h(px(560.))
                             .flex_none()
                             .gap_2()
                             .track_scroll(&self.prompt_bar_scroll)
