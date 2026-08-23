@@ -20,6 +20,8 @@ const componentEventTypes = Object.freeze({
   context: "ContextCardEvent",
   insights: "InsightEvent",
   "prompt-bar": "PromptBarEvent",
+  voice: "VoiceEvent",
+  queue: "QueueEvent",
   suggestions: "SuggestionsEvent",
   attachments: "AttachmentEvent",
   artifact: "ArtifactPanelEvent",
@@ -92,7 +94,9 @@ export const components = Object.freeze([
   component(29, "context", "Context cards", "Evidence", "Compact source context that preserves provenance and readable detail.", "context_card", "ContextCard", 'ContextCard::new("design-doc", "Architecture")', "tall"),
   component(30, "insights", "Insight card", "Evidence", "Paged analytical findings with chart-ready, semantic values.", "insight", "InsightCard", 'InsightCard::new("retention", "Retention improved")'),
   component(31, "prompt-bar", "Prompt bar", "Composites", "A hybrid-controlled composer with mentions, commands, models, and attachments.", "prompt_bar", "PromptBar", 'PromptBar::new("agent-prompt", window, cx)'),
-  component(32, "selection-actions", "Selection actions", "Readable output", "Ask, explain, and rewrite actions anchored to selected Markdown.", "selection_actions", "SelectionActions", 'SelectionActions::new("answer-actions", markdown, window, cx)'),
+  component(32, "voice", "Voice controls", "Composites", "Dictate and speak controls with a live level meter and interim transcript, as typed intent.", "voice", "VoiceControls", 'VoiceControls::new("voice", VoiceState::Idle)'),
+  component(33, "queue", "Message queue", "Composites", "Prompts waiting while the agent runs, with reorder, edit, send-now, remove, and clear by stable ID.", "queue", "MessageQueue", 'MessageQueue::new("queue").items(queued)'),
+  component(34, "selection-actions", "Selection actions", "Readable output", "Ask, explain, and rewrite actions anchored to selected Markdown.", "selection_actions", "SelectionActions", 'SelectionActions::new("answer-actions", markdown, window, cx)'),
 ]);
 
 export const categories = Object.freeze([

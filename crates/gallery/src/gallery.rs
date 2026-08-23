@@ -206,6 +206,8 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::Artifact
+        | StoryId::Voice
+        | StoryId::Queue
         | StoryId::CodeDiff
         | StoryId::Plan
         | StoryId::ContextMeter
@@ -651,6 +653,23 @@ const ARTIFACT_VERSIONS: &[(&str, &str)] = &[
         "# Supplier comparison\n\n| Supplier | Unit price | Delivery | Risk |\n| --- | --- | --- | --- |\n| Alpenrose Dairy | $4.12 | 2 days | Low |\n| Tillamook County Creamery | $4.43 | 3 days | Low |\n| Cascade Cultured Foods | $4.37 | 4 days | Medium |\n\n## Recommendation\n\nSwitch bulk orders to **Alpenrose Dairy**.\n\n## Next steps\n\n1. Confirm the wholesale tier at 500 units.\n2. Draft the revised order",
     ),
 ];
+
+/// Prompts a person might type while the agent is busy.
+fn demo_queue() -> Vec<QueuedMessage> {
+    vec![
+        QueuedMessage::new(
+            "queued-compare",
+            "Compare the three suppliers for next month",
+        )
+        .note("after the current step"),
+        QueuedMessage::new("queued-draft", "Draft the order confirmations"),
+        QueuedMessage::new(
+            "queued-risks",
+            "Summarize every risk from the cold-chain review and propose mitigations",
+        )
+        .note("steering"),
+    ]
+}
 
 fn demo_thread_sections() -> Vec<ThreadSection> {
     vec![
@@ -3352,6 +3371,11 @@ pub struct Gallery {
     artifact_open: bool,
     last_artifact_event: Option<SharedString>,
     artifact_split: Entity<ResizableState>,
+    voice_state: VoiceState,
+    voice_transcript: Option<SharedString>,
+    last_voice_event: Option<SharedString>,
+    queued: Vec<QueuedMessage>,
+    last_queue_event: Option<SharedString>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -3432,6 +3456,11 @@ impl Gallery {
             artifact_open: true,
             last_artifact_event: None,
             artifact_split: cx.new(|_| ResizableState::default()),
+            voice_state: VoiceState::Idle,
+            voice_transcript: None,
+            last_voice_event: None,
+            queued: demo_queue(),
+            last_queue_event: None,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -4433,6 +4462,153 @@ impl Gallery {
                             TextView::markdown(
                                 "artifact-reference-note",
                                 "**Reference comparison.** Claude's Artifacts and ChatGPT's Canvas open generated documents beside the chat with a preview / code switch and version history. gpui-ai's panel carries the source as streamed content (so it renders while the agent writes), picks the preview from the artifact kind, keeps versions and actions typed by stable ID, and leaves width and docking to the application — here the upstream resizable group.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Voice => self.section(
+                story,
+                "Voice controls",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let status: SharedString = self
+                        .last_voice_event
+                        .clone()
+                        .unwrap_or_else(|| "Start dictation, then stop or cancel it; Speak reads the latest reply".into());
+                    let mut controls = VoiceControls::new("voice", self.voice_state)
+                        .speakable(true)
+                        .on_event(cx.listener(|this, event: &VoiceEvent, _, cx| {
+                            match event {
+                                VoiceEvent::DictationStarted => {
+                                    this.voice_state = VoiceState::Listening { level: 0.55 };
+                                    this.voice_transcript =
+                                        Some("compare the three suppliers for next".into());
+                                }
+                                VoiceEvent::DictationStopped => {
+                                    this.voice_state = VoiceState::Transcribing;
+                                }
+                                VoiceEvent::DictationCancelled => {
+                                    this.voice_state = VoiceState::Idle;
+                                    this.voice_transcript = None;
+                                }
+                                VoiceEvent::SpeakRequested => this.voice_state = VoiceState::Speaking,
+                                VoiceEvent::SpeakStopped => this.voice_state = VoiceState::Idle,
+                            }
+                            this.last_voice_event = Some(format!("{event:?}").into());
+                            cx.notify();
+                        }));
+                    if let Some(transcript) = self.voice_transcript.clone() {
+                        controls = controls.transcript(transcript);
+                    }
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(controls)
+                        .when(self.voice_state == VoiceState::Transcribing, |this| {
+                            this.child(
+                                Button::new("voice-finish")
+                                    .outline()
+                                    .small()
+                                    .label("Simulate: transcription finished")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.voice_state = VoiceState::Idle;
+                                        this.voice_transcript = None;
+                                        this.last_voice_event = Some(
+                                            "Transcribed: \"compare the three suppliers for next month\"".into(),
+                                        );
+                                        cx.notify();
+                                    })),
+                            )
+                        })
+                        .child(
+                            div()
+                                .id("voice-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "voice-reference-note",
+                                "**Reference comparison.** AI SDK Elements and assistant-ui ship microphone and speaker buttons bound to browser audio APIs. gpui-ai keeps audio with the application: the controls render the state it owns (idle, listening with a live level meter, transcribing, speaking), show the interim transcript as a status, and report every press as a typed `VoiceEvent` so native capture, streaming speech-to-text, and text-to-speech plug in behind stable intent.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
+            StoryId::Queue => self.section(
+                story,
+                "Message queue",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let status: SharedString = self
+                        .last_queue_event
+                        .clone()
+                        .unwrap_or_else(|| "Reorder, edit, send now, or remove a waiting prompt".into());
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            MessageQueue::new("queue")
+                                .items(self.queued.iter().cloned())
+                                .editable(true)
+                                .on_event(cx.listener(|this, event: &QueueEvent, _, cx| {
+                                    match event {
+                                        QueueEvent::Removed { id } | QueueEvent::SentNow { id } => {
+                                            this.queued.retain(|item| item.id() != id);
+                                        }
+                                        QueueEvent::MovedUp { id } => {
+                                            if let Some(index) =
+                                                this.queued.iter().position(|item| item.id() == id)
+                                                && index > 0
+                                            {
+                                                this.queued.swap(index, index - 1);
+                                            }
+                                        }
+                                        QueueEvent::MovedDown { id } => {
+                                            if let Some(index) =
+                                                this.queued.iter().position(|item| item.id() == id)
+                                                && index + 1 < this.queued.len()
+                                            {
+                                                this.queued.swap(index, index + 1);
+                                            }
+                                        }
+                                        QueueEvent::EditRequested { .. } => {}
+                                        QueueEvent::Cleared => this.queued.clear(),
+                                    }
+                                    this.last_queue_event = Some(format!("{event:?}").into());
+                                    cx.notify();
+                                })),
+                        )
+                        .when(self.queued.is_empty(), |this| {
+                            this.child(
+                                Button::new("queue-refill")
+                                    .outline()
+                                    .small()
+                                    .label("Queue the demo prompts again")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.queued = demo_queue();
+                                        this.last_queue_event = Some("Refilled".into());
+                                        cx.notify();
+                                    })),
+                            )
+                        })
+                        .child(
+                            div()
+                                .id("queue-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "queue-reference-note",
+                                "**Reference comparison.** Claude Code and Codex queue the prompts typed while a turn runs and let people pull one forward or drop it. gpui-ai renders that queue as a named list above the composer with position, note, and keyboard-reachable move, edit, send-now, remove, and clear controls, each reported by stable ID so the application owns ordering and dispatch.",
                             )
                             .selectable(true),
                         )

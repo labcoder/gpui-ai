@@ -42,6 +42,7 @@ pub mod motion;
 pub mod orbs;
 pub mod plan;
 pub mod prompt_bar;
+pub mod queue;
 pub mod recommendation;
 pub mod records_table;
 pub mod scrolling;
@@ -59,6 +60,7 @@ pub mod thinking;
 pub mod thread_list;
 pub mod todo_list;
 pub mod tool_call;
+pub mod voice;
 
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
@@ -110,6 +112,7 @@ pub mod prelude {
         PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
         PromptSubmission,
     };
+    pub use crate::queue::{MessageQueue, QueueEvent, QueuedMessage};
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
     pub use crate::records_table::{
         RecordCell, RecordCellKind, RecordColumn, RecordColumnAlignment, RecordRow,
@@ -137,6 +140,7 @@ pub mod prelude {
     pub use crate::tool_call::{
         ToolApproval, ToolCall, ToolCallEvent, ToolGroup, ToolGroupEvent, ToolInvocation,
     };
+    pub use crate::voice::{VoiceControls, VoiceEvent, VoiceState};
 }
 
 pub(crate) mod handlers {

@@ -69,6 +69,10 @@ pub enum StoryId {
     Insights,
     /// Hybrid-controlled prompt composer.
     PromptBar,
+    /// Dictate and speak controls.
+    Voice,
+    /// Prompts waiting while the agent runs.
+    Queue,
     /// Actions anchored to a readable text selection.
     SelectionActions,
 }
@@ -107,6 +111,8 @@ impl StoryId {
         Self::Context,
         Self::Insights,
         Self::PromptBar,
+        Self::Voice,
+        Self::Queue,
         Self::SelectionActions,
     ];
 
@@ -145,6 +151,8 @@ impl StoryId {
             Self::Context => "context",
             Self::Insights => "insights",
             Self::PromptBar => "prompt-bar",
+            Self::Voice => "voice",
+            Self::Queue => "queue",
             Self::SelectionActions => "selection-actions",
         }
     }
@@ -184,6 +192,8 @@ impl StoryId {
             Self::Context => "Context cards",
             Self::Insights => "Insight card",
             Self::PromptBar => "Prompt bar",
+            Self::Voice => "Voice controls",
+            Self::Queue => "Message queue",
             Self::SelectionActions => "Selection actions",
         }
     }
