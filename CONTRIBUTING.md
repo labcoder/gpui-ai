@@ -26,6 +26,13 @@ For the browser gallery you also need a nightly toolchain with the
 `wasm32-unknown-unknown` target and `wasm-bindgen-cli` at the version recorded
 in `.github/workflows/ci.yml`.
 
+[Binaryen](https://github.com/WebAssembly/binaryen) is optional locally and
+installed in CI. When `wasm-opt` is on your `PATH`, `npm run build:wasm` runs it
+over the release artifact and prints the saving; without it the build says so
+and produces a working but larger binary. Install it if you are making a size
+claim — `npm run report:wasm` numbers from a build that skipped `wasm-opt` are
+not comparable to CI's.
+
 ## The rules that decide whether a change lands
 
 Four of them account for most review comments:

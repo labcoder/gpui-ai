@@ -86,6 +86,8 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: wasm-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install binaryen
+        run: sudo apt-get update && sudo apt-get install -y binaryen
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - name: Install web host dependencies

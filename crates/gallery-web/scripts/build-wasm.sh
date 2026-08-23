@@ -33,3 +33,25 @@ fi
 
 wasm-bindgen "$BINDGEN_WASM" --out-dir "$BINDGEN_OUT" --target web --no-typescript
 printf 'generated browser bindings in %s\n' "$OUT"
+
+# Binaryen shrinks the bindgen output further. CI installs it; locally it is
+# optional, and the build still produces a working artifact without it — just a
+# larger one. Run it after wasm-bindgen so its custom sections are already in
+# place, and never fail the build on it: a feature-flag mismatch with an older
+# binaryen should cost size, not the artifact.
+if [[ "$PROFILE" == "wasm-release" ]]; then
+  BUNDLE="$OUT/gallery_web_bg.wasm"
+  if command -v wasm-opt >/dev/null 2>&1; then
+    BEFORE="$(wc -c < "$BUNDLE")"
+    if wasm-opt -Oz -all -o "$BUNDLE.opt" "$BUNDLE" 2>/dev/null; then
+      mv "$BUNDLE.opt" "$BUNDLE"
+      AFTER="$(wc -c < "$BUNDLE")"
+      printf 'wasm-opt -Oz: %s -> %s bytes\n' "$BEFORE" "$AFTER"
+    else
+      rm -f "$BUNDLE.opt"
+      printf 'warning: wasm-opt failed; keeping the unoptimized artifact (%s bytes)\n' "$BEFORE" >&2
+    fi
+  else
+    printf 'wasm-opt not found; skipping size optimization. Install binaryen for release-sized output.\n'
+  fi
+fi
