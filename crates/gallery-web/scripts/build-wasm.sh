@@ -6,8 +6,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PROFILE="debug"
 RELEASE_FLAG=()
 if [[ "${1:-}" == "--release" ]]; then
-  PROFILE="release"
-  RELEASE_FLAG=(--release)
+  # The size-tuned browser profile, not the frame-time-tuned native one.
+  PROFILE="wasm-release"
+  RELEASE_FLAG=(--profile wasm-release)
 elif [[ "$#" -gt 0 ]]; then
   printf 'usage: %s [--release]\n' "$0" >&2
   exit 2

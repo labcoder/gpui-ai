@@ -47,6 +47,19 @@ unwrap_used = "deny"
 codegen-units = 16
 lto = "thin"
 
+# Browser delivery profile: the whole catalog ships as one WASM binary that
+# every visitor downloads before a demo can run, so size wins over compile
+# time here. `opt-level = "s"` rather than "z" keeps the loop optimizations the
+# animated stories depend on. Used by `npm run build:wasm`; measurements live
+# in docs/internal/wasm-baseline.md.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
 # Optimized development profile: dependency crates (gpui, gpui-component, and
 # their stacks) dominate frame-time cost, so they compile with optimizations
 # while workspace crates stay unoptimized for fast iteration. Use through
