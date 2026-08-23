@@ -15,7 +15,7 @@
 //! Shimmer::new("thinking-label", "Thinking…").active(is_running)
 //!
 //! // A freshly inserted row fades and rises into place once.
-//! reveal(v_flex().child("New tool call"), ("tool-call", 3))
+//! reveal(v_flex().child("New tool call"), ("tool-call", 3), window, cx)
 //! ```
 
 use gpui::{
@@ -23,7 +23,7 @@ use gpui::{
     ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
     ease_in_out, pulsating_between, px, relative,
 };
-use gpui_base::animation::{EffectTransition, ease_out_cubic};
+use gpui_base::animation::ease_out_cubic;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use std::time::Duration;
 
@@ -149,18 +149,45 @@ impl RenderOnce for Shimmer {
     }
 }
 
+/// Progress of a one-shot reveal keyed by `id`, from `0.0` (just mounted) to
+/// `1.0` (settled), starting the clock the first time the element renders.
+///
+/// The start instant lives in keyed element state, so a row that keeps its
+/// stable identity across renders plays the reveal only once; it requests
+/// animation frames until it settles and returns `1.0` immediately under
+/// reduced motion.
+pub fn reveal_progress(
+    id: impl Into<ElementId>,
+    delay: Duration,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    if cx.reduce_motion() {
+        return 1.0;
+    }
+    let now = cx.background_executor().now();
+    let started = *window.use_keyed_state(id, cx, |_, _| now).read(cx);
+    let elapsed = now.saturating_duration_since(started);
+    let progress = if elapsed <= delay {
+        0.0
+    } else {
+        (elapsed.saturating_sub(delay).as_secs_f32() / REVEAL_DURATION.as_secs_f32()).min(1.0)
+    };
+    if progress < 1.0 {
+        window.request_animation_frame();
+    }
+    ease_out_cubic(progress)
+}
+
 /// Fades and lifts an element into place once when it first mounts.
 ///
 /// Keyed by `id`: a row that keeps its stable identity across renders plays
-/// the reveal only on its first frame, never on every content update.
-pub fn reveal<E>(element: E, id: impl Into<ElementId>) -> AnimationElement<E>
+/// the reveal only on its first frames, never on every content update.
+pub fn reveal<E>(element: E, id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> E
 where
-    E: IntoElement + Styled + 'static,
+    E: Styled,
 {
-    EffectTransition::new(REVEAL_DURATION)
-        .fade(0., 1.)
-        .slide_y(px(REVEAL_RISE), px(0.))
-        .apply(element, id)
+    apply_reveal(element, reveal_progress(id, Duration::ZERO, window, cx))
 }
 
 /// Like [`reveal`], but item `index` waits `index` stagger beats before it
@@ -169,23 +196,20 @@ pub fn reveal_staggered<E>(
     element: E,
     id: impl Into<ElementId>,
     index: usize,
-) -> AnimationElement<E>
+    window: &mut Window,
+    cx: &mut App,
+) -> E
 where
-    E: IntoElement + Styled + 'static,
+    E: Styled,
 {
     let delay = REVEAL_STAGGER * index.min(12) as u32;
-    let total = REVEAL_DURATION + delay;
-    let delay_fraction = delay.as_secs_f32() / total.as_secs_f32();
-    element.with_animation(
-        id,
-        Animation::new(total).with_easing(move |delta| {
-            if delay_fraction >= 1.0 {
-                return 1.0;
-            }
-            ease_out_cubic(((delta - delay_fraction) / (1.0 - delay_fraction)).clamp(0., 1.))
-        }),
-        |element, delta| element.opacity(delta).top(px(REVEAL_RISE * (1.0 - delta))),
-    )
+    apply_reveal(element, reveal_progress(id, delay, window, cx))
+}
+
+fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
+    element
+        .opacity(progress)
+        .top(px(REVEAL_RISE * (1.0 - progress)))
 }
 
 /// Slowly breathes an element's opacity — for indicators that mean "still

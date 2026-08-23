@@ -142,7 +142,8 @@ The full API is documented on each type. Run `cargo doc --open` from a checkout 
 | `ContextCard` | stateless | Retrieved knowledge chunks with sources |
 | `InsightCard` | stateless | Paged insight cards with sparkline charts |
 | `PromptBar` | entity | Composer: @ mentions, / commands, model picker, attachments |
-| `Chat` | entity | Virtualized transcript + composer, unread & jump-to-latest |
+| `Chat` | entity | Virtualized transcript + composer with hover-revealed message actions (copy, regenerate, edit, feedback), welcome state, unread & jump-to-latest |
+| `Suggestions` | stateless | Starter and follow-up prompt chips with staggered reveal and stable IDs |
 | `CommandSearch` | entity | Command palette with filtering and keyboard navigation |
 | `SidebarNav` | entity | Collapsible, filterable workspace navigation |
 | `FineTuneCard` | entity | Design-property inspector (size, radius, opacity, typeface) |

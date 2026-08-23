@@ -29,6 +29,8 @@ pub enum StoryId {
     StreamingText,
     /// Controlled virtualized conversation.
     Chat,
+    /// Starter and follow-up suggestion chips.
+    Suggestions,
     /// Stable-ID command palette.
     CommandSearch,
     /// Stable-ID filterable sidebar navigation.
@@ -73,6 +75,7 @@ impl StoryId {
         Self::ImageGeneration,
         Self::StreamingText,
         Self::Chat,
+        Self::Suggestions,
         Self::CommandSearch,
         Self::SidebarNav,
         Self::FineTune,
@@ -104,6 +107,7 @@ impl StoryId {
             Self::ImageGeneration => "image-generation",
             Self::StreamingText => "streaming-text",
             Self::Chat => "chat",
+            Self::Suggestions => "suggestions",
             Self::CommandSearch => "command-search",
             Self::SidebarNav => "sidebar-nav",
             Self::FineTune => "fine-tune",
@@ -136,6 +140,7 @@ impl StoryId {
             Self::ImageGeneration => "Image generation",
             Self::StreamingText => "Streaming text",
             Self::Chat => "Chat",
+            Self::Suggestions => "Suggestions",
             Self::CommandSearch => "Command search",
             Self::SidebarNav => "Sidebar navigation",
             Self::FineTune => "Fine-tune card",

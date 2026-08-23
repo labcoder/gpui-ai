@@ -279,7 +279,7 @@ impl Styled for ToolCall {
 }
 
 impl RenderOnce for ToolCall {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let open = self.is_open();
         let id = self.invocation.id.clone();
@@ -522,7 +522,9 @@ impl RenderOnce for ToolCall {
             .rounded(tokens.radius.md)
             .overflow_hidden()
             .child(header)
-            .when(open, |this| this.child(reveal(body, (root_id, "body"))))
+            .when(open, |this| {
+                this.child(reveal(body, (root_id, "body"), window, cx))
+            })
             .refine_style(&self.style)
     }
 }

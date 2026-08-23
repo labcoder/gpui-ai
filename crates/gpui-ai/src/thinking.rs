@@ -254,6 +254,8 @@ impl RenderOnce for Thinking {
                             .rounded(tokens.radius.full)
                             .bg(cx.theme().success),
                         ElementId::NamedInteger(format!("{trace_id}-step-done").into(), ix as u64),
+                        window,
+                        cx,
                     )
                     .into_any_element(),
                 };

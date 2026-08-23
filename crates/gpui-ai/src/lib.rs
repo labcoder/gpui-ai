@@ -45,6 +45,7 @@ pub mod sidebar_nav;
 pub mod status;
 pub mod stream;
 pub mod streaming_text;
+pub mod suggestions;
 mod surface;
 pub mod task;
 mod theme;
@@ -56,8 +57,8 @@ pub mod tool_call;
 pub mod prelude {
     pub use crate::approval::{ApprovalCard, ApprovalEvent};
     pub use crate::chat::{
-        Chat, ChatEvent, ChatMessage, ChatMessageAppearance, ChatRole, MessageAlignment,
-        MessageBubble,
+        Chat, ChatEvent, ChatMessage, ChatMessageAppearance, ChatRole, ChatWelcome, MessageActions,
+        MessageAlignment, MessageBubble,
     };
     pub use crate::chip::{ToolChip, ToolChipEvent, ToolStatus};
     pub use crate::code_block::CodeBlock;
@@ -107,6 +108,7 @@ pub mod prelude {
     pub use crate::streaming_text::{
         CitationRef, FollowUp, SourceRef, StreamingText, StreamingTextEvent,
     };
+    pub use crate::suggestions::{Suggestion, Suggestions, SuggestionsEvent};
     pub use crate::task::{TaskRow, TaskSnapshot};
     pub use crate::thinking::{StepStatus, Thinking, ThinkingEvent, ThinkingStep, ThinkingTrace};
     pub use crate::todo_list::{TodoItem, TodoList, TodoListEvent, TodoStatus};

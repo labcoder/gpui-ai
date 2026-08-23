@@ -2,25 +2,35 @@
 
 use crate::{
     control::outlined_control,
+    orbs::Orbs,
     prompt_bar::{PromptBar, PromptBarEvent},
     scrolling::list_scroll_mask,
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
+    suggestions::{Suggestion, Suggestions, SuggestionsEvent},
+    surface::icon_button,
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnyElement, App, Context, ElementId, Entity, EventEmitter, FocusHandle, FollowMode,
-    InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset, ListState,
-    ParentElement as _, Render, Role, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div, list, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, ClipboardItem, Context, ElementId, Entity, EventEmitter, FocusHandle,
+    FollowMode, FontWeight, InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset,
+    ListState, ParentElement as _, Render, Role, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div, list,
+    prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::Button;
-use gpui_component::{ActiveTheme as _, scroll::ScrollableElement as _, text::TextView, v_flex};
+use gpui_component::{
+    ActiveTheme as _, IconName, h_flex, scroll::ScrollableElement as _, text::TextView, v_flex,
+};
 use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     sync::Arc,
+    time::Duration,
 };
+
+/// How long the copy action shows its "copied" confirmation.
+const COPIED_FEEDBACK: Duration = Duration::from_secs(2);
 
 /// The semantic speaker or producer of a [`ChatMessage`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -62,6 +72,7 @@ pub struct ChatMessage {
     follow_ups: Vec<FollowUp>,
     retryable: bool,
     appearance: ChatMessageAppearance,
+    actions: Option<MessageActions>,
 }
 
 /// Application-controlled presentation for one message.
@@ -121,6 +132,100 @@ impl ChatMessageAppearance {
     }
 }
 
+/// The per-message actions a transcript row offers.
+///
+/// Actions are quiet at rest and appear on hover or keyboard focus; the last
+/// settled message keeps them visible so the most likely next action is one
+/// click away. Every action is reported as a typed [`ChatEvent`] — the
+/// application performs the work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MessageActions {
+    copy: bool,
+    regenerate: bool,
+    edit: bool,
+    feedback: bool,
+}
+
+impl MessageActions {
+    /// No actions.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// The conventional set for a role: assistant replies can be copied,
+    /// regenerated, and rated; user prompts can be copied and edited; tool
+    /// output can be copied; system notes offer nothing.
+    pub fn for_role(role: ChatRole) -> Self {
+        match role {
+            ChatRole::Assistant => Self::none().copy(true).regenerate(true).feedback(true),
+            ChatRole::User => Self::none().copy(true).edit(true),
+            ChatRole::Tool => Self::none().copy(true),
+            ChatRole::System => Self::none(),
+        }
+    }
+
+    /// Offers copying the message text to the clipboard.
+    pub fn copy(mut self, enabled: bool) -> Self {
+        self.copy = enabled;
+        self
+    }
+
+    /// Offers requesting a new response.
+    pub fn regenerate(mut self, enabled: bool) -> Self {
+        self.regenerate = enabled;
+        self
+    }
+
+    /// Offers editing (and resending) the message.
+    pub fn edit(mut self, enabled: bool) -> Self {
+        self.edit = enabled;
+        self
+    }
+
+    /// Offers helpful / not-helpful feedback.
+    pub fn feedback(mut self, enabled: bool) -> Self {
+        self.feedback = enabled;
+        self
+    }
+
+    /// Whether any action is offered.
+    pub fn is_empty(&self) -> bool {
+        !(self.copy || self.regenerate || self.edit || self.feedback)
+    }
+}
+
+/// What an empty conversation shows: a welcome, optional guidance, and
+/// starter suggestions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatWelcome {
+    title: SharedString,
+    description: Option<SharedString>,
+    suggestions: Vec<Suggestion>,
+}
+
+impl ChatWelcome {
+    /// Creates a welcome with a headline.
+    pub fn new(title: impl Into<SharedString>) -> Self {
+        Self {
+            title: title.into(),
+            description: None,
+            suggestions: Vec::new(),
+        }
+    }
+
+    /// Adds supporting guidance under the headline.
+    pub fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Adds starter prompts, reported through [`ChatEvent::SuggestionSelected`].
+    pub fn suggestions(mut self, suggestions: impl IntoIterator<Item = Suggestion>) -> Self {
+        self.suggestions = suggestions.into_iter().collect();
+        self
+    }
+}
+
 impl ChatMessage {
     /// Creates a message with stable application identity and progressive text.
     pub fn new(id: impl Into<SharedString>, role: ChatRole, content: StreamedContent) -> Self {
@@ -134,7 +239,20 @@ impl ChatMessage {
             follow_ups: Vec::new(),
             retryable: false,
             appearance: ChatMessageAppearance::default(),
+            actions: None,
         }
+    }
+
+    /// Overrides the actions this message offers (default: [`MessageActions::for_role`]).
+    pub fn actions(mut self, actions: MessageActions) -> Self {
+        self.actions = Some(actions);
+        self
+    }
+
+    /// The actions this message offers.
+    pub fn message_actions(&self) -> MessageActions {
+        self.actions
+            .unwrap_or_else(|| MessageActions::for_role(self.role))
     }
 
     /// Sets this message's presentation (alignment and bubble treatment).
@@ -261,6 +379,33 @@ pub enum ChatEvent {
         /// Opaque application-owned destination.
         destination: SharedString,
     },
+    /// The user copied a message; the text is already on the clipboard.
+    MessageCopied {
+        /// Stable message identifier.
+        message_id: SharedString,
+    },
+    /// The user asked for a new response in place of this one.
+    RegenerateRequested {
+        /// Stable message identifier.
+        message_id: SharedString,
+    },
+    /// The user wants to edit (and resend) this message.
+    EditRequested {
+        /// Stable message identifier.
+        message_id: SharedString,
+    },
+    /// The user rated a response.
+    FeedbackSubmitted {
+        /// Stable message identifier.
+        message_id: SharedString,
+        /// `true` for helpful, `false` for not helpful.
+        positive: bool,
+    },
+    /// The user chose a welcome suggestion.
+    SuggestionSelected {
+        /// Stable suggestion identifier.
+        suggestion_id: SharedString,
+    },
     /// The user returned the transcript to active tail-following.
     JumpedToLatest,
 }
@@ -379,6 +524,10 @@ pub struct Chat {
     visible_range: Range<usize>,
     pinned_to_bottom: bool,
     unread_message_ids: HashSet<SharedString>,
+    welcome: Option<ChatWelcome>,
+    copied_message: Option<SharedString>,
+    copied_reset: Option<Task<()>>,
+    feedback: HashMap<SharedString, bool>,
     _prompt_subscription: Subscription,
 }
 
@@ -422,7 +571,19 @@ impl Chat {
             visible_range: 0..0,
             pinned_to_bottom: true,
             unread_message_ids: HashSet::new(),
+            welcome: None,
+            copied_message: None,
+            copied_reset: None,
+            feedback: HashMap::new(),
             _prompt_subscription: prompt_subscription,
+        }
+    }
+
+    /// Sets what an empty conversation shows.
+    pub fn set_welcome(&mut self, welcome: Option<ChatWelcome>, cx: &mut Context<Self>) {
+        if self.welcome != welcome {
+            self.welcome = welcome;
+            cx.notify();
         }
     }
 
@@ -596,10 +757,249 @@ impl Chat {
         cx.emit(ChatEvent::RetryRequested { message_id });
     }
 
+    fn copy_message(&mut self, message_id: SharedString, cx: &mut Context<Self>) {
+        let Some(message) = self
+            .messages
+            .iter()
+            .find(|message| message.id == message_id)
+        else {
+            return;
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(message.content.text().to_owned()));
+        self.copied_message = Some(message_id.clone());
+        // One-shot confirmation owned by the entity: dropping the chat drops
+        // the timer, and a second copy restarts it.
+        self.copied_reset = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(COPIED_FEEDBACK).await;
+            this.update(cx, |chat, cx| {
+                chat.copied_message = None;
+                chat.copied_reset = None;
+                cx.notify();
+            })
+            .ok();
+        }));
+        cx.emit(ChatEvent::MessageCopied { message_id });
+        cx.notify();
+    }
+
+    fn submit_feedback(
+        &mut self,
+        message_id: SharedString,
+        positive: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.feedback.insert(message_id.clone(), positive);
+        cx.emit(ChatEvent::FeedbackSubmitted {
+            message_id,
+            positive,
+        });
+        cx.notify();
+    }
+
+    fn render_actions(
+        &self,
+        message: &ChatMessage,
+        is_last: bool,
+        message_focus_handle: &FocusHandle,
+        group_name: SharedString,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let actions = message.message_actions();
+        let settled = matches!(
+            message.content.state(),
+            ProgressState::Complete | ProgressState::Failed(_)
+        );
+        if actions.is_empty() || !settled {
+            return None;
+        }
+        let tokens = cx.theme().semantic_tokens();
+        let message_id = message.id.clone();
+        let base_id = ElementId::from((ElementId::from(self.id.clone()), message_id.clone()));
+        let copied = self.copied_message.as_ref() == Some(&message_id);
+        let rating = self.feedback.get(&message_id).copied();
+        // Quiet at rest; revealed by pointer hover on the row, by keyboard
+        // focus inside it, and permanently on the last settled message.
+        let always_visible = is_last || message_focus_handle.contains_focused(window, cx);
+        let debug_id = message_id.to_string();
+        let bar = h_flex()
+            .id((base_id.clone(), "actions"))
+            .debug_selector(move || format!("chat-actions-{debug_id}"))
+            .role(Role::Toolbar)
+            .aria_label("Message actions")
+            .tab_group()
+            .items_center()
+            .gap(tokens.spacing.xxs)
+            .opacity(if always_visible { 1.0 } else { 0.0 })
+            .group_hover(group_name, |style| style.opacity(1.0))
+            .when(actions.copy, |bar| {
+                let id = message_id.clone();
+                let debug_id = message_id.to_string();
+                bar.child(
+                    icon_button(
+                        (base_id.clone(), "copy"),
+                        if copied {
+                            IconName::Check
+                        } else {
+                            IconName::Copy
+                        },
+                        if copied { "Copied" } else { "Copy message" },
+                        cx,
+                    )
+                    .debug_selector(move || format!("chat-action-copy-{debug_id}"))
+                    .when(copied, |button| button.text_color(cx.theme().success))
+                    .on_click(cx.listener(move |chat, _, _, cx| {
+                        chat.copy_message(id.clone(), cx);
+                    })),
+                )
+            })
+            .when(actions.regenerate, |bar| {
+                let id = message_id.clone();
+                let debug_id = message_id.to_string();
+                bar.child(
+                    icon_button(
+                        (base_id.clone(), "regenerate"),
+                        IconName::Redo,
+                        "Regenerate response",
+                        cx,
+                    )
+                    .debug_selector(move || format!("chat-action-regenerate-{debug_id}"))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(ChatEvent::RegenerateRequested {
+                            message_id: id.clone(),
+                        });
+                    })),
+                )
+            })
+            .when(actions.edit, |bar| {
+                let id = message_id.clone();
+                let debug_id = message_id.to_string();
+                bar.child(
+                    icon_button(
+                        (base_id.clone(), "edit"),
+                        IconName::Replace,
+                        "Edit message",
+                        cx,
+                    )
+                    .debug_selector(move || format!("chat-action-edit-{debug_id}"))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(ChatEvent::EditRequested {
+                            message_id: id.clone(),
+                        });
+                    })),
+                )
+            })
+            .when(actions.feedback, |bar| {
+                let up_id = message_id.clone();
+                let down_id = message_id.clone();
+                let up_debug_id = message_id.to_string();
+                let down_debug_id = message_id.to_string();
+                bar.child(
+                    icon_button(
+                        (base_id.clone(), "helpful"),
+                        IconName::ThumbsUp,
+                        if rating == Some(true) {
+                            "Marked helpful"
+                        } else {
+                            "Mark helpful"
+                        },
+                        cx,
+                    )
+                    .debug_selector(move || format!("chat-action-helpful-{up_debug_id}"))
+                    .selected(rating == Some(true))
+                    .when(rating == Some(true), |button| {
+                        button.text_color(cx.theme().primary)
+                    })
+                    .on_click(cx.listener(move |chat, _, _, cx| {
+                        chat.submit_feedback(up_id.clone(), true, cx);
+                    })),
+                )
+                .child(
+                    icon_button(
+                        (base_id.clone(), "unhelpful"),
+                        IconName::ThumbsDown,
+                        if rating == Some(false) {
+                            "Marked not helpful"
+                        } else {
+                            "Mark not helpful"
+                        },
+                        cx,
+                    )
+                    .debug_selector(move || format!("chat-action-unhelpful-{down_debug_id}"))
+                    .selected(rating == Some(false))
+                    .when(rating == Some(false), |button| {
+                        button.text_color(cx.theme().primary)
+                    })
+                    .on_click(cx.listener(move |chat, _, _, cx| {
+                        chat.submit_feedback(down_id.clone(), false, cx);
+                    })),
+                )
+            });
+        Some(bar.into_any_element())
+    }
+
+    fn render_welcome(&self, cx: &mut Context<Self>) -> AnyElement {
+        let tokens = cx.theme().semantic_tokens();
+        let Some(welcome) = &self.welcome else {
+            return div()
+                .id((ElementId::from(self.id.clone()), "empty"))
+                .role(Role::Status)
+                .aria_label("No messages yet")
+                .p(tokens.spacing.md)
+                .text_token(tokens.typography.sm)
+                .text_color(cx.theme().muted_foreground)
+                .child("No messages yet")
+                .into_any_element();
+        };
+        v_flex()
+            .id((ElementId::from(self.id.clone()), "welcome"))
+            .debug_selector(|| "chat-welcome".into())
+            .role(Role::Group)
+            .aria_label(welcome.title.clone())
+            .size_full()
+            .items_center()
+            .justify_center()
+            .gap(tokens.spacing.md)
+            .p(tokens.spacing.xl)
+            .child(Orbs::new())
+            .child(
+                div()
+                    .text_token(tokens.typography.lg)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(cx.theme().foreground)
+                    .text_center()
+                    .child(welcome.title.clone()),
+            )
+            .when_some(welcome.description.clone(), |this, description| {
+                this.child(
+                    div()
+                        .max_w(relative(0.8))
+                        .text_token(tokens.typography.sm)
+                        .text_color(cx.theme().muted_foreground)
+                        .text_center()
+                        .child(description),
+                )
+            })
+            .when(!welcome.suggestions.is_empty(), |this| {
+                this.child(
+                    Suggestions::new((ElementId::from(self.id.clone()), "suggestions"))
+                        .items(welcome.suggestions.iter().cloned())
+                        .justify_center()
+                        .on_event(cx.listener(|_, event: &SuggestionsEvent, _, cx| {
+                            let SuggestionsEvent::Selected { id } = event;
+                            cx.emit(ChatEvent::SuggestionSelected {
+                                suggestion_id: id.clone(),
+                            });
+                        })),
+                )
+            })
+            .into_any_element()
+    }
+
     fn render_message(
         &mut self,
         index: usize,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(message) = self.messages.get(index).cloned() else {
@@ -652,8 +1052,19 @@ impl Chat {
         // inside a full-width background.
         let appearance = message.appearance();
         let bubble_debug_id = message_id.clone();
+        let group_name: SharedString = format!("{}-message-group-{message_id}", self.id).into();
+        let is_last = index + 1 == self.messages.len();
+        let actions = self.render_actions(
+            &message,
+            is_last,
+            &message_focus_handle,
+            group_name.clone(),
+            window,
+            cx,
+        );
         let row = message_frame(&self.id, &message)
             .track_focus(&message_focus_handle)
+            .group(group_name)
             .px(tokens.spacing.md)
             .py(tokens.spacing.sm);
         let bubble = v_flex()
@@ -715,7 +1126,8 @@ impl Chat {
                             },
                         )),
                     )
-                }),
+                })
+                .children(actions),
         )
         .into_any_element()
     }
@@ -744,16 +1156,7 @@ impl Render for Chat {
                     .flex_1()
                     .overflow_hidden()
                     .when(self.messages.is_empty(), |this| {
-                        this.child(
-                            div()
-                                .id((ElementId::from(self.id.clone()), "empty"))
-                                .role(Role::Status)
-                                .aria_label("No messages yet")
-                                .p(tokens.spacing.md)
-                                .text_token(tokens.typography.sm)
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No messages yet"),
-                        )
+                        this.child(self.render_welcome(cx))
                     })
                     .when(!self.messages.is_empty(), |this| {
                         this.child(

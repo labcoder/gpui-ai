@@ -86,7 +86,6 @@ pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
 ///
 /// Rests muted, lifts to the foreground on hover, and shows the theme ring on
 /// keyboard focus. Used for message actions and card toolbars.
-#[allow(dead_code)] // Chat message actions adopt this in the next change.
 pub(crate) fn icon_button(
     id: impl Into<ElementId>,
     icon: impl IconNamed,

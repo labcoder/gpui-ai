@@ -198,6 +198,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         }
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
+        | StoryId::Suggestions
         | StoryId::ToolChips
         | StoryId::Orbs
         | StoryId::Todos
@@ -221,8 +222,13 @@ struct ChatStory {
     chat: Entity<Chat>,
     answer: Option<StreamedContent>,
     last_event: SharedString,
+    show_welcome: bool,
     _subscription: Subscription,
 }
+
+/// Switcher labels for the two demonstrated chat states.
+const CHAT_STORY_STATES: &[(&str, &str)] =
+    &[("conversation", "Conversation"), ("welcome", "Welcome")];
 
 impl ChatStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -246,12 +252,43 @@ impl ChatStory {
             prompt.set_draft("Ask a follow-up about suppliers", window, cx);
             prompt
         });
-        let chat = cx.new(|cx| Chat::new("gallery-chat", prompt, window, cx));
-        let subscription =
-            cx.subscribe_in(&chat, window, |this, chat, event: &ChatEvent, _, cx| {
+        let chat = cx.new(|cx| {
+            let mut chat = Chat::new("gallery-chat", prompt, window, cx);
+            chat.set_welcome(
+                Some(
+                    ChatWelcome::new("What should we look into?")
+                        .description(
+                            "Ask about suppliers, pricing, or delivery risk. Suggestions send \
+                             immediately; the composer stays yours.",
+                        )
+                        .suggestions([
+                            Suggestion::new("compare", "Compare supplier prices"),
+                            Suggestion::new("risk", "Explain this week's delivery risk"),
+                            Suggestion::new("draft", "Draft the order confirmations"),
+                        ]),
+                ),
+                cx,
+            );
+            chat
+        });
+        let subscription = cx.subscribe_in(
+            &chat,
+            window,
+            |this, chat, event: &ChatEvent, window, cx| {
                 this.last_event = format!("{event:?}").into();
                 let prompt = chat.read(cx).prompt_bar().clone();
                 match event {
+                    ChatEvent::SuggestionSelected { suggestion_id } => {
+                        let draft = match suggestion_id.as_ref() {
+                            "compare" => "Compare supplier prices",
+                            "risk" => "Explain this week's delivery risk",
+                            _ => "Draft the order confirmations",
+                        };
+                        prompt.update(cx, |prompt, cx| {
+                            prompt.set_draft(draft, window, cx);
+                        });
+                        this.show_welcome = false;
+                    }
                     ChatEvent::Prompt(PromptBarEvent::ModelChanged { model_id, .. }) => {
                         prompt.update(cx, |prompt, cx| {
                             prompt.set_selected_model(model_id.clone(), cx);
@@ -271,15 +308,32 @@ impl ChatStory {
                     | ChatEvent::RetryRequested { .. }
                     | ChatEvent::FollowUpSelected { .. }
                     | ChatEvent::CitationActivated { .. }
+                    | ChatEvent::MessageCopied { .. }
+                    | ChatEvent::RegenerateRequested { .. }
+                    | ChatEvent::EditRequested { .. }
+                    | ChatEvent::FeedbackSubmitted { .. }
                     | ChatEvent::JumpedToLatest => {}
                 }
                 cx.notify();
-            });
+            },
+        );
         Self {
             chat,
             answer: None,
-            last_event: "Try Retry, a citation, a follow-up, or the composer.".into(),
+            last_event: "Hover a message for actions, or try Retry, a citation, or the composer."
+                .into(),
+            show_welcome: false,
             _subscription: subscription,
+        }
+    }
+
+    fn set_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let show_welcome = index == 1;
+        if self.show_welcome != show_welcome {
+            self.show_welcome = show_welcome;
+            // Force the next simulation snapshot to rebuild the transcript.
+            self.answer = None;
+            cx.notify();
         }
     }
 
@@ -291,6 +345,13 @@ impl ChatStory {
     ) -> bool {
         if self.answer.as_ref() == Some(&answer) {
             return false;
+        }
+        if self.show_welcome {
+            self.chat.update(cx, |chat, cx| {
+                chat.set_messages(Arc::from([]), window, cx);
+            });
+            self.answer = Some(answer);
+            return true;
         }
         let live_text = format!(
             "The current supplier comparison follows [[cite:pricing]].\n\n{}",
@@ -398,6 +459,13 @@ impl Render for ChatStory {
         // 480px shows the full story arc the way the reference demos do.
         v_flex()
             .gap(tokens.spacing.xs)
+            .child(story_state_switcher(
+                cx.weak_entity(),
+                "chat",
+                CHAT_STORY_STATES,
+                usize::from(self.show_welcome),
+                Self::set_state,
+            ))
             .child(
                 div()
                     .id("chat-story-host")
@@ -2924,6 +2992,7 @@ pub struct Gallery {
     tool_call_open: HashMap<SharedString, bool>,
     tool_group_open: Option<bool>,
     tool_approval: ToolApproval,
+    last_suggestion: Option<SharedString>,
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
@@ -2985,6 +3054,7 @@ impl Gallery {
             tool_call_open: HashMap::new(),
             tool_group_open: None,
             tool_approval: ToolApproval::Requested,
+            last_suggestion: None,
             theme: theme.unwrap_or_else(|| {
                 if cx.theme().is_dark() {
                     GalleryTheme::Dark
@@ -3743,6 +3813,51 @@ impl Gallery {
                     cx,
                 )
             }
+            StoryId::Suggestions => self.section(
+                story,
+                "Suggestions",
+                || {
+                    let tokens = cx.theme().semantic_tokens();
+                    let status: SharedString = match &self.last_suggestion {
+                        Some(id) => format!("Selected: {id}").into(),
+                        None => "Choose a suggestion".into(),
+                    };
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            Suggestions::new("starter-suggestions")
+                                .items([
+                                    Suggestion::new("compare", "Compare supplier prices")
+                                        .description("Sends the prompt immediately"),
+                                    Suggestion::new("risk", "Explain this week's delivery risk"),
+                                    Suggestion::new("draft", "Draft the order confirmations"),
+                                    Suggestion::new("history", "Show the price history"),
+                                ])
+                                .on_event(cx.listener(|this, event: &SuggestionsEvent, _, cx| {
+                                    let SuggestionsEvent::Selected { id } = event;
+                                    this.last_suggestion = Some(id.clone());
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            div()
+                                .id("suggestions-story-status")
+                                .role(Role::Status)
+                                .aria_label(status.clone())
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(status),
+                        )
+                        .child(
+                            TextView::markdown(
+                                "suggestions-reference-note",
+                                "**Reference comparison.** AI Elements and assistant-ui show starter prompts as a single scrolling row that sends on click. gpui-ai wraps chips onto the available width, ripples them in with a staggered reveal, keeps every chip a named keyboard-reachable button, and reports a stable ID so the application decides whether to send or merely fill the composer.",
+                            )
+                            .selectable(true),
+                        )
+                },
+                cx,
+            ),
             StoryId::CommandSearch => {
                 let command_story = window.use_keyed_state(
                     "command-search-story-state",
