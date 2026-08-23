@@ -15,7 +15,6 @@ use crate::{
     control::composed_button,
     handlers::SharedHandler,
     motion::{Shimmer, reveal_staggered},
-    status::StatusTone,
     stream::ProgressState,
     surface::icon_button,
     theme::SemanticStyledExt as _,
@@ -239,10 +238,6 @@ impl Attachment {
     pub fn accessibility_label(&self) -> String {
         format!("{}, {}", self.name, self.summary())
     }
-
-    fn tone(&self) -> StatusTone {
-        StatusTone::from_progress(&self.state)
-    }
 }
 
 impl PartialEq for Attachment {
@@ -389,7 +384,6 @@ impl RenderOnce for AttachmentPreview {
         let debug_id = attachment.id.to_string();
         let label = attachment.accessibility_label();
         let summary = attachment.summary();
-        let tone = attachment.tone();
         let failed = matches!(attachment.state, ProgressState::Failed(_));
         let running = attachment.state == ProgressState::Running;
         let leading_size = if self.compact { rems(1.25) } else { rems(2.5) };
@@ -445,9 +439,10 @@ impl RenderOnce for AttachmentPreview {
         let meta = div()
             .min_w_0()
             .text_token(tokens.typography.xs)
-            .text_color(match tone {
-                StatusTone::Neutral | StatusTone::Info => cx.theme().muted_foreground,
-                tone => tone.color(cx),
+            .text_color(if failed {
+                cx.theme().danger
+            } else {
+                cx.theme().muted_foreground
             })
             .child(meta_text);
 
