@@ -77,6 +77,11 @@ export function Shell({
 
       <div className="layout">
         <aside className="desktop-rail" aria-label="Component catalog">
+          {/* The category labels below are h3s. Without an h2 above them the
+              document jumps straight from nothing to level three, which is a
+              heading-order error and reads as a missing section to anyone
+              navigating by heading. The drawer has a visible one already. */}
+          <h2 className="visually-hidden">Component catalog</h2>
           <ComponentNav route={route} idPrefix="rail" />
         </aside>
         <main id="content" tabIndex={-1}>

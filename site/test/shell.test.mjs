@@ -182,6 +182,28 @@ test("the rail's search is labelled, counted, and distinct from the catalog filt
   assert.match(html, new RegExp(`${components.length} shown`));
 });
 
+test("no page skips a heading level", async () => {
+  for (const route of ROUTES) {
+    const html = await page(route);
+    const levels = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((match) => Number(match[1]));
+
+    assert.ok(levels.length > 3, `${route} has almost no headings`);
+    assert.equal(levels.filter((level) => level === 1).length, 1, `${route} needs exactly one h1`);
+
+    // Someone navigating by heading uses the levels as an outline. A jump from
+    // one straight to three reads as a section that failed to load — which is
+    // what the rail's category labels did before they had a heading above them.
+    for (const [index, level] of levels.entries()) {
+      if (index === 0) continue;
+      const previous = levels[index - 1];
+      assert.ok(
+        level <= previous + 1,
+        `${route} jumps from h${previous} to h${level} at heading ${index + 1}`,
+      );
+    }
+  }
+});
+
 test("no page ships a browser-only attribute the pre-render cannot know", async () => {
   for (const route of ROUTES) {
     const html = await page(route);
