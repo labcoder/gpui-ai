@@ -38,6 +38,21 @@ const releaseGalleryDir = path.join(repositoryRoot, "crates/gallery-web/www/dist
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+// Runs every cleanup step even when an earlier one throws, then reports the
+// first failure. A browser that refuses to close must not strand the HTTP
+// server or the temporary directory behind it.
+async function settleAll(steps) {
+  let failure;
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure) throw failure;
+}
+
 async function createGalleryFixture(directory) {
   await mkdir(path.join(directory, "assets"), { recursive: true });
   await Promise.all([
@@ -280,10 +295,18 @@ async function waitForValue(
     `(() => new Promise((resolve) => {
       const test = () => { try { return Boolean(${expression}); } catch { return false; } };
       const doomed = () => { try { return ${fatal ? `(${fatal})` : "false"}; } catch { return false; } };
+      // A fatal state must hold twice running before it counts. A frame that
+      // is reloading can show the previous document's fallback for an instant,
+      // and aborting on that single sample would fail a run that recovers.
+      let doomedSamples = 0;
       const settle = () => {
         if (test()) return { ok: true };
-        const reason = doomed();
-        return reason ? { ok: false, fatal: reason } : undefined;
+        if (!doomed()) {
+          doomedSamples = 0;
+          return undefined;
+        }
+        doomedSamples += 1;
+        return doomedSamples > 1 ? { ok: false, fatal: doomed() } : undefined;
       };
       const first = settle();
       if (first) return resolve(first);
@@ -399,6 +422,27 @@ test("a wait abandons an unrecoverable state instead of burning the whole timeou
   );
 });
 
+test("cleanup runs every step even when one throws, then reports the first failure", async () => {
+  const ran = [];
+  await assert.rejects(
+    settleAll([
+      () => {
+        ran.push("browser");
+        throw new Error("browser would not close");
+      },
+      () => {
+        ran.push("server");
+        throw new Error("server would not close");
+      },
+      () => {
+        ran.push("directory");
+      },
+    ]),
+    /browser would not close/,
+  );
+  assert.deepEqual(ran, ["browser", "server", "directory"], "no step may be skipped");
+});
+
 test("a successful wait reports no diagnosis and describes nothing", async () => {
   let describes = 0;
   const cdp = {
@@ -422,10 +466,14 @@ test("real browser covers responsive navigation, search, copy, and semantics", {
   const userDataDir = path.join(temporaryRoot, "browser");
   let serverHandle;
   let browserHandle;
+  // Each step runs even if an earlier one throws: a browser that will not
+  // close must not strand the HTTP server or the temporary directory.
   context.after(async () => {
-    await closeBrowser(browserHandle);
-    if (serverHandle) await new Promise((resolve) => serverHandle.server.close(resolve));
-    await rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
+    await settleAll([
+      () => closeBrowser(browserHandle),
+      () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
+      () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
+    ]);
   });
   await createGalleryFixture(galleryDir);
   await buildSite({ galleryDir, outDir });
@@ -604,10 +652,14 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   const userDataDir = path.join(temporaryRoot, "browser");
   let serverHandle;
   let browserHandle;
+  // Each step runs even if an earlier one throws: a browser that will not
+  // close must not strand the HTTP server or the temporary directory.
   context.after(async () => {
-    await closeBrowser(browserHandle);
-    if (serverHandle) await new Promise((resolve) => serverHandle.server.close(resolve));
-    await rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
+    await settleAll([
+      () => closeBrowser(browserHandle),
+      () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
+      () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
+    ]);
   });
 
   await buildSite({ galleryDir: releaseGalleryDir, outDir });
