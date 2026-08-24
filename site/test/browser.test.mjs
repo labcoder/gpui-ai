@@ -189,8 +189,8 @@ class Cdp {
     return result.result.value;
   }
 
-  async navigate(url, width, height) {
-    await this.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+  async navigate(url, width, height, deviceScaleFactor = 1) {
+    await this.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile: false });
     const loaded = this.once("Page.loadEventFired");
     await this.send("Page.navigate", { url });
     await loaded;
@@ -542,9 +542,13 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // check that the demo a visitor actually meets ever starts. A page that
   // renders perfectly and never loads its demo passes every other gate.
   // Served from the project-page base the site was built for, because that is
-  // where its own bundle and stylesheet live.
+  // where its own bundle and stylesheet live. Driven at a HiDPI device pixel
+  // ratio, which is what most visitors have: GPUI's web backend takes that
+  // ratio as its scale factor without scaling the canvas surface, so an
+  // unpinned ratio lays the story out at double size and it overflows a frame
+  // sized from the catalog. Nothing else here would notice.
   const specimen = components.find((component) => component.slug === "loading") ?? components[0];
-  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900);
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900, 2);
   await waitForValue(
     cdp,
     "Boolean(document.querySelector('[data-specimen-frame] iframe'))",
@@ -567,6 +571,18 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     ),
     specimen.height,
   );
+  // And the story inside it is laid out at that same scale. Nothing in the DOM
+  // reports what the canvas drew, so check the input GPUI reads: unpinned, the
+  // ratio the page is running at becomes its scale factor and the demo paints
+  // at double size inside a frame that cannot grow.
+  assert.equal(await cdp.evaluate("window.devicePixelRatio"), 2, "the page is running HiDPI");
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').contentWindow.devicePixelRatio",
+    ),
+    1,
+    "the embed must pin its scale factor or every measured height is wrong",
+  );
   await waitForValue(
     cdp,
     "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
@@ -578,6 +594,57 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
   assert.deepEqual(errors, []);
+
+  // The other half of lazy: a frame that is nowhere near the viewport must not
+  // load. Arriving at a deep anchor on a short viewport puts the demo well
+  // above the observer's margin. Without this, promoting every frame on
+  // hydration would pass every check above — and every visitor reading prose
+  // would pay for the shared binary.
+  const deep = components.find((component) => component.slug === "chat") ?? specimen;
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${deep.slug}/#limits`, 1280, 400);
+  await waitForValue(cdp, "Boolean(document.querySelector('[data-specimen-frame]'))", {
+    label: `the ${deep.slug} page to render its frame`,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.ok(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame]').getBoundingClientRect().bottom < -window.innerHeight",
+    ),
+    "the anchor must leave the demo more than a viewport above the fold",
+  );
+  await delay(1_000);
+  assert.equal(
+    await cdp.evaluate("document.querySelectorAll('[data-specimen-frame] iframe').length"),
+    0,
+    "a demo far outside the viewport must not fetch the shared binary",
+  );
+
+  await cdp.evaluate("window.scrollTo(0, 0)");
+  await waitForValue(cdp, "Boolean(document.querySelector('[data-specimen-frame] iframe'))", {
+    label: "scrolling back to the demo to load it",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+
+  // On a phone the rail stops being a sidebar, but it is the only place the
+  // page carries the rustdoc link, the source link, and the reference table.
+  // Laying it out with `display: none` below a breakpoint would take all of
+  // that off every small screen while leaving the markup in place, which every
+  // HTML-level assertion would happily match.
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 390, 844);
+  const railOnMobile = await cdp.evaluate(`(() => {
+    const link = document.querySelector('.component-rail a[href*="/api/gpui_ai/"]');
+    if (!link) return { rendered: false, reason: 'no rustdoc link' };
+    const box = link.getBoundingClientRect();
+    return { rendered: box.width > 0 && box.height > 0, href: link.getAttribute('href') };
+  })()`);
+  assert.equal(
+    railOnMobile.rendered,
+    true,
+    `the API link must stay on the page at 390px wide (${JSON.stringify(railOnMobile)})`,
+  );
+  assert.match(railOnMobile.href, new RegExp(`struct\\.${specimen.api}\\.html$`));
 
   // Without WebGPU the embed must say so rather than showing an empty frame.
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {

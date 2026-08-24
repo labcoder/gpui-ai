@@ -1,5 +1,6 @@
 import './styles.css';
 import { parseEmbedOptions, parseThemeEvent, themeMessage } from './query.js';
+import { pinScaleFactor } from './scale.js';
 
 function preferredTheme(explicit) {
   if (explicit !== undefined) return explicit;
@@ -97,6 +98,7 @@ function assetEndpoint() {
 }
 
 async function initEmbed() {
+  pinScaleFactor();
   const options = parseEmbedOptions(window.location.search);
   const theme = preferredTheme(options.theme);
   const themeChannel = watchTheme(theme);
