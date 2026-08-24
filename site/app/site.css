@@ -279,7 +279,7 @@ main [id] {
   font: inherit;
   font-size: 0.8125rem;
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -330,7 +330,7 @@ main [id] {
   font: inherit;
   font-size: 0.8125rem;
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -393,7 +393,7 @@ main [id] {
   font-size: 0.875rem;
   width: 100%;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -455,7 +455,7 @@ main [id] {
   font-size: 0.8125rem;
   max-width: 11rem;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -463,7 +463,7 @@ main [id] {
 
 .mode-switch {
   display: flex;
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   overflow: hidden;
 }
@@ -479,7 +479,7 @@ main [id] {
 }
 
 .mode-switch button + button {
-  border-left: 1px solid var(--ai-border);
+  border-left: 1px solid var(--ai-muted);
 }
 
 .mode-switch button[aria-pressed="true"] {
@@ -622,7 +622,7 @@ section + section {
 .code-actions button {
   font: inherit;
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -743,7 +743,7 @@ pre.code {
   border-bottom: 1px solid var(--ai-border);
   background: var(--ai-accent);
   font-size: 0.75rem;
-  color: var(--ai-muted);
+  color: var(--ai-foreground);
 }
 
 .demo-dots {
@@ -810,7 +810,7 @@ pre.code {
 }
 
 .demo-toolbar label {
-  color: var(--ai-muted);
+  color: var(--ai-foreground);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -819,7 +819,7 @@ pre.code {
   font: inherit;
   max-width: 10rem;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -829,7 +829,7 @@ pre.code {
 .demo-toolbar a {
   font: inherit;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -843,7 +843,7 @@ pre.code {
 }
 
 .demo-toolbar .copy-status {
-  color: var(--ai-muted);
+  color: var(--ai-foreground);
 }
 
 /* The theme's own numbers, printed under the thing they painted. */
@@ -880,7 +880,7 @@ pre.code {
   font: inherit;
   font-size: 0.9375rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
@@ -978,7 +978,9 @@ pre.code {
 .theme-strip button {
   font: inherit;
   padding: var(--space-1) var(--space-3);
-  border: 1px solid;
+  /* The page's edge, not the swatch's own: a theme whose background matches
+     the page would otherwise be a control with no visible boundary at all. */
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   cursor: pointer;
 }
@@ -1081,7 +1083,7 @@ pre.code {
 .theme-actions a {
   font: inherit;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;

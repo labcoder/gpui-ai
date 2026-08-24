@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { buildSite } from "../scripts/build.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
+import themeFile from "../generated/themes.json" with { type: "json" };
+import { auditExpression, report } from "./contrast.mjs";
 
 const { components } = catalog;
 
@@ -1294,4 +1296,78 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "This live example requires a browser with WebGPU support.",
   );
   assert.equal(await cdp.evaluate("document.querySelectorAll('canvas').length"), 0);
+});
+
+test("every theme the site offers can be read", {
+  skip: !browserPath && !releaseGateIsMandatory
+    ? "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate"
+    : releaseIntegrationRequested ? false : "Run npm run check:web:release for the built-artifact integration gate",
+  timeout: 120_000,
+}, async (context) => {
+  assert.ok(browserPath, "CI runs this against a real browser, and none was found");
+
+  // Forty-five themes, and the site paints its chrome from all of them. A
+  // theme is not a picture here — it decides whether the prose, the code, and
+  // the controls can be read at all, and nothing else in the suite would
+  // notice a palette that puts grey text on a grey card.
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-contrast-"));
+  const outDir = path.join(temporaryRoot, "site");
+  const galleryDir = path.join(temporaryRoot, "gallery");
+  const userDataDir = path.join(temporaryRoot, "browser");
+  let serverHandle;
+  let browserHandle;
+  context.after(async () => {
+    await settleAll([
+      () => closeBrowser(browserHandle),
+      () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
+      () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
+    ]);
+  });
+
+  // A fixture gallery, not the release artifact: this is about the chrome the
+  // site paints, and booting thirty-four WebGPU canvases would prove nothing
+  // about it while taking a hundred times as long.
+  await createGalleryFixture(galleryDir);
+  await buildSite({ galleryDir, outDir });
+  serverHandle = await serve(outDir);
+  browserHandle = await launchBrowser(userDataDir);
+  const { cdp } = browserHandle;
+  await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable")]);
+
+  const own = new Set(
+    themeFile.groups.find((group) => group.id === "gpui-ai").themes.map((theme) => theme.slug),
+  );
+  const slugs = themeFile.groups.flatMap((group) => group.themes.map((theme) => theme.slug));
+  assert.ok(slugs.length > 40, `only ${slugs.length} themes were found`);
+
+  const routes = ["/", `/components/${components[0].slug}/`, "/themes/"];
+  const findings = [];
+  for (const route of routes) {
+    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, 1280, 900);
+    const audit = await cdp.evaluate(auditExpression(slugs), 90_000);
+    assert.ok(audit.elements > 20, `${route} has only ${audit.elements} pieces of text to check`);
+    findings.push(...audit.findings.map((finding) => ({ ...finding, route })));
+  }
+
+  const ours = findings.filter((finding) => own.has(finding.theme));
+  const vendored = findings.filter((finding) => !own.has(finding.theme));
+
+  // The upstream pack is shown as published and credited, so a palette of
+  // theirs that reads poorly is theirs to fix and not ours to silently
+  // repaint. It is reported rather than enforced — but it is reported, so
+  // nobody has to discover it from a visitor.
+  if (vendored.length > 0) {
+    const themes = new Set(vendored.map((finding) => finding.theme));
+    process.stdout.write(
+      `\n${vendored.length} contrast findings across ${themes.size} vendored themes ` +
+        `(shown as published, not enforced):\n${report(vendored.slice(0, 20))}\n` +
+        (vendored.length > 20 ? `…and ${vendored.length - 20} more\n` : ""),
+    );
+  }
+
+  assert.deepEqual(
+    ours,
+    [],
+    `the site's own themes must be readable:\n${report(ours)}`,
+  );
 });

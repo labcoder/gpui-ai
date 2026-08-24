@@ -198,10 +198,13 @@ function ThemeStrip() {
               data-use-theme={theme.slug}
               aria-pressed={applied === theme.slug}
               onClick={() => setChoice(theme.slug)}
+              // Its own fill and its own text, so the swatch shows the theme.
+              // Not its own border: a theme's border is a divider between two
+              // of its surfaces, and against the page it can be invisible —
+              // which is how a light swatch disappears on a light page.
               style={{
                 background: theme.tokens["--ai-background"],
                 color: theme.tokens["--ai-foreground"],
-                borderColor: theme.tokens["--ai-border"],
               }}
             >
               {theme.label}
