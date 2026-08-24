@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
+import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
 import themeFile from "../generated/themes.json" with { type: "json" };
@@ -760,7 +761,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     });
   };
 
-  const openPage = async (route, width, height, expected = "light") => {
+  // `expected` defaults to what a visitor who has chosen nothing gets, which
+  // is the site's default theme rather than the machine's light or dark.
+  const openPage = async (route, width, height, expected = DEFAULT_THEME) => {
     await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
     await waitForValue(
       cdp,
@@ -1128,7 +1131,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await openPage(`/components/${specimen.slug}/`, 1280, 900);
   const frameTheme = (theme) =>
     `document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.currentTheme() === '${theme}'`;
-  await waitForValue(cdp, frameTheme("light"), {
+  await waitForValue(cdp, frameTheme(DEFAULT_THEME), {
     label: "the demo to start out following the site",
     fatal: GALLERY_GAVE_UP,
     describe: GALLERY_DIAGNOSIS,
@@ -1136,7 +1139,11 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   });
 
   const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
-  assert.equal(await readout(), "light", "the readout must name what the frame is painted from");
+  assert.equal(
+    await readout(),
+    DEFAULT_THEME,
+    "the readout must name what the frame is painted from",
+  );
 
   await cdp.evaluate(`(() => {
     const select = document.querySelector('.demo-toolbar select');
@@ -1157,7 +1164,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   // And the page has not moved. An override that changed the site theme would
   // be a different control wearing the same label.
-  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), "light");
+  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), DEFAULT_THEME);
   assert.match(
     await cdp.evaluate("document.querySelector('[data-specimen-open]').getAttribute('href')"),
     /theme=ember-dusk$/,
@@ -1233,7 +1240,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   await waitForValue(
     cdp,
-    "[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === 'light')",
+    `[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === '${DEFAULT_THEME}')`,
     {
       label: "the trio to start on the site theme",
       fatal: GALLERY_GAVE_UP,
@@ -1242,13 +1249,24 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
 
+  // The card for the theme already showing is the one case the control has to
+  // refuse, and the site opens on a named theme, so it is true before anything
+  // is clicked.
+  assert.equal(
+    await cdp.evaluate(
+      `document.querySelector('[data-use-theme="${DEFAULT_THEME}"]').disabled`,
+    ),
+    true,
+    "the card for the theme already showing should not offer to be used",
+  );
+
   const pageBackground = await cdp.evaluate("getComputedStyle(document.body).backgroundColor");
-  await cdp.evaluate("document.querySelector('[data-use-theme=\"nord-frost\"]').click()");
-  await settleTheme("Nord Frost", pageBackground);
-  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), "nord-frost");
+  await cdp.evaluate("document.querySelector('[data-use-theme=\"ember-dusk\"]').click()");
+  await settleTheme("Ember Dusk", pageBackground);
+  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), "ember-dusk");
   await waitForValue(
     cdp,
-    "[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === 'nord-frost')",
+    "[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === 'ember-dusk')",
     {
       label: "every demo on the page to follow the card that was chosen",
       fatal: GALLERY_GAVE_UP,
@@ -1257,21 +1275,28 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
   assert.equal(
-    await cdp.evaluate("document.querySelector('[data-use-theme=\"nord-frost\"]').disabled"),
+    await cdp.evaluate("document.querySelector('[data-use-theme=\"ember-dusk\"]').disabled"),
     true,
     "the card in use should not offer to be used again",
+  );
+  assert.equal(
+    await cdp.evaluate(
+      `document.querySelector('[data-use-theme="${DEFAULT_THEME}"]').disabled`,
+    ),
+    false,
+    "the card that was left should offer itself again",
   );
 
   // Download is a real file at a real URL, not a blob built in the page from
   // values the site derived — those would read back as a theme and not be one.
   const download = await cdp.evaluate(`(async () => {
-    const link = document.querySelector('[data-theme-card="nord-frost"] a[download]');
+    const link = document.querySelector('[data-theme-card="ember-dusk"] a[download]');
     const response = await fetch(link.href);
     return { status: response.status, body: await response.json(), href: link.getAttribute('href') };
   })()`);
   assert.equal(download.status, 200, `${download.href} does not resolve`);
   assert.equal(download.body.themes.length, 1);
-  assert.match(download.body.themes[0].name, /Nord Frost/);
+  assert.match(download.body.themes[0].name, /Ember Dusk/);
   assert.ok(
     Object.keys(download.body.themes[0].colors).length > 3,
     "the downloaded theme has no colours",
