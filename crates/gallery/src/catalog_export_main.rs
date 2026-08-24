@@ -9,7 +9,7 @@
 //! it described. Event names are read out of `crates/gpui-ai/src` rather than
 //! restated here, so a renamed event enum shows up as a catalog diff.
 
-use gallery::{StoryId, Viewport};
+use gallery::StoryId;
 use serde_json::{Map, Value, json};
 use std::{fs, path::PathBuf};
 
@@ -149,13 +149,12 @@ fn main() {
                 if events.len() > 1 { "s" } else { "" }
             )
         };
-        let overflow = match meta.viewport {
-            Viewport::Tall => {
-                "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
-            }
-            Viewport::Wide => {
-                "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
-            }
+        // A story taller than a comfortable frame is the one that has to
+        // say something about staying reachable.
+        let overflow = if meta.height > 480 {
+            "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        } else {
+            "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
         };
 
         let variants: Vec<Value> = story
@@ -174,7 +173,7 @@ fn main() {
             "source": source,
             "api": meta.api,
             "usage": meta.usage,
-            "viewport": meta.viewport.as_str(),
+            "height": meta.height,
             // The window frame the site draws around each demo.
             "windowTitle": format!("{} — gpui-ai", story.title()),
             "variants": variants,

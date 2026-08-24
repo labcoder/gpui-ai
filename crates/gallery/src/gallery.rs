@@ -3339,8 +3339,21 @@ impl Render for ComparisonTableStory {
 }
 
 /// Stateful component gallery shared by native and web launchers.
+/// How much of the gallery's own furniture to draw around a story.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GalleryChrome {
+    /// The native gallery: a title and the theme control above the story.
+    #[default]
+    Full,
+    /// The website's embed. The page already provides a heading, a theme
+    /// picker and a frame, so drawing them again is duplication inside a
+    /// duplicate — and the story is centred in whatever room the frame gives.
+    Embedded,
+}
+
 pub struct Gallery {
     selected: StoryId,
+    chrome: GalleryChrome,
     catalog_list: ListState,
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
@@ -3473,6 +3486,7 @@ impl Gallery {
                     GalleryTheme::LIGHT
                 }
             }),
+            chrome: GalleryChrome::Full,
             autoscroll: None,
             wheel: WheelAccelerator::new(),
             #[cfg(any(test, feature = "performance"))]
@@ -5428,13 +5442,23 @@ impl Render for Gallery {
                 )
                 .into_any_element()
         } else {
+            let story = self.render_story(self.selected, window, cx);
             div()
                 .id("gallery-scroll")
                 .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scrollbar()
-                .child(self.render_story(self.selected, window, cx))
+                .child(
+                    v_flex()
+                        .w_full()
+                        .min_h_full()
+                        .items_center()
+                        .when(self.chrome == GalleryChrome::Embedded, |this| {
+                            this.justify_center()
+                        })
+                        .child(story),
+                )
                 .into_any_element()
         };
 
@@ -5442,27 +5466,43 @@ impl Render for Gallery {
             .size_full()
             .overflow_hidden()
             .bg(cx.theme().background)
-            .child(
-                h_flex()
-                    .w_full()
-                    .max_w(px(640.))
-                    .mx_auto()
-                    .p_6()
-                    .items_center()
-                    .justify_between()
-                    .child(div().font_semibold().child(self.selected.title()))
-                    .child(
-                        Button::new("theme")
-                            .outline()
-                            .label(format!("Theme: {}", self.theme.label()))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.theme = this.theme.next();
-                                apply_gallery_theme(this.theme, Some(window), cx);
-                                cx.notify();
-                            })),
-                    ),
-            )
+            .when(self.chrome == GalleryChrome::Full, |this| {
+                this.child(
+                    h_flex()
+                        .w_full()
+                        .max_w(px(640.))
+                        .mx_auto()
+                        .p_6()
+                        .items_center()
+                        .justify_between()
+                        .child(div().font_semibold().child(self.selected.title()))
+                        .child(
+                            Button::new("theme")
+                                .outline()
+                                .label(format!("Theme: {}", self.theme.label()))
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.theme = this.theme.next();
+                                    apply_gallery_theme(this.theme, Some(window), cx);
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            })
             .child(content)
+    }
+}
+
+impl Gallery {
+    /// Draws the story without the gallery's own title and theme control.
+    ///
+    /// The website frames each demo itself, so the embed must not repeat that
+    /// furniture inside the frame.
+    pub fn set_chrome(&mut self, chrome: GalleryChrome, cx: &mut Context<Self>) {
+        if self.chrome == chrome {
+            return;
+        }
+        self.chrome = chrome;
+        cx.notify();
     }
 }
 
@@ -6795,6 +6835,55 @@ mod tests {
         unique.sort_unstable();
         unique.dedup();
         assert_eq!(unique.len(), labels.len(), "stage names must be distinct");
+    }
+
+    /// The declared heights must be what the stories actually measure.
+    ///
+    /// The website centres each story in a frame sized from this number, so a
+    /// stale value shows as dead space or a clipped demo. When a story changes
+    /// shape this test fails and prints the number to put in `story.rs`.
+    #[gpui::test]
+    fn story_heights_match_what_the_stories_measure(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let mut wrong = Vec::new();
+
+        for story in StoryId::ALL {
+            let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(*story, cx));
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|_, cx| {
+                gallery.update(cx, |gallery, cx| {
+                    gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+                })
+            });
+            // Tall enough that nothing is clipped by the viewport itself.
+            cx.simulate_resize(size(px(900.), px(2400.)));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            let selector: &'static str =
+                Box::leak(format!("story-{}", story.slug()).into_boxed_str());
+            let measured = cx
+                .debug_bounds(selector)
+                .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
+                .unwrap_or_else(|| panic!("{} did not render a measurable frame", story.slug()));
+            let declared = story
+                .meta()
+                .expect("component stories carry metadata")
+                .height;
+
+            // A pixel of rounding drift is not worth a failing build.
+            if measured.abs_diff(declared) > 2 {
+                wrong.push(format!(
+                    "  {} => declared {declared}, measures {measured}",
+                    story.slug()
+                ));
+            }
+        }
+
+        assert!(
+            wrong.is_empty(),
+            "these story heights are stale; update StoryMeta::height in story.rs:\n{}",
+            wrong.join("\n")
+        );
     }
 }
 

@@ -55,7 +55,13 @@ test("every catalog entry carries what the site renders", async () => {
     assert.match(component.summary, /\S.*\S/);
     assert.match(component.category, /\S/);
     assert.ok(categories.includes(component.category), `${component.category} is not grouped`);
-    assert.match(component.viewport, /^(tall|wide)$/);
+    // A measured height, not a two-value guess: a frame sized from anything
+    // else leaves dead space or clips the demo.
+    assert.equal(Number.isInteger(component.height), true, `${component.slug} has no height`);
+    assert.ok(
+      component.height >= 40 && component.height <= 2000,
+      `${component.slug} reports an implausible height of ${component.height}`,
+    );
     assert.match(component.source, /^crates\/gpui-ai\/src\/[a-z_]+\.rs$/);
     assert.match(component.usage, new RegExp(`${component.api}::new`));
     assert.match(component.windowTitle, /gpui-ai$/);

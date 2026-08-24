@@ -8,9 +8,6 @@ import catalogJson from "../generated/catalog.json";
 import snippetsJson from "../generated/snippets.json";
 import themesJson from "../generated/themes.json";
 
-/** How much room a story's demo frame needs. */
-export type Viewport = "wide" | "tall";
-
 /** One state a story's switcher offers. */
 export interface Variant {
   readonly id: string;
@@ -36,7 +33,13 @@ export interface Component {
   readonly source: string;
   readonly api: string;
   readonly usage: string;
-  readonly viewport: Viewport;
+  /**
+   * The story's measured natural height in pixels.
+   *
+   * The demo frame is sized from this, so it fits the story instead of
+   * padding a three-chip row out to the height of a data table.
+   */
+  readonly height: number;
   readonly windowTitle: string;
   readonly variants: readonly Variant[];
   readonly events: readonly string[];

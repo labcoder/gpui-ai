@@ -125,6 +125,11 @@ pub fn run(
         };
         apply_theme(mode, cx);
         let gallery = gallery::open_gallery_with_theme(selected, theme, cx);
+        // The page frames each demo and offers its own theme picker, so the
+        // embed must not draw a second title and control inside that frame.
+        gallery.update(cx, |gallery, cx| {
+            gallery.set_chrome(gallery::GalleryChrome::Embedded, cx);
+        });
         GALLERY.with(|stored| *stored.borrow_mut() = Some(gallery));
         ACTIVE_THEME.with(|active| active.set(Some(theme)));
         cx.activate(true);

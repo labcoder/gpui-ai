@@ -8,8 +8,7 @@ mod sim;
 mod story;
 
 pub use gallery::{
-    Gallery, GalleryTheme, apply_gallery_theme, init, open_gallery, open_gallery_with_theme,
+    Gallery, GalleryChrome, GalleryTheme, apply_gallery_theme, init, open_gallery,
+    open_gallery_with_theme,
 };
-pub use story::{
-    CHAT_STORY_VARIANTS, StoryId, StoryLookupError, StoryMeta, TABLE_STORY_VARIANTS, Viewport,
-};
+pub use story::{CHAT_STORY_VARIANTS, StoryId, StoryLookupError, StoryMeta, TABLE_STORY_VARIANTS};

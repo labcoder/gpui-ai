@@ -101,25 +101,6 @@ pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
     ("constrained", "Constrained"),
 ];
 
-/// How much vertical room a story's demo frame needs on the website.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Viewport {
-    /// Fits a standard demo frame.
-    Wide,
-    /// Needs a taller frame to show its real states.
-    Tall,
-}
-
-impl Viewport {
-    /// The value written to the exported catalog.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Wide => "wide",
-            Self::Tall => "tall",
-        }
-    }
-}
-
 /// Catalog metadata for one component story, exported to the website.
 ///
 /// This is the single source for the component index: the site is generated
@@ -136,8 +117,13 @@ pub struct StoryMeta {
     pub api: &'static str,
     /// A constructor call short enough to read in the index.
     pub usage: &'static str,
-    /// How much vertical room the demo frame needs.
-    pub viewport: Viewport,
+    /// The story's natural height in pixels at the website's demo width.
+    ///
+    /// Measured rather than guessed: a story is centred in its frame, so a
+    /// frame sized from anything else leaves dead space or clips. The
+    /// `story_heights_match_what_the_stories_measure` test fails when a story
+    /// changes shape and this number does not.
+    pub height: u32,
 }
 
 impl StoryId {
@@ -277,7 +263,7 @@ impl StoryId {
                 module: "loading",
                 api: "LoadingState",
                 usage: "LoadingState::new().label(\"Thinking\")",
-                viewport: Viewport::Tall,
+                height: 84,
             },
             Self::ToolChips => StoryMeta {
                 category: "Agent work",
@@ -285,7 +271,7 @@ impl StoryId {
                 module: "chip",
                 api: "ToolChip",
                 usage: "ToolChip::new(\"edit\", \"edit main.rs\")",
-                viewport: Viewport::Tall,
+                height: 116,
             },
             Self::ToolCalls => StoryMeta {
                 category: "Agent work",
@@ -293,7 +279,7 @@ impl StoryId {
                 module: "tool_call",
                 api: "ToolCall",
                 usage: "ToolCall::new(&call_progress)",
-                viewport: Viewport::Tall,
+                height: 870,
             },
             Self::Tasks => StoryMeta {
                 category: "Agent work",
@@ -301,7 +287,7 @@ impl StoryId {
                 module: "task",
                 api: "TaskRow",
                 usage: "TaskRow::new(&task_progress)",
-                viewport: Viewport::Tall,
+                height: 176,
             },
             Self::Thinking => StoryMeta {
                 category: "Progress",
@@ -309,7 +295,7 @@ impl StoryId {
                 module: "thinking",
                 api: "Thinking",
                 usage: "Thinking::new(\"reasoning\", &trace_progress)",
-                viewport: Viewport::Tall,
+                height: 337,
             },
             Self::Orbs => StoryMeta {
                 category: "Progress",
@@ -317,7 +303,7 @@ impl StoryId {
                 module: "orbs",
                 api: "Orbs",
                 usage: "Orbs::new()",
-                viewport: Viewport::Tall,
+                height: 226,
             },
             Self::Search => StoryMeta {
                 category: "Agent work",
@@ -325,7 +311,7 @@ impl StoryId {
                 module: "search_results",
                 api: "SearchResults",
                 usage: "SearchResults::new(\"research\", \"GPUI components\")",
-                viewport: Viewport::Wide,
+                height: 90,
             },
             Self::Todos => StoryMeta {
                 category: "Agent work",
@@ -333,7 +319,7 @@ impl StoryId {
                 module: "todo_list",
                 api: "TodoList",
                 usage: "TodoList::new(\"release-plan\")",
-                viewport: Viewport::Tall,
+                height: 250,
             },
             Self::ImageGeneration => StoryMeta {
                 category: "Agent work",
@@ -341,7 +327,7 @@ impl StoryId {
                 module: "image_generation",
                 api: "ImageGeneration",
                 usage: "ImageGeneration::new(\"hero-art\").progress(0.64)",
-                viewport: Viewport::Wide,
+                height: 244,
             },
             Self::StreamingText => StoryMeta {
                 category: "Readable output",
@@ -349,7 +335,7 @@ impl StoryId {
                 module: "streaming_text",
                 api: "StreamingText",
                 usage: "StreamingText::new(\"answer\", &content)",
-                viewport: Viewport::Wide,
+                height: 458,
             },
             Self::Chat => StoryMeta {
                 category: "Composites",
@@ -357,7 +343,7 @@ impl StoryId {
                 module: "chat",
                 api: "Chat",
                 usage: "Chat::new(\"conversation\", prompt, window, cx)",
-                viewport: Viewport::Tall,
+                height: 646,
             },
             Self::Suggestions => StoryMeta {
                 category: "Composites",
@@ -365,7 +351,7 @@ impl StoryId {
                 module: "suggestions",
                 api: "Suggestions",
                 usage: "Suggestions::new(\"starters\")",
-                viewport: Viewport::Wide,
+                height: 353,
             },
             Self::Attachments => StoryMeta {
                 category: "Composites",
@@ -373,7 +359,7 @@ impl StoryId {
                 module: "attachment",
                 api: "AttachmentStrip",
                 usage: "AttachmentStrip::new(\"files\").items(attachments)",
-                viewport: Viewport::Wide,
+                height: 790,
             },
             Self::Artifact => StoryMeta {
                 category: "Composites",
@@ -381,7 +367,7 @@ impl StoryId {
                 module: "artifact",
                 api: "ArtifactPanel",
                 usage: "ArtifactPanel::new(\"doc\", &artifact)",
-                viewport: Viewport::Tall,
+                height: 755,
             },
             Self::ContextMeter => StoryMeta {
                 category: "Progress",
@@ -389,7 +375,7 @@ impl StoryId {
                 module: "context_meter",
                 api: "ContextMeter",
                 usage: "ContextMeter::new(\"context\", &usage)",
-                viewport: Viewport::Wide,
+                height: 346,
             },
             Self::CommandSearch => StoryMeta {
                 category: "Navigation",
@@ -397,7 +383,7 @@ impl StoryId {
                 module: "command_search",
                 api: "CommandSearch",
                 usage: "CommandSearch::new(\"commands\", window, cx)",
-                viewport: Viewport::Tall,
+                height: 719,
             },
             Self::SidebarNav => StoryMeta {
                 category: "Navigation",
@@ -405,7 +391,7 @@ impl StoryId {
                 module: "sidebar_nav",
                 api: "SidebarNav",
                 usage: "SidebarNav::new(\"workspace-nav\", window, cx)",
-                viewport: Viewport::Tall,
+                height: 479,
             },
             Self::ThreadList => StoryMeta {
                 category: "Navigation",
@@ -413,7 +399,7 @@ impl StoryId {
                 module: "thread_list",
                 api: "ThreadList",
                 usage: "ThreadList::new(\"threads\", window, cx)",
-                viewport: Viewport::Tall,
+                height: 653,
             },
             Self::FineTune => StoryMeta {
                 category: "Composites",
@@ -421,7 +407,7 @@ impl StoryId {
                 module: "fine_tune",
                 api: "FineTuneCard",
                 usage: "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-                viewport: Viewport::Tall,
+                height: 1185,
             },
             Self::RecordsTable => StoryMeta {
                 category: "Data tables",
@@ -429,7 +415,7 @@ impl StoryId {
                 module: "records_table",
                 api: "RecordsTable",
                 usage: "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
-                viewport: Viewport::Wide,
+                height: 320,
             },
             Self::DiffTable => StoryMeta {
                 category: "Data tables",
@@ -437,7 +423,7 @@ impl StoryId {
                 module: "diff_table",
                 api: "DiffTable",
                 usage: "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
-                viewport: Viewport::Wide,
+                height: 320,
             },
             Self::FilterTable => StoryMeta {
                 category: "Data tables",
@@ -445,7 +431,7 @@ impl StoryId {
                 module: "filter_table",
                 api: "FilterTable",
                 usage: "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
-                viewport: Viewport::Wide,
+                height: 320,
             },
             Self::ComparisonTable => StoryMeta {
                 category: "Data tables",
@@ -453,7 +439,7 @@ impl StoryId {
                 module: "comparison_table",
                 api: "ComparisonTable",
                 usage: "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
-                viewport: Viewport::Wide,
+                height: 464,
             },
             Self::CodeBlock => StoryMeta {
                 category: "Readable output",
@@ -461,7 +447,7 @@ impl StoryId {
                 module: "code_block",
                 api: "CodeBlock",
                 usage: "CodeBlock::new(\"patch\", source).language(\"rust\")",
-                viewport: Viewport::Wide,
+                height: 155,
             },
             Self::CodeDiff => StoryMeta {
                 category: "Readable output",
@@ -469,7 +455,7 @@ impl StoryId {
                 module: "code_diff",
                 api: "CodeDiff",
                 usage: "CodeDiff::new(\"patch\", &file).reviewable(true)",
-                viewport: Viewport::Tall,
+                height: 712,
             },
             Self::Approval => StoryMeta {
                 category: "Decisions",
@@ -477,7 +463,7 @@ impl StoryId {
                 module: "approval",
                 api: "ApprovalCard",
                 usage: "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
-                viewport: Viewport::Tall,
+                height: 480,
             },
             Self::Plan => StoryMeta {
                 category: "Decisions",
@@ -485,7 +471,7 @@ impl StoryId {
                 module: "plan",
                 api: "PlanCard",
                 usage: "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-                viewport: Viewport::Tall,
+                height: 653,
             },
             Self::Recommendation => StoryMeta {
                 category: "Decisions",
@@ -493,7 +479,7 @@ impl StoryId {
                 module: "recommendation",
                 api: "RecommendationCard",
                 usage: "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
-                viewport: Viewport::Tall,
+                height: 294,
             },
             Self::Context => StoryMeta {
                 category: "Evidence",
@@ -501,7 +487,7 @@ impl StoryId {
                 module: "context_card",
                 api: "ContextCard",
                 usage: "ContextCard::new(\"design-doc\", \"Architecture\")",
-                viewport: Viewport::Tall,
+                height: 224,
             },
             Self::Insights => StoryMeta {
                 category: "Evidence",
@@ -509,7 +495,7 @@ impl StoryId {
                 module: "insight",
                 api: "InsightCard",
                 usage: "InsightCard::new(\"retention\", \"Retention improved\")",
-                viewport: Viewport::Wide,
+                height: 484,
             },
             Self::PromptBar => StoryMeta {
                 category: "Composites",
@@ -517,7 +503,7 @@ impl StoryId {
                 module: "prompt_bar",
                 api: "PromptBar",
                 usage: "PromptBar::new(\"agent-prompt\", window, cx)",
-                viewport: Viewport::Wide,
+                height: 624,
             },
             Self::Voice => StoryMeta {
                 category: "Composites",
@@ -525,7 +511,7 @@ impl StoryId {
                 module: "voice",
                 api: "VoiceControls",
                 usage: "VoiceControls::new(\"voice\", VoiceState::Idle)",
-                viewport: Viewport::Wide,
+                height: 341,
             },
             Self::Queue => StoryMeta {
                 category: "Composites",
@@ -533,7 +519,7 @@ impl StoryId {
                 module: "queue",
                 api: "MessageQueue",
                 usage: "MessageQueue::new(\"queue\").items(queued)",
-                viewport: Viewport::Wide,
+                height: 465,
             },
             Self::SelectionActions => StoryMeta {
                 category: "Readable output",
@@ -541,7 +527,7 @@ impl StoryId {
                 module: "selection_actions",
                 api: "SelectionActions",
                 usage: "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
-                viewport: Viewport::Wide,
+                height: 320,
             },
         })
     }

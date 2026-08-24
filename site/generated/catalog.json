@@ -27,7 +27,7 @@
       "source": "crates/gpui-ai/src/loading.rs",
       "api": "LoadingState",
       "usage": "LoadingState::new().label(\"Thinking\")",
-      "viewport": "tall",
+      "height": 84,
       "windowTitle": "Loading state — gpui-ai",
       "variants": [],
       "events": [],
@@ -37,7 +37,7 @@
         "ownership": "LoadingState renders state supplied by the application; it does not own durable work.",
         "interaction": "This presentation surface adds no component-specific interaction event.",
         "semantics": "A token-driven pixel field for work whose duration is not yet known.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -50,7 +50,7 @@
       "source": "crates/gpui-ai/src/chip.rs",
       "api": "ToolChip",
       "usage": "ToolChip::new(\"edit\", \"edit main.rs\")",
-      "viewport": "tall",
+      "height": 116,
       "windowTitle": "Tool chips — gpui-ai",
       "variants": [],
       "events": [
@@ -62,7 +62,7 @@
         "ownership": "ToolChip renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ToolChipEvent contract and stable application IDs.",
         "semantics": "Compact, typed status for tool calls without hiding their lifecycle.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -75,7 +75,7 @@
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
       "usage": "ToolCall::new(&call_progress)",
-      "viewport": "tall",
+      "height": 870,
       "windowTitle": "Tool calls — gpui-ai",
       "variants": [],
       "events": [
@@ -101,7 +101,7 @@
       "source": "crates/gpui-ai/src/task.rs",
       "api": "TaskRow",
       "usage": "TaskRow::new(&task_progress)",
-      "viewport": "tall",
+      "height": 176,
       "windowTitle": "Task rows — gpui-ai",
       "variants": [],
       "events": [],
@@ -111,7 +111,7 @@
         "ownership": "TaskRow renders state supplied by the application; it does not own durable work.",
         "interaction": "This presentation surface adds no component-specific interaction event.",
         "semantics": "Progressive task rows with stable identity and readable state.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -124,7 +124,7 @@
       "source": "crates/gpui-ai/src/thinking.rs",
       "api": "Thinking",
       "usage": "Thinking::new(\"reasoning\", &trace_progress)",
-      "viewport": "tall",
+      "height": 337,
       "windowTitle": "Thinking — gpui-ai",
       "variants": [],
       "events": [
@@ -136,7 +136,7 @@
         "ownership": "Thinking renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ThinkingEvent contract and stable application IDs.",
         "semantics": "Expandable reasoning traces in structured step and prose forms.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -149,7 +149,7 @@
       "source": "crates/gpui-ai/src/orbs.rs",
       "api": "Orbs",
       "usage": "Orbs::new()",
-      "viewport": "tall",
+      "height": 226,
       "windowTitle": "Orbs — gpui-ai",
       "variants": [],
       "events": [],
@@ -159,7 +159,7 @@
         "ownership": "Orbs renders state supplied by the application; it does not own durable work.",
         "interaction": "This presentation surface adds no component-specific interaction event.",
         "semantics": "A reduced-motion-aware ambient signal for background AI activity.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -172,7 +172,7 @@
       "source": "crates/gpui-ai/src/search_results.rs",
       "api": "SearchResults",
       "usage": "SearchResults::new(\"research\", \"GPUI components\")",
-      "viewport": "wide",
+      "height": 90,
       "windowTitle": "Web search — gpui-ai",
       "variants": [],
       "events": [
@@ -197,7 +197,7 @@
       "source": "crates/gpui-ai/src/todo_list.rs",
       "api": "TodoList",
       "usage": "TodoList::new(\"release-plan\")",
-      "viewport": "tall",
+      "height": 250,
       "windowTitle": "To-do list — gpui-ai",
       "variants": [],
       "events": [
@@ -209,7 +209,7 @@
         "ownership": "TodoList renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed TodoListEvent contract and stable application IDs.",
         "semantics": "A stable-ID checklist for plans that change while an agent works.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -222,7 +222,7 @@
       "source": "crates/gpui-ai/src/image_generation.rs",
       "api": "ImageGeneration",
       "usage": "ImageGeneration::new(\"hero-art\").progress(0.64)",
-      "viewport": "wide",
+      "height": 244,
       "windowTitle": "Image generation — gpui-ai",
       "variants": [],
       "events": [],
@@ -245,7 +245,7 @@
       "source": "crates/gpui-ai/src/streaming_text.rs",
       "api": "StreamingText",
       "usage": "StreamingText::new(\"answer\", &content)",
-      "viewport": "wide",
+      "height": 458,
       "windowTitle": "Streaming text — gpui-ai",
       "variants": [],
       "events": [
@@ -270,7 +270,7 @@
       "source": "crates/gpui-ai/src/chat.rs",
       "api": "Chat",
       "usage": "Chat::new(\"conversation\", prompt, window, cx)",
-      "viewport": "tall",
+      "height": 646,
       "windowTitle": "Chat — gpui-ai",
       "variants": [
         {
@@ -304,7 +304,7 @@
       "source": "crates/gpui-ai/src/suggestions.rs",
       "api": "Suggestions",
       "usage": "Suggestions::new(\"starters\")",
-      "viewport": "wide",
+      "height": 353,
       "windowTitle": "Suggestions — gpui-ai",
       "variants": [],
       "events": [
@@ -329,7 +329,7 @@
       "source": "crates/gpui-ai/src/attachment.rs",
       "api": "AttachmentStrip",
       "usage": "AttachmentStrip::new(\"files\").items(attachments)",
-      "viewport": "wide",
+      "height": 790,
       "windowTitle": "Attachment previews — gpui-ai",
       "variants": [],
       "events": [
@@ -341,7 +341,7 @@
         "ownership": "AttachmentStrip renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed AttachmentEvent contract and stable application IDs.",
         "semantics": "Composer and message attachments with thumbnails, kinds, upload state, and typed open or remove events.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -354,7 +354,7 @@
       "source": "crates/gpui-ai/src/artifact.rs",
       "api": "ArtifactPanel",
       "usage": "ArtifactPanel::new(\"doc\", &artifact)",
-      "viewport": "tall",
+      "height": 755,
       "windowTitle": "Artifact panel — gpui-ai",
       "variants": [],
       "events": [
@@ -379,7 +379,7 @@
       "source": "crates/gpui-ai/src/context_meter.rs",
       "api": "ContextMeter",
       "usage": "ContextMeter::new(\"context\", &usage)",
-      "viewport": "wide",
+      "height": 346,
       "windowTitle": "Context meter — gpui-ai",
       "variants": [],
       "events": [],
@@ -402,7 +402,7 @@
       "source": "crates/gpui-ai/src/command_search.rs",
       "api": "CommandSearch",
       "usage": "CommandSearch::new(\"commands\", window, cx)",
-      "viewport": "tall",
+      "height": 719,
       "windowTitle": "Command search — gpui-ai",
       "variants": [],
       "events": [
@@ -427,7 +427,7 @@
       "source": "crates/gpui-ai/src/sidebar_nav.rs",
       "api": "SidebarNav",
       "usage": "SidebarNav::new(\"workspace-nav\", window, cx)",
-      "viewport": "tall",
+      "height": 479,
       "windowTitle": "Sidebar navigation — gpui-ai",
       "variants": [],
       "events": [
@@ -439,7 +439,7 @@
         "ownership": "SidebarNav renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed SidebarNavEvent contract and stable application IDs.",
         "semantics": "Filterable, accessible navigation for growing AI workspaces.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -452,7 +452,7 @@
       "source": "crates/gpui-ai/src/thread_list.rs",
       "api": "ThreadList",
       "usage": "ThreadList::new(\"threads\", window, cx)",
-      "viewport": "tall",
+      "height": 653,
       "windowTitle": "Thread list — gpui-ai",
       "variants": [],
       "events": [
@@ -477,7 +477,7 @@
       "source": "crates/gpui-ai/src/fine_tune.rs",
       "api": "FineTuneCard",
       "usage": "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-      "viewport": "tall",
+      "height": 1185,
       "windowTitle": "Fine-tune card — gpui-ai",
       "variants": [],
       "events": [
@@ -502,7 +502,7 @@
       "source": "crates/gpui-ai/src/records_table.rs",
       "api": "RecordsTable",
       "usage": "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
-      "viewport": "wide",
+      "height": 320,
       "windowTitle": "Records table — gpui-ai",
       "variants": [
         {
@@ -556,7 +556,7 @@
       "source": "crates/gpui-ai/src/diff_table.rs",
       "api": "DiffTable",
       "usage": "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
-      "viewport": "wide",
+      "height": 320,
       "windowTitle": "Diff table — gpui-ai",
       "variants": [
         {
@@ -610,7 +610,7 @@
       "source": "crates/gpui-ai/src/filter_table.rs",
       "api": "FilterTable",
       "usage": "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
-      "viewport": "wide",
+      "height": 320,
       "windowTitle": "Filter table — gpui-ai",
       "variants": [
         {
@@ -664,7 +664,7 @@
       "source": "crates/gpui-ai/src/comparison_table.rs",
       "api": "ComparisonTable",
       "usage": "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
-      "viewport": "wide",
+      "height": 464,
       "windowTitle": "Comparison table — gpui-ai",
       "variants": [
         {
@@ -718,7 +718,7 @@
       "source": "crates/gpui-ai/src/code_block.rs",
       "api": "CodeBlock",
       "usage": "CodeBlock::new(\"patch\", source).language(\"rust\")",
-      "viewport": "wide",
+      "height": 155,
       "windowTitle": "Code block — gpui-ai",
       "variants": [],
       "events": [],
@@ -741,7 +741,7 @@
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
-      "viewport": "tall",
+      "height": 712,
       "windowTitle": "Code diff — gpui-ai",
       "variants": [],
       "events": [
@@ -766,7 +766,7 @@
       "source": "crates/gpui-ai/src/approval.rs",
       "api": "ApprovalCard",
       "usage": "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
-      "viewport": "tall",
+      "height": 480,
       "windowTitle": "Approval card — gpui-ai",
       "variants": [],
       "events": [
@@ -778,7 +778,7 @@
         "ownership": "ApprovalCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ApprovalEvent contract and stable application IDs.",
         "semantics": "An explicit, keyboard-operable human gate with destructive and always-allow variants and resolved states.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -791,7 +791,7 @@
       "source": "crates/gpui-ai/src/plan.rs",
       "api": "PlanCard",
       "usage": "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-      "viewport": "tall",
+      "height": 653,
       "windowTitle": "Plan card — gpui-ai",
       "variants": [],
       "events": [
@@ -816,7 +816,7 @@
       "source": "crates/gpui-ai/src/recommendation.rs",
       "api": "RecommendationCard",
       "usage": "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
-      "viewport": "tall",
+      "height": 294,
       "windowTitle": "Recommendation card — gpui-ai",
       "variants": [],
       "events": [
@@ -828,7 +828,7 @@
         "ownership": "RecommendationCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed RecommendationEvent contract and stable application IDs.",
         "semantics": "A focused recommendation with rationale and typed actions.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -841,7 +841,7 @@
       "source": "crates/gpui-ai/src/context_card.rs",
       "api": "ContextCard",
       "usage": "ContextCard::new(\"design-doc\", \"Architecture\")",
-      "viewport": "tall",
+      "height": 224,
       "windowTitle": "Context cards — gpui-ai",
       "variants": [],
       "events": [
@@ -853,7 +853,7 @@
         "ownership": "ContextCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ContextCardEvent contract and stable application IDs.",
         "semantics": "Compact source context that preserves provenance and readable detail.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -866,7 +866,7 @@
       "source": "crates/gpui-ai/src/insight.rs",
       "api": "InsightCard",
       "usage": "InsightCard::new(\"retention\", \"Retention improved\")",
-      "viewport": "wide",
+      "height": 484,
       "windowTitle": "Insight card — gpui-ai",
       "variants": [],
       "events": [
@@ -878,7 +878,7 @@
         "ownership": "InsightCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed InsightEvent contract and stable application IDs.",
         "semantics": "Paged analytical findings with chart-ready, semantic values.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -891,7 +891,7 @@
       "source": "crates/gpui-ai/src/prompt_bar.rs",
       "api": "PromptBar",
       "usage": "PromptBar::new(\"agent-prompt\", window, cx)",
-      "viewport": "wide",
+      "height": 624,
       "windowTitle": "Prompt bar — gpui-ai",
       "variants": [],
       "events": [
@@ -903,7 +903,7 @@
         "ownership": "PromptBar renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed PromptBarEvent contract and stable application IDs.",
         "semantics": "A hybrid-controlled composer with mentions, commands, models, and attachments.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -916,7 +916,7 @@
       "source": "crates/gpui-ai/src/voice.rs",
       "api": "VoiceControls",
       "usage": "VoiceControls::new(\"voice\", VoiceState::Idle)",
-      "viewport": "wide",
+      "height": 341,
       "windowTitle": "Voice controls — gpui-ai",
       "variants": [],
       "events": [
@@ -941,7 +941,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "viewport": "wide",
+      "height": 465,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [
@@ -966,7 +966,7 @@
       "source": "crates/gpui-ai/src/selection_actions.rs",
       "api": "SelectionActions",
       "usage": "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
-      "viewport": "wide",
+      "height": 320,
       "windowTitle": "Selection actions — gpui-ai",
       "variants": [],
       "events": [
