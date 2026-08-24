@@ -16,3 +16,7 @@ dist/
 
 # Upstream icon set copied into the web host by copy-icons.mjs
 /crates/gallery-web/www/public/
+
+# Vite app dependencies and output under site/
+/site/node_modules/
+/site/dist-app/

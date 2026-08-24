@@ -25,7 +25,7 @@
     "release:notes": "node script/release-notes.mjs",
     "check:web": "npm --prefix crates/gallery-web/www test && npm run check:site && npm run check:web:release",
     "check:web:release": "node script/check-web-release.mjs",
-    "check:site": "npm --prefix site test",
+    "check:site": "npm --prefix site run typecheck && npm --prefix site test",
     "test": "cargo test --workspace",
     "dev:web": "npm --prefix crates/gallery-web/www run dev",
     "report:wasm": "node crates/gallery-web/scripts/report-size.mjs",

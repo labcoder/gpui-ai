@@ -8,7 +8,10 @@ test("root workflows expose and compose site checks and builds", async () => {
   );
   const { scripts } = packageJson;
 
-  assert.equal(scripts["check:site"], "npm --prefix site test");
+  // The site is TypeScript now, so the gate has to typecheck it, not only run
+  // the node tests.
+  assert.match(scripts["check:site"], /npm --prefix site run typecheck/);
+  assert.match(scripts["check:site"], /npm --prefix site test/);
   assert.equal(scripts["build:site"], "npm --prefix site run build");
   assert.equal(scripts["check:web:release"], "node script/check-web-release.mjs");
   assert.match(scripts["check:web"], /check:web:release/);
