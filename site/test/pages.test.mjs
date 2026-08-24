@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -229,6 +229,39 @@ test("the home page publishes what this build is and where it came from", async 
   }
   assert.match(html, /How this site works/, "the home page must say what it is doing");
   assert.match(html, new RegExp(`href="${BASE}/api/"`), "the API docs are not linked");
+});
+
+test("every font the site uses is served from the site", async () => {
+  const { outDir } = await site();
+  const assets = await readdir(path.join(outDir, "assets"));
+  const stylesheets = assets.filter((name) => name.endsWith(".css"));
+  assert.ok(stylesheets.length > 0, "the build emitted no stylesheet");
+
+  const css = (
+    await Promise.all(
+      stylesheets.map((name) => readFile(path.join(outDir, "assets", name), "utf8")),
+    )
+  ).join("\n");
+
+  // A third-party font request tells another host about every visitor and adds
+  // a connection the first paint waits on. Self-hosting is the whole reason
+  // @fontsource is a dependency rather than a <link> to a CDN.
+  const external = css.match(/url\(\s*['"]?(https?:)?\/\/[^)]*\)/g) ?? [];
+  assert.deepEqual(external, [], "a stylesheet fetches a font from another origin");
+  assert.doesNotMatch(css, /fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit/);
+
+  const families = [...css.matchAll(/@font-face\{[^}]*font-family:\s*([^;}]+)/g)].map((match) =>
+    match[1].replace(/['"]/g, "").trim(),
+  );
+  assert.deepEqual(
+    [...new Set(families)].sort(),
+    ["IBM Plex Sans", "IBM Plex Serif", "Lilex"],
+    "the faces the theme tokens name must be the faces the build ships",
+  );
+  assert.ok(
+    assets.filter((name) => name.endsWith(".woff2")).length >= families.length,
+    "each declared face needs a woff2 next to it",
+  );
 });
 
 test("no page links to a bare index.html", async () => {

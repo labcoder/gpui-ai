@@ -630,6 +630,41 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     errors,
   });
 
+  // S-03's whole claim: the chrome is painted from the generated tokens, so
+  // setting the attribute the registry keys on repaints it. Nothing static can
+  // check this — a stylesheet full of var() references looks correct whether or
+  // not the properties resolve, and only a browser knows what was painted.
+  const repaint = await cdp.evaluate(`(() => {
+    const read = () => {
+      const body = getComputedStyle(document.body);
+      const rail = document.querySelector('.component-rail');
+      return {
+        background: body.backgroundColor,
+        foreground: body.color,
+        border: rail ? getComputedStyle(rail).borderTopColor : null,
+        radius: rail ? getComputedStyle(rail).borderTopLeftRadius : null,
+        face: body.fontFamily,
+      };
+    };
+    const before = read();
+    document.documentElement.dataset.theme = 'ember-dusk';
+    const after = read();
+    document.documentElement.removeAttribute('data-theme');
+    const restored = read();
+    return { before, after, restored };
+  })()`);
+  for (const property of ["background", "foreground", "border"]) {
+    assert.notEqual(
+      repaint.after[property],
+      repaint.before[property],
+      `switching data-theme left ${property} at ${repaint.before[property]}`,
+    );
+  }
+  assert.deepEqual(repaint.restored, repaint.before, "removing data-theme must restore the default");
+  // The face comes from a token too, so a theme that changed it would move the
+  // chrome and the demos together.
+  assert.match(repaint.before.face, /IBM Plex Sans/);
+
   // On a phone the rail stops being a sidebar, but it is the only place the
   // page carries the rustdoc link, the source link, and the reference table.
   // Laying it out with `display: none` below a breakpoint would take all of

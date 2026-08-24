@@ -9,6 +9,19 @@
 
 @import "../generated/themes.css";
 
+/* Self-hosted, latin subset only. Every face is served from this origin: a
+   third-party font request would leak every visitor to another host and add a
+   connection the page has to wait on. The three families are the ones the
+   theme registry already names — Plex Sans body and Lilex mono come from
+   --ai-font-sans and --ai-font-mono, so the demos and the chrome share a face
+   — plus Plex Serif for titles, which is the site's own (decision 3).
+   Four faces, the only weights the stylesheet asks for: roughly 90 KB, against
+   a WASM payload measured in megabytes. */
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-serif/latin-600.css";
+@import "@fontsource/lilex/latin-400.css";
+
 *,
 *::before,
 *::after {
@@ -31,6 +44,14 @@
      against narrow viewports and the themes that change the base font size. */
   --demo-width: 900px;
   --page-width: 68rem;
+  /* Prose reads at about 72 characters; the demo breaks out past it. */
+  --prose-width: 72ch;
+
+  /* The display face. Not a theme token on purpose: body and mono change with
+     the theme so the chrome matches the demos, while the title face is the
+     site's identity and stays put. site/scripts/token-lint.mjs allows this one
+     name and no other. */
+  --site-font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
 }
 
 html {
@@ -67,6 +88,15 @@ h2,
 h3 {
   line-height: 1.2;
   text-wrap: balance;
+}
+
+/* Titles only. A serif running through headings gives the page a voice the
+   component demos do not have to share. */
+h1,
+h2 {
+  font-family: var(--site-font-serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 h1 {
@@ -157,7 +187,7 @@ main {
   color: var(--ai-muted);
   font-size: 1.0625rem;
   margin: 0 0 var(--space-8);
-  max-width: 46rem;
+  max-width: var(--prose-width);
 }
 
 /* Component page --------------------------------------------------------- */
@@ -203,6 +233,7 @@ main {
 }
 
 .component-rail h2 {
+  font-family: var(--ai-font-sans);
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;

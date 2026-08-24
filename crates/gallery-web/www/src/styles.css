@@ -34,7 +34,10 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  /* The canvas draws IBM Plex Sans, which gpui_web links into the binary.
+     This chrome only shows before that starts, so it takes the viewer's own
+     UI face rather than naming one nothing in the project ships. */
+  font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
 body[data-page='embed'] { overflow: hidden; }
