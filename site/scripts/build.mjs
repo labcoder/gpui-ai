@@ -2,7 +2,9 @@ import { access, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { components } from "../src/catalog.js";
+import catalog from "../generated/catalog.json" with { type: "json" };
+
+const { components } = catalog;
 import { catalogPage, componentPage, homePage } from "../src/templates.js";
 
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -78,7 +80,6 @@ async function generateInto(stageDir, galleryDir) {
   await Promise.all([
     copySource("styles.css", path.join(assetsDir, "styles.css")),
     copySource("shell.js", path.join(assetsDir, "shell.js")),
-    copySource("catalog.js", path.join(assetsDir, "catalog.js")),
     copySource("runtime.js", path.join(assetsDir, "runtime.js")),
   ]);
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });

@@ -1,4 +1,6 @@
-import { categories, components } from "./catalog.js";
+import catalog from "../generated/catalog.json" with { type: "json" };
+
+const { categories, components } = catalog;
 
 const escapeHtml = (value) =>
   String(value)

@@ -17,8 +17,16 @@ name = "gallery-catalog-scan"
 path = "src/catalog_main.rs"
 required-features = ["performance"]
 
+[[bin]]
+name = "gallery-catalog-export"
+path = "src/catalog_export_main.rs"
+required-features = ["export"]
+
 [features]
 performance = ["gpui/profiler", "dep:windows-sys"]
+# Kept behind a feature so serde_json stays out of the shipped gallery and its
+# WASM build; only the catalog exporter needs it.
+export = ["dep:serde_json"]
 
 [dependencies]
 anyhow.workspace = true
@@ -27,6 +35,7 @@ gpui_platform.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
 gpui-ai.workspace = true
+serde_json = { version = "1", optional = true }
 
 # Syntax highlighting for Markdown code fences in native CodeBlock stories.
 # Upstream declares every tree-sitter dependency as native-only, so enabling

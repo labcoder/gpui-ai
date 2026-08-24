@@ -5,7 +5,9 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { buildSite } from "../scripts/build.mjs";
-import { components } from "../src/catalog.js";
+import catalog from "../generated/catalog.json" with { type: "json" };
+
+const { components } = catalog;
 
 async function createGalleryFixture(directory) {
   await mkdir(path.join(directory, "assets"), { recursive: true });
@@ -82,7 +84,6 @@ test("generated pages share the same local assets", async (context) => {
   assert.match(page, /src="\.\.\/\.\.\/assets\/shell\.js"/);
   await readFile(path.join(outDir, "assets", "styles.css"), "utf8");
   await readFile(path.join(outDir, "assets", "shell.js"), "utf8");
-  await readFile(path.join(outDir, "assets", "catalog.js"), "utf8");
   await readFile(path.join(outDir, "assets", "runtime.js"), "utf8");
 });
 

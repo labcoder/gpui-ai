@@ -114,15 +114,7 @@ impl TableStoryState {
     ];
 
     /// Switcher labels parallel to [`Self::ALL`].
-    const LABELS: &'static [(&'static str, &'static str)] = &[
-        ("populated", "Populated"),
-        ("loading", "Loading"),
-        ("error", "Error"),
-        ("empty", "Empty"),
-        ("disabled", "Disabled"),
-        ("selected", "Selected"),
-        ("constrained", "Constrained"),
-    ];
+    const LABELS: &'static [(&'static str, &'static str)] = crate::story::TABLE_STORY_VARIANTS;
 
     /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
     fn index(self) -> usize {
@@ -234,8 +226,7 @@ const QUESTION_VERSIONS: &[&str] = &[
 ];
 
 /// Switcher labels for the two demonstrated chat states.
-const CHAT_STORY_STATES: &[(&str, &str)] =
-    &[("conversation", "Conversation"), ("welcome", "Welcome")];
+const CHAT_STORY_STATES: &[(&str, &str)] = crate::story::CHAT_STORY_VARIANTS;
 
 impl ChatStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {

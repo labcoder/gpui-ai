@@ -9,7 +9,9 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
-import { components } from "../src/catalog.js";
+import catalog from "../generated/catalog.json" with { type: "json" };
+
+const { components } = catalog;
 
 const browserCandidates = process.platform === "win32"
   ? [
