@@ -41,7 +41,13 @@ export function apiHref(component: Component): string {
   return href(`/api/gpui_ai/${module}/struct.${component.api}.html`);
 }
 
-/** The component's implementation on GitHub, at the released tag. */
-export function sourceHref(component: Component, repository: string, version: string): string {
-  return `${repository}/blob/v${version}/${component.source}`;
+/**
+ * The component's implementation on GitHub.
+ *
+ * Pinned to `main`, not to the last tag: the summaries, snippets, and measured
+ * heights on this page are generated from the tree the site was built from, so
+ * a tag link would open code that does not match what is described here.
+ */
+export function sourceHref(component: Component, repository: string): string {
+  return `${repository}/blob/main/${component.source}`;
 }

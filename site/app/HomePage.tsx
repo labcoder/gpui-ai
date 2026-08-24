@@ -20,7 +20,7 @@ export function HomePage() {
       </p>
 
       <section aria-labelledby="install">
-        <h2 id="install">Install</h2>
+        <h2 id="install">Install the latest release</h2>
         <div className="install">
           <p className="lede">
             Not on crates.io yet: GPUI itself is only published from Git, so this is too.
@@ -69,11 +69,18 @@ gpui = { git = "https://github.com/zed-industries/zed" }`}</code>
       </section>
 
       <section aria-labelledby="build">
-        <h2 id="build">This build</h2>
+        <h2 id="build">What these demos were built from</h2>
+        <p className="lede">
+          This site is built from <code>main</code>, so the demos can be ahead of the release
+          above. These are the commits they were compiled against — for a Git dependency that is
+          the only thing that pins what you get.
+        </p>
         <dl className="facts">
           <div>
-            <dt>Version</dt>
-            <dd>{`v${build.version}`}</dd>
+            <dt>Latest release</dt>
+            <dd>
+              <a href={`${build.repository}/releases/tag/v${build.version}`}>{`v${build.version}`}</a>
+            </dd>
           </div>
           <div>
             <dt>License</dt>
