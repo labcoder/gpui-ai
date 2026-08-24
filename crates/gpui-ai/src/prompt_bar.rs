@@ -1284,6 +1284,17 @@ impl Render for PromptBar {
     }
 }
 
+/// Rejects a catalog that repeats a stable ID.
+///
+/// Repeated IDs alias `ElementId`s, so a second entry would silently take the
+/// first one's focus, hover, and reveal state. [`Chat`](crate::chat::Chat) and
+/// [`RecordsTable`](crate::records_table::RecordsTable) reject malformed
+/// controlled snapshots the same way.
+fn stable_ids_are_unique<'a>(mut ids: impl Iterator<Item = &'a SharedString>) -> bool {
+    let mut seen = HashSet::new();
+    ids.all(|id| seen.insert(id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1988,15 +1999,4 @@ mod tests {
             assert_eq!(prompt.commands.len(), 1, "commands must be unchanged");
         });
     }
-}
-
-/// Rejects a catalog that repeats a stable ID.
-///
-/// Repeated IDs alias `ElementId`s, so a second entry would silently take the
-/// first one's focus, hover, and reveal state. [`Chat`](crate::chat::Chat) and
-/// [`RecordsTable`](crate::records_table::RecordsTable) reject malformed
-/// controlled snapshots the same way.
-fn stable_ids_are_unique<'a>(mut ids: impl Iterator<Item = &'a SharedString>) -> bool {
-    let mut seen = HashSet::new();
-    ids.all(|id| seen.insert(id))
 }
