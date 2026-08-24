@@ -76,7 +76,7 @@
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
       "usage": "ToolCall::new(&call_progress)",
-      "height": 838,
+      "height": 640,
       "windowTitle": "Tool calls — gpui-ai",
       "variants": [],
       "events": [
@@ -246,7 +246,7 @@
       "source": "crates/gpui-ai/src/streaming_text.rs",
       "api": "StreamingText",
       "usage": "StreamingText::new(\"answer\", &content)",
-      "height": 676,
+      "height": 426,
       "windowTitle": "Streaming text — gpui-ai",
       "variants": [],
       "events": [
@@ -258,7 +258,7 @@
         "ownership": "StreamingText renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed StreamingTextEvent contract and stable application IDs.",
         "semantics": "Selectable streaming Markdown with citations, sources, and follow-ups.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -305,7 +305,7 @@
       "source": "crates/gpui-ai/src/suggestions.rs",
       "api": "Suggestions",
       "usage": "Suggestions::new(\"starters\")",
-      "height": 322,
+      "height": 128,
       "windowTitle": "Suggestions — gpui-ai",
       "variants": [],
       "events": [
@@ -330,7 +330,7 @@
       "source": "crates/gpui-ai/src/attachment.rs",
       "api": "AttachmentStrip",
       "usage": "AttachmentStrip::new(\"files\").items(attachments)",
-      "height": 758,
+      "height": 486,
       "windowTitle": "Attachment previews — gpui-ai",
       "variants": [],
       "events": [
@@ -355,7 +355,7 @@
       "source": "crates/gpui-ai/src/artifact.rs",
       "api": "ArtifactPanel",
       "usage": "ArtifactPanel::new(\"doc\", &artifact)",
-      "height": 724,
+      "height": 504,
       "windowTitle": "Artifact panel — gpui-ai",
       "variants": [],
       "events": [
@@ -380,7 +380,7 @@
       "source": "crates/gpui-ai/src/context_meter.rs",
       "api": "ContextMeter",
       "usage": "ContextMeter::new(\"context\", &usage)",
-      "height": 314,
+      "height": 120,
       "windowTitle": "Context meter — gpui-ai",
       "variants": [],
       "events": [],
@@ -403,7 +403,7 @@
       "source": "crates/gpui-ai/src/command_search.rs",
       "api": "CommandSearch",
       "usage": "CommandSearch::new(\"commands\", window, cx)",
-      "height": 688,
+      "height": 494,
       "windowTitle": "Command search — gpui-ai",
       "variants": [],
       "events": [
@@ -428,7 +428,7 @@
       "source": "crates/gpui-ai/src/sidebar_nav.rs",
       "api": "SidebarNav",
       "usage": "SidebarNav::new(\"workspace-nav\", window, cx)",
-      "height": 448,
+      "height": 284,
       "windowTitle": "Sidebar navigation — gpui-ai",
       "variants": [],
       "events": [
@@ -453,7 +453,7 @@
       "source": "crates/gpui-ai/src/thread_list.rs",
       "api": "ThreadList",
       "usage": "ThreadList::new(\"threads\", window, cx)",
-      "height": 622,
+      "height": 436,
       "windowTitle": "Thread list — gpui-ai",
       "variants": [],
       "events": [
@@ -465,7 +465,7 @@
         "ownership": "ThreadList renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ThreadListEvent contract and stable application IDs.",
         "semantics": "A grouped conversation list with search, archived threads, and typed row actions.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -478,7 +478,7 @@
       "source": "crates/gpui-ai/src/fine_tune.rs",
       "api": "FineTuneCard",
       "usage": "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-      "height": 1154,
+      "height": 990,
       "windowTitle": "Fine-tune card — gpui-ai",
       "variants": [],
       "events": [
@@ -742,7 +742,7 @@
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
-      "height": 681,
+      "height": 461,
       "windowTitle": "Code diff — gpui-ai",
       "variants": [],
       "events": [
@@ -754,7 +754,7 @@
         "ownership": "CodeDiff renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed CodeDiffEvent contract and stable application IDs.",
         "semantics": "A unified patch with line gutters, change tints, per-hunk accept or reject, and a copyable source.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -792,7 +792,7 @@
       "source": "crates/gpui-ai/src/plan.rs",
       "api": "PlanCard",
       "usage": "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-      "height": 622,
+      "height": 402,
       "windowTitle": "Plan card — gpui-ai",
       "variants": [],
       "events": [
@@ -804,7 +804,7 @@
         "ownership": "PlanCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed PlanEvent contract and stable application IDs.",
         "semantics": "An agent's proposed steps with typed per-step status, approve or reject while proposed, and resolved states.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -917,7 +917,7 @@
       "source": "crates/gpui-ai/src/voice.rs",
       "api": "VoiceControls",
       "usage": "VoiceControls::new(\"voice\", VoiceState::Idle)",
-      "height": 310,
+      "height": 90,
       "windowTitle": "Voice controls — gpui-ai",
       "variants": [],
       "events": [
@@ -942,7 +942,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "height": 434,
+      "height": 240,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [

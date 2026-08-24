@@ -422,10 +422,10 @@ impl ChatStory {
             ProgressState::Failed(reason) => StreamedContent::failed(live_text, reason.clone()),
         };
         let mut messages = vec![ChatMessage::new(
-            "reference-note",
+            "system-note",
             ChatRole::System,
             StreamedContent::done(
-                "Beautiful UI keeps Chat compact and bottom-pinned. This original GPUI composition additionally virtualizes by stable application IDs, preserves the top item and pixel offset while reading history, exposes unread state, and delegates every async producer to the application.",
+                "This thread virtualizes by stable application IDs, preserves the top item and its pixel offset while you read back through history, exposes unread state, and leaves every async producer to the application.",
             ),
         )
         .with_appearance(ChatMessageAppearance::new(
@@ -439,8 +439,8 @@ impl ChatStory {
                 ChatRole::Assistant
             };
             // Role-driven presentation: user messages trail in a filled
-            // bubble, assistant replies lead unframed — the composition the
-            // reference demos use. Applications choose per message.
+            // bubble, assistant replies lead unframed. Applications choose
+            // the appearance per message.
             let appearance = match role {
                 ChatRole::User => {
                     ChatMessageAppearance::new(MessageAlignment::Trailing, MessageBubble::Filled)
@@ -815,13 +815,6 @@ impl Render for ThreadListStory {
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
             )
-            .child(
-                TextView::markdown(
-                    "thread-list-reference-note",
-                    "**Reference comparison.** assistant-ui and Beautiful UI keep a conversation list in the sidebar with new, switch, archive, and delete. gpui-ai groups threads into application-owned sections, keeps the active thread semantic, hides archived threads behind a named toggle, searches title and subtitle natively, and exposes rename / archive / delete as keyboard-reachable row actions that report typed events.",
-                )
-                .selectable(true),
-            )
     }
 }
 
@@ -954,13 +947,6 @@ impl Render for CommandSearchStory {
                             .child(self.no_results.clone()),
                     ),
             )
-            .child(
-                TextView::markdown(
-                    "command-search-reference-note",
-                    "**Reference comparison.** Beautiful UI presents a compact search-and-command list. This original GPUI adapter preserves the upstream native editor, filtering, keyboard navigation, focus, and virtual list while adding stable application IDs, typed query/selection/dismissal events, subtitles, shortcut hints, disabled-state semantics, and controlled snapshot replacement.",
-                )
-                .selectable(true),
-            )
     }
 }
 
@@ -1091,17 +1077,13 @@ impl Render for SidebarNavStory {
                 div()
                     .id("sidebar-nav-event")
                     .role(Role::Status)
-                    .aria_label(format!("Last sidebar navigation event: {}", self.last_event))
+                    .aria_label(format!(
+                        "Last sidebar navigation event: {}",
+                        self.last_event
+                    ))
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
-            )
-            .child(
-                TextView::markdown(
-                    "sidebar-nav-reference-note",
-                    "**Reference comparison.** Inspired by Creamery's calm, compact navigation, this original GPUI composition keeps application-owned stable IDs and active state, recursively retains matching ancestors, exposes badges and disabled state, and intentionally scrolls deep content inside each constrained sidebar.",
-                )
-                .selectable(true),
             )
     }
 }
@@ -1256,9 +1238,7 @@ impl Render for FineTuneStory {
                                 div().flex_1().items_start().child(
                                     div()
                                         .id("fine-tune-preview-target")
-                                        .debug_selector(|| {
-                                            "fine-tune-preview-target".to_owned()
-                                        })
+                                        .debug_selector(|| "fine-tune-preview-target".to_owned())
                                         .w(preview_width)
                                         .h(preview_height)
                                         .rounded(px(populated_values.radius() as f32))
@@ -1306,13 +1286,6 @@ impl Render for FineTuneStory {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
-            )
-            .child(
-                TextView::markdown(
-                    "fine-tune-reference-note",
-                    "**Reference comparison.** Beautiful UI's compact Fine-tune surface groups width, height, radius, opacity, and typeface. This original GPUI inspector adds an optional named accent color, application-owned stable identities, typed controlled events, duplicate-label-safe typeface selection, and deliberate constrained-height scrolling.",
-                )
-                .selectable(true),
             )
     }
 }
@@ -1550,13 +1523,6 @@ impl Render for PromptBarStory {
                 )
                 .selectable(true),
             )
-            .child(
-                TextView::markdown(
-                    "prompt-bar-reference-note",
-                    "**Reference comparison.** Beautiful UI places its compact `Prompt or tag a flavor with @` composer inside Chat. This GPUI implementation deliberately makes the composer reusable on its own, retains the upstream native textarea for IME and selection, and adds typed model, attachment, command, enhancement, submission, and cancellation events without owning application async work.",
-                )
-                .selectable(true),
-            )
     }
 }
 
@@ -1628,13 +1594,6 @@ impl Render for SelectionActionsStory {
                 TextView::markdown(
                     "selection-actions-event-log",
                     format!("**Last typed event.** {}", self.last_event),
-                )
-                .selectable(true),
-            )
-            .child(
-                TextView::markdown(
-                    "selection-actions-reference-note",
-                    "**Reference comparison.** Beautiful UI presents Ask, Explain, and Rewrite in a compact floating selection toolbar. This original GPUI composition deliberately keeps gpui-component's Markdown selection and native copy behavior, emits stable typed IDs for application-owned work, names every keyboard control, and clamps the token-driven toolbar inside constrained surfaces without motion-dependent meaning.",
                 )
                 .selectable(true),
             )
@@ -2054,12 +2013,18 @@ impl Render for RecordsTableStory {
                 .into_any_element(),
         };
 
-        v_flex().gap_3()
-            .child(switcher)
-            .child(active)
-            .child(TextView::markdown("records-story-event-log", format!("**Last typed event.** {}", self.last_event)).selectable(true))
-            .child(div().id("records-story-reference-note").debug_selector(|| "records-story-reference-note".into())
-                .child(TextView::markdown("records-story-reference-copy", "**Reference comparison.** Beautiful UI's records table establishes the compact density and pinned identity column. This GPUI version keeps application-owned sorting and selection, stable row and column IDs, selectable cells, semantic state, and two-axis virtualization.").selectable(true)))
+        v_flex().gap_3().child(switcher).child(active).child(
+            div()
+                .id("records-story-end")
+                .debug_selector(|| "records-story-end".into())
+                .child(
+                    TextView::markdown(
+                        "records-story-event-log",
+                        format!("**Last typed event.** {}", self.last_event),
+                    )
+                    .selectable(true),
+                ),
+        )
     }
 }
 
@@ -2411,29 +2376,18 @@ impl Render for DiffTableStory {
                 .into_any_element(),
         };
 
-        v_flex()
-            .gap_3()
-            .child(switcher)
-            .child(active)
-            .child(
-                TextView::markdown(
-                    "diff-story-event-log",
-                    format!("**Last typed event.** {}", self.last_event),
-                )
-                .selectable(true),
-            )
-            .child(
-                div()
-                    .id("diff-story-reference-note")
-                    .debug_selector(|| "diff-story-reference-note".into())
-                    .child(
-                        TextView::markdown(
-                            "diff-story-reference-copy",
-                            "**Reference comparison.** Beautiful UI presents AI-proposed menu edits as a compact table. This original GPUI composition adds explicit before/after labels, stable proposal and column IDs, application-owned decisions and sorting, selectable cells, direct semantics, and two-axis virtualization.",
-                        )
-                        .selectable(true),
-                    ),
-            )
+        v_flex().gap_3().child(switcher).child(active).child(
+            div()
+                .id("diff-story-end")
+                .debug_selector(|| "diff-story-end".into())
+                .child(
+                    TextView::markdown(
+                        "diff-story-event-log",
+                        format!("**Last typed event.** {}", self.last_event),
+                    )
+                    .selectable(true),
+                ),
+        )
     }
 }
 
@@ -2983,20 +2937,13 @@ impl Render for FilterTableStory {
             .child(switcher)
             .child(active)
             .child(
-                TextView::markdown(
-                    "filter-story-event-log",
-                    format!("**Last typed event.** {}", self.last_event),
-                )
-                .selectable(true),
-            )
-            .child(
                 div()
-                    .id("filter-story-reference-note")
-                    .debug_selector(|| "filter-story-reference-note".into())
+                    .id("filter-story-end")
+                    .debug_selector(|| "filter-story-end".into())
                     .child(
                         TextView::markdown(
-                            "filter-story-reference-copy",
-                            "**Reference comparison.** Beautiful UI uses status chips to reorganize a compact task table. This original GPUI composition keeps filter definitions and ordered rows application-owned, adds stable IDs and typed intent, selectable cells, direct semantics, two-axis virtualization, and visible-only finite reorder motion that snaps under reduced motion.",
+                            "filter-story-event-log",
+                            format!("**Last typed event.** {}", self.last_event),
                         )
                         .selectable(true),
                     ),
@@ -3319,29 +3266,18 @@ impl Render for ComparisonTableStory {
             }
         };
 
-        v_flex()
-            .gap_3()
-            .child(switcher)
-            .child(active)
-            .child(
-                TextView::markdown(
-                    "comparison-story-event-log",
-                    format!("**Last typed event.** {}", self.last_event),
-                )
-                .selectable(true),
-            )
-            .child(
-                div()
-                    .id("comparison-story-reference-note")
-                    .debug_selector(|| "comparison-story-reference-note".into())
-                    .child(
-                        TextView::markdown(
-                            "comparison-story-reference-copy",
-                            "**Reference comparison.** Beautiful UI establishes a compact feature-by-plan layout. This original GPUI composition deliberately validates a bounded 12-item by 128-feature snapshot, keeps highlighting and selection application-owned, exposes stable typed intent and direct table semantics, preserves selectable values, and provides keyboard-driven horizontal reachability.",
-                        )
-                        .selectable(true),
-                    ),
-            )
+        v_flex().gap_3().child(switcher).child(active).child(
+            div()
+                .id("comparison-story-end")
+                .debug_selector(|| "comparison-story-end".into())
+                .child(
+                    TextView::markdown(
+                        "comparison-story-event-log",
+                        format!("**Last typed event.** {}", self.last_event),
+                    )
+                    .selectable(true),
+                ),
+        )
     }
 }
 
@@ -4207,13 +4143,6 @@ impl Gallery {
                     v_flex()
                         .gap_4()
                         .child(
-                            TextView::markdown(
-                                "streaming-text-reference-note",
-                                "**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups; AI Elements and assistant-ui add favicon badges and a hover preview per citation. gpui-ai keeps stable typed citation routing with keyboard/AccessKit companion links (the pinned Markdown glyph link is pointer-only), previews each citation's title and destination on hover, and renders web sources as activatable chips with a domain initial in place of a favicon.",
-                            )
-                            .selectable(true),
-                        )
-                        .child(
                             StreamingText::new("answer", &self.sim.answer)
                                 .source_refs([
                                     SourceRef::new("pricing.md"),
@@ -4316,13 +4245,6 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
-                        .child(
-                            TextView::markdown(
-                                "suggestions-reference-note",
-                                "**Reference comparison.** AI Elements and assistant-ui show starter prompts as a single scrolling row that sends on click. gpui-ai wraps chips onto the available width, ripples them in with a staggered reveal, keeps every chip a named keyboard-reachable button, and reports a stable ID so the application decides whether to send or merely fill the composer.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -4392,13 +4314,6 @@ impl Gallery {
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
-                        )
-                        .child(
-                            TextView::markdown(
-                                "attachments-reference-note",
-                                "**Reference comparison.** AI Elements and assistant-ui render attachments as image thumbnails or file chips inside the composer and again inside the sent message. gpui-ai uses one `Attachment` value for both: the same ID, kind glyph, size, and thumbnail travel from the composer into the message, upload state is typed (`ProgressState`) rather than a boolean, every tile has an accessible name that reads the file name and its summary, and remove or open intent is reported by stable ID so the application owns bytes, uploads, and previews.",
-                            )
-                            .selectable(true),
                         )
                     // snippet:end
                 },
@@ -4517,13 +4432,6 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
-                        .child(
-                            TextView::markdown(
-                                "artifact-reference-note",
-                                "**Reference comparison.** Claude's Artifacts and ChatGPT's Canvas open generated documents beside the chat with a preview / code switch and version history. gpui-ai's panel carries the source as streamed content (so it renders while the agent writes), picks the preview from the artifact kind, keeps versions and actions typed by stable ID, and leaves width and docking to the application — here the upstream resizable group.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -4590,13 +4498,6 @@ impl Gallery {
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
-                        )
-                        .child(
-                            TextView::markdown(
-                                "voice-reference-note",
-                                "**Reference comparison.** AI SDK Elements and assistant-ui ship microphone and speaker buttons bound to browser audio APIs. gpui-ai keeps audio with the application: the controls render the state it owns (idle, listening with a live level meter, transcribing, speaking), show the interim transcript as a status, and report every press as a typed `VoiceEvent` so native capture, streaming speech-to-text, and text-to-speech plug in behind stable intent.",
-                            )
-                            .selectable(true),
                         )
                     // snippet:end
                 },
@@ -4668,13 +4569,6 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
-                        .child(
-                            TextView::markdown(
-                                "queue-reference-note",
-                                "**Reference comparison.** Claude Code and Codex queue the prompts typed while a turn runs and let people pull one forward or drop it. gpui-ai renders that queue as a named list above the composer with position, note, and keyboard-reachable move, edit, send-now, remove, and clear controls, each reported by stable ID so the application owns ordering and dispatch.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -4730,13 +4624,6 @@ impl Gallery {
                         .child(row("Ring", ContextMeterVariant::Ring))
                         .child(row("Bar", ContextMeterVariant::Bar))
                         .child(row("Text", ContextMeterVariant::Text))
-                        .child(
-                            TextView::markdown(
-                                "context-meter-reference-note",
-                                "**Reference comparison.** AI Elements and assistant-ui show token usage as a ring that turns amber past 65% and red past 85%, with a hover breakdown of input, output, reasoning, cached tokens, and cost. gpui-ai keeps those thresholds, exposes the same numbers as a named progress indicator with a spoken description, and offers ring, bar, and text forms that share one tone scale.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -4934,13 +4821,6 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
-                        .child(
-                            TextView::markdown(
-                                "code-diff-reference-note",
-                                "**Reference comparison.** Cursor and Zed review agent edits inline with accept and reject per hunk; AI Elements ships a read-only code block. gpui-ai parses the unified patch a tool already produced, renders it through the upstream highlighted, selectable text view with rem-aligned gutters and change tints, keeps each hunk a named group with keyboard-reachable Accept and Reject, and reports decisions by path and hunk index so the application applies them.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -5099,13 +4979,6 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
-                        .child(
-                            TextView::markdown(
-                                "plan-reference-note",
-                                "**Reference comparison.** assistant-ui and AI Elements show agent plans as a static task list; Cursor and Claude Code gate plans behind an approve step. gpui-ai's plan card combines both: ordered steps with typed per-step status (pending, running, done, failed, skipped), a lifecycle badge, keyboard-reachable Approve / Reject / Edit while proposed, resolved states afterwards, and step activation by stable ID so the application can jump to the work.",
-                            )
-                            .selectable(true),
-                        )
                     // snippet:end
                 },
                 cx,
@@ -5205,13 +5078,6 @@ impl Gallery {
                             .on_event(cx.listener(|_, event: &InsightEvent, _, _| {
                                 println!("insight event: {event:?}");
                             })),
-                        )
-                        .child(
-                            TextView::markdown(
-                                "insight-reference-note",
-                                "**Reference comparison.** Beautiful UI uses two compact value tiles and a canvas sparkline. This GPUI version deliberately shows three text-labeled trend tiles, an accessible GPUI line chart, named Previous/Next controls, and constrained scrolling so the same content remains understandable and reachable without color or pointer input.",
-                            )
-                            .selectable(true),
                         )
                         .child(
                             div()
@@ -5335,13 +5201,6 @@ impl Gallery {
                         .child(
                             configure(ToolCall::new(&failed), "query-prices")
                                 .on_event(cx.listener(Self::handle_tool_call_event)),
-                        )
-                        .child(
-                            TextView::markdown(
-                                "tool-calls-reference-note",
-                                "**Reference comparison.** AI Elements and assistant-ui render each tool call as a collapsible card with a status badge, input, output, and inline Allow/Deny. gpui-ai keeps that shape, shares one status vocabulary with chips and task rows, adds a controlled group whose title shimmers while calls run, opens automatically only when a call needs attention, and reports every decision as a typed event.",
-                            )
-                            .selectable(true),
                         )
                     // snippet:end
                 },
@@ -5886,8 +5745,8 @@ mod tests {
             );
         }
         assert!(
-            cx.debug_bounds("records-story-reference-note").is_some(),
-            "records story should exercise records-story-reference-note"
+            cx.debug_bounds("records-story-end").is_some(),
+            "records story should exercise records-story-end"
         );
     }
 
@@ -5918,7 +5777,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn constrained_records_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+    fn constrained_records_table_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
@@ -5935,8 +5794,8 @@ mod tests {
             .debug_bounds("records-table-story-scroll")
             .expect("the direct story should expose its overflow region");
         let initial_end = cx
-            .debug_bounds("records-story-reference-note")
-            .expect("the reference note should remain rendered");
+            .debug_bounds("records-story-end")
+            .expect("the story end should remain rendered");
         assert!(
             initial_end.top() >= viewport.bottom(),
             "the end should start below the constrained viewport: end={initial_end:?}, viewport={viewport:?}"
@@ -5953,8 +5812,8 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let end = cx
-            .debug_bounds("records-story-reference-note")
-            .expect("the reference note should remain rendered after scrolling");
+            .debug_bounds("records-story-end")
+            .expect("the story end should remain rendered after scrolling");
         assert!(
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"
@@ -5993,13 +5852,13 @@ mod tests {
             );
         }
         assert!(
-            cx.debug_bounds("diff-story-reference-note").is_some(),
-            "diff story should exercise diff-story-reference-note"
+            cx.debug_bounds("diff-story-end").is_some(),
+            "diff story should exercise diff-story-end"
         );
     }
 
     #[gpui::test]
-    fn constrained_diff_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+    fn constrained_diff_table_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
@@ -6016,8 +5875,8 @@ mod tests {
             .debug_bounds("diff-table-story-scroll")
             .expect("the direct diff story should expose its overflow region");
         let initial_end = cx
-            .debug_bounds("diff-story-reference-note")
-            .expect("the diff reference note should remain rendered");
+            .debug_bounds("diff-story-end")
+            .expect("the diff story end should remain rendered");
         assert!(
             initial_end.top() >= viewport.bottom(),
             "the end should start below the constrained viewport: end={initial_end:?}, viewport={viewport:?}"
@@ -6034,8 +5893,8 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let end = cx
-            .debug_bounds("diff-story-reference-note")
-            .expect("the diff reference note should remain rendered after scrolling");
+            .debug_bounds("diff-story-end")
+            .expect("the diff story end should remain rendered after scrolling");
         assert!(
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"
@@ -6074,13 +5933,13 @@ mod tests {
             );
         }
         assert!(
-            cx.debug_bounds("filter-story-reference-note").is_some(),
-            "filter story should exercise filter-story-reference-note"
+            cx.debug_bounds("filter-story-end").is_some(),
+            "filter story should exercise filter-story-end"
         );
     }
 
     #[gpui::test]
-    fn constrained_filter_table_story_keeps_its_reference_end_reachable(cx: &mut TestAppContext) {
+    fn constrained_filter_table_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
@@ -6097,8 +5956,8 @@ mod tests {
             .debug_bounds("filter-table-story-scroll")
             .expect("the direct filter story should expose its overflow region");
         let initial_end = cx
-            .debug_bounds("filter-story-reference-note")
-            .expect("the filter reference note should remain rendered");
+            .debug_bounds("filter-story-end")
+            .expect("the filter story end should remain rendered");
         assert!(initial_end.top() >= viewport.bottom());
 
         let gallery = result
@@ -6112,8 +5971,8 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let end = cx
-            .debug_bounds("filter-story-reference-note")
-            .expect("the filter reference note should remain rendered after scrolling");
+            .debug_bounds("filter-story-end")
+            .expect("the filter story end should remain rendered after scrolling");
         assert!(
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"
@@ -6153,15 +6012,13 @@ mod tests {
             );
         }
         assert!(
-            cx.debug_bounds("comparison-story-reference-note").is_some(),
-            "comparison story should exercise comparison-story-reference-note"
+            cx.debug_bounds("comparison-story-end").is_some(),
+            "comparison story should exercise comparison-story-end"
         );
     }
 
     #[gpui::test]
-    fn constrained_comparison_table_story_keeps_its_reference_end_reachable(
-        cx: &mut TestAppContext,
-    ) {
+    fn constrained_comparison_table_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
@@ -6172,8 +6029,8 @@ mod tests {
         });
         let cx: &mut VisualTestContext = cx;
         // The story host is 400px tall; a 320px window guarantees the
-        // reference note starts out of view so the scroll contract is
-        // actually exercised.
+        // story end starts out of view so the scroll contract is actually
+        // exercised.
         cx.simulate_resize(size(px(700.), px(360.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -6181,8 +6038,8 @@ mod tests {
             .debug_bounds("comparison-table-story-scroll")
             .expect("the direct comparison story should expose its overflow region");
         let initial_end = cx
-            .debug_bounds("comparison-story-reference-note")
-            .expect("the comparison reference note should remain rendered");
+            .debug_bounds("comparison-story-end")
+            .expect("the comparison story end should remain rendered");
 
         let gallery = result
             .borrow_mut()
@@ -6195,8 +6052,8 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let end = cx
-            .debug_bounds("comparison-story-reference-note")
-            .expect("the comparison reference note should remain rendered after scrolling");
+            .debug_bounds("comparison-story-end")
+            .expect("the comparison story end should remain rendered after scrolling");
         assert!(
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"

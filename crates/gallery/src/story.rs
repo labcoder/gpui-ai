@@ -288,7 +288,7 @@ impl StoryId {
                 module: "tool_call",
                 api: "ToolCall",
                 usage: "ToolCall::new(&call_progress)",
-                height: 838,
+                height: 640,
             },
             Self::Tasks => StoryMeta {
                 category: "Agent work",
@@ -344,7 +344,7 @@ impl StoryId {
                 module: "streaming_text",
                 api: "StreamingText",
                 usage: "StreamingText::new(\"answer\", &content)",
-                height: 676,
+                height: 426,
             },
             Self::Chat => StoryMeta {
                 category: "Composites",
@@ -360,7 +360,7 @@ impl StoryId {
                 module: "suggestions",
                 api: "Suggestions",
                 usage: "Suggestions::new(\"starters\")",
-                height: 322,
+                height: 128,
             },
             Self::Attachments => StoryMeta {
                 category: "Composites",
@@ -368,7 +368,7 @@ impl StoryId {
                 module: "attachment",
                 api: "AttachmentStrip",
                 usage: "AttachmentStrip::new(\"files\").items(attachments)",
-                height: 758,
+                height: 486,
             },
             Self::Artifact => StoryMeta {
                 category: "Composites",
@@ -376,7 +376,7 @@ impl StoryId {
                 module: "artifact",
                 api: "ArtifactPanel",
                 usage: "ArtifactPanel::new(\"doc\", &artifact)",
-                height: 724,
+                height: 504,
             },
             Self::ContextMeter => StoryMeta {
                 category: "Progress",
@@ -384,7 +384,7 @@ impl StoryId {
                 module: "context_meter",
                 api: "ContextMeter",
                 usage: "ContextMeter::new(\"context\", &usage)",
-                height: 314,
+                height: 120,
             },
             Self::CommandSearch => StoryMeta {
                 category: "Navigation",
@@ -392,7 +392,7 @@ impl StoryId {
                 module: "command_search",
                 api: "CommandSearch",
                 usage: "CommandSearch::new(\"commands\", window, cx)",
-                height: 688,
+                height: 494,
             },
             Self::SidebarNav => StoryMeta {
                 category: "Navigation",
@@ -400,7 +400,7 @@ impl StoryId {
                 module: "sidebar_nav",
                 api: "SidebarNav",
                 usage: "SidebarNav::new(\"workspace-nav\", window, cx)",
-                height: 448,
+                height: 284,
             },
             Self::ThreadList => StoryMeta {
                 category: "Navigation",
@@ -408,7 +408,7 @@ impl StoryId {
                 module: "thread_list",
                 api: "ThreadList",
                 usage: "ThreadList::new(\"threads\", window, cx)",
-                height: 622,
+                height: 436,
             },
             Self::FineTune => StoryMeta {
                 category: "Composites",
@@ -416,7 +416,7 @@ impl StoryId {
                 module: "fine_tune",
                 api: "FineTuneCard",
                 usage: "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-                height: 1154,
+                height: 990,
             },
             Self::RecordsTable => StoryMeta {
                 category: "Data tables",
@@ -464,7 +464,7 @@ impl StoryId {
                 module: "code_diff",
                 api: "CodeDiff",
                 usage: "CodeDiff::new(\"patch\", &file).reviewable(true)",
-                height: 681,
+                height: 461,
             },
             Self::Approval => StoryMeta {
                 category: "Decisions",
@@ -480,7 +480,7 @@ impl StoryId {
                 module: "plan",
                 api: "PlanCard",
                 usage: "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-                height: 622,
+                height: 402,
             },
             Self::Recommendation => StoryMeta {
                 category: "Decisions",
@@ -520,7 +520,7 @@ impl StoryId {
                 module: "voice",
                 api: "VoiceControls",
                 usage: "VoiceControls::new(\"voice\", VoiceState::Idle)",
-                height: 310,
+                height: 90,
             },
             Self::Queue => StoryMeta {
                 category: "Composites",
@@ -528,7 +528,7 @@ impl StoryId {
                 module: "queue",
                 api: "MessageQueue",
                 usage: "MessageQueue::new(\"queue\").items(queued)",
-                height: 434,
+                height: 240,
             },
             Self::SelectionActions => StoryMeta {
                 category: "Readable output",

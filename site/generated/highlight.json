@@ -2498,69 +2498,6 @@
             "        "
           ],
           [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"streaming-text-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** Beautiful UI pairs an inline `scoopdata.io` source with a separate 10-source footer and follow-ups; AI Elements and assistant-ui add favicon badges and a hover preview per citation. gpui-ai keeps stable typed citation routing with keyboard/AccessKit companion links (the pinned Markdown glyph link is pointer-only), previews each citation's title and destination on hover, and renders web sources as activatable chips with a domain initial in place of a favicon.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
             "StreamingText",
             "type"
           ],
@@ -3430,69 +3367,6 @@
           [
             "    )"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"suggestions-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** AI Elements and assistant-ui show starter prompts as a single scrolling row that sends on click. gpui-ai wraps chips onto the available width, ripples them in with a staggered reveal, keeps every chip a named keyboard-reachable button, and reports a stable ID so the application decides whether to send or merely fill the composer.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -4089,69 +3963,6 @@
         [
           [
             "            .child(status),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"attachments-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** AI Elements and assistant-ui render attachments as image thumbnails or file chips inside the composer and again inside the sent message. gpui-ai uses one `Attachment` value for both: the same ID, kind glyph, size, and thumbnail travel from the composer into the message, upload state is typed (`ProgressState`) rather than a boolean, every tile has an accessible name that reads the file name and its summary, and remove or open intent is reported by stable ID so the application owns bytes, uploads, and previews.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
           ]
         ],
         [
@@ -5189,69 +5000,6 @@
           [
             "    )"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"artifact-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** Claude's Artifacts and ChatGPT's Canvas open generated documents beside the chat with a preview / code switch and version history. gpui-ai's panel carries the source as streamed content (so it renders while the agent writes), picks the preview from the artifact kind, keeps versions and actions typed by stable ID, and leaves width and docking to the application — here the upstream resizable group.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -5930,69 +5678,6 @@
           [
             "    )"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"voice-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** AI SDK Elements and assistant-ui ship microphone and speaker buttons bound to browser audio APIs. gpui-ai keeps audio with the application: the controls render the state it owns (idle, listening with a live level meter, transcribing, speaking), show the interim transcript as a status, and report every press as a typed `VoiceEvent` so native capture, streaming speech-to-text, and text-to-speech plug in behind stable intent.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -6598,69 +6283,6 @@
           [
             "    )"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"queue-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** Claude Code and Codex queue the prompts typed while a turn runs and let people pull one forward or drop it. gpui-ai renders that queue as a named list above the composer with position, note, and keyboard-reachable move, edit, send-now, remove, and clear controls, each reported by stable ID so the application owns ordering and dispatch.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -7195,69 +6817,6 @@
           [
             "))"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"context-meter-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** AI Elements and assistant-ui show token usage as a ring that turns amber past 65% and red past 85%, with a hover breakdown of input, output, reasoning, cached tokens, and cost. gpui-ai keeps those thresholds, exposes the same numbers as a named progress indicator with a spoken description, and offers ring, bar, and text forms that share one tone scale.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -7739,69 +7298,6 @@
         [
           [
             "            .child(status),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"code-diff-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** Cursor and Zed review agent edits inline with accept and reject per hunk; AI Elements ships a read-only code block. gpui-ai parses the unified patch a tool already produced, renders it through the upstream highlighted, selectable text view with rem-aligned gutters and change tints, keeps each hunk a named group with keyboard-reachable Accept and Reject, and reports decisions by path and hunk index so the application applies them.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
           ]
         ],
         [
@@ -9303,69 +8799,6 @@
           [
             "    )"
           ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"plan-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** assistant-ui and AI Elements show agent plans as a static task list; Cursor and Claude Code gate plans behind an approve step. gpui-ai's plan card combines both: ordered steps with typed per-step status (pending, running, done, failed, skipped), a lifecycle badge, keyboard-reachable Approve / Reject / Edit while proposed, resolved states afterwards, and step activation by stable ID so the application can jump to the work.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
         ]
       ]
     },
@@ -10276,69 +9709,6 @@
         [
           [
             "        })),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"insight-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** Beautiful UI uses two compact value tiles and a canvas sparkline. This GPUI version deliberately shows three text-labeled trend tiles, an accessible GPUI line chart, named Previous/Next controls, and constrained scrolling so the same content remains understandable and reachable without color or pointer input.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
           ]
         ],
         [
@@ -11312,69 +10682,6 @@
           ],
           [
             "::handle_tool_call_event)),"
-          ]
-        ],
-        [
-          [
-            "    )"
-          ]
-        ],
-        [
-          [
-            "    .child("
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "TextView",
-            "type"
-          ],
-          [
-            "::markdown("
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"tool-calls-reference-note\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "            "
-          ],
-          [
-            "\"**Reference comparison.** AI Elements and assistant-ui render each tool call as a collapsible card with a status badge, input, output, and inline Allow/Deny. gpui-ai keeps that shape, shares one status vocabulary with chips and task rows, adds a controlled group whose title shimmers while calls run, opens automatically only when a call needs attention, and reports every decision as a typed event.\"",
-            "string"
-          ],
-          [
-            ","
-          ]
-        ],
-        [
-          [
-            "        )"
-          ]
-        ],
-        [
-          [
-            "        .selectable("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            "),"
           ]
         ],
         [
