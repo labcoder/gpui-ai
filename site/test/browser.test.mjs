@@ -571,18 +571,6 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     ),
     specimen.height,
   );
-  // And the story inside it is laid out at that same scale. Nothing in the DOM
-  // reports what the canvas drew, so check the input GPUI reads: unpinned, the
-  // ratio the page is running at becomes its scale factor and the demo paints
-  // at double size inside a frame that cannot grow.
-  assert.equal(await cdp.evaluate("window.devicePixelRatio"), 2, "the page is running HiDPI");
-  assert.equal(
-    await cdp.evaluate(
-      "document.querySelector('[data-specimen-frame] iframe').contentWindow.devicePixelRatio",
-    ),
-    1,
-    "the embed must pin its scale factor or every measured height is wrong",
-  );
   await waitForValue(
     cdp,
     "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
@@ -594,6 +582,21 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
   assert.deepEqual(errors, []);
+
+  // And the story inside it is laid out at that same scale. Nothing in the DOM
+  // reports what the canvas drew, so check the input GPUI reads: unpinned, the
+  // ratio the page is running at becomes its scale factor and the demo paints
+  // at double size inside a frame that cannot grow. Asserted only once the
+  // canvas exists — before that the iframe's window is a fresh about:blank
+  // that has not run the embed's script and still reports the parent's ratio.
+  assert.equal(await cdp.evaluate("window.devicePixelRatio"), 2, "the page is running HiDPI");
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').contentWindow.devicePixelRatio",
+    ),
+    1,
+    "the embed must pin its scale factor or every measured height is wrong",
+  );
 
   // The other half of lazy: a frame that is nowhere near the viewport must not
   // load. Arriving at a deep anchor on a short viewport puts the demo well
