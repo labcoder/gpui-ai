@@ -107,6 +107,64 @@ function pick(colors, ...candidates) {
   return undefined;
 }
 
+// The registry's status colours are fills — `danger.background`,
+// `success.background` — and using one as text on the code panel's accent
+// surface is asking a background to do a foreground's job. On a light or
+// mid-toned accent it lands around 2:1 and the code is unreadable.
+//
+// So the code colours are derived rather than borrowed: take the status hue the
+// convention expects, then walk it toward black or white — whichever direction
+// the accent is not — until it clears 4.5:1 against that accent. The hue
+// survives, which is the part a reader recognises; the lightness moves, which
+// is the part that has to.
+
+function channel(value) {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance([r, g, b]) {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrast(a, b) {
+  const [hi, lo] = luminance(a) >= luminance(b) ? [a, b] : [b, a];
+  return (luminance(hi) + 0.05) / (luminance(lo) + 0.05);
+}
+
+function toRgb(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex ?? "");
+  if (!match) return undefined;
+  const value = Number.parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function toHex([r, g, b]) {
+  return `#${[r, g, b].map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const mix = (from, to, amount) => from.map((c, index) => c + (to[index] - c) * amount);
+
+/**
+ * The nearest version of a colour that can be read on a given background.
+ *
+ * Returns undefined when even pure black or white cannot reach the target,
+ * which no theme in the registry does but a future one might.
+ */
+function readable(source, against, target = 4.5) {
+  const from = toRgb(source);
+  const behind = toRgb(against);
+  if (!from || !behind) return undefined;
+  if (contrast(from, behind) >= target) return toHex(from);
+
+  const toward = luminance(behind) > 0.18 ? [0, 0, 0] : [255, 255, 255];
+  for (let amount = 0.05; amount <= 1.0001; amount += 0.05) {
+    const candidate = mix(from, toward, amount);
+    if (contrast(candidate, behind) >= target) return toHex(candidate);
+  }
+  return undefined;
+}
+
 function tokensFor(theme) {
   const colors = theme.colors ?? {};
   const mode = theme.mode === "dark" ? "dark" : "light";
@@ -143,6 +201,21 @@ function tokensFor(theme) {
   };
 }
 
+/** Syntax colours, guaranteed legible on the surface the code panel uses. */
+function codeTokensFor(tokens) {
+  const surface = tokens["--ai-accent"];
+  const fallback = tokens["--ai-foreground"];
+  const derive = (source) => readable(source, surface) ?? fallback;
+
+  return {
+    "--ai-code-comment": derive(tokens["--ai-muted"]),
+    "--ai-code-keyword": derive(tokens["--ai-danger"]),
+    "--ai-code-string": derive(tokens["--ai-success"]),
+    "--ai-code-type": derive(tokens["--ai-info"]),
+    "--ai-code-number": derive(tokens["--ai-warning"]),
+  };
+}
+
 // Every theme is also written out on its own, as a registry file a visitor can
 // download and drop straight into themes/. Reconstructing one from the derived
 // --ai-* values would produce something that looks right and is not the theme;
@@ -160,6 +233,7 @@ function describe(theme, slug, group) {
   });
 
   const mode = theme.mode === "dark" ? "dark" : "light";
+  const base = tokensFor(theme);
   return {
     slug,
     // gpui-ai's own presets carry the project name in the registry so they do
@@ -172,7 +246,7 @@ function describe(theme, slug, group) {
     radiusLg: theme["radius.lg"] ?? 8,
     fontSize: theme["font.size"] ?? 16,
     shadow: theme.shadow !== false,
-    tokens: tokensFor(theme),
+    tokens: { ...base, ...codeTokensFor(base) },
   };
 }
 

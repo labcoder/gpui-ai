@@ -648,27 +648,30 @@ pre.code {
 
 /* Syntax, painted from the theme rather than from a palette of its own, so
    code re-skins with the page. Five categories because five is what the
-   registry can express: every theme defines these and nothing more, and a
-   sixth would mean inventing a colour the themes do not have. */
+   registry can express: every theme defines these hues and nothing more.
+   These are the --ai-code-* properties, not the status colours they come
+   from — a status colour is a fill, and on a light accent it reads at about
+   2:1 as text. The generator keeps the hue and moves the lightness until it
+   clears 4.5:1 against the surface the code sits on. */
 .t-comment {
-  color: var(--ai-muted);
+  color: var(--ai-code-comment);
   font-style: italic;
 }
 
 .t-keyword {
-  color: var(--ai-danger);
+  color: var(--ai-code-keyword);
 }
 
 .t-string {
-  color: var(--ai-success);
+  color: var(--ai-code-string);
 }
 
 .t-type {
-  color: var(--ai-info);
+  color: var(--ai-code-type);
 }
 
 .t-number {
-  color: var(--ai-warning);
+  color: var(--ai-code-number);
 }
 
 .variant + .variant {

@@ -24,6 +24,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #6d6d6d;
+  --ai-code-keyword: #cb3a3a;
+  --ai-code-string: #16803d;
+  --ai-code-type: #04768a;
+  --ai-code-number: #8c6b05;
 }
 
 /* Default Dark — gpui-ai, dark */
@@ -47,6 +52,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a3a3a3;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #4ade80;
+  --ai-code-type: #22d3ee;
+  --ai-code-number: #facc15;
 }
 
 /* gpui-ai Contrast — gpui-ai, dark */
@@ -70,6 +80,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #d4d4d4;
+  --ai-code-keyword: #fc8d9d;
+  --ai-code-string: #86efac;
+  --ai-code-type: #67e8f9;
+  --ai-code-number: #fde047;
 }
 
 /* Ember Dusk — gpui-ai, dark */
@@ -93,6 +108,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #9c917f;
+  --ai-code-keyword: #f16060;
+  --ai-code-string: #84cc16;
+  --ai-code-type: #e8b04b;
+  --ai-code-number: #facc15;
 }
 
 /* Graphite — gpui-ai, dark */
@@ -116,6 +136,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #858c95;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #5eead4;
+  --ai-code-type: #7dd3fc;
+  --ai-code-number: #fbbf24;
 }
 
 /* Midnight Violet — gpui-ai, dark */
@@ -139,6 +164,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8f88ab;
+  --ai-code-keyword: #f54966;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Nord Frost — gpui-ai, dark */
@@ -162,6 +192,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #b4bdcb;
+  --ai-code-keyword: #dfb0b5;
+  --ai-code-string: #acc598;
+  --ai-code-type: #adc2d7;
+  --ai-code-number: #ebcb8b;
 }
 
 /* Paper Light — gpui-ai, light */
@@ -185,6 +220,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #5b616d;
+  --ai-code-keyword: #bb2020;
+  --ai-code-string: #0f7234;
+  --ai-code-type: #026a9f;
+  --ai-code-number: #985304;
 }
 
 /* Solstice — gpui-ai, light */
@@ -208,6 +248,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #785a3c;
+  --ai-code-keyword: #c62222;
+  --ai-code-string: #047854;
+  --ai-code-type: #0270a9;
+  --ai-code-number: #985304;
 }
 
 /* Adventure — gpui-component, dark */
@@ -231,6 +276,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8e9093;
+  --ai-code-keyword: #e06e5c;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Adventure Time — gpui-component, dark */
@@ -254,6 +304,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a3a3b8;
+  --ai-code-keyword: #f97f7f;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Alduin — gpui-component, dark */
@@ -277,6 +332,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #939393;
+  --ai-code-keyword: #e07c77;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Asciinema — gpui-component, dark */
@@ -300,6 +360,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #929292;
+  --ai-code-keyword: #e46387;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Aurora Light — gpui-component, light */
@@ -323,6 +388,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #5f6e84;
+  --ai-code-keyword: #d12424;
+  --ai-code-string: #048059;
+  --ai-code-type: #0270a9;
+  --ai-code-number: #a35905;
 }
 
 /* Ayu Light — gpui-component, light */
@@ -346,6 +416,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #5c6064;
+  --ai-code-keyword: #b01e1e;
+  --ai-code-string: #04694a;
+  --ai-code-type: #026395;
+  --ai-code-number: #8d4d04;
 }
 
 /* Ayu Dark — gpui-component, dark */
@@ -369,6 +444,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8f8e8d;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Catppuccin Latte — gpui-component, light */
@@ -392,6 +472,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #555662;
+  --ai-code-keyword: #b01e1e;
+  --ai-code-string: #04694a;
+  --ai-code-type: #026395;
+  --ai-code-number: #8d4d04;
 }
 
 /* Catppuccin Frappe — gpui-component, dark */
@@ -415,6 +500,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a7acc0;
+  --ai-code-keyword: #f98d8d;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Catppuccin Macchiato — gpui-component, dark */
@@ -438,6 +528,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #b8c0e0;
+  --ai-code-keyword: #ed8796;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Catppuccin Mocha — gpui-component, dark */
@@ -461,6 +556,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #989baa;
+  --ai-code-keyword: #f38ba8;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Everforest Light — gpui-component, light */
@@ -484,6 +584,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #616466;
+  --ai-code-keyword: #965253;
+  --ai-code-string: #04714f;
+  --ai-code-type: #026a9f;
+  --ai-code-number: #985304;
 }
 
 /* Everforest Dark — gpui-component, dark */
@@ -507,6 +612,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #afb5b2;
+  --ai-code-keyword: #fa9595;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Fahrenheit — gpui-component, dark */
@@ -530,6 +640,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #828282;
+  --ai-code-keyword: #9b8367;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Flexoki Light — gpui-component, light */
@@ -553,6 +668,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #64635f;
+  --ai-code-keyword: #bb2020;
+  --ai-code-string: #04714f;
+  --ai-code-type: #32648f;
+  --ai-code-number: #985304;
 }
 
 /* Flexoki Dark — gpui-component, dark */
@@ -576,6 +696,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8d8b86;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #638ec1;
+  --ai-code-number: #fbbf24;
 }
 
 /* Gruvbox Light — gpui-component, light */
@@ -599,6 +724,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #5f554b;
+  --ai-code-keyword: #a32f22;
+  --ai-code-string: #036244;
+  --ai-code-type: #015c8b;
+  --ai-code-number: #824704;
 }
 
 /* Gruvbox Dark — gpui-component, dark */
@@ -622,6 +752,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a29689;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Harper — gpui-component, dark */
@@ -645,6 +780,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8e8b87;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Hybrid Light — gpui-component, light */
@@ -668,6 +808,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #565656;
+  --ai-code-keyword: #8c3434;
+  --ai-code-string: #036244;
+  --ai-code-type: #015c8b;
+  --ai-code-number: #824704;
 }
 
 /* Hybrid Dark — gpui-component, dark */
@@ -691,6 +836,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a5a5a5;
+  --ai-code-keyword: #f97f7f;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Jellybeans — gpui-component, dark */
@@ -714,6 +864,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #919191;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Kibble — gpui-component, dark */
@@ -737,6 +892,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8b8b8b;
+  --ai-code-keyword: #e07b5c;
+  --ai-code-string: #7d8be6;
+  --ai-code-type: #5cd1e0;
+  --ai-code-number: #e0c85c;
 }
 
 /* macOS Classic Light — gpui-component, light */
@@ -760,6 +920,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #5f5f5f;
+  --ai-code-keyword: #bb2020;
+  --ai-code-string: #04714f;
+  --ai-code-type: #026395;
+  --ai-code-number: #8d4d04;
 }
 
 /* macOS Classic Dark — gpui-component, dark */
@@ -783,6 +948,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #9d9d9d;
+  --ai-code-keyword: #e86569;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Mellifluous Light — gpui-component, light */
@@ -806,6 +976,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #555962;
+  --ai-code-keyword: #b01e1e;
+  --ai-code-string: #04694a;
+  --ai-code-type: #015c8b;
+  --ai-code-number: #824704;
 }
 
 /* Mellifluous Dark — gpui-component, dark */
@@ -829,6 +1004,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #959ba7;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Molokai Light — gpui-component, light */
@@ -852,6 +1032,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
+  --ai-code-comment: #646464;
+  --ai-code-keyword: #c62222;
+  --ai-code-string: #04714f;
+  --ai-code-type: #026a9f;
+  --ai-code-number: #985304;
 }
 
 /* Molokai Dark — gpui-component, dark */
@@ -875,6 +1060,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #9d9c98;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Solarized Light — gpui-component, light */
@@ -898,6 +1088,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-code-comment: #586161;
+  --ai-code-keyword: #c62222;
+  --ai-code-string: #04714f;
+  --ai-code-type: #026a9f;
+  --ai-code-number: #985304;
 }
 
 /* Solarized Dark — gpui-component, dark */
@@ -921,6 +1116,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8f9fa1;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Spaceduck — gpui-component, dark */
@@ -944,6 +1144,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #8193a1;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Tokyo Night — gpui-component, dark */
@@ -967,6 +1172,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #9197b2;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Tokyo Storm — gpui-component, dark */
@@ -990,6 +1200,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #bbbfd0;
+  --ai-code-keyword: #faa3a3;
+  --ai-code-string: #34d399;
+  --ai-code-type: #56c7f9;
+  --ai-code-number: #fbbf24;
 }
 
 /* Tokyo Moon — gpui-component, dark */
@@ -1013,6 +1228,11 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #a1a4b5;
+  --ai-code-keyword: #f97f7f;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }
 
 /* Twilight — gpui-component, dark */
@@ -1036,4 +1256,9 @@
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-code-comment: #959595;
+  --ai-code-keyword: #f87171;
+  --ai-code-string: #34d399;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
 }

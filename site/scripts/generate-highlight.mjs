@@ -35,11 +35,11 @@ const GENERATED = join(ROOT, "site", "generated");
  * and no others: a sixth would have to invent a colour the themes do not have.
  */
 const CATEGORIES = {
-  comment: { sentinel: "#000001", token: "--ai-muted" },
-  keyword: { sentinel: "#000002", token: "--ai-danger" },
-  string: { sentinel: "#000003", token: "--ai-success" },
-  type: { sentinel: "#000004", token: "--ai-info" },
-  number: { sentinel: "#000005", token: "--ai-warning" },
+  comment: { sentinel: "#000001", token: "--ai-code-comment" },
+  keyword: { sentinel: "#000002", token: "--ai-code-keyword" },
+  string: { sentinel: "#000003", token: "--ai-code-string" },
+  type: { sentinel: "#000004", token: "--ai-code-type" },
+  number: { sentinel: "#000005", token: "--ai-code-number" },
 };
 
 const SENTINELS = new Map(

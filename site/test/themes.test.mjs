@@ -92,6 +92,13 @@ test("every theme carries the full token set the chrome is painted from", async 
     "--ai-font-sans",
     "--ai-font-mono",
     "--ai-shadow",
+    // Derived rather than read out of the theme file: a status colour is a
+    // fill, and the code panel needs text that can be read on its surface.
+    "--ai-code-comment",
+    "--ai-code-keyword",
+    "--ai-code-string",
+    "--ai-code-type",
+    "--ai-code-number",
   ];
 
   const slugs = [];

@@ -1374,6 +1374,13 @@ test("every theme the site offers can be read", {
     await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, 1280, 900);
     const audit = await cdp.evaluate(auditExpression(slugs), 90_000);
     assert.ok(audit.elements > 20, `${route} has only ${audit.elements} pieces of text to check`);
+    // An audit that writes the attribute and gets ignored reports a clean bill
+    // of health for one theme, forty-five times. Distinct backgrounds are the
+    // cheapest proof it really visited them.
+    assert.ok(
+      audit.palettes > slugs.length / 2,
+      `${route} painted only ${audit.palettes} distinct backgrounds across ${slugs.length} themes`,
+    );
     findings.push(...audit.findings.map((finding) => ({ ...finding, route })));
   }
 

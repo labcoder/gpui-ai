@@ -18,6 +18,26 @@
  * runs under, and `getComputedStyle` would then return colours caught halfway
  * between two themes. Writing the attribute skips all of it, so every reading
  * is final on the same tick.
+ *
+ * It goes on `<body>`, not on the document element, because the site writes the
+ * document element itself: any React render that reaches `paint()` puts the
+ * page's own theme back, and an audit racing it measures whatever it happens to
+ * catch. That is not hypothetical — it is how this audit came to pass locally
+ * and fail in CI on the same commit. `themes.css` keys on `[data-theme]` at any
+ * level and the properties inherit, so body is as good a place to set it, and
+ * nothing in the app touches it there.
+ *
+ * The one thing body cannot carry is `html { font-size: var(--ai-font-size) }`,
+ * so a theme with a different base size is measured at the default one. Font
+ * size only decides which WCAG threshold applies, and every size on the site is
+ * far below the large-text boundary either way.
+ *
+ * Transitions are switched off for the duration, and that is not tidiness. The
+ * site cross-fades colour over two hundred milliseconds, and `getComputedStyle`
+ * reports the value a transition is currently at — so forty-five themes read
+ * inside one frame all return the same colour part-way between two of them, and
+ * the audit finds nothing wrong with any of them. That is exactly how this gate
+ * passed locally and failed in CI on the same commit.
  */
 export function auditExpression(slugs) {
   return `(() => {
@@ -79,11 +99,23 @@ export function auditExpression(slugs) {
       return className ? tag + "." + className.split(/\\s+/).join(".") : tag;
     };
 
+    // Every reading has to be the theme's own value, not a frame of a
+    // cross-fade between two of them.
+    const frozen = document.createElement("style");
+    frozen.textContent =
+      "*,*::before,*::after{transition:none !important;animation:none !important}";
+    document.head.append(frozen);
+
     const findings = [];
-    const previous = document.documentElement.dataset.theme;
+    const previous = document.body.dataset.theme;
+    // Proof the loop is doing anything at all: forty-five themes paint
+    // forty-five different backgrounds, and one distinct value means the
+    // attribute is being written and ignored.
+    const palettes = new Set();
 
     for (const slug of slugs) {
-      document.documentElement.dataset.theme = slug;
+      document.body.dataset.theme = slug;
+      palettes.add(getComputedStyle(document.body).backgroundColor);
       const seen = new Set();
 
       for (const element of targets) {
@@ -143,10 +175,11 @@ export function auditExpression(slugs) {
       }
     }
 
-    if (previous) document.documentElement.dataset.theme = previous;
-    else document.documentElement.removeAttribute("data-theme");
+    if (previous) document.body.dataset.theme = previous;
+    else document.body.removeAttribute("data-theme");
+    frozen.remove();
 
-    return { findings, elements: targets.length, controls: edges.length };
+    return { findings, elements: targets.length, controls: edges.length, palettes: palettes.size };
   })()`;
 }
 
