@@ -30,6 +30,9 @@ const browserCandidates = process.platform === "win32"
     ];
 const browserPath = browserCandidates.find((candidate) => candidate && existsSync(candidate));
 const releaseIntegrationRequested = process.env.GPUI_AI_RELEASE_INTEGRATION === "1";
+// Skipping the release gate is a developer convenience, never a CI outcome: a
+// runner without a browser would report green while proving nothing.
+const releaseGateIsMandatory = releaseIntegrationRequested && process.env.CI === "true";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const releaseGalleryDir = path.join(repositoryRoot, "crates/gallery-web/www/dist");
 
@@ -156,8 +159,12 @@ class Cdp {
     this.listeners.set(method, [...(this.listeners.get(method) ?? []), listener]);
   }
 
-  async evaluate(expression) {
-    const result = await this.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  async evaluate(expression, timeoutMs = 5_000) {
+    const result = await this.send(
+      "Runtime.evaluate",
+      { expression, awaitPromise: true, returnByValue: true },
+      timeoutMs,
+    );
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
     return result.result.value;
   }
@@ -254,16 +261,156 @@ async function closeBrowser(browserHandle) {
   await stopBrowserProcess(browserHandle.child);
 }
 
-async function waitForValue(cdp, expression, { timeoutMs = 20_000, intervalMs = 100 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  let value;
-  while (Date.now() < deadline) {
-    value = await cdp.evaluate(expression);
-    if (value) return value;
-    await delay(intervalMs);
-  }
-  throw new Error(`Browser condition timed out after ${timeoutMs}ms; last value: ${JSON.stringify(value)}`);
+// Waits for a condition inside the page instead of round-tripping CDP every
+// 100ms: one Runtime.evaluate replaces a couple of hundred messages, and the
+// wait ends on the tick the condition holds rather than on the next poll.
+//
+// `fatal` names states the condition can never recover from — a WebGPU
+// fallback panel, a module that failed to instantiate — so an unrecoverable
+// run reports in a moment rather than burning the whole timeout. `describe`
+// evaluates only on failure, and its job is to say which part was false: this
+// gate previously failed twice in CI with nothing but `last value: false` for
+// a three-way conjunction, which took a local bisect to read.
+async function waitForValue(
+  cdp,
+  expression,
+  { timeoutMs = 20_000, intervalMs = 50, label = "browser condition", fatal, describe, errors } = {},
+) {
+  const outcome = await cdp.evaluate(
+    `(() => new Promise((resolve) => {
+      const test = () => { try { return Boolean(${expression}); } catch { return false; } };
+      const doomed = () => { try { return ${fatal ? `(${fatal})` : "false"}; } catch { return false; } };
+      const settle = () => {
+        if (test()) return { ok: true };
+        const reason = doomed();
+        return reason ? { ok: false, fatal: reason } : undefined;
+      };
+      const first = settle();
+      if (first) return resolve(first);
+      const deadline = Date.now() + ${timeoutMs};
+      const timer = setInterval(() => {
+        const result = settle();
+        if (result) { clearInterval(timer); resolve(result); return; }
+        if (Date.now() >= deadline) { clearInterval(timer); resolve({ ok: false, timedOut: true }); }
+      }, ${intervalMs});
+    }))()`,
+    // Outlive the in-page deadline so a genuine timeout reports its own
+    // diagnosis rather than surfacing as an opaque CDP timeout.
+    timeoutMs + 5_000,
+  );
+
+  if (outcome?.ok) return true;
+
+  const state = describe
+    ? await cdp
+        .evaluate(`(() => { try { return ${describe}; } catch (error) { return { describeFailed: String(error) }; } })()`)
+        .catch((error) => ({ describeFailed: String(error) }))
+    : undefined;
+
+  const lines = [
+    outcome?.fatal
+      ? `Gave up waiting for ${label}: ${outcome.fatal}`
+      : `Timed out after ${timeoutMs}ms waiting for ${label}`,
+  ];
+  if (state !== undefined) lines.push(`state: ${JSON.stringify(state, null, 2)}`);
+  lines.push(errors?.length ? `page errors:\n  ${errors.join("\n  ")}` : "page errors: none");
+  throw new Error(lines.join("\n"));
 }
+
+// What the release gate needs to see when a specimen never starts: which half
+// of the condition failed, whether the module was even served, and what the
+// fallback said.
+const SPECIMEN_DIAGNOSIS = `(() => {
+  const frame = document.querySelector('[data-specimen-frame]');
+  if (!frame) return { frame: 'missing' };
+  const doc = frame.contentDocument;
+  const fallback = doc?.getElementById('fallback');
+  return {
+    frameSrc: frame.getAttribute('src'),
+    documentReady: doc?.readyState ?? null,
+    hasCanvas: Boolean(doc?.querySelector('canvas')),
+    stillLoading: Boolean(doc?.getElementById('loading')),
+    fallbackVisible: Boolean(fallback && !fallback.hidden),
+    fallbackText: fallback?.querySelector('[data-error]')?.textContent ?? null,
+    hostTheme: doc?.documentElement?.dataset?.theme ?? null,
+    reportedTheme: (() => { try { return frame.contentWindow.gpuiAi?.currentTheme() ?? null; } catch { return 'unreachable'; } })(),
+    wasmRequests: (() => {
+      try {
+        return frame.contentWindow.performance
+          .getEntriesByType('resource')
+          .filter((entry) => entry.name.endsWith('.wasm'))
+          .map((entry) => ({ name: entry.name.split('/').pop(), transferred: entry.transferSize, duration: Math.round(entry.duration) }));
+      } catch { return 'unreachable'; }
+    })(),
+  };
+})()`;
+
+// A specimen that has painted its WebGPU fallback will never produce a canvas.
+const SPECIMEN_GAVE_UP = `(() => {
+  const fallback = document.querySelector('[data-specimen-frame]')?.contentDocument?.getElementById('fallback');
+  return fallback && !fallback.hidden
+    ? 'the specimen rendered its WebGPU fallback: ' + (fallback.querySelector('[data-error]')?.textContent ?? 'no detail')
+    : false;
+})()`;
+
+test("a timed-out wait names the condition, its state, and the collected page errors", async () => {
+  const evaluated = [];
+  const cdp = {
+    evaluate: async (expression) => {
+      evaluated.push(expression);
+      return evaluated.length === 1
+        ? { ok: false, timedOut: true }
+        : { hasCanvas: false, stillLoading: true, reportedTheme: null };
+    },
+  };
+
+  await assert.rejects(
+    waitForValue(cdp, "false", {
+      timeoutMs: 10,
+      label: "the loading specimen to start",
+      describe: "({})",
+      errors: ["ReferenceError: WebSocket is not defined"],
+    }),
+    (error) => {
+      assert.match(error.message, /Timed out after 10ms waiting for the loading specimen to start/);
+      // The point of the diagnosis: which part was false, not just "false".
+      assert.match(error.message, /"hasCanvas": false/);
+      assert.match(error.message, /"stillLoading": true/);
+      assert.match(error.message, /ReferenceError: WebSocket is not defined/);
+      return true;
+    },
+  );
+  assert.equal(evaluated.length, 2, "the state is described once, only after the wait fails");
+});
+
+test("a wait abandons an unrecoverable state instead of burning the whole timeout", async () => {
+  const cdp = {
+    evaluate: async () => ({ ok: false, fatal: "the specimen rendered its WebGPU fallback: no adapter" }),
+  };
+
+  await assert.rejects(
+    waitForValue(cdp, "false", { timeoutMs: 20_000, label: "a canvas" }),
+    (error) => {
+      assert.match(error.message, /Gave up waiting for a canvas/);
+      assert.match(error.message, /rendered its WebGPU fallback: no adapter/);
+      assert.doesNotMatch(error.message, /Timed out/, "a fatal state is not a timeout");
+      return true;
+    },
+  );
+});
+
+test("a successful wait reports no diagnosis and describes nothing", async () => {
+  let describes = 0;
+  const cdp = {
+    evaluate: async (expression) => {
+      if (expression.includes("describeMarker")) describes += 1;
+      return { ok: true };
+    },
+  };
+
+  assert.equal(await waitForValue(cdp, "true", { describe: "({ describeMarker: 1 })" }), true);
+  assert.equal(describes, 0, "describing a healthy page is wasted work");
+});
 
 test("real browser covers responsive navigation, search, copy, and semantics", {
   skip: browserPath ? false : "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate",
@@ -442,11 +589,15 @@ test("real browser covers responsive navigation, search, copy, and semantics", {
 });
 
 test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
-  skip: !browserPath
+  skip: !browserPath && !releaseGateIsMandatory
     ? "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate"
     : releaseIntegrationRequested ? false : "Run npm run check:web:release for the built-artifact integration gate",
   timeout: 60_000,
 }, async (context) => {
+  assert.ok(
+    browserPath,
+    "CI runs the release gate against a real browser, and none was found on PATH or CHROME_PATH; install one rather than letting this gate skip",
+  );
   assert.equal(existsSync(path.join(releaseGalleryDir, "embed.html")), true, "build the release gallery before the site browser gate");
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-release-browser-"));
   const outDir = path.join(temporaryRoot, "site");
@@ -478,7 +629,12 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await waitForValue(cdp, `(() => {
     const frame = document.querySelector('[data-specimen-frame]');
     return Boolean(frame?.contentDocument?.querySelector('canvas') && !frame.contentDocument.getElementById('loading') && frame.contentWindow.gpuiAi?.currentTheme() === 'light');
-  })()`);
+  })()`, {
+    label: "the loading specimen to start and report the light theme",
+    fatal: SPECIMEN_GAVE_UP,
+    describe: SPECIMEN_DIAGNOSIS,
+    errors,
+  });
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "light");
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.gpuiAi.currentTheme()`), "light");
 
@@ -492,17 +648,31 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     await waitForValue(cdp, `(() => {
       const frame = document.querySelector('[data-specimen-frame]');
       return frame?.contentDocument?.documentElement.dataset.theme === '${theme}' && frame?.contentWindow?.gpuiAi?.currentTheme() === '${theme}';
-    })()`);
+    })()`, {
+      label: `the specimen to follow the ${theme} theme`,
+      fatal: SPECIMEN_GAVE_UP,
+      describe: SPECIMEN_DIAGNOSIS,
+      errors,
+    });
     assert.equal(await cdp.evaluate(`document.documentElement.dataset.theme`), theme);
   }
 
   await cdp.evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
-  await waitForValue(cdp, `!document.querySelector('[data-specimen-frame]').hasAttribute('src')`);
+  await waitForValue(cdp, `!document.querySelector('[data-specimen-frame]').hasAttribute('src')`, {
+    label: "the offscreen specimen to unload",
+    describe: SPECIMEN_DIAGNOSIS,
+    errors,
+  });
   await cdp.evaluate(`document.querySelector('[data-specimen-frame]').scrollIntoView({ block: 'center' })`);
   await waitForValue(cdp, `(() => {
     const frame = document.querySelector('[data-specimen-frame]');
     return Boolean(frame?.contentDocument?.querySelector('canvas') && frame?.contentWindow?.gpuiAi?.currentTheme() === 'dark');
-  })()`);
+  })()`, {
+    label: "the specimen to restore after scrolling back",
+    fatal: SPECIMEN_GAVE_UP,
+    describe: SPECIMEN_DIAGNOSIS,
+    errors,
+  });
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentDocument.documentElement.dataset.theme`), "dark");
   assert.equal(await cdp.evaluate(`document.querySelector('[data-specimen-frame]').contentWindow.gpuiAi.currentTheme()`), "dark");
   assert.deepEqual(errors, []);
@@ -515,7 +685,11 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     const frame = document.querySelector('[data-specimen-frame]');
     const fallback = frame?.contentDocument?.getElementById('fallback');
     return Boolean(frame?.hasAttribute('src') && fallback && !fallback.hidden);
-  })()`);
+  })()`, {
+    label: "the specimen to show its WebGPU fallback",
+    describe: SPECIMEN_DIAGNOSIS,
+    errors,
+  });
   assert.deepEqual(await cdp.evaluate(`(() => ({
     parentFallbacks: document.querySelectorAll('.webgpu-fallback').length,
     sourceVisible: document.querySelector('.code-panel').getBoundingClientRect().height > 0,
