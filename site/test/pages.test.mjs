@@ -192,6 +192,19 @@ test("every component page shows the snippet cut from the gallery, not the one-l
   );
 });
 
+test("every component page links its own type under /api/", async () => {
+  for (const component of components) {
+    const html = await page(`/components/${component.slug}/`);
+    const module = path.basename(component.source, ".rs");
+
+    assert.match(
+      html,
+      new RegExp(`href="${BASE}/api/gpui_ai/${module}/struct\\.${component.api}\\.html"`),
+      `${component.slug} does not link ${component.api}'s rustdoc page`,
+    );
+  }
+});
+
 test("every component page explains what the demo does and does not show", async () => {
   for (const component of components) {
     const html = await page(`/components/${component.slug}/`);

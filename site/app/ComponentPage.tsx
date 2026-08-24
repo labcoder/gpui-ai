@@ -7,7 +7,7 @@ import {
   snippet,
   type Component,
 } from "./data";
-import { href, sourceHref } from "./links";
+import { apiHref, href, sourceHref } from "./links";
 
 /**
  * One component, entirely from generated data.
@@ -143,7 +143,9 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
           <dl className="metadata">
             <dt>Type</dt>
             <dd>
-              <code>{component.api}</code>
+              <a href={apiHref(component)}>
+                <code>{component.api}</code>
+              </a>
             </dd>
             <dt>Category</dt>
             <dd>{component.category}</dd>

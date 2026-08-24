@@ -27,6 +27,20 @@ export function demoSrc(story: string, theme?: string): string {
   return `${href("/gallery/embed.html")}?${query.toString()}`;
 }
 
+/**
+ * The rustdoc page for a component's type.
+ *
+ * Rustdoc lays items out by module, and a component's module is the file the
+ * catalog already records as its source. `catalog.test.mjs` holds the two
+ * assumptions this makes — that the source path is a crate module and that the
+ * type is a struct — so an item that stops matching fails the gate rather than
+ * shipping a dead link.
+ */
+export function apiHref(component: Component): string {
+  const module = component.source.replace(/^.*\//, "").replace(/\.rs$/, "");
+  return href(`/api/gpui_ai/${module}/struct.${component.api}.html`);
+}
+
 /** The component's implementation on GitHub, at the released tag. */
 export function sourceHref(component: Component, repository: string, version: string): string {
   return `${repository}/blob/v${version}/${component.source}`;

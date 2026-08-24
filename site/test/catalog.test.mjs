@@ -125,6 +125,26 @@ test("every component page has a snippet cut from the gallery's own source", () 
   );
 });
 
+test("every component's type resolves to a rustdoc page the site can link", async () => {
+  // S-16 derives `/api/gpui_ai/<module>/struct.<Api>.html` from the catalog.
+  // Rustdoc lays items out by module and names each file after the item's
+  // kind, so both assumptions have to hold or 34 pages get a dead link.
+  for (const component of components) {
+    const module = path.basename(component.source, ".rs");
+    const source = await readFile(path.join(repositoryRoot, component.source), "utf8");
+
+    assert.match(
+      component.source,
+      new RegExp(`/${module}\\.rs$`),
+      `${component.slug}'s source is not a crate module`,
+    );
+    assert.ok(
+      source.includes(`pub struct ${component.api}`),
+      `${component.api} is not a pub struct in ${component.source}, so struct.*.html is wrong`,
+    );
+  }
+});
+
 test("the stories with a switcher report their variants", () => {
   const bySlug = (slug) => components.find((component) => component.slug === slug);
 
