@@ -785,6 +785,21 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // after the switch starts dark instead of contradicting the page around it.
   assert.equal(await cdp.evaluate("document.documentElement.classList.contains('dark')"), true);
 
+  // And a demo that was already running follows too. Without this the page
+  // goes dark around a white window, which is worse than not offering the
+  // control — and no HTML assertion can see it, because the frame's contents
+  // are drawn on a canvas.
+  await waitForValue(
+    cdp,
+    "document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.currentTheme() === 'dark'",
+    {
+      label: "the running demo to follow the page into dark",
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+
   // The skip link is the first thing Tab reaches, and it moves focus rather
   // than only scrolling — which is the whole reason main carries tabindex.
   await openPage(`/components/${specimen.slug}/`, 1280, 900);

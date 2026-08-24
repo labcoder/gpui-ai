@@ -49,10 +49,29 @@ export function Shell({
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = mode;
-    // The embed guesses its own theme from this class when the host has not
-    // named one, so a frame opened after a switch starts in the right mode.
-    // S-05 broadcasts to frames that are already running.
+    // The embed guesses light or dark from this class when the host has not
+    // named a theme, which is how a frame starts in the right mode before
+    // anyone tells it anything.
     root.classList.toggle("dark", DARK_MODES.has(mode));
+
+    // Guessing is not enough for a demo that is already running: it would sit
+    // there in the old theme, a white window inside a black page. The embed
+    // listens for this message and checks that it came from its own parent on
+    // its own origin, so telling it exactly which theme costs one post. The
+    // capture-phase listener catches frames the observer promotes later, which
+    // would otherwise only ever see the class. S-05 still owns persistence,
+    // the URL parameter, the full picker, and the cross-fade.
+    const tell = (frame: HTMLIFrameElement) =>
+      frame.contentWindow?.postMessage(
+        { type: "gpui-ai-theme", theme: mode },
+        window.location.origin,
+      );
+    for (const frame of document.querySelectorAll("iframe")) tell(frame);
+    const onLoad = (event: Event) => {
+      if (event.target instanceof HTMLIFrameElement) tell(event.target);
+    };
+    document.addEventListener("load", onLoad, true);
+    return () => document.removeEventListener("load", onLoad, true);
   }, [mode]);
 
   // A drawer left open across a resize would sit invisibly over a desktop

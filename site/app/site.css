@@ -748,8 +748,12 @@ pre.code {
   font-size: 0.875rem;
 }
 
-.card .eyebrow {
+/* A Rust type name, not a label: uppercasing it says LOADINGSTATE, which is
+   not what anyone would type. */
+.card-api {
   margin: 0;
+  color: var(--ai-muted);
+  font-size: 0.75rem;
 }
 
 .category + .category {

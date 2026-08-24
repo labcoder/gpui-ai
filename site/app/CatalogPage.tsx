@@ -55,7 +55,7 @@ export function CatalogPage() {
                 <li className="card" key={component.slug} data-component={component.slug}>
                   <a href={href(`/components/${component.slug}/`)}>{component.title}</a>
                   <p>{component.summary}</p>
-                  <p className="eyebrow">
+                  <p className="card-api">
                     <code>{component.api}</code>
                   </p>
                 </li>
