@@ -27,11 +27,18 @@ For the browser gallery you also need a nightly toolchain with the
 in `.github/workflows/ci.yml`.
 
 [Binaryen](https://github.com/WebAssembly/binaryen) is optional locally and
-installed in CI. When `wasm-opt` is on your `PATH`, `npm run build:wasm` runs it
+pinned in CI. When `wasm-opt` is on your `PATH`, `npm run build:wasm` runs it
 over the release artifact and prints the saving; without it the build says so
 and produces a working but larger binary. Install it if you are making a size
 claim — `npm run report:wasm` numbers from a build that skipped `wasm-opt` are
 not comparable to CI's.
+
+**Use a recent binaryen.** Install it from an upstream release, not from your
+distribution's package manager. `wasm-opt` accepts input it does not fully
+understand: Ubuntu's binaryen 108 exits successfully on today's rustc output
+and emits a smaller module that no browser can instantiate. The version CI
+pins is in `.github/workflows/ci.yml`, and the release browser gate is what
+proves the optimized artifact still starts.
 
 ## The rules that decide whether a change lands
 
