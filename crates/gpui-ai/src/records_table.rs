@@ -1492,6 +1492,14 @@ impl RecordsTable {
                 }
                 self.defer_controlled_selection_sync(cx);
             }
+            TableEvent::ClearSelection => {
+                // Escape reaches upstream's Cancel action, which drops its own
+                // selection and tells us here. Selection is application-owned,
+                // so re-assert the controlled value instead of letting the
+                // rendered row and `selected_row_id` disagree — otherwise the
+                // highlight vanishes while Enter still activates the old row.
+                self.defer_controlled_selection_sync(cx);
+            }
             TableEvent::DoubleClickedRow(row_ix) => {
                 if let Some(row) = self.records.content().get(*row_ix)
                     && !row.disabled
@@ -1914,6 +1922,63 @@ mod tests {
                 .is_some(),
             "failed stale content must retain a named alert"
         );
+    }
+
+    #[gpui::test]
+    fn upstream_clearing_its_selection_restores_the_controlled_row(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (records, cx) = cx
+            .add_window_view(|window, cx| RecordsTable::new("selection", "Selection", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+                records.set_records(
+                    Progressive::complete(Arc::from([
+                        RecordRow::new("first", "First").cells([RecordCell::new("name", "First")]),
+                        RecordRow::new("second", "Second")
+                            .cells([RecordCell::new("name", "Second")]),
+                    ])),
+                    window,
+                    cx,
+                );
+                records.set_selected_row("second", window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+
+        cx.update(|_, cx| {
+            records.read_with(cx, |records, cx| {
+                assert_eq!(records.selected_row_id(), Some("second"));
+                assert_eq!(records.table.read(cx).selected_row(), Some(1));
+            });
+        });
+
+        // Escape reaches upstream's Cancel action, which clears its own
+        // selection and emits TableEvent::ClearSelection.
+        cx.update(|_, cx| {
+            records.update(cx, |records, cx| {
+                records
+                    .table
+                    .update(cx, |table, cx| table.clear_selection(cx));
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            records.read_with(cx, |records, cx| {
+                assert_eq!(
+                    records.selected_row_id(),
+                    Some("second"),
+                    "the application owns selection; upstream clearing it must not change ours"
+                );
+                assert_eq!(
+                    records.table.read(cx).selected_row(),
+                    Some(1),
+                    "the rendered row must agree with the controlled value, or Enter activates a row that looks unselected"
+                );
+            });
+        });
     }
 
     #[gpui::test]
