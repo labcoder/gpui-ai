@@ -123,12 +123,12 @@ test("every component page links stable previous and next neighbours", async () 
   }
 });
 
-test("every component page carries a rail, its metadata, and its behaviour notes", async () => {
+test("every component page carries its reference, metadata, and behaviour notes", async () => {
   for (const component of components) {
     const html = await page(`/components/${component.slug}/`);
     const where = component.slug;
 
-    assert.match(html, /class="component-rail"/, `${where} has no rail`);
+    assert.match(html, /class="component-reference"/, `${where} has no reference block`);
     assert.match(html, new RegExp(asRendered(component.api)), `${where} does not name its type`);
     assert.match(
       html,

@@ -637,7 +637,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   const repaint = await cdp.evaluate(`(() => {
     const read = () => {
       const body = getComputedStyle(document.body);
-      const rail = document.querySelector('.component-rail');
+      const rail = document.querySelector('.component-reference');
       return {
         background: body.backgroundColor,
         foreground: body.color,
@@ -665,6 +665,139 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // chrome and the demos together.
   assert.match(repaint.before.face, /IBM Plex Sans/);
 
+  // Every interaction below needs the page hydrated, or it drives inert
+  // markup and reports that nothing happened. The shell writes data-theme on
+  // mount, so the attribute appearing is this site's own signal that its
+  // handlers are attached — and that the theme is applied after render rather
+  // than baked into the pre-render, which is what keeps hydration clean.
+  const openPage = async (route, width, height) => {
+    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
+    await waitForValue(cdp, "document.documentElement.dataset.theme === 'light'", {
+      label: `${route} to hydrate and apply its theme`,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    });
+  };
+
+  // The drawer, driven the way a keyboard drives it. None of this is visible
+  // in the markup: the panel ships hidden and everything below happens after
+  // mount, so HTML assertions can only prove the parts exist.
+  await openPage(`/components/${specimen.slug}/`, 390, 844);
+  await cdp.evaluate(`(() => {
+    const toggle = document.querySelector('[data-nav-toggle]');
+    toggle.focus();
+    toggle.click();
+  })()`);
+  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+    label: "the drawer to open",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const opened = await cdp.evaluate(`(() => {
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const panel = document.getElementById('site-nav-panel');
+    return {
+      expanded: toggle.getAttribute('aria-expanded'),
+      visible: !panel.hidden && panel.getBoundingClientRect().width > 0,
+      focused: document.activeElement?.textContent,
+      // Read before the focus probe below moves it.
+      // Everything beside the panel must be inert, or Tab wanders into a page
+      // the visitor cannot see and cannot get back from. The attribute goes on
+      // the panel's siblings and inherits, so the property worth checking is
+      // the one a keyboard would hit: nothing behind the drawer can take focus.
+      inertSiblings: [...panel.parentElement.children]
+        .filter((child) => child !== panel)
+        .every((child) => child.hasAttribute('inert')),
+      contentUnreachable: (() => {
+        const behind = document.querySelector('#content a, #content button');
+        if (!behind) return 'nothing focusable behind the drawer to test';
+        behind.focus();
+        return panel.contains(document.activeElement);
+      })(),
+      current: document.querySelectorAll('#site-nav-panel [aria-current="page"]').length,
+    };
+  })()`);
+  assert.deepEqual(opened, {
+    expanded: "true",
+    visible: true,
+    focused: "Close",
+    inertSiblings: true,
+    contentUnreachable: true,
+    current: 1,
+  });
+
+  await cdp.key("Escape", "Escape", 27);
+  const closed = await cdp.evaluate(`(() => {
+    const panel = document.getElementById('site-nav-panel');
+    return {
+      expanded: document.querySelector('[data-nav-toggle]').getAttribute('aria-expanded'),
+      hidden: panel.hidden,
+      // Focus has to come back to something, and the toggle is where the
+      // visitor left it.
+      focused: document.activeElement?.dataset.navToggle !== undefined,
+      anyInert: document.querySelectorAll('[inert]').length,
+    };
+  })()`);
+  assert.deepEqual(closed, { expanded: "false", hidden: true, focused: true, anyInert: 0 });
+
+  // The backdrop is pointer-only by design, so prove the pointer path works
+  // too — otherwise it is decoration that traps a mouse user.
+  await cdp.evaluate("document.querySelector('[data-nav-toggle]').click()");
+  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+    label: "the drawer to reopen for the pointer path",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await cdp.evaluate("document.querySelector('.nav-backdrop').click()");
+  await waitForValue(cdp, "document.getElementById('site-nav-panel').hidden", {
+    label: "a backdrop click to close the drawer",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.deepEqual(
+    await cdp.evaluate(`(() => ({
+      backdropIsButton: Boolean(document.querySelector('button.nav-backdrop')),
+      backdropFocusable: document.querySelector('.nav-backdrop').tabIndex >= 0,
+    }))()`),
+    { backdropIsButton: false, backdropFocusable: false },
+  );
+
+  // The mode control has to actually change what the page is painted from.
+  const readMode = `(() => ({
+    theme: document.documentElement.dataset.theme,
+    background: getComputedStyle(document.body).backgroundColor,
+    pressed: [...document.querySelectorAll('[data-theme-choice]')]
+      .filter((button) => button.getAttribute('aria-pressed') === 'true')
+      .map((button) => button.dataset.themeChoice),
+  }))()`;
+  const beforeMode = await cdp.evaluate(readMode);
+  assert.deepEqual(beforeMode.pressed, ["light"], "the shell must start on the mode it rendered");
+  await cdp.evaluate("document.querySelector('[data-theme-choice=\"dark\"]').click()");
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'dark'", {
+    label: "the dark control to change the mode",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const afterMode = await cdp.evaluate(readMode);
+  assert.deepEqual(afterMode.pressed, ["dark"], "the control must state which mode is current");
+  assert.notEqual(afterMode.background, beforeMode.background, "dark repainted nothing");
+  // The embed reads this class when the host names no theme, so a demo opened
+  // after the switch starts dark instead of contradicting the page around it.
+  assert.equal(await cdp.evaluate("document.documentElement.classList.contains('dark')"), true);
+
+  // The skip link is the first thing Tab reaches, and it moves focus rather
+  // than only scrolling — which is the whole reason main carries tabindex.
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
+  await cdp.key("Tab", "Tab", 9);
+  const skip = await cdp.evaluate("document.activeElement?.className");
+  assert.equal(skip, "skip-link", "the skip link must be the first tab stop");
+  await cdp.key("Enter", "Enter", 13);
+  assert.equal(
+    await cdp.evaluate("document.activeElement?.id"),
+    "content",
+    "following the skip link must move focus into the content",
+  );
+
   // On a phone the rail stops being a sidebar, but it is the only place the
   // page carries the rustdoc link, the source link, and the reference table.
   // Laying it out with `display: none` below a breakpoint would take all of
@@ -672,7 +805,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // HTML-level assertion would happily match.
   await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 390, 844);
   const railOnMobile = await cdp.evaluate(`(() => {
-    const link = document.querySelector('.component-rail a[href*="/api/gpui_ai/"]');
+    const link = document.querySelector('.component-reference a[href*="/api/gpui_ai/"]');
     if (!link) return { rendered: false, reason: 'no rustdoc link' };
     const box = link.getBoundingClientRect();
     return { rendered: box.width > 0 && box.height > 0, href: link.getAttribute('href') };
