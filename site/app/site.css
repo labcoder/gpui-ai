@@ -24,8 +24,11 @@
   --space-8: 2rem;
   --space-12: 3rem;
   --space-16: 4rem;
-  /* The demo frame's width, and the width every story height was measured at.
-     Narrowing it re-wraps the stories and invalidates the measurement. */
+  /* The width every story height in catalog.json was measured at. The frame
+     never exceeds it, so a desktop demo sits at exactly its measured height.
+     Below it the frame narrows and a text-heavy story re-wraps taller than the
+     number it was given, and scrolls inside its own canvas — D-13 re-measures
+     against narrow viewports and the themes that change the base font size. */
   --demo-width: 900px;
   --page-width: 68rem;
 }
@@ -172,10 +175,11 @@ main {
   }
 }
 
+/* Content, not chrome: the rustdoc link, the source link, and the reference
+   metadata exist nowhere else on the page, so this becomes a sidebar on a wide
+   screen and stays a plain block on a narrow one. Hiding it would take those
+   links off phones and off any sufficiently zoomed desktop. */
 .component-rail {
-  display: none;
-  position: sticky;
-  top: var(--space-6);
   font-size: 0.8125rem;
   border: 1px solid var(--ai-border);
   border-radius: var(--ai-radius-lg);
@@ -184,8 +188,18 @@ main {
 
 @media (min-width: 60rem) {
   .component-rail {
-    display: block;
+    position: sticky;
+    top: var(--space-6);
   }
+
+  /* Redundant beside the prose it points at, useful only as a sidebar. */
+  .component-rail .on-this-page {
+    display: revert;
+  }
+}
+
+.component-rail .on-this-page {
+  display: none;
 }
 
 .component-rail h2 {
@@ -316,6 +330,7 @@ pre.code {
 }
 
 .pager {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: space-between;
   gap: var(--space-4);

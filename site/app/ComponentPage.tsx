@@ -97,38 +97,25 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
             <div className="caveat">
               <p>
                 The demo above is the same Rust as the native component, compiled to WebAssembly
-                and drawn on a WebGPU canvas. What you interact with is the real thing, not a
-                mock-up or a video.
+                and drawn on a WebGPU canvas — not a mock-up, a recording, or a re-implementation.
+                What it paints is what the component paints: layout, colour from the live theme,
+                and motion.
               </p>
               <p>{component.limitation}</p>
               <p>
-                So: colours, layout, motion and interaction are faithful. Native window behaviour —
-                system text input, the platform clipboard, real file drops, GPU performance on your
-                machine — is not something a browser canvas can stand in for. If your browser has no
-                WebGPU, the frame says so instead of pretending.
+                A canvas cannot stand in for the platform, so treat everything that goes through
+                the operating system as unproven here: keyboard handling and shortcuts, screen
+                reader semantics, text input and IME, the clipboard, file drops, and the frame rate
+                you would get on your own GPU. Judge those in a native build. If your browser has
+                no WebGPU, the frame says so rather than showing an empty box.
               </p>
             </div>
           </section>
-
-          <nav className="pager" aria-label="Catalog">
-            {previous ? (
-              <a className="previous" href={href(`/components/${previous.slug}/`)} rel="prev">
-                <span>Previous</span>
-                {previous.title}
-              </a>
-            ) : null}
-            {next ? (
-              <a className="next" href={href(`/components/${next.slug}/`)} rel="next">
-                <span>Next</span>
-                {next.title}
-              </a>
-            ) : null}
-          </nav>
         </div>
 
         <aside className="component-rail" aria-label="About this component">
-          <h2>On this page</h2>
-          <ol>
+          <h2 className="on-this-page">On this page</h2>
+          <ol className="on-this-page">
             <li>
               <a href="#code">Code</a>
             </li>
@@ -151,7 +138,7 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
             <dd>{component.category}</dd>
             <dt>Source</dt>
             <dd>
-              <a href={sourceHref(component, build.repository, build.version)}>
+              <a href={sourceHref(component, build.repository)}>
                 <code>{component.source.replace("crates/gpui-ai/src/", "")}</code>
               </a>
             </dd>
@@ -165,6 +152,24 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
             <dd>{component.events.length > 0 ? component.events.join(", ") : "None"}</dd>
           </dl>
         </aside>
+
+        {/* Outside both columns: on a phone the reference has to come before
+            the way out of the page, and on a desktop the pager belongs under
+            the whole layout rather than under the prose column. */}
+        <nav className="pager" aria-label="Catalog">
+          {previous ? (
+            <a className="previous" href={href(`/components/${previous.slug}/`)} rel="prev">
+              <span>Previous</span>
+              {previous.title}
+            </a>
+          ) : null}
+          {next ? (
+            <a className="next" href={href(`/components/${next.slug}/`)} rel="next">
+              <span>Next</span>
+              {next.title}
+            </a>
+          ) : null}
+        </nav>
       </div>
     </div>
   );
