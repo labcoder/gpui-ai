@@ -679,7 +679,11 @@ mod tests {
             let meta = story
                 .meta()
                 .unwrap_or_else(|| panic!("{} has no catalog metadata", story.slug()));
-            assert!(!meta.category.is_empty(), "{} has no category", story.slug());
+            assert!(
+                !meta.category.is_empty(),
+                "{} has no category",
+                story.slug()
+            );
             assert!(
                 meta.summary.len() > 20,
                 "{} needs a real summary, not a label",
@@ -687,7 +691,9 @@ mod tests {
             );
             assert!(!story.title().is_empty());
             assert!(
-                meta.module.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                meta.module
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_'),
                 "{} points at a module path that is not snake_case",
                 story.slug()
             );
@@ -754,11 +760,16 @@ mod tests {
 
             for (id, label) in variants {
                 assert!(
-                    id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                    id.chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                     "{} has variant id {id}, which is not a slug",
                     story.slug()
                 );
-                assert!(!label.is_empty(), "{} has an unlabelled variant", story.slug());
+                assert!(
+                    !label.is_empty(),
+                    "{} has an unlabelled variant",
+                    story.slug()
+                );
             }
         }
 

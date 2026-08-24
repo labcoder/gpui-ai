@@ -33,12 +33,15 @@ and produces a working but larger binary. Install it if you are making a size
 claim — `npm run report:wasm` numbers from a build that skipped `wasm-opt` are
 not comparable to CI's.
 
-**Use a recent binaryen.** Install it from an upstream release, not from your
-distribution's package manager. `wasm-opt` accepts input it does not fully
-understand: Ubuntu's binaryen 108 exits successfully on today's rustc output
-and emits a smaller module that no browser can instantiate. The version CI
-pins is in `.github/workflows/ci.yml`, and the release browser gate is what
-proves the optimized artifact still starts.
+**`wasm-opt` currently breaks this artifact, so CI does not install binaryen.**
+`wasm-opt -Oz -all` shrinks the gallery by 14% and produces a module no browser
+can instantiate — with Ubuntu's binaryen 108 and equally with a pinned upstream
+132, so it is not version skew. The same build without it passes the release
+browser gate. If you install binaryen locally, `npm run build:wasm` will run
+`wasm-opt` and your artifact will not start; that is expected until the
+incompatibility is understood. See `docs/internal/wasm-baseline.md`, and treat
+a green release browser gate — not a successful build — as the bar for
+re-enabling it.
 
 ## The rules that decide whether a change lands
 

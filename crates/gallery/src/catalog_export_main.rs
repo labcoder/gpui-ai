@@ -69,7 +69,10 @@ fn snippets(source: &str) -> Vec<(String, String, String)> {
         if let Some(rest) = trimmed.strip_prefix("// snippet:start(") {
             let key = rest.strip_suffix(')').unwrap_or(rest);
             let (slug, variant) = key.split_once('/').unwrap_or((key, "default"));
-            assert!(open.is_none(), "snippet:start inside an open snippet ({slug})");
+            assert!(
+                open.is_none(),
+                "snippet:start inside an open snippet ({slug})"
+            );
             open = Some((slug.to_owned(), variant.to_owned(), Vec::new()));
             continue;
         }
@@ -83,7 +86,13 @@ fn snippets(source: &str) -> Vec<(String, String, String)> {
                 .unwrap_or(0);
             let code = body
                 .iter()
-                .map(|line| if line.len() > indent { &line[indent..] } else { line.trim_start() })
+                .map(|line| {
+                    if line.len() > indent {
+                        &line[indent..]
+                    } else {
+                        line.trim_start()
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
                 .trim_end()
@@ -92,8 +101,9 @@ fn snippets(source: &str) -> Vec<(String, String, String)> {
 
             match collected
                 .iter_mut()
-                .find(|(existing, existing_variant, _)| *existing == slug && *existing_variant == variant)
-            {
+                .find(|(existing, existing_variant, _)| {
+                    *existing == slug && *existing_variant == variant
+                }) {
                 Some((_, _, existing)) => {
                     existing.push_str("\n\n");
                     existing.push_str(&code);
@@ -140,8 +150,12 @@ fn main() {
             )
         };
         let overflow = match meta.viewport {
-            Viewport::Tall => "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state.",
-            Viewport::Wide => "Wide content retains context in a bounded surface; reduced motion preserves a useful state.",
+            Viewport::Tall => {
+                "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+            }
+            Viewport::Wide => {
+                "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+            }
         };
 
         let variants: Vec<Value> = story
@@ -207,7 +221,11 @@ fn main() {
     );
     fs::write(&path, rendered).expect("the catalog must be writable");
 
-    let gallery_source = root.join("crates").join("gallery").join("src").join("gallery.rs");
+    let gallery_source = root
+        .join("crates")
+        .join("gallery")
+        .join("src")
+        .join("gallery.rs");
     let gallery = fs::read_to_string(&gallery_source).expect("the gallery source must be readable");
     let mut by_story: Map<String, Value> = Map::new();
     for (slug, variant, code) in snippets(&gallery) {

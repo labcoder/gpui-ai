@@ -90,24 +90,13 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: wasm-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install binaryen
-        # Pinned to an upstream release rather than apt: Ubuntu ships binaryen
-        # 108 (2022), which accepts today's rustc output and silently produces
-        # a module the browser cannot instantiate. The release browser gate
-        # below is what caught it. Bump this deliberately, and let that gate
-        # prove the artifact still runs.
-        env:
-          BINARYEN_VERSION: version_132
-          BINARYEN_SHA256: 195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572
-        run: |
-          set -euo pipefail
-          archive="binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz"
-          curl -fsSLO "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/${archive}"
-          echo "${BINARYEN_SHA256}  ${archive}" | sha256sum --check --strict
-          tar -xzf "${archive}"
-          echo "${PWD}/binaryen-${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
-      - name: Confirm binaryen is new enough for this toolchain
-        run: wasm-opt --version
+      # No binaryen step on purpose. `wasm-opt -Oz -all` shrinks the artifact
+      # from 16.9 MB to 14.4 MB and produces a module the browser cannot
+      # instantiate — with Ubuntu's binaryen 108 and equally with a pinned
+      # upstream 132, so it is not version skew. The same artifact without
+      # wasm-opt passes the release browser gate. build-wasm.sh still runs
+      # wasm-opt when it is on PATH, so re-enabling this is one step away once
+      # the incompatibility is understood; see docs/internal/wasm-baseline.md.
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - name: Install web host dependencies
