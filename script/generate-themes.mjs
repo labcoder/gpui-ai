@@ -143,7 +143,11 @@ function toHex([r, g, b]) {
   return `#${[r, g, b].map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
 }
 
-const mix = (from, to, amount) => from.map((c, index) => c + (to[index] - c) * amount);
+// Rounded to the channel values `toHex` will actually write. Testing the
+// unrounded mix and emitting the rounded one lets a colour that just cleared
+// the target land a hair under it in the file.
+const mix = (from, to, amount) =>
+  from.map((c, index) => Math.round(c + (to[index] - c) * amount));
 
 /**
  * The nearest version of a colour that can be read on a given background.
@@ -161,6 +165,33 @@ function readable(source, against, target = 4.5) {
   for (let amount = 0.05; amount <= 1.0001; amount += 0.05) {
     const candidate = mix(from, toward, amount);
     if (contrast(candidate, behind) >= target) return toHex(candidate);
+  }
+  return undefined;
+}
+
+/**
+ * The nearest version of a colour that can be read on all of several grounds.
+ *
+ * Same walk as [`readable`], but it only stops once every background clears the
+ * target, because the site paints the same secondary text on the page and on
+ * cards and those are not always the same colour.
+ */
+function readableOnAll(source, againsts, target = 4.5) {
+  const from = toRgb(source);
+  const behinds = againsts.map(toRgb).filter(Boolean);
+  if (!from || behinds.length === 0) return undefined;
+
+  const clears = (candidate) => behinds.every((behind) => contrast(candidate, behind) >= target);
+  if (clears(from)) return toHex(from);
+
+  // One direction for all of them: the grounds a theme uses for its page and
+  // its cards are close to each other by construction, so their mean says
+  // which way is away from both.
+  const mean = behinds.reduce((sum, behind) => sum + luminance(behind), 0) / behinds.length;
+  const toward = mean > 0.18 ? [0, 0, 0] : [255, 255, 255];
+  for (let amount = 0.05; amount <= 1.0001; amount += 0.05) {
+    const candidate = mix(from, toward, amount);
+    if (clears(candidate)) return toHex(candidate);
   }
   return undefined;
 }
@@ -198,6 +229,32 @@ function tokensFor(theme) {
       ? `"${theme["mono_font.family"]}", ${FONT_FALLBACK.mono}`
       : FONT_FALLBACK.mono,
     "--ai-shadow": theme.shadow === false ? "none" : SHADOW[mode],
+  };
+}
+
+/**
+ * Secondary text, guaranteed legible on the page and on a card.
+ *
+ * `--ai-muted` is the registry's `muted.foreground`, and in a component library
+ * that is a colour for de-emphasis: dividers, placeholder glyphs, a label
+ * beside something louder. The site was also using it for whole paragraphs and
+ * for the navigation links, and 26 of the 45 themes put it below 4.5:1 against
+ * their own background — nine of them below 3:1, which is not a subtlety, it is
+ * text a reader has to work at.
+ *
+ * So the colour text is painted in is derived rather than borrowed: keep the
+ * hue, which is what makes it read as secondary, and move the lightness until
+ * it clears AA on both grounds. A theme that already cleared it is returned
+ * unchanged, so this only touches the themes that needed touching.
+ *
+ * `--ai-muted` itself is unchanged and still the right token for a border or a
+ * rule, where 4.5:1 is not the bar.
+ */
+function mutedTextFor(tokens) {
+  return {
+    "--ai-muted-text":
+      readableOnAll(tokens["--ai-muted"], [tokens["--ai-background"], tokens["--ai-surface"]]) ??
+      tokens["--ai-foreground"],
   };
 }
 
@@ -246,7 +303,7 @@ function describe(theme, slug, group) {
     radiusLg: theme["radius.lg"] ?? 8,
     fontSize: theme["font.size"] ?? 16,
     shadow: theme.shadow !== false,
-    tokens: { ...base, ...codeTokensFor(base) },
+    tokens: { ...base, ...mutedTextFor(base), ...codeTokensFor(base) },
   };
 }
 

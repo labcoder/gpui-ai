@@ -167,7 +167,7 @@ h3 {
 .site-footer {
   border-top: 1px solid var(--ai-border);
   margin-top: var(--space-16);
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.8125rem;
 }
 
@@ -344,7 +344,7 @@ main [id] {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .component-nav ul {
@@ -362,7 +362,7 @@ main [id] {
   border-radius: var(--ai-radius);
   font-size: 0.875rem;
   text-decoration: none;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .nav-component-link:hover {
@@ -385,7 +385,7 @@ main [id] {
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .nav-search input {
@@ -401,7 +401,7 @@ main [id] {
 
 .nav-search output {
   font-size: 0.75rem;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 /* Theme controls ---------------------------------------------------------- */
@@ -445,7 +445,7 @@ main [id] {
 }
 
 .theme-picker label {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -474,7 +474,7 @@ main [id] {
   padding: var(--space-1) var(--space-3);
   border: 0;
   background: var(--ai-surface);
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   cursor: pointer;
 }
 
@@ -488,7 +488,7 @@ main [id] {
 }
 
 .lede {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 1.0625rem;
   margin: 0 0 var(--space-8);
   max-width: var(--prose-width);
@@ -513,7 +513,7 @@ main [id] {
 }
 
 .component-reference dt {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -533,7 +533,7 @@ main [id] {
 }
 
 .metadata dt {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .metadata dd {
@@ -543,7 +543,7 @@ main [id] {
 }
 
 .eyebrow {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -582,7 +582,7 @@ section + section {
 
 .notes dd {
   margin: 0;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.875rem;
 }
 
@@ -630,7 +630,7 @@ section + section {
 }
 
 .code-actions .copy-status {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 pre.code {
@@ -684,7 +684,7 @@ pre.code {
   border-left-width: 3px;
   border-radius: var(--ai-radius-lg);
   padding: var(--space-4);
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.875rem;
 }
 
@@ -714,7 +714,7 @@ pre.code {
 
 .pager span {
   display: block;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.75rem;
 }
 
@@ -787,7 +787,7 @@ pre.code {
   margin: 0;
   padding: var(--space-4);
   text-align: center;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.8125rem;
 }
 
@@ -841,7 +841,7 @@ pre.code {
 }
 
 .demo-toolbar button:disabled {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   cursor: default;
 }
 
@@ -855,12 +855,12 @@ pre.code {
   font-family: var(--ai-font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .demo figcaption {
   margin-top: var(--space-2);
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.75rem;
 }
 
@@ -876,7 +876,7 @@ pre.code {
 
 .filter label {
   font-size: 0.875rem;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .filter input {
@@ -891,7 +891,7 @@ pre.code {
 }
 
 .filter output {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.875rem;
 }
 
@@ -930,7 +930,7 @@ pre.code {
 
 .card p {
   margin: 0;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.875rem;
 }
 
@@ -938,7 +938,7 @@ pre.code {
    not what anyone would type. */
 .card-api {
   margin: 0;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.75rem;
 }
 
@@ -947,7 +947,7 @@ pre.code {
 }
 
 .empty {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 /* Home ------------------------------------------------------------------- */
@@ -964,7 +964,7 @@ pre.code {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .theme-strip ul {
@@ -1009,7 +1009,7 @@ pre.code {
 }
 
 .facts dt {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1062,7 +1062,7 @@ pre.code {
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .theme-readout {
@@ -1070,7 +1070,7 @@ pre.code {
   font-family: var(--ai-font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.04em;
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
 }
 
 .theme-actions {
@@ -1093,7 +1093,7 @@ pre.code {
 }
 
 .theme-actions button:disabled {
-  color: var(--ai-muted);
+  color: var(--ai-muted-text);
   cursor: default;
 }
 

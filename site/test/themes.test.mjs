@@ -94,6 +94,7 @@ test("every theme carries the full token set the chrome is painted from", async 
     "--ai-shadow",
     // Derived rather than read out of the theme file: a status colour is a
     // fill, and the code panel needs text that can be read on its surface.
+    "--ai-muted-text",
     "--ai-code-comment",
     "--ai-code-keyword",
     "--ai-code-string",
@@ -130,6 +131,52 @@ test("every theme carries the full token set the chrome is painted from", async 
 
   assert.equal(new Set(slugs).size, slugs.length, "theme slugs must be unique");
   assert.ok(slugs.includes("light") && slugs.includes("dark"), "the basic pair must be present");
+});
+
+/** WCAG relative luminance, from an `#rrggbb` string. */
+function luminance(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  assert.ok(match, `${hex} is not a six-digit hex colour`);
+  const value = Number.parseInt(match[1], 16);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((c) => {
+    const unit = c / 255;
+    return unit <= 0.03928 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrast(a, b) {
+  const [hi, lo] = luminance(a) >= luminance(b) ? [a, b] : [b, a];
+  return (luminance(hi) + 0.05) / (luminance(lo) + 0.05);
+}
+
+test("secondary text is readable on the page and on a card, in every theme", async () => {
+  const { groups } = JSON.parse(await readFile(path.join(generated, "themes.json"), "utf8"));
+
+  // The site paints paragraphs, captions, and the navigation links in this
+  // colour. Read straight from the registry, `--ai-muted` put 26 of the 45
+  // themes below AA and nine of them below 3:1, which is why `--ai-muted-text`
+  // is derived from it rather than being it.
+  const failures = [];
+  let nudged = 0;
+  for (const group of groups) {
+    for (const theme of group.themes) {
+      const { tokens } = theme;
+      const text = tokens["--ai-muted-text"];
+      if (text.toLowerCase() !== tokens["--ai-muted"].toLowerCase()) nudged += 1;
+      for (const ground of ["--ai-background", "--ai-surface"]) {
+        const ratio = contrast(text, tokens[ground]);
+        if (ratio < 4.5) {
+          failures.push(`${theme.slug}: ${text} on ${ground} is ${ratio.toFixed(2)}:1`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(failures, [], `secondary text fails AA in ${failures.length} places`);
+  // A theme that already cleared AA is left exactly as its author wrote it, so
+  // this must never become "all of them".
+  assert.ok(nudged > 0 && nudged < 45, `${nudged} themes were altered, which is not plausible`);
 });
 
 test("the upstream group is credited separately from gpui-ai's own themes", async () => {
