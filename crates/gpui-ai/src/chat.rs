@@ -742,12 +742,21 @@ impl Chat {
         let last_retained_index = messages
             .iter()
             .rposition(|message| old_by_id.contains_key(&message.id));
-        let appended_ids = messages
-            .iter()
-            .skip(last_retained_index.map_or(0, |index| index + 1))
-            .filter(|message| !old_by_id.contains_key(&message.id))
-            .map(|message| message.id.clone())
-            .collect::<Vec<_>>();
+        // A snapshot that shares no identity with the previous one is a
+        // different conversation, not a hundred new messages. Without this the
+        // switch would cue every message as an arrival, animate them all in,
+        // and mark the whole history unread.
+        let is_replacement = !was_empty && !messages.is_empty() && last_retained_index.is_none();
+        let appended_ids = if is_replacement {
+            Vec::new()
+        } else {
+            messages
+                .iter()
+                .skip(last_retained_index.map_or(0, |index| index + 1))
+                .filter(|message| !old_by_id.contains_key(&message.id))
+                .map(|message| message.id.clone())
+                .collect::<Vec<_>>()
+        };
         // Only messages appended to a live transcript animate in and cue;
         // a freshly loaded history settles silently.
         let arrived = if was_empty {
@@ -814,13 +823,38 @@ impl Chat {
             .collect::<HashSet<_>>();
         self.unread_message_ids
             .retain(|message_id| new_ids.contains(message_id));
+        // Transient state belongs to a message, so it cannot outlive one.
+        // Otherwise feedback grows without bound across conversation switches
+        // and an open editor keeps pointing at a message that is gone.
+        self.feedback
+            .retain(|message_id, _| new_ids.contains(message_id));
+        if self
+            .copied_message
+            .as_ref()
+            .is_some_and(|message_id| !new_ids.contains(message_id))
+        {
+            self.copied_message = None;
+            self.copied_reset = None;
+        }
+        if self
+            .editing
+            .as_ref()
+            .is_some_and(|session| !new_ids.contains(&session.message_id))
+        {
+            self.editing = None;
+        }
         self.messages = messages;
         if self.messages.is_empty() {
             self.list_state.set_follow_mode(FollowMode::Tail);
             self.list_state.scroll_to_end();
             self.unread_message_ids.clear();
             self.pinned_to_bottom = true;
-        } else if was_following {
+        } else if was_following || is_replacement {
+            // A different conversation opens at its end, like opening it fresh,
+            // rather than inheriting the previous transcript's scroll offset.
+            if is_replacement {
+                self.list_state.set_follow_mode(FollowMode::Tail);
+            }
             self.list_state.scroll_to_end();
             self.unread_message_ids.clear();
             self.pinned_to_bottom = true;
@@ -2222,6 +2256,80 @@ mod tests {
                 ChatEvent::FollowUpSelected { message_id, follow_up_id }
                     if message_id == "answer" && follow_up_id == "compare"
             )));
+        });
+    }
+
+    #[gpui::test]
+    fn switching_to_a_disjoint_conversation_is_not_a_burst_of_arrivals(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..12), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+
+        // Read back through the transcript, so the next snapshot is not a
+        // tail-following append.
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 2,
+                offset_in_item: px(0.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        // A different conversation: no message identity in common.
+        set_messages(&harness, messages(100..112), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        chat.read_with(cx, |chat, _| {
+            assert_eq!(
+                chat.unread_count(),
+                0,
+                "opening another conversation must not mark its history unread"
+            );
+            assert!(
+                chat.arrivals.is_empty(),
+                "a replacement is not twelve arrivals, so nothing should animate in or cue"
+            );
+            assert!(
+                chat.pinned_to_bottom,
+                "a different conversation opens at its end, not at the old scroll offset"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn per_message_state_does_not_outlive_its_message(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..6), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+
+        cx.update(|window, cx| {
+            chat.update(cx, |chat, cx| {
+                chat.feedback.insert("m0001".into(), true);
+                chat.copied_message = Some("m0002".into());
+                chat.begin_edit("m0003", window, cx);
+            });
+        });
+        chat.read_with(cx, |chat, _| {
+            assert!(chat.editing.is_some(), "the edit session must start");
+        });
+
+        set_messages(&harness, messages(100..106), cx);
+
+        chat.read_with(cx, |chat, _| {
+            assert!(
+                chat.feedback.is_empty(),
+                "feedback keyed by message must not accumulate across conversations"
+            );
+            assert_eq!(
+                chat.copied_message, None,
+                "the copied marker belonged to a message that is gone"
+            );
+            assert!(
+                chat.editing.is_none(),
+                "an open editor must not keep pointing at a removed message"
+            );
         });
     }
 
