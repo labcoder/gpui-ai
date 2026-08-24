@@ -20,6 +20,7 @@ use gpui_component::{
     scroll::ScrollableElement as _,
     v_flex,
 };
+use std::collections::HashSet;
 use std::ops::Range;
 
 /// A selectable model offered by a [`PromptBar`].
@@ -585,12 +586,17 @@ impl PromptBar {
     }
 
     /// Replaces the model catalog while preserving a still-valid selection.
+    ///
+    /// A catalog repeating a stable ID is ignored, atomically.
     pub fn set_models(
         &mut self,
         models: impl IntoIterator<Item = PromptModel>,
         cx: &mut gpui::Context<Self>,
     ) {
         let models: Vec<_> = models.into_iter().collect();
+        if !stable_ids_are_unique(models.iter().map(PromptModel::id)) {
+            return;
+        }
         if self.models == models {
             return;
         }
@@ -633,12 +639,17 @@ impl PromptBar {
     }
 
     /// Replaces the `@` mention catalog.
+    ///
+    /// A catalog repeating a stable ID is ignored, atomically.
     pub fn set_mentions(
         &mut self,
         mentions: impl IntoIterator<Item = PromptMention>,
         cx: &mut gpui::Context<Self>,
     ) {
         let mentions: Vec<_> = mentions.into_iter().collect();
+        if !stable_ids_are_unique(mentions.iter().map(PromptMention::id)) {
+            return;
+        }
         if self.mentions != mentions {
             self.mentions = mentions;
             if !self.refresh_suggestions(cx) {
@@ -648,12 +659,17 @@ impl PromptBar {
     }
 
     /// Replaces the `/` command catalog.
+    ///
+    /// A catalog repeating a stable ID is ignored, atomically.
     pub fn set_commands(
         &mut self,
         commands: impl IntoIterator<Item = PromptCommand>,
         cx: &mut gpui::Context<Self>,
     ) {
         let commands: Vec<_> = commands.into_iter().collect();
+        if !stable_ids_are_unique(commands.iter().map(PromptCommand::id)) {
+            return;
+        }
         if self.commands != commands {
             self.commands = commands;
             if !self.refresh_suggestions(cx) {
@@ -663,12 +679,17 @@ impl PromptBar {
     }
 
     /// Replaces application-owned attachments.
+    ///
+    /// A snapshot repeating a stable ID is ignored, atomically.
     pub fn set_attachments(
         &mut self,
         attachments: impl IntoIterator<Item = PromptAttachment>,
         cx: &mut gpui::Context<Self>,
     ) {
         let attachments: Vec<_> = attachments.into_iter().collect();
+        if !stable_ids_are_unique(attachments.iter().map(PromptAttachment::id)) {
+            return;
+        }
         if self.attachments != attachments {
             self.attachments = attachments;
             cx.notify();
@@ -1266,14 +1287,15 @@ impl Render for PromptBar {
 #[cfg(test)]
 mod tests {
     use super::{
-        ProgressState, PromptAttachment, PromptBar, PromptBarEvent, PromptMention, PromptModel,
-        PromptTokenKind, SuggestionKey, active_prompt_token, build_submission, model_groups,
-        prompt_control, prompt_frame, prompt_listbox, prompt_model_control, prompt_status,
-        retain_active_suggestion,
+        ProgressState, PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention,
+        PromptModel, PromptTokenKind, SuggestionKey, active_prompt_token, build_submission,
+        model_groups, prompt_control, prompt_frame, prompt_listbox, prompt_model_control,
+        prompt_status, retain_active_suggestion, stable_ids_are_unique,
     };
     use gpui::{
         AppContext as _, Element as _, Focusable as _, IntoElement as _, Render, RenderOnce as _,
-        Role, StatefulInteractiveElement as _, TestAppContext, Window, accesskit, canvas, px, size,
+        Role, SharedString, StatefulInteractiveElement as _, TestAppContext, Window, accesskit,
+        canvas, px, size,
     };
     use std::{
         cell::{Cell, RefCell},
@@ -1890,4 +1912,91 @@ mod tests {
         assert_eq!(node.is_expanded(), Some(true));
         assert!(node.supports_action(accesskit::Action::Click));
     }
+
+    #[test]
+    fn repeated_stable_ids_are_rejected() {
+        let unique = [
+            SharedString::from("balanced"),
+            SharedString::from("precise"),
+        ];
+        assert!(stable_ids_are_unique(unique.iter()));
+
+        let repeated = [
+            SharedString::from("balanced"),
+            SharedString::from("precise"),
+            SharedString::from("balanced"),
+        ];
+        assert!(!stable_ids_are_unique(repeated.iter()));
+        assert!(stable_ids_are_unique(std::iter::empty()));
+    }
+
+    #[gpui::test]
+    fn catalogs_repeating_a_stable_id_are_ignored_atomically(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (prompt, cx) =
+            cx.add_window_view(|window, cx| PromptBar::new("duplicates", window, cx));
+
+        let valid = || {
+            [
+                PromptModel::new("balanced", "Balanced"),
+                PromptModel::new("precise", "Precise"),
+            ]
+        };
+        cx.update(|_, cx| {
+            prompt.update(cx, |prompt, cx| {
+                prompt.set_models(valid(), cx);
+                prompt.set_mentions([PromptMention::new("docs", "docs")], cx);
+                prompt.set_commands([PromptCommand::new("summarize", "summarize")], cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            prompt.update(cx, |prompt, cx| {
+                // Each of these repeats an ID, so each must be refused whole
+                // rather than installing a catalog with aliased ElementIds.
+                prompt.set_models(
+                    [
+                        PromptModel::new("fast", "Fast"),
+                        PromptModel::new("fast", "Fast again"),
+                    ],
+                    cx,
+                );
+                prompt.set_mentions(
+                    [
+                        PromptMention::new("specs", "specs"),
+                        PromptMention::new("specs", "specs again"),
+                    ],
+                    cx,
+                );
+                prompt.set_commands(
+                    [
+                        PromptCommand::new("explain", "explain"),
+                        PromptCommand::new("explain", "explain again"),
+                    ],
+                    cx,
+                );
+            });
+        });
+
+        prompt.read_with(cx, |prompt, _| {
+            assert_eq!(
+                prompt.models,
+                valid().to_vec(),
+                "a malformed model catalog must leave the previous one untouched"
+            );
+            assert_eq!(prompt.mentions.len(), 1, "mentions must be unchanged");
+            assert_eq!(prompt.commands.len(), 1, "commands must be unchanged");
+        });
+    }
+}
+
+/// Rejects a catalog that repeats a stable ID.
+///
+/// Repeated IDs alias `ElementId`s, so a second entry would silently take the
+/// first one's focus, hover, and reveal state. [`Chat`](crate::chat::Chat) and
+/// [`RecordsTable`](crate::records_table::RecordsTable) reject malformed
+/// controlled snapshots the same way.
+fn stable_ids_are_unique<'a>(mut ids: impl Iterator<Item = &'a SharedString>) -> bool {
+    let mut seen = HashSet::new();
+    ids.all(|id| seen.insert(id))
 }
