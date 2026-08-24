@@ -85,8 +85,11 @@ test("every page exposes keyboard-operable theme controls", async () => {
       /data-theme-choice="system" aria-pressed="true"/,
       `${route} must pre-render with the system choice pressed`,
     );
+    // Counted within the mode group. Other controls report a pressed state
+    // too — the home page's theme strip marks whichever theme is showing —
+    // and the claim here is only that the three modes never disagree.
     assert.equal(
-      count(html, /aria-pressed="true"/g),
+      count(html, /data-theme-choice="[a-z]+" aria-pressed="true"/g),
       1,
       `${route} must show exactly one mode as current`,
     );

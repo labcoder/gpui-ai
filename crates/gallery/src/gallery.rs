@@ -5462,14 +5462,14 @@ impl Render for Gallery {
                 .min_h_0()
                 .overflow_y_scrollbar()
                 .child(
-                    v_flex()
-                        .w_full()
-                        .min_h_full()
-                        .items_center()
-                        .when(self.chrome == GalleryChrome::Embedded, |this| {
-                            this.justify_center()
-                        })
-                        .child(story),
+                    // Horizontally centred, never vertically. A host sizes its
+                    // frame to the height the story measures, so for every
+                    // story but one the two are equal and centring does
+                    // nothing. The exception is the guided demo, which starts
+                    // as a bare composer and grows to five times that: centred,
+                    // it opened floating in the middle of an empty box, which
+                    // is the dead space the measured heights exist to remove.
+                    v_flex().w_full().min_h_full().items_center().child(story),
                 )
                 .into_any_element()
         };

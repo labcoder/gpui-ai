@@ -55,6 +55,14 @@ export interface Hero {
   readonly slug: string;
   readonly title: string;
   readonly windowTitle: string;
+  /**
+   * The hero's measured height at its settled state.
+   *
+   * Optional because the hero is not in `StoryId::ALL` and the exporter has
+   * carried it without a height in the past; a home page that renders no hero
+   * is better than one that guesses at the size of it.
+   */
+  readonly height?: number;
   readonly siteOnly: true;
 }
 
