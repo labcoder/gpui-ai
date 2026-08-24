@@ -1,3 +1,4 @@
+import { CodePanel } from "./CodePanel";
 import { Demo } from "./Demo";
 import {
   build,
@@ -7,7 +8,7 @@ import {
   snippet,
   type Component,
 } from "./data";
-import { apiHref, href, sourceHref } from "./links";
+import { apiHref, demoSrc, href, sourceHref } from "./links";
 
 /**
  * One component, entirely from generated data.
@@ -57,9 +58,14 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
       <section aria-labelledby="code">
         <h2 id="code">Code</h2>
         <p className="lede">Cut from the gallery story this page runs, so it stays true.</p>
-        <pre className="code">
-          <code>{snippet(component.slug) ?? component.usage}</code>
-        </pre>
+        <CodePanel
+          slug={component.slug}
+          label={`the ${component.title} snippet`}
+          actions={[
+            { href: demoSrc(component.slug), text: "Open in the gallery" },
+            { href: sourceHref(component, build.repository), text: "Implementation" },
+          ]}
+        />
       </section>
 
       <section aria-labelledby="ownership">
@@ -198,9 +204,11 @@ function Variants({ component }: { readonly component: Component }) {
           <div className="variant" key={variant.id}>
             <h3>{variant.label}</h3>
             {code ? (
-              <pre className="code">
-                <code>{code}</code>
-              </pre>
+              <CodePanel
+                slug={component.slug}
+                variant={variant.id}
+                label={`the ${variant.label} snippet`}
+              />
             ) : null}
           </div>
         );

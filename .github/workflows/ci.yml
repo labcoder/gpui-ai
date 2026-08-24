@@ -21,8 +21,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
       - name: Install Linux system dependencies
         run: bash script/install-linux.sh
+      - name: Install site dependencies
+        # `npm run generate` highlights the Rust snippets with Shiki, which
+        # lives in site/node_modules. Without this the freshness check below
+        # fails on a clean runner for a reason that has nothing to do with the
+        # generated files being stale.
+        run: npm ci --prefix site
       - name: Cache Cargo
         uses: actions/cache@v6
         with:

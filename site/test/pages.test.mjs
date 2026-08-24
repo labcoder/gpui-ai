@@ -168,6 +168,20 @@ test("every component page sizes its demo from the measured height", async () =>
   }
 });
 
+/** The text of the first code block on a page, with its highlighting removed. */
+function renderedCode(html) {
+  const block = /<pre class="code"><code>([\s\S]*?)<\/code><\/pre>/.exec(html)?.[1];
+  if (block === undefined) return undefined;
+  return block
+    .replace(/<[^>]+>/g, "")
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&gt;", ">")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&amp;", "&")
+    .replace(/\n$/, "");
+}
+
 test("every component page shows the snippet cut from the gallery, not the one-line usage", async () => {
   let richerThanUsage = 0;
 
@@ -177,10 +191,15 @@ test("every component page shows the snippet cut from the gallery, not the one-l
     assert.ok(code, `${component.slug} has no default snippet`);
     if (code !== component.usage) richerThanUsage += 1;
 
-    assert.match(
-      html,
-      new RegExp(asRendered(code).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-      `${component.slug} does not render its snippet`,
+    // Compared after the highlighting is stripped back off, not by looking for
+    // the snippet as one run of text: the tokens are wrapped in spans now. The
+    // stronger claim, and the one that matters, is that what a reader sees
+    // reassembles into the snippet exactly — not a line missing, not a
+    // character changed.
+    assert.equal(
+      renderedCode(html),
+      code,
+      `${component.slug} renders code that is not its snippet`,
     );
   }
 
@@ -190,6 +209,27 @@ test("every component page shows the snippet cut from the gallery, not the one-l
     richerThanUsage > components.length / 2,
     `only ${richerThanUsage} snippets say more than the usage line`,
   );
+});
+
+test("code is highlighted in the build, not in the browser", async () => {
+  const html = await page(`/components/${components.find((c) => c.slug === "chat").slug}/`);
+
+  // Pre-rendered spans, so the panel is coloured before any JavaScript runs
+  // and no highlighter is shipped. Shiki is a devDependency of the generate
+  // step; finding it in the bundle would mean it followed the data in.
+  assert.match(html, /<pre class="code"><code>.*<span class="t-/s, "the code is not highlighted");
+  for (const category of ["keyword", "string", "type"]) {
+    assert.match(html, new RegExp(`class="t-${category}"`), `no ${category} tokens were emitted`);
+  }
+
+  const { outDir } = await site();
+  const bundles = (await readdir(path.join(outDir, "assets"))).filter((name) =>
+    name.endsWith(".js"),
+  );
+  for (const name of bundles) {
+    const source = await readFile(path.join(outDir, "assets", name), "utf8");
+    assert.doesNotMatch(source, /shiki|textmate|oniguruma/i, `${name} carries a highlighter`);
+  }
 });
 
 test("every component page links its own type under /api/", async () => {

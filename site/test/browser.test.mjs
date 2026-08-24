@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
+import snippetFile from "../generated/snippets.json" with { type: "json" };
 
 const { components } = catalog;
 
@@ -1066,6 +1067,38 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
   await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
+  // Copy, against a real clipboard. Everything short of this checks that the
+  // page holds the right string somewhere; only reading the clipboard back
+  // shows what a visitor would paste. The panel is highlighted, so the
+  // failure this rules out is copying spans, classes, or a partial line.
+  await cdp.send("Browser.grantPermissions", {
+    origin: serverHandle.origin,
+    permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
+  });
+  // Chrome refuses clipboard access to a document it does not consider
+  // focused, and a headless page never is unless it is told it is.
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await cdp.send("Page.bringToFront");
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
+  await cdp.evaluate("document.querySelector('[data-copy]').click()");
+  await waitForValue(cdp, "document.querySelector('.copy-status').textContent.length > 0", {
+    label: 'the copy button to report what it did',
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  // Line endings are normalised on the way back out: the Windows clipboard
+  // hands back CRLF whatever was put in. That is the operating system, not the
+  // page, and asserting on it would make this test pass on one platform only.
+  assert.equal(
+    (await cdp.evaluate("navigator.clipboard.readText()")).replaceAll("\r\n", "\n"),
+    snippetFile.snippets[specimen.slug].default,
+    "the clipboard must hold the snippet, not the markup around it",
+  );
+  assert.match(
+    await cdp.evaluate("document.querySelector('.copy-status').textContent"),
+    /^Copied /,
+    'a copy that says nothing is a copy a visitor cannot trust',
+  );
   // The skip link is the first thing Tab reaches, and it moves focus rather
   // than only scrolling — which is the whole reason main carries tabindex.
   await openPage(`/components/${specimen.slug}/`, 1280, 900);

@@ -6,6 +6,7 @@
 
 import buildJson from "../generated/build.json";
 import catalogJson from "../generated/catalog.json";
+import highlightJson from "../generated/highlight.json";
 import snippetsJson from "../generated/snippets.json";
 import themesJson from "../generated/themes.json";
 
@@ -114,6 +115,37 @@ const snippetsBySlug = snippetsJson.snippets as Readonly<
 /** The copyable Rust for one story variant, cut from the gallery's source. */
 export function snippet(slug: string, variant = "default"): string | undefined {
   return snippetsBySlug[slug]?.[variant];
+}
+
+/**
+ * One piece of a highlighted line: its text, and what kind of thing it is.
+ *
+ * The second element is absent for ordinary text. The kinds are named rather
+ * than coloured so the stylesheet can paint them from the active theme.
+ */
+export type CodeToken = readonly [text: string, category?: string];
+
+// Widened through `unknown` on purpose: TypeScript reads the generated JSON as
+// `string[][][]`, which cannot be narrowed to a tuple that requires its first
+// element. The generator emits the tuple shape and refuses to write a file
+// whose tokens do not reassemble into the snippet, so the shape is checked —
+// just not by the compiler.
+const highlightedBySlug = highlightJson.snippets as unknown as Readonly<
+  Record<string, Readonly<Record<string, readonly (readonly CodeToken[])[]>>>
+>;
+
+/**
+ * The same snippet, split into tokens.
+ *
+ * Highlighted at build time by `site/scripts/generate-highlight.mjs`, which
+ * checks that reassembling the tokens gives back the snippet exactly. Copy
+ * still reads `snippet()`, so what a visitor pastes never comes through here.
+ */
+export function highlighted(
+  slug: string,
+  variant = "default",
+): readonly (readonly CodeToken[])[] | undefined {
+  return highlightedBySlug[slug]?.[variant];
 }
 
 export function componentBySlug(slug: string): Component | undefined {
