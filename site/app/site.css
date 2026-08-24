@@ -241,6 +241,13 @@ main:focus {
   outline: none;
 }
 
+/* The masthead is sticky, so anything scrolled to by a fragment — the skip
+   link's target, a section anchor — would otherwise arrive underneath it. */
+main,
+main [id] {
+  scroll-margin-top: 4.5rem;
+}
+
 /* Rail and drawer --------------------------------------------------------- */
 
 .desktop-rail {

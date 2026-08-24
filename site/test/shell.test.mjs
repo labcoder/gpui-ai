@@ -171,14 +171,6 @@ test("the rail's search is labelled, counted, and distinct from the catalog filt
     assert.match(html, new RegExp(`id="${prefix}-component-search"`));
   }
 
-  // Two searches on one page is fine; two elements sharing one id is not — the
-  // second <output for=…> would bind to the wrong input and announce nothing.
-  const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(
-    ids.filter((id, index) => ids.indexOf(id) !== index),
-    [],
-    "an id appears twice in one document",
-  );
   assert.match(html, new RegExp(`${components.length} shown`));
 });
 
@@ -204,15 +196,33 @@ test("no page skips a heading level", async () => {
   }
 });
 
-test("no page ships a browser-only attribute the pre-render cannot know", async () => {
+test("no page repeats an id", async () => {
+  // Two searches on one page is fine; two elements sharing one id is not — the
+  // second `<output for=…>` binds to the wrong input and announces nothing,
+  // and a duplicate anchor target sends a fragment link to whichever came
+  // first. The rail and the drawer render the same nav twice, so every route
+  // is at risk, not only the one that also carries a filter.
+  for (const route of ROUTES) {
+    const html = await page(route);
+    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    const repeated = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+    assert.deepEqual(repeated, [], `${route} repeats ${repeated.join(", ")}`);
+  }
+});
+
+test("the pre-render carries no state only a browser could know", async () => {
+  // A cheap guard, not a hydration test: whether the two renders agree is
+  // something only a browser can answer, and the release gate answers it by
+  // failing on the console error React logs for a mismatch. What this catches
+  // is the shape of the mistake — a value that came from the machine doing the
+  // build leaking into markup every visitor receives.
   for (const route of ROUTES) {
     const html = await page(route);
 
-    // The theme is applied after mount, deliberately: reading a stored
-    // preference during render makes the server and the browser disagree and
-    // React throws the whole pre-render away.
     assert.doesNotMatch(html, /<html[^>]*data-theme=/, `${route} bakes in a theme`);
     assert.doesNotMatch(html, /class="[^"]*\bdark\b/, `${route} bakes in a mode`);
+    // An open drawer and an inert region are both runtime states. Shipping
+    // either leaves a visitor without JavaScript on an unusable page.
     assert.doesNotMatch(html, /\binert\b/, `${route} ships part of itself inert`);
   }
 });

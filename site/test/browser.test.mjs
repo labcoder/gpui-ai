@@ -196,6 +196,49 @@ class Cdp {
     await loaded;
   }
 
+  /**
+   * Clicks where an element actually is, rather than calling its handler.
+   *
+   * Only a dispatched pointer can tell whether something is reachable: a
+   * `.click()` fires just as happily on an element another layer covers, one
+   * pushed off screen, or one under `pointer-events: none`. The element's own
+   * centre is not always a point a pointer can reach it at — a full-viewport
+   * backdrop has a drawer sitting over the middle of it — so this probes the
+   * centre and then the edges, and fails loudly if no point on the element
+   * belongs to it.
+   */
+  async clickAt(selector) {
+    const point = await this.evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return { error: 'no element matches' };
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return { error: 'element has no box' };
+      const candidates = [
+        [rect.left + rect.width / 2, rect.top + rect.height / 2],
+        [rect.right - 4, rect.top + rect.height / 2],
+        [rect.left + rect.width / 2, rect.bottom - 4],
+        [rect.left + 4, rect.top + rect.height / 2],
+        [rect.left + rect.width / 2, rect.top + 4],
+      ];
+      for (const [x, y] of candidates) {
+        const hit = document.elementFromPoint(Math.round(x), Math.round(y));
+        if (hit === element || element.contains(hit)) {
+          return { x: Math.round(x), y: Math.round(y) };
+        }
+      }
+      const covering = document.elementFromPoint(
+        Math.round(rect.left + rect.width / 2),
+        Math.round(rect.top + rect.height / 2),
+      );
+      return { error: 'every point on it belongs to ' + (covering?.className || covering?.tagName) };
+    })()`);
+    if (point.error) throw new Error(`cannot click ${selector}: ${point.error}`);
+    const at = { x: point.x, y: point.y, button: "left", clickCount: 1 };
+    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", ...at });
+    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...at });
+    return point;
+  }
+
   async key(key, code, virtualKeyCode, modifiers = 0) {
     const params = { key, code, windowsVirtualKeyCode: virtualKeyCode, nativeVirtualKeyCode: virtualKeyCode, modifiers };
     await this.send("Input.dispatchKeyEvent", { ...params, type: "keyDown" });
@@ -726,6 +769,33 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     current: 1,
   });
 
+  // A modal is supposed to cycle: Shift+Tab from the first control lands on
+  // the last, and Tab from the last comes back to the first. `inert` keeps the
+  // page behind out of the sequence but does nothing about its two ends.
+  const wrapped = await cdp.evaluate(`(() => {
+    const panel = document.getElementById('site-nav-panel');
+    const stops = [...panel.querySelectorAll('a[href], button, input, [tabindex]')]
+      .filter((element) => element.tabIndex >= 0 && element.offsetParent !== null);
+    return { first: stops[0]?.textContent?.trim(), last: stops[stops.length - 1]?.textContent?.trim(), count: stops.length };
+  })()`);
+  assert.ok(wrapped.count > 2, `the drawer has only ${wrapped.count} tab stops`);
+
+  await cdp.evaluate(
+    "document.querySelector('#site-nav-panel [data-nav-close]').focus()",
+  );
+  await cdp.key("Tab", "Tab", 9, 8);
+  assert.equal(
+    await cdp.evaluate("document.activeElement?.textContent?.trim()"),
+    wrapped.last,
+    "Shift+Tab from the first control must wrap to the last, not leave the drawer",
+  );
+  await cdp.key("Tab", "Tab", 9);
+  assert.equal(
+    await cdp.evaluate("document.activeElement?.textContent?.trim()"),
+    wrapped.first,
+    "Tab from the last control must wrap back to the first",
+  );
+
   await cdp.key("Escape", "Escape", 27);
   const closed = await cdp.evaluate(`(() => {
     const panel = document.getElementById('site-nav-panel');
@@ -748,7 +818,12 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
-  await cdp.evaluate("document.querySelector('.nav-backdrop').click()");
+  // Dispatched at coordinates, not through the element's own click(): the
+  // claim is that a pointer reaches the backdrop, and a handler fires just as
+  // happily on something buried under another layer.
+  // Throws unless a real pointer can land on the backdrop itself, which its
+  // own centre cannot do — the drawer covers that.
+  await cdp.clickAt(".nav-backdrop");
   await waitForValue(cdp, "document.getElementById('site-nav-panel').hidden", {
     label: "a backdrop click to close the drawer",
     describe: GALLERY_DIAGNOSIS,
@@ -761,6 +836,45 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     }))()`),
     { backdropIsButton: false, backdropFocusable: false },
   );
+
+  // A drawer open across the desktop breakpoint. The toggle that opened it is
+  // display:none up here, so handing focus back to it would drop focus onto
+  // nothing — the page would look fine and the keyboard would be lost.
+  await cdp.evaluate("document.querySelector('[data-nav-toggle]').click()");
+  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+    label: "the drawer to open before the resize",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1280,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await waitForValue(cdp, "document.getElementById('site-nav-panel').hidden", {
+    label: "the drawer to close when the rail appears",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.deepEqual(
+    await cdp.evaluate(`(() => {
+      const active = document.activeElement;
+      return {
+        onSomethingVisible: Boolean(active && active !== document.body && active.offsetParent !== null || active?.id === 'content'),
+        id: active?.id ?? active?.tagName ?? null,
+        anyInert: document.querySelectorAll('[inert]').length,
+      };
+    })()`),
+    { onSomethingVisible: true, id: "content", anyInert: 0 },
+    "focus must land somewhere real when the drawer closes itself",
+  );
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
 
   // The mode control has to actually change what the page is painted from.
   const readMode = `(() => ({

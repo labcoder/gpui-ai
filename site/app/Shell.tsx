@@ -228,19 +228,44 @@ function Drawer({
     for (const sibling of siblings) sibling.setAttribute("inert", "");
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !opened) return;
+
+      // `inert` keeps Tab out of the page behind, but the sequence still runs
+      // off the end of the panel into the browser's own chrome. A modal is
+      // supposed to cycle, so the two edges wrap by hand.
+      const stops = [...opened.querySelectorAll<HTMLElement>("a[href], button, input, [tabindex]")]
+        .filter((element) => element.tabIndex >= 0 && element.offsetParent !== null);
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      if (!first || !last) return;
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
       for (const sibling of siblings) sibling.removeAttribute("inert");
       document.removeEventListener("keydown", onKeyDown);
-      // Focus is sitting inside a panel that is about to be hidden. Hand it
-      // back to the control that opened it — and only after the inert
-      // attributes are gone, or the browser refuses to move focus there.
-      document.querySelector<HTMLElement>("[data-nav-toggle]")?.focus();
+      // Focus is sitting inside a panel that is about to be hidden, so it has
+      // to go somewhere real — and only once the inert attributes are gone, or
+      // the browser refuses to move it. The toggle is where the visitor left
+      // it, but crossing the desktop breakpoint hides that button, and focus
+      // on a display:none element is focus on nothing. The content is the
+      // honest fallback.
+      const toggle = document.querySelector<HTMLElement>("[data-nav-toggle]");
+      const target = toggle?.offsetParent ? toggle : document.getElementById("content");
+      target?.focus();
     };
   }, [open, onClose]);
 

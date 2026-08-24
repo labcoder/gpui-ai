@@ -36,6 +36,12 @@ const CAUGHT = [
   ['font-family: "Inter", sans-serif', "literal-font-family"],
   // A stack smuggled in under a name of its own and read back through var().
   ['--brand-font: "Inter", sans-serif', "literal-font-family"],
+  // Inside a quoted SVG data URI, which is how a colour usually reaches a
+  // stylesheet without anyone meaning it to.
+  ["background: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><path fill='red'/></svg>\")", "literal-colour"],
+  // Spelled with a CSS character escape. A rule one backslash steps around
+  // enforces whatever it happens to notice.
+  ["color: \\72 ed", "literal-colour"],
 ];
 
 const ALLOWED = [
@@ -68,6 +74,9 @@ const ALLOWED = [
   "--demo-width: 900px",
   // Quoted text is content or a family name, never an authored colour.
   'content: "#ff0000"',
+  'quotes: "«" "»"',
+  // A data URI that paints nothing: no fill, no stroke, no colour word.
+  "background: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>\")",
 ];
 
 test("every rule catches the value it exists for", () => {

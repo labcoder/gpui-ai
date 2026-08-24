@@ -248,6 +248,10 @@ test("every font the site uses is served from the site", async () => {
   // @fontsource is a dependency rather than a <link> to a CDN.
   const external = css.match(/url\(\s*['"]?(https?:)?\/\/[^)]*\)/g) ?? [];
   assert.deepEqual(external, [], "a stylesheet fetches a font from another origin");
+  // An @import survives bundling and fetches at run time like any other URL,
+  // so neither the url() rule above nor a list of known vendors would see it.
+  const imports = css.match(/@import\s+(url\()?\s*['"]?(https?:)?\/\//g) ?? [];
+  assert.deepEqual(imports, [], "a stylesheet imports from another origin");
   assert.doesNotMatch(css, /fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit/);
 
   const families = [...css.matchAll(/@font-face\{[^}]*font-family:\s*([^;}]+)/g)].map((match) =>

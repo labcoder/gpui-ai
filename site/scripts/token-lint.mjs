@@ -155,20 +155,43 @@ export function declarations(css) {
   return found;
 }
 
+/** Properties whose quoted text is a name or a string, never a colour. */
+const QUOTES_ARE_TEXT = new Set(["font-family", "font", "content", "quotes", "src"]);
+
+/**
+ * Resolves CSS character escapes, so the lint reads what the browser reads.
+ *
+ * A backslash escape spells any character in hex, which means a colour can be
+ * written in a form no plain search finds. Nobody types that by hand, but a
+ * rule that one backslash steps around reports what it happens to notice
+ * rather than what it says it enforces.
+ */
+function unescapeCss(value) {
+  return value.replace(/\\([0-9a-fA-F]{1,6})[ \t\n]?/g, (_match, hex) =>
+    String.fromCodePoint(Number.parseInt(hex, 16)),
+  );
+}
+
 /**
  * Strips the parts of a value that cannot hold an authored colour.
  *
  * Only the custom-property *names* go: `--ai-border` would otherwise read as
  * the colour word `border` is not, but `--ai-red-line` would read as `red`. A
  * var() fallback is kept, because `var(--x, #fff)` really does hard-code white.
- * Quoted strings are font names and `content`, never colours.
+ *
+ * Quoted text is dropped only where a quote means a name — a font family,
+ * `content`, `quotes`, an @font-face `src`. Everywhere else it stays, because
+ * the usual way a colour reaches a stylesheet unnoticed is inside a quoted SVG
+ * data URI, and a fill in there paints exactly as hard-coded a colour as one
+ * written in the open.
  */
-function withoutReferences(value) {
-  return value.replace(/--[\w-]+/g, " ").replace(/"[^"]*"|'[^']*'/g, " ");
+function withoutReferences(value, property) {
+  const resolved = unescapeCss(value).replace(/--[\w-]+/g, " ");
+  return QUOTES_ARE_TEXT.has(property) ? resolved.replace(/"[^"]*"|'[^']*'/g, " ") : resolved;
 }
 
-function isColourViolation(value) {
-  const bare = withoutReferences(value);
+function isColourViolation(value, property) {
+  const bare = withoutReferences(value, property);
   if (HEX.test(bare) || COLOUR_FUNCTIONS.test(bare)) return true;
   return bare
     .split(/[^a-zA-Z-]+/)
@@ -187,7 +210,7 @@ const RULES = [
     // Any property can carry a colour — box-shadow, border, background, and
     // outline all hide one inside a longer value — so this rule reads them all.
     applies: () => true,
-    violated: (_property, value) => isColourViolation(value),
+    violated: (property, value) => isColourViolation(value, property),
     explain: (property, value) =>
       `\`${property}: ${value}\` names a colour. Use a --ai-* property from site/generated/themes.css.`,
   },
