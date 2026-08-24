@@ -717,7 +717,7 @@ impl Chat {
     pub fn set_messages(
         &mut self,
         messages: Arc<[ChatMessage]>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if Arc::ptr_eq(&self.messages, &messages) || self.messages.as_ref() == messages.as_ref() {
@@ -836,12 +836,22 @@ impl Chat {
             self.copied_message = None;
             self.copied_reset = None;
         }
-        if self
+        let stale_editor = self
             .editing
             .as_ref()
-            .is_some_and(|session| !new_ids.contains(&session.message_id))
-        {
+            .filter(|session| !new_ids.contains(&session.message_id))
+            .map(|session| session.editor.clone());
+        if let Some(editor) = stale_editor {
+            // Dropping the session is not enough on its own. If the editor
+            // being removed holds focus, the window keeps pointing at a
+            // handle whose entity is gone: the caret disappears and typing
+            // reaches nothing. Hand focus to the composer first.
+            let editor_had_focus = editor.read(cx).focus_handle(cx).is_focused(window);
             self.editing = None;
+            if editor_had_focus {
+                let prompt_focus = self.prompt_bar.read(cx).focus_handle(cx);
+                window.focus(&prompt_focus, cx);
+            }
         }
         self.messages = messages;
         if self.messages.is_empty() {
@@ -2329,6 +2339,45 @@ mod tests {
             assert!(
                 chat.editing.is_none(),
                 "an open editor must not keep pointing at a removed message"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn removing_the_edited_message_moves_focus_off_the_vanishing_editor(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..6), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+
+        cx.update(|window, cx| {
+            chat.update(cx, |chat, cx| chat.begin_edit("m0003", window, cx));
+        });
+        let editor = chat.read_with(cx, |chat, _| {
+            chat.editing
+                .as_ref()
+                .expect("the edit session must start")
+                .editor
+                .clone()
+        });
+        cx.update(|window, cx| {
+            assert!(
+                editor.read(cx).focus_handle(cx).is_focused(window),
+                "beginning an edit focuses its editor"
+            );
+        });
+
+        // The application swaps in a conversation without the edited message.
+        set_messages(&harness, messages(100..106), cx);
+
+        cx.update(|window, cx| {
+            assert!(
+                !editor.read(cx).focus_handle(cx).is_focused(window),
+                "focus must not stay on an editor that no longer exists"
+            );
+            let prompt = chat.read(cx).prompt_bar.clone();
+            assert!(
+                prompt.read(cx).focus_handle(cx).is_focused(window),
+                "focus belongs on the composer, which is still there"
             );
         });
     }
