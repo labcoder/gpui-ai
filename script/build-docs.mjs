@@ -8,8 +8,8 @@
 // redirects `/api/` to `/api/gpui_ai/`.
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CRATE = "gpui_ai";
@@ -54,8 +54,32 @@ function measure(directory) {
   return { files, bytes };
 }
 
+// Every component page links its own type here (S-16), deriving the path from
+// the catalog. Source-level checks cannot prove that derivation: a type moved
+// behind a private module and re-exported still reads as `pub struct` in the
+// same file while rustdoc documents it somewhere else. This is the only place
+// the artifact exists, so this is where the links get checked.
+const catalog = JSON.parse(readFileSync(join(ROOT, "site", "generated", "catalog.json"), "utf8"));
+const missing = catalog.components
+  .map((component) => ({
+    slug: component.slug,
+    page: join(CRATE, basename(component.source, ".rs"), `struct.${component.api}.html`),
+  }))
+  .filter(({ page }) => !existsSync(join(OUTPUT, page)));
+
+if (missing.length > 0) {
+  process.stderr.write(
+    `rustdoc has no page for ${missing.length} catalogued component${missing.length === 1 ? "" : "s"}, ` +
+      `so the site would link a 404:\n` +
+      missing.map(({ slug, page }) => `  ${slug} -> ${page}`).join("\n") +
+      `\nUpdate site/app/links.ts, or re-export the type from its own module.\n`,
+  );
+  process.exit(1);
+}
+
 const { files, bytes } = measure(OUTPUT);
 process.stdout.write(
   `rustdoc tree ready: ${files.toLocaleString()} files, ${(bytes / 1024 / 1024).toFixed(1)} MB\n` +
+    `every one of the ${catalog.components.length} component API links resolves\n` +
     `entry: target/doc/${CRATE}/index.html (root index.html redirects to it)\n`,
 );
