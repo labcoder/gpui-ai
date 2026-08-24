@@ -24,9 +24,11 @@ const STRIP = [
 /**
  * What gpui-ai is, shown before it is described.
  *
- * The hero is the guided demo: a working prompt bar that runs a scripted
+ * The two lines that install it come first, because someone who has already
+ * decided wants them and should not have to scroll a demo to reach them. Then
+ * the hero: the guided demo, a working prompt bar that runs a scripted
  * exchange when it is sent. It is the same binary every other demo on the site
- * runs, which is the claim the whole site makes, made once at the top.
+ * runs, which is the claim the whole site makes.
  */
 export function HomePage() {
   return (
@@ -37,17 +39,6 @@ export function HomePage() {
         <a href="https://gpui.rs/">GPUI</a>
         {`, the Rust framework behind Zed. ${components.length} components across ${categories.length} categories and ${themes.length} themes, each one demonstrated by the real compiled component rather than a screenshot.`}
       </p>
-
-      {hero.height ? (
-        <Demo
-          story={hero.slug}
-          title={hero.windowTitle}
-          height={hero.height}
-          caption="Send the question, or pick a suggestion. The tool calls, the reasoning and the reply are a fixed script — this demonstrates the components, not a language model."
-        />
-      ) : null}
-
-      <ThemeStrip />
 
       <section aria-labelledby="install">
         <h2 id="install">Install the latest release</h2>
@@ -62,6 +53,17 @@ gpui = { git = "https://github.com/zed-industries/zed" }`}</code>
           </pre>
         </div>
       </section>
+
+      {hero.height ? (
+        <Demo
+          story={hero.slug}
+          title={hero.windowTitle}
+          height={hero.height}
+          caption="Send the question, or pick a suggestion. The tool calls, the reasoning and the reply are a fixed script — this demonstrates the components, not a language model."
+        />
+      ) : null}
+
+      <ThemeStrip />
 
       <section aria-labelledby="categories">
         <h2 id="categories">What is in it</h2>

@@ -271,6 +271,18 @@ test("the home page publishes what this build is and where it came from", async 
   assert.match(html, new RegExp(`href="${BASE}/api/"`), "the API docs are not linked");
 });
 
+test("the home page puts installing it above the demo", async () => {
+  const html = await page("/");
+
+  // The hero is a 706px demo. A visitor who has already decided to try this
+  // should not have to scroll past it to find the two lines that install it.
+  const install = html.indexOf('id="install"');
+  const demo = html.indexOf("data-specimen-frame");
+  assert.ok(install > 0, "the home page has no install section");
+  assert.ok(demo > 0, "the home page has no demo");
+  assert.ok(install < demo, `install is at ${install}, below the demo at ${demo}`);
+});
+
 test("every font the site uses is served from the site", async () => {
   const { outDir } = await site();
   const assets = await readdir(path.join(outDir, "assets"));
