@@ -1019,16 +1019,14 @@ pre.code {
 
 /* Themes ----------------------------------------------------------------- */
 
+/* One column, not two. Each height in the catalog was measured at the demo
+   width, and half of it would re-wrap the story taller than the frame it is
+   given — the three chosen here are short enough that stacking them costs
+   less vertical space than a two-column grid would anyway. */
 .theme-trio {
   display: grid;
   gap: var(--space-6);
   margin-bottom: var(--space-12);
-}
-
-@media (min-width: 60rem) {
-  .theme-trio {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .theme-cards {
