@@ -71,7 +71,12 @@ async function serve(directory) {
         response.end();
         return;
       }
-      const mountedPath = requestPath.startsWith("/manual/") ? requestPath.slice("/manual".length) : requestPath;
+      // `/manual` is this harness's own mount point. `/gpui-ai` is the project
+      // page's base path, which is baked into every asset URL the site emits:
+      // without it the pages 404 their own bundle and never hydrate, so the
+      // demos would silently never load.
+      const mount = ["/manual/", "/gpui-ai/"].find((prefix) => requestPath.startsWith(prefix));
+      const mountedPath = mount ? requestPath.slice(mount.length - 1) : requestPath;
       let file = path.resolve(directory, `.${mountedPath}`);
       if (!file.startsWith(path.resolve(directory))) throw new Error("outside site root");
       if ((await stat(file)).isDirectory()) file = path.join(file, "index.html");
@@ -530,6 +535,48 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
+  assert.deepEqual(errors, []);
+
+  // Now through a real component page. The page ships no `src` — the frame
+  // carries `data-src` and the observer promotes it — so this is the only
+  // check that the demo a visitor actually meets ever starts. A page that
+  // renders perfectly and never loads its demo passes every other gate.
+  // Served from the project-page base the site was built for, because that is
+  // where its own bundle and stylesheet live.
+  const specimen = components.find((component) => component.slug === "loading") ?? components[0];
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900);
+  await waitForValue(
+    cdp,
+    "Boolean(document.querySelector('[data-specimen-frame] iframe'))",
+    {
+      label: `the ${specimen.slug} page to load its demo once the frame is in view`,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').getAttribute('src')",
+    ),
+    `/gpui-ai/gallery/embed.html?story=${specimen.slug}`,
+  );
+  // The frame is the height the gallery measured, not a guess.
+  assert.equal(
+    await cdp.evaluate(
+      "Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height)",
+    ),
+    specimen.height,
+  );
+  await waitForValue(
+    cdp,
+    "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
+    {
+      label: `the ${specimen.slug} demo to start inside the page`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
   assert.deepEqual(errors, []);
 
   // Without WebGPU the embed must say so rather than showing an empty frame.

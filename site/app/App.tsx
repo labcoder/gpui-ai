@@ -1,78 +1,54 @@
-import { componentBySlug, components, categories, hero, themeGroups, themes } from "./data";
+import "./site.css";
+import { CatalogPage } from "./CatalogPage";
+import { ComponentPage } from "./ComponentPage";
+import { HomePage } from "./HomePage";
+import { ThemesPage } from "./ThemesPage";
+import { build } from "./data";
+import { href } from "./links";
 import type { Route } from "./routes";
 
 /**
  * The whole site, one route at a time.
  *
- * Deliberately plain: S-08 replaces these bodies with the real pages and S-03
- * paints them from the generated tokens. What matters now is that every route
- * renders identical markup on the server and in the browser, because that is
- * what hydration compares.
+ * The header and footer here are the minimum a page needs to be navigable.
+ * S-04 replaces them with the real shell — category rail, search, theme and
+ * mode controls, mobile drawer — and S-03 brings the fonts.
  */
 export function App({ route }: { readonly route: Route }) {
   return (
-    <main>
-      <h1>{route.title.replace(" · gpui-ai", "")}</h1>
-      <p>{route.description}</p>
-      {route.kind === "home" ? <Home /> : null}
-      {route.kind === "index" ? <Index /> : null}
-      {route.kind === "themes" ? <Themes /> : null}
-      {route.kind === "component" ? <ComponentPage slug={route.slug ?? ""} /> : null}
-    </main>
-  );
-}
+    <>
+      <a className="skip-link" href="#content">
+        Skip to content
+      </a>
+      <header className="site-header">
+        <div className="shell">
+          <a className="wordmark" href={href("/")}>
+            gpui-ai
+          </a>
+          <nav className="site-nav" aria-label="Site">
+            <a href={href("/components/")}>Components</a>
+            <a href={href("/themes/")}>Themes</a>
+            <a href={href("/api/")}>API</a>
+            <a href={build.repository}>GitHub</a>
+          </nav>
+        </div>
+      </header>
 
-function Home() {
-  return (
-    <p>
-      {components.length} components across {categories.length} categories, {themes.length} themes.
-      The hero story is <code>{hero.slug}</code>.
-    </p>
-  );
-}
+      <main id="content">
+        {route.kind === "home" ? <HomePage /> : null}
+        {route.kind === "index" ? <CatalogPage /> : null}
+        {route.kind === "themes" ? <ThemesPage /> : null}
+        {route.kind === "component" ? <ComponentPage slug={route.slug ?? ""} /> : null}
+      </main>
 
-function Index() {
-  return (
-    <ul>
-      {components.map((component) => (
-        <li key={component.slug}>
-          <a href={`/gpui-ai/components/${component.slug}/`}>{component.title}</a> — {component.category}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Themes() {
-  return (
-    <ul>
-      {themeGroups.map((group) => (
-        <li key={group.id}>
-          {group.label}: {group.themes.length} themes
-          {group.license ? ` (${group.license})` : ""}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ComponentPage({ slug }: { readonly slug: string }) {
-  const component = componentBySlug(slug);
-  if (!component) return <p>Unknown component.</p>;
-  return (
-    <dl>
-      <dt>API</dt>
-      <dd>
-        <code>{component.api}</code>
-      </dd>
-      <dt>Source</dt>
-      <dd>
-        <code>{component.source}</code>
-      </dd>
-      <dt>Story</dt>
-      <dd>
-        <code>story={component.slug}</code>
-      </dd>
-    </dl>
+      <footer className="site-footer">
+        <div className="shell">
+          <span>{`gpui-ai v${build.version} · ${build.license}`}</span>
+          <span>
+            Built from <a href={build.repository}>labcoder/gpui-ai</a>
+          </span>
+        </div>
+      </footer>
+    </>
   );
 }

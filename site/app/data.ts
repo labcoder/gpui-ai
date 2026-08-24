@@ -4,6 +4,7 @@
 // Rust story registry and the themes/ directory. Nothing here is authored, and
 // nothing here may be edited by hand.
 
+import buildJson from "../generated/build.json";
 import catalogJson from "../generated/catalog.json";
 import snippetsJson from "../generated/snippets.json";
 import themesJson from "../generated/themes.json";
@@ -56,6 +57,24 @@ export interface Hero {
   readonly siteOnly: true;
 }
 
+/** One upstream repository this release is pinned against. */
+export interface UpstreamPin {
+  readonly id: string;
+  readonly label: string;
+  readonly repository: string;
+  readonly commit: string;
+  readonly note: string;
+}
+
+/** What this build is: its version, its source, and what it is pinned to. */
+export interface BuildInfo {
+  readonly version: string;
+  readonly repository: string;
+  readonly homepage: string;
+  readonly license: string;
+  readonly upstream: readonly UpstreamPin[];
+}
+
 /** A theme preset and the `--ai-*` values the chrome is painted from. */
 export interface Theme {
   readonly slug: string;
@@ -79,6 +98,7 @@ export interface ThemeGroup {
   readonly themes: readonly Theme[];
 }
 
+export const build = buildJson as BuildInfo;
 export const components = catalogJson.components as readonly Component[];
 export const categories = catalogJson.categories as readonly string[];
 export const hero = catalogJson.hero as Hero;
@@ -98,4 +118,24 @@ export function snippet(slug: string, variant = "default"): string | undefined {
 
 export function componentBySlug(slug: string): Component | undefined {
   return components.find((component) => component.slug === slug);
+}
+
+/** The component before this one in catalog order, for prev/next links. */
+export function previousComponent(slug: string): Component | undefined {
+  const index = components.findIndex((component) => component.slug === slug);
+  return index > 0 ? components[index - 1] : undefined;
+}
+
+/** The component after this one in catalog order, for prev/next links. */
+export function nextComponent(slug: string): Component | undefined {
+  const index = components.findIndex((component) => component.slug === slug);
+  return index >= 0 && index < components.length - 1 ? components[index + 1] : undefined;
+}
+
+/** Components grouped by category, in the catalog's own order. */
+export function componentsByCategory(): readonly (readonly [string, readonly Component[]])[] {
+  return categories.map(
+    (category) =>
+      [category, components.filter((component) => component.category === category)] as const,
+  );
 }
