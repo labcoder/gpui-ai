@@ -770,15 +770,89 @@ pre.code {
   border: 0;
 }
 
-.demo-placeholder {
+/* The idle state. Static on purpose: a frame two viewports down is not
+   loading, and a shimmer would say it was. */
+.demo-idle,
+.demo-unavailable {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   margin: 0;
+  padding: var(--space-4);
+  text-align: center;
   color: var(--ai-muted);
   font-size: 0.8125rem;
+}
+
+.demo-unavailable strong {
+  color: var(--ai-foreground);
+  font-size: 0.9375rem;
+}
+
+.demo-unavailable p {
+  margin: 0;
+  max-width: 34rem;
+}
+
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--ai-border);
+  background: var(--ai-accent);
+  font-size: 0.75rem;
+}
+
+.demo-toolbar label {
+  color: var(--ai-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.demo-toolbar select {
+  font: inherit;
+  max-width: 10rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  color: inherit;
+}
+
+.demo-toolbar button,
+.demo-toolbar a {
+  font: inherit;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.demo-toolbar button:disabled {
+  color: var(--ai-muted);
+  cursor: default;
+}
+
+.demo-toolbar .copy-status {
+  color: var(--ai-muted);
+}
+
+/* The theme's own numbers, printed under the thing they painted. */
+.demo-readout {
+  margin: var(--space-2) 0 0;
+  font-family: var(--ai-font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--ai-muted);
 }
 
 .demo figcaption {

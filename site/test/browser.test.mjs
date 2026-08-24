@@ -532,6 +532,15 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-color-scheme", value: "light" }],
   });
+  // Granted once, for every clipboard check below. Chrome also refuses the
+  // clipboard to a document it does not consider focused, and a headless page
+  // never is unless it is told it is.
+  await cdp.send("Browser.grantPermissions", {
+    origin: serverHandle.origin,
+    permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
+  });
+  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await cdp.send("Page.bringToFront");
   cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
   cdp.on("Runtime.consoleAPICalled", ({ type, args }) => {
     if (type === "error") errors.push(args.map((argument) => argument.value ?? argument.description).join(" "));
@@ -730,9 +739,20 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // changes still sees the old palette. Waiting for the class the fade runs
   // under also proves it is added and then taken away again — a transition
   // left in place would catch every later hover.
-  const settleTheme = async (label) => {
+  const settleTheme = async (label, previous) => {
+    // Waiting for the body to actually be a different colour is the only
+    // deterministic way to read the new one: a fixed delay races the
+    // transition, and the class the fade runs under comes off on its own timer
+    // rather than when the colours have finished moving.
+    await waitForValue(
+      cdp,
+      `getComputedStyle(document.body).backgroundColor !== ${JSON.stringify(previous)}`,
+      { label: `the ${label} cross-fade to finish`, describe: GALLERY_DIAGNOSIS, errors },
+    );
+    // And the transition must not still be in force afterwards, or it catches
+    // every later hover and makes the whole page feel slow.
     await waitForValue(cdp, "!document.documentElement.classList.contains('theming')", {
-      label: `the ${label} cross-fade to finish`,
+      label: `the ${label} transition to come back off`,
       describe: GALLERY_DIAGNOSIS,
       errors,
     });
@@ -921,7 +941,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
-  await settleTheme("dark");
+  await settleTheme("dark", beforeMode.background);
   const afterMode = await cdp.evaluate(readMode);
   assert.deepEqual(afterMode.pressed, ["dark"], "the control must state which mode is current");
   assert.notEqual(afterMode.background, beforeMode.background, "dark repainted nothing");
@@ -957,7 +977,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
-  await settleTheme("Ember Dusk");
+  await settleTheme("Ember Dusk", afterMode.background);
   const picked = await cdp.evaluate(`(() => ({
     stored: window.localStorage.getItem('gpui-ai:theme'),
     param: new URLSearchParams(window.location.search).get('theme'),
@@ -1067,21 +1087,88 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
   await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
+  // The demo's own toolbar. The override is the interesting one: it has to
+  // move this frame without moving the page, and without the frame being torn
+  // down and rebuilt, which is why it travels as a message rather than a URL.
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
+  const frameTheme = (theme) =>
+    `document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.currentTheme() === '${theme}'`;
+  await waitForValue(cdp, frameTheme("light"), {
+    label: "the demo to start out following the site",
+    fatal: GALLERY_GAVE_UP,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+
+  const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
+  assert.equal(await readout(), "light", "the readout must name what the frame is painted from");
+
+  await cdp.evaluate(`(() => {
+    const select = document.querySelector('.demo-toolbar select');
+    select.value = 'ember-dusk';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitForValue(cdp, frameTheme("ember-dusk"), {
+    label: "the demo to take a theme of its own",
+    fatal: GALLERY_GAVE_UP,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.equal(await readout(), "ember-dusk");
+  assert.match(
+    await cdp.evaluate("document.querySelector('.demo-readout').textContent"),
+    /OVERRIDDEN$/,
+    "a frame that has stopped following the page should say so",
+  );
+  // And the page has not moved. An override that changed the site theme would
+  // be a different control wearing the same label.
+  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), "light");
+  assert.match(
+    await cdp.evaluate("document.querySelector('[data-specimen-open]').getAttribute('href')"),
+    /theme=ember-dusk$/,
+    "Pop out must open the demo as it is being shown, not as it started",
+  );
+
+  // Reload replaces the frame rather than reaching into it, so the proof is a
+  // new document that boots again and comes back to the same theme.
+  const wasStartedAt = await cdp.evaluate(
+    "document.querySelector('[data-specimen-frame] iframe').contentWindow.performance.timeOrigin",
+  );
+  await cdp.evaluate("document.querySelector('[data-specimen-reload]').click()");
+  await waitForValue(
+    cdp,
+    `(() => {
+      const frame = document.querySelector('[data-specimen-frame] iframe');
+      return Boolean(frame?.contentWindow) && frame.contentWindow.performance.timeOrigin !== ${wasStartedAt};
+    })()`,
+    { label: "Reload to replace the frame", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  await waitForValue(cdp, frameTheme("ember-dusk"), {
+    label: "the reloaded demo to come back overridden",
+    fatal: GALLERY_GAVE_UP,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+
+  await cdp.evaluate("document.querySelector('[data-specimen-link]').click()");
+  await waitForValue(
+    cdp,
+    "document.querySelector('.demo-toolbar .copy-status').textContent.length > 0",
+    { label: "Copy link to report what it did", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  assert.match(
+    await cdp.evaluate("navigator.clipboard.readText()"),
+    new RegExp(`/components/${specimen.slug}/\\?theme=ember-dusk$`),
+    "Copy link must hand over the page as it is being looked at",
+  );
+
   // Copy, against a real clipboard. Everything short of this checks that the
   // page holds the right string somewhere; only reading the clipboard back
   // shows what a visitor would paste. The panel is highlighted, so the
   // failure this rules out is copying spans, classes, or a partial line.
-  await cdp.send("Browser.grantPermissions", {
-    origin: serverHandle.origin,
-    permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
-  });
-  // Chrome refuses clipboard access to a document it does not consider
-  // focused, and a headless page never is unless it is told it is.
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
-  await cdp.send("Page.bringToFront");
   await openPage(`/components/${specimen.slug}/`, 1280, 900);
   await cdp.evaluate("document.querySelector('[data-copy]').click()");
-  await waitForValue(cdp, "document.querySelector('.copy-status').textContent.length > 0", {
+  await waitForValue(cdp, "document.querySelector('.code-actions .copy-status').textContent.length > 0", {
     label: 'the copy button to report what it did',
     describe: GALLERY_DIAGNOSIS,
     errors,
@@ -1095,7 +1182,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "the clipboard must hold the snippet, not the markup around it",
   );
   assert.match(
-    await cdp.evaluate("document.querySelector('.copy-status').textContent"),
+    await cdp.evaluate("document.querySelector('.code-actions .copy-status').textContent"),
     /^Copied /,
     'a copy that says nothing is a copy a visitor cannot trust',
   );

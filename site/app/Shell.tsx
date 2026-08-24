@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { build, componentsByCategory, themeGroups, type Component } from "./data";
 import { href } from "./links";
 import type { Route } from "./routes";
-import { SYSTEM, paint, tellFrame, useTheme } from "./theme";
+import { SYSTEM, paint, useTheme } from "./theme";
 
 /**
  * The control most visitors want, in front of the one most of them do not.
@@ -41,19 +41,12 @@ export function Shell({
     // The inline script in the document head painted this before first paint.
     // Repainting here is what keeps it right after a change, and `paint`
     // returns early when nothing moved.
+    //
+    // Demos are not told anything from here. Each `Demo` owns its own frame
+    // and reads the site theme for itself, because a frame may be overriding
+    // it — and a shell that posted to every frame on every change would undo
+    // that override the moment the page repainted, or a frame reloaded.
     paint(applied, isDark);
-
-    // A demo already running would otherwise sit in the old theme — a lit
-    // window inside a dark page. The embed checks the message came from its
-    // own parent on its own origin before believing it. The capture-phase
-    // listener catches frames the observer promotes later, which would only
-    // ever see the class.
-    for (const frame of document.querySelectorAll("iframe")) tellFrame(frame, applied);
-    const onLoad = (event: Event) => {
-      if (event.target instanceof HTMLIFrameElement) tellFrame(event.target, applied);
-    };
-    document.addEventListener("load", onLoad, true);
-    return () => document.removeEventListener("load", onLoad, true);
   }, [applied, isDark]);
 
   // A drawer left open across a resize would sit invisibly over a desktop

@@ -192,27 +192,38 @@ function Reference({ component }: { readonly component: Component }) {
  */
 function Variants({ component }: { readonly component: Component }) {
   if (component.variants.length === 0) return null;
+
+  const withCode = component.variants.filter((variant) => snippet(component.slug, variant.id));
+
   return (
     <section aria-labelledby="variants">
       <h2 id="variants">States</h2>
       <p className="lede">
         The gallery story switches between these; the demo above starts on the first.
       </p>
-      {component.variants.map((variant) => {
-        const code = snippet(component.slug, variant.id);
-        return (
+      {withCode.length === 0 ? (
+        // A heading over nothing reads as a section that failed to load. Until
+        // D-11 cuts a snippet per state, the states are a list — which is all
+        // the catalog actually knows about them.
+        <ul className="chips">
+          {component.variants.map((variant) => (
+            <li className="chip" key={variant.id}>
+              {variant.label}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        withCode.map((variant) => (
           <div className="variant" key={variant.id}>
             <h3>{variant.label}</h3>
-            {code ? (
-              <CodePanel
-                slug={component.slug}
-                variant={variant.id}
-                label={`the ${variant.label} snippet`}
-              />
-            ) : null}
+            <CodePanel
+              slug={component.slug}
+              variant={variant.id}
+              label={`the ${variant.label} snippet`}
+            />
           </div>
-        );
-      })}
+        ))
+      )}
     </section>
   );
 }
