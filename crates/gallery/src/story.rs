@@ -101,6 +101,15 @@ pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
     ("constrained", "Constrained"),
 ];
 
+/// The site hero's height in pixels at the website's demo width.
+///
+/// Separate from [`StoryMeta::height`] because the hero carries no component
+/// metadata, and measured settled rather than idle: the frame has to hold the
+/// finished answer, not the composer the demo opens on. The
+/// `the_hero_height_matches_what_the_settled_demo_measures` test fails when
+/// the script changes shape and this number does not.
+pub const HERO_HEIGHT: u32 = 706;
+
 /// Catalog metadata for one component story, exported to the website.
 ///
 /// This is the single source for the component index: the site is generated

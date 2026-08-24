@@ -9,7 +9,7 @@
 //! it described. Event names are read out of `crates/gpui-ai/src` rather than
 //! restated here, so a renamed event enum shows up as a catalog diff.
 
-use gallery::StoryId;
+use gallery::{HERO_HEIGHT, StoryId};
 use serde_json::{Map, Value, json};
 use std::{fs, path::PathBuf};
 
@@ -226,6 +226,7 @@ fn main() {
         json!({
             "slug": hero.slug(),
             "title": hero.title(),
+            "height": HERO_HEIGHT,
             "windowTitle": format!("{} — gpui-ai", hero.title()),
             "siteOnly": true,
         }),

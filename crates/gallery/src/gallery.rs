@@ -6914,6 +6914,54 @@ mod tests {
             wrong.join("\n")
         );
     }
+
+    /// The hero's declared height must be what the settled demo measures.
+    ///
+    /// The loop above never sees it: the hero is outside `StoryId::ALL` and
+    /// carries no `StoryMeta`. It also needs a state the other stories do not
+    /// have — idle is a composer alone, and the site sizes its frame for the
+    /// finished answer. Reduced motion lands there in one frame.
+    #[gpui::test]
+    fn the_hero_height_matches_what_the_settled_demo_measures(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        cx.update(|cx| cx.set_reduce_motion(true));
+
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::GuidedDemo, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|_, cx| {
+            gallery.update(cx, |gallery, cx| {
+                gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+            })
+        });
+        // Tall enough that nothing is clipped by the viewport itself.
+        cx.simulate_resize(size(px(900.), px(2400.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let send = cx
+            .debug_bounds("prompt-bar-send-control")
+            .expect("the hero opens on a prefilled composer")
+            .center();
+        cx.simulate_mouse_move(send, None, Modifiers::default());
+        cx.simulate_mouse_down(send, MouseButton::Left, Modifiers::default());
+        cx.simulate_mouse_up(send, MouseButton::Left, Modifiers::default());
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(
+            cx.debug_bounds("streaming-follow-up-components").is_some(),
+            "the follow-ups appear only once the answer has settled"
+        );
+        let measured = cx
+            .debug_bounds("story-guided-demo")
+            .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
+            .expect("the hero did not render a measurable frame");
+
+        // A pixel of rounding drift is not worth a failing build.
+        assert!(
+            measured.abs_diff(crate::story::HERO_HEIGHT) <= 2,
+            "the hero height is stale; set HERO_HEIGHT in story.rs to {measured}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
