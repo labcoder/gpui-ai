@@ -71,9 +71,19 @@ export async function buildSite({
 // route to <path>/index.html is what makes the site work there — it is not an
 // optimisation, and the usual 404.html rewrite hack is what it replaces.
 async function generateInto(stageDir, galleryDir) {
-  // Built inside site/ rather than the staging directory: the bundle imports
-  // react, and Node resolves that from site/node_modules.
-  const ssrDir = path.join(siteRoot, ".ssr");
+  // Built inside site/ rather than the staging directory, because the bundle
+  // imports react and Node resolves that from site/node_modules. The directory
+  // is unique per build so two builds cannot empty each other's output, and it
+  // is removed whether or not this succeeds.
+  const ssrDir = await mkdtemp(path.join(siteRoot, ".ssr-"));
+  try {
+    await generateWithSsr(stageDir, galleryDir, ssrDir);
+  } finally {
+    await rm(ssrDir, { force: true, recursive: true });
+  }
+}
+
+async function generateWithSsr(stageDir, galleryDir, ssrDir) {
   await viteBuild(["--outDir", stageDir, "--emptyOutDir"]);
   await viteBuild(["--ssr", "prerender.tsx", "--outDir", ssrDir, "--emptyOutDir"]);
 
@@ -99,8 +109,6 @@ async function generateInto(stageDir, galleryDir) {
     await writeFile(path.join(directory, "index.html"), html);
   }
 
-  // The SSR bundle is a build artifact, not part of the site.
-  await rm(ssrDir, { force: true, recursive: true });
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });
 }
 

@@ -27,7 +27,7 @@
       "source": "crates/gpui-ai/src/loading.rs",
       "api": "LoadingState",
       "usage": "LoadingState::new().label(\"Thinking\")",
-      "height": 84,
+      "height": 52,
       "windowTitle": "Loading state — gpui-ai",
       "variants": [],
       "events": [],
@@ -50,7 +50,7 @@
       "source": "crates/gpui-ai/src/chip.rs",
       "api": "ToolChip",
       "usage": "ToolChip::new(\"edit\", \"edit main.rs\")",
-      "height": 116,
+      "height": 84,
       "windowTitle": "Tool chips — gpui-ai",
       "variants": [],
       "events": [
@@ -75,7 +75,7 @@
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
       "usage": "ToolCall::new(&call_progress)",
-      "height": 870,
+      "height": 838,
       "windowTitle": "Tool calls — gpui-ai",
       "variants": [],
       "events": [
@@ -101,7 +101,7 @@
       "source": "crates/gpui-ai/src/task.rs",
       "api": "TaskRow",
       "usage": "TaskRow::new(&task_progress)",
-      "height": 176,
+      "height": 144,
       "windowTitle": "Task rows — gpui-ai",
       "variants": [],
       "events": [],
@@ -124,7 +124,7 @@
       "source": "crates/gpui-ai/src/thinking.rs",
       "api": "Thinking",
       "usage": "Thinking::new(\"reasoning\", &trace_progress)",
-      "height": 337,
+      "height": 306,
       "windowTitle": "Thinking — gpui-ai",
       "variants": [],
       "events": [
@@ -149,7 +149,7 @@
       "source": "crates/gpui-ai/src/orbs.rs",
       "api": "Orbs",
       "usage": "Orbs::new()",
-      "height": 226,
+      "height": 195,
       "windowTitle": "Orbs — gpui-ai",
       "variants": [],
       "events": [],
@@ -172,7 +172,7 @@
       "source": "crates/gpui-ai/src/search_results.rs",
       "api": "SearchResults",
       "usage": "SearchResults::new(\"research\", \"GPUI components\")",
-      "height": 90,
+      "height": 151,
       "windowTitle": "Web search — gpui-ai",
       "variants": [],
       "events": [
@@ -197,7 +197,7 @@
       "source": "crates/gpui-ai/src/todo_list.rs",
       "api": "TodoList",
       "usage": "TodoList::new(\"release-plan\")",
-      "height": 250,
+      "height": 218,
       "windowTitle": "To-do list — gpui-ai",
       "variants": [],
       "events": [
@@ -222,7 +222,7 @@
       "source": "crates/gpui-ai/src/image_generation.rs",
       "api": "ImageGeneration",
       "usage": "ImageGeneration::new(\"hero-art\").progress(0.64)",
-      "height": 244,
+      "height": 212,
       "windowTitle": "Image generation — gpui-ai",
       "variants": [],
       "events": [],
@@ -245,7 +245,7 @@
       "source": "crates/gpui-ai/src/streaming_text.rs",
       "api": "StreamingText",
       "usage": "StreamingText::new(\"answer\", &content)",
-      "height": 458,
+      "height": 676,
       "windowTitle": "Streaming text — gpui-ai",
       "variants": [],
       "events": [
@@ -257,7 +257,7 @@
         "ownership": "StreamingText renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed StreamingTextEvent contract and stable application IDs.",
         "semantics": "Selectable streaming Markdown with citations, sources, and follow-ups.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -270,7 +270,7 @@
       "source": "crates/gpui-ai/src/chat.rs",
       "api": "Chat",
       "usage": "Chat::new(\"conversation\", prompt, window, cx)",
-      "height": 646,
+      "height": 615,
       "windowTitle": "Chat — gpui-ai",
       "variants": [
         {
@@ -304,7 +304,7 @@
       "source": "crates/gpui-ai/src/suggestions.rs",
       "api": "Suggestions",
       "usage": "Suggestions::new(\"starters\")",
-      "height": 353,
+      "height": 322,
       "windowTitle": "Suggestions — gpui-ai",
       "variants": [],
       "events": [
@@ -329,7 +329,7 @@
       "source": "crates/gpui-ai/src/attachment.rs",
       "api": "AttachmentStrip",
       "usage": "AttachmentStrip::new(\"files\").items(attachments)",
-      "height": 790,
+      "height": 758,
       "windowTitle": "Attachment previews — gpui-ai",
       "variants": [],
       "events": [
@@ -354,7 +354,7 @@
       "source": "crates/gpui-ai/src/artifact.rs",
       "api": "ArtifactPanel",
       "usage": "ArtifactPanel::new(\"doc\", &artifact)",
-      "height": 755,
+      "height": 724,
       "windowTitle": "Artifact panel — gpui-ai",
       "variants": [],
       "events": [
@@ -379,7 +379,7 @@
       "source": "crates/gpui-ai/src/context_meter.rs",
       "api": "ContextMeter",
       "usage": "ContextMeter::new(\"context\", &usage)",
-      "height": 346,
+      "height": 314,
       "windowTitle": "Context meter — gpui-ai",
       "variants": [],
       "events": [],
@@ -402,7 +402,7 @@
       "source": "crates/gpui-ai/src/command_search.rs",
       "api": "CommandSearch",
       "usage": "CommandSearch::new(\"commands\", window, cx)",
-      "height": 719,
+      "height": 688,
       "windowTitle": "Command search — gpui-ai",
       "variants": [],
       "events": [
@@ -427,7 +427,7 @@
       "source": "crates/gpui-ai/src/sidebar_nav.rs",
       "api": "SidebarNav",
       "usage": "SidebarNav::new(\"workspace-nav\", window, cx)",
-      "height": 479,
+      "height": 448,
       "windowTitle": "Sidebar navigation — gpui-ai",
       "variants": [],
       "events": [
@@ -452,7 +452,7 @@
       "source": "crates/gpui-ai/src/thread_list.rs",
       "api": "ThreadList",
       "usage": "ThreadList::new(\"threads\", window, cx)",
-      "height": 653,
+      "height": 622,
       "windowTitle": "Thread list — gpui-ai",
       "variants": [],
       "events": [
@@ -477,7 +477,7 @@
       "source": "crates/gpui-ai/src/fine_tune.rs",
       "api": "FineTuneCard",
       "usage": "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-      "height": 1185,
+      "height": 1154,
       "windowTitle": "Fine-tune card — gpui-ai",
       "variants": [],
       "events": [
@@ -502,7 +502,7 @@
       "source": "crates/gpui-ai/src/records_table.rs",
       "api": "RecordsTable",
       "usage": "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
-      "height": 320,
+      "height": 288,
       "windowTitle": "Records table — gpui-ai",
       "variants": [
         {
@@ -556,7 +556,7 @@
       "source": "crates/gpui-ai/src/diff_table.rs",
       "api": "DiffTable",
       "usage": "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
-      "height": 320,
+      "height": 288,
       "windowTitle": "Diff table — gpui-ai",
       "variants": [
         {
@@ -610,7 +610,7 @@
       "source": "crates/gpui-ai/src/filter_table.rs",
       "api": "FilterTable",
       "usage": "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
-      "height": 320,
+      "height": 288,
       "windowTitle": "Filter table — gpui-ai",
       "variants": [
         {
@@ -664,7 +664,7 @@
       "source": "crates/gpui-ai/src/comparison_table.rs",
       "api": "ComparisonTable",
       "usage": "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
-      "height": 464,
+      "height": 432,
       "windowTitle": "Comparison table — gpui-ai",
       "variants": [
         {
@@ -718,7 +718,7 @@
       "source": "crates/gpui-ai/src/code_block.rs",
       "api": "CodeBlock",
       "usage": "CodeBlock::new(\"patch\", source).language(\"rust\")",
-      "height": 155,
+      "height": 223,
       "windowTitle": "Code block — gpui-ai",
       "variants": [],
       "events": [],
@@ -741,7 +741,7 @@
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
-      "height": 712,
+      "height": 681,
       "windowTitle": "Code diff — gpui-ai",
       "variants": [],
       "events": [
@@ -766,7 +766,7 @@
       "source": "crates/gpui-ai/src/approval.rs",
       "api": "ApprovalCard",
       "usage": "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
-      "height": 480,
+      "height": 449,
       "windowTitle": "Approval card — gpui-ai",
       "variants": [],
       "events": [
@@ -791,7 +791,7 @@
       "source": "crates/gpui-ai/src/plan.rs",
       "api": "PlanCard",
       "usage": "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-      "height": 653,
+      "height": 622,
       "windowTitle": "Plan card — gpui-ai",
       "variants": [],
       "events": [
@@ -816,7 +816,7 @@
       "source": "crates/gpui-ai/src/recommendation.rs",
       "api": "RecommendationCard",
       "usage": "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
-      "height": 294,
+      "height": 262,
       "windowTitle": "Recommendation card — gpui-ai",
       "variants": [],
       "events": [
@@ -841,7 +841,7 @@
       "source": "crates/gpui-ai/src/context_card.rs",
       "api": "ContextCard",
       "usage": "ContextCard::new(\"design-doc\", \"Architecture\")",
-      "height": 224,
+      "height": 192,
       "windowTitle": "Context cards — gpui-ai",
       "variants": [],
       "events": [
@@ -866,7 +866,7 @@
       "source": "crates/gpui-ai/src/insight.rs",
       "api": "InsightCard",
       "usage": "InsightCard::new(\"retention\", \"Retention improved\")",
-      "height": 484,
+      "height": 452,
       "windowTitle": "Insight card — gpui-ai",
       "variants": [],
       "events": [
@@ -878,7 +878,7 @@
         "ownership": "InsightCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed InsightEvent contract and stable application IDs.",
         "semantics": "Paged analytical findings with chart-ready, semantic values.",
-        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -891,7 +891,7 @@
       "source": "crates/gpui-ai/src/prompt_bar.rs",
       "api": "PromptBar",
       "usage": "PromptBar::new(\"agent-prompt\", window, cx)",
-      "height": 624,
+      "height": 592,
       "windowTitle": "Prompt bar — gpui-ai",
       "variants": [],
       "events": [
@@ -916,7 +916,7 @@
       "source": "crates/gpui-ai/src/voice.rs",
       "api": "VoiceControls",
       "usage": "VoiceControls::new(\"voice\", VoiceState::Idle)",
-      "height": 341,
+      "height": 310,
       "windowTitle": "Voice controls — gpui-ai",
       "variants": [],
       "events": [
@@ -941,7 +941,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "height": 465,
+      "height": 434,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [
@@ -966,7 +966,7 @@
       "source": "crates/gpui-ai/src/selection_actions.rs",
       "api": "SelectionActions",
       "usage": "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
-      "height": 320,
+      "height": 288,
       "windowTitle": "Selection actions — gpui-ai",
       "variants": [],
       "events": [

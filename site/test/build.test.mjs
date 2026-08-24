@@ -6,6 +6,7 @@ import { test } from "node:test";
 
 import { buildSite } from "../scripts/build.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
+import { normalizeRoutePath } from "../app/route-path.mjs";
 
 const { components } = catalog;
 
@@ -132,4 +133,35 @@ test("double promotion failure preserves the prior output backup", async (contex
     "utf8",
   );
   assert.match(preserved, /<main/);
+});
+
+test("the client resolves a URL to the same route the server rendered", () => {
+  // A link may name the file the server returns, and the browser must agree
+  // with the pre-render about which route that is. Disagreeing fails hydration
+  // and silently rebuilds the page as whatever the client picked instead.
+  const base = "/gpui-ai/";
+  assert.equal(normalizeRoutePath("/gpui-ai/components/chat/", base), "/components/chat/");
+  assert.equal(normalizeRoutePath("/gpui-ai/components/chat", base), "/components/chat/");
+  assert.equal(
+    normalizeRoutePath("/gpui-ai/components/chat/index.html", base),
+    "/components/chat/",
+    "an explicit index.html is the same page",
+  );
+  assert.equal(normalizeRoutePath("/gpui-ai/", base), "/");
+  assert.equal(normalizeRoutePath("/gpui-ai", base), "/");
+  assert.equal(normalizeRoutePath("/gpui-ai/index.html", base), "/");
+  assert.equal(normalizeRoutePath("/gpui-ai/themes/", base), "/themes/");
+
+  // Served from a root, as the dev server and the tests do.
+  assert.equal(normalizeRoutePath("/components/chat/index.html"), "/components/chat/");
+  assert.equal(normalizeRoutePath("/"), "/");
+});
+
+test("every emitted route survives that normalisation", () => {
+  // The pre-render writes <route>index.html; the client must resolve both that
+  // path and its directory back to the very same route.
+  for (const route of ["/", "/components/", "/themes/", ...components.map((c) => `/components/${c.slug}/`)]) {
+    assert.equal(normalizeRoutePath(`/gpui-ai${route}`, "/gpui-ai/"), route);
+    assert.equal(normalizeRoutePath(`/gpui-ai${route}index.html`, "/gpui-ai/"), route);
+  }
 });

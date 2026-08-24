@@ -74,6 +74,13 @@ fn story_frame(story: StoryId, in_catalog: bool) -> Stateful<Div> {
     }
 }
 
+/// Ticks the height measurement runs a streaming story for.
+///
+/// The answer stream is the longest and finishes well inside this; the code
+/// stream starts halfway through it.
+#[cfg(test)]
+const MEASURE_TICKS: usize = 220;
+
 fn story_needs_simulation(story: StoryId) -> bool {
     matches!(
         story,
@@ -3869,13 +3876,18 @@ impl Gallery {
             .px_6()
             .py_4()
             .gap_3()
-            .child(
-                div()
-                    .text_xs()
-                    .font_semibold()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(title),
-            )
+            // The embed's caption belongs to the page around it. In the
+            // catalog this label is how you tell one story from the next; in a
+            // frame the site has already titled, it is the same words twice.
+            .when(self.chrome == GalleryChrome::Full, |frame| {
+                frame.child(
+                    div()
+                        .text_xs()
+                        .font_semibold()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(title),
+                )
+            })
             .child(content())
             .into_any_element()
     }
@@ -6861,10 +6873,27 @@ mod tests {
 
             let selector: &'static str =
                 Box::leak(format!("story-{}", story.slug()).into_boxed_str());
-            let measured = cx
-                .debug_bounds(selector)
-                .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
-                .unwrap_or_else(|| panic!("{} did not render a measurable frame", story.slug()));
+            let height_now = |cx: &mut VisualTestContext| {
+                cx.debug_bounds(selector)
+                    .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
+                    .unwrap_or_else(|| panic!("{} did not render a measurable frame", story.slug()))
+            };
+
+            // The simulation starts with empty streams, so measuring only the
+            // first frame sizes a search story to its "searching" state and
+            // clips the results that arrive a second later. Run the streams to
+            // completion and keep the tallest state the story passes through.
+            // Only the stories the simulation actually feeds need ticking; the
+            // rest are static, and ticking all of them costs minutes.
+            let mut measured = height_now(cx);
+            if super::story_needs_simulation(*story) {
+                for _ in 0..super::MEASURE_TICKS {
+                    cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+                    cx.run_until_parked();
+                    cx.update(|window, cx| window.draw(cx).clear(cx));
+                    measured = measured.max(height_now(cx));
+                }
+            }
             let declared = story
                 .meta()
                 .expect("component stories carry metadata")

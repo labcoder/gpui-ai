@@ -1,4 +1,5 @@
 import { components } from "./data";
+import { normalizeRoutePath } from "./route-path.mjs";
 
 /** One page the site emits as real HTML. */
 export interface Route {
@@ -52,7 +53,7 @@ export const routes: readonly Route[] = [
   ),
 ];
 
-export function routeFor(path: string): Route | undefined {
-  const normalized = path.endsWith("/") ? path : `${path}/`;
+export function routeFor(path: string, base = "/"): Route | undefined {
+  const normalized = normalizeRoutePath(path, base);
   return routes.find((route) => route.path === normalized);
 }

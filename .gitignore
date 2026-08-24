@@ -20,4 +20,4 @@ dist/
 # Vite app dependencies and output under site/
 /site/node_modules/
 /site/dist-app/
-/site/.ssr/
+/site/.ssr-*/

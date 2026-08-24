@@ -80,7 +80,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: crates/gallery-web/www/package-lock.json
+          cache-dependency-path: |
+            crates/gallery-web/www/package-lock.json
+            site/package-lock.json
       - name: Cache Cargo
         uses: actions/cache@v6
         with:
@@ -101,6 +103,10 @@ jobs:
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - name: Install web host dependencies
         run: npm ci --prefix crates/gallery-web/www
+      - name: Install site dependencies
+        # check:site typechecks and build:site runs Vite, both from
+        # site/node_modules. Without this a clean runner produces no site.
+        run: npm ci --prefix site
       - name: Test and build the shared gallery artifact
         run: |
           npm run check:web

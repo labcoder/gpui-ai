@@ -7,14 +7,10 @@ import { routeFor, routes } from "./routes";
 // browser hydrates rather than mounts. That is what lets GitHub Pages serve a
 // deep link with no server behind it.
 //
-// The base path is stripped before matching so the same build works from the
-// dev server root and from /gpui-ai/ on Pages.
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const path = window.location.pathname.startsWith(base)
-  ? window.location.pathname.slice(base.length) || "/"
-  : window.location.pathname;
-
-const route = routeFor(path) ?? routes[0];
+// routeFor applies the same rule the pre-render used, including the base path
+// and an explicit index.html, so the client cannot pick a different route than
+// the markup it is hydrating.
+const route = routeFor(window.location.pathname, import.meta.env.BASE_URL) ?? routes[0];
 const root = document.getElementById("root");
 if (root && route) {
   hydrateRoot(
