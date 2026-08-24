@@ -19,5 +19,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["app", "vite.config.ts"]
+  "include": ["app", "prerender.tsx", "vite.config.ts"]
 }

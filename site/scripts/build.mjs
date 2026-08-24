@@ -1,14 +1,14 @@
+import { spawn } from "node:child_process";
 import { access, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import catalog from "../generated/catalog.json" with { type: "json" };
-
-const { components } = catalog;
-import { catalogPage, componentPage, homePage } from "../src/templates.js";
 
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = path.resolve(siteRoot, "..");
+const VITE_BIN = path.join(siteRoot, "node_modules", "vite", "bin", "vite.js");
+/** Where React's markup goes; Vite copies it through from index.html. */
+const APP_MARKER = "<!--app-html-->";
 
 export async function buildSite({
   outDir = path.join(siteRoot, "dist"),
@@ -64,25 +64,71 @@ export async function buildSite({
   }
 }
 
+// Builds the client bundle, then writes every route as real HTML.
+//
+// GitHub Pages serves files and nothing else, so a route that exists only in
+// JavaScript returns a hard 404 on a deep link or a refresh. Pre-rendering each
+// route to <path>/index.html is what makes the site work there — it is not an
+// optimisation, and the usual 404.html rewrite hack is what it replaces.
 async function generateInto(stageDir, galleryDir) {
-  await mkdir(path.join(stageDir, "components"), { recursive: true });
-  await writeFile(path.join(stageDir, "index.html"), homePage());
-  await writeFile(path.join(stageDir, "components", "index.html"), catalogPage());
+  // Built inside site/ rather than the staging directory: the bundle imports
+  // react, and Node resolves that from site/node_modules.
+  const ssrDir = path.join(siteRoot, ".ssr");
+  await viteBuild(["--outDir", stageDir, "--emptyOutDir"]);
+  await viteBuild(["--ssr", "prerender.tsx", "--outDir", ssrDir, "--emptyOutDir"]);
 
-  for (const item of components) {
-    const directory = path.join(stageDir, "components", item.slug);
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, "index.html"), componentPage(item));
+  const template = await readFile(path.join(stageDir, "index.html"), "utf8");
+  if (!template.includes(APP_MARKER)) {
+    throw new Error(`the built index.html lost its ${APP_MARKER} placeholder`);
   }
 
-  const assetsDir = path.join(stageDir, "assets");
-  await mkdir(assetsDir, { recursive: true });
-  await Promise.all([
-    copySource("styles.css", path.join(assetsDir, "styles.css")),
-    copySource("shell.js", path.join(assetsDir, "shell.js")),
-    copySource("runtime.js", path.join(assetsDir, "runtime.js")),
-  ]);
+  const { render, routes } = await import(
+    pathToFileURL(path.join(ssrDir, "prerender.js")).href
+  );
+
+  for (const route of routes) {
+    const html = template
+      .replace(APP_MARKER, render(route.path))
+      .replace("<title>gpui-ai</title>", `<title>${escapeHtml(route.title)}</title>`)
+      .replace(
+        "</head>",
+        `  <meta name="description" content="${escapeHtml(route.description)}">\n  </head>`,
+      );
+    const directory = path.join(stageDir, ...route.path.split("/").filter(Boolean));
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "index.html"), html);
+  }
+
+  // The SSR bundle is a build artifact, not part of the site.
+  await rm(ssrDir, { force: true, recursive: true });
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });
+}
+
+/** Runs Vite's CLI from the site root and fails loudly. */
+function viteBuild(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [VITE_BIN, "build", ...args], {
+      cwd: siteRoot,
+      stdio: "pipe",
+      env: { ...process.env, NODE_ENV: "production" },
+    });
+    let output = "";
+    child.stdout?.on("data", (chunk) => (output += chunk));
+    child.stderr?.on("data", (chunk) => (output += chunk));
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`vite build ${args.join(" ")} failed with exit code ${code}\n${output}`));
+    });
+  });
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 async function validateGallery(galleryDir) {
@@ -102,13 +148,8 @@ async function validateGallery(galleryDir) {
   }
 }
 
-async function copySource(name, destination) {
-  const contents = await readFile(path.join(siteRoot, "src", name));
-  await writeFile(destination, contents);
-}
-
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";
 if (import.meta.url === invokedPath) {
   await buildSite();
-  process.stdout.write(`Built ${components.length} component pages in site/dist\n`);
+  process.stdout.write("Built the pre-rendered site into site/dist\n");
 }
