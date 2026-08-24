@@ -48,7 +48,7 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
         story={component.slug}
         title={component.windowTitle}
         height={component.height}
-        caption={`Running the real component, compiled to WebAssembly. The frame is ${component.height} px tall because that is what the story measures.`}
+        caption={`Running the real component, compiled to WebAssembly. The frame is ${component.height} px tall, which is what this story measures at the demo width in the default type size — a narrower column or a theme that changes that size will wrap it differently.`}
       />
 
       <Reference component={component} />

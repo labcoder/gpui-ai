@@ -53,12 +53,24 @@ export function Demo({
 
   // Asked after mount, never during render: `navigator` does not exist in the
   // pre-render, and the answer would differ between the two anyway.
-  const [webgpu, setWebgpu] = useState(true);
-  useEffect(() => setWebgpu("gpu" in navigator), []);
+  //
+  // Undefined until it is known, rather than assuming yes. Starting at `true`
+  // left one commit in which the effect below could promote the frame before
+  // the answer arrived, which would have downloaded the binary on exactly the
+  // machine the card exists to spare. And the question is whether
+  // `navigator.gpu` is *there*, not whether the property name exists: a
+  // browser that defines the getter and returns nothing answers `in` with yes.
+  const [webgpu, setWebgpu] = useState<boolean>();
+  useEffect(
+    // Typed in by hand: the DOM library this project builds against predates
+    // WebGPU, so `navigator.gpu` is not declared anywhere it can see.
+    () => setWebgpu(Boolean((navigator as Navigator & { gpu?: unknown }).gpu)),
+    [],
+  );
 
   useEffect(() => {
     const element = frame.current;
-    if (!element || src || !webgpu) return;
+    if (!element || src || webgpu !== true) return;
     if (typeof IntersectionObserver !== "function") {
       setSrc(demoSrc(story));
       return;
@@ -125,7 +137,7 @@ export function Demo({
           ref={frame}
           style={{ ["--demo-height" as string]: `${height}px` }}
         >
-          {!webgpu ? (
+          {webgpu === false ? (
             <div className="demo-unavailable" data-webgpu-fallback>
               <strong>This demo needs WebGPU</strong>
               <p>

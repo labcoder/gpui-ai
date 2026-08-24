@@ -1281,6 +1281,34 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   assert.match(railOnMobile.href, new RegExp(`struct\\.${specimen.api}\\.html$`));
 
+  // Without WebGPU the *site* must say so, and — the part that matters — must
+  // not have fetched anything. Every check above is on a machine that can draw;
+  // this one is the promise the card makes to a machine that cannot. The stub
+  // defines the property and returns nothing, which is what a browser with the
+  // API disabled does, and which an `in` check would have read as yes.
+  const { identifier: noGpu } = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source:
+      "Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined });",
+  });
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
+  await waitForValue(cdp, "Boolean(document.querySelector('[data-webgpu-fallback]'))", {
+    label: "the site's own WebGPU card",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await delay(1_000);
+  assert.deepEqual(
+    await cdp.evaluate(`(() => ({
+      frames: document.querySelectorAll('[data-specimen-frame] iframe').length,
+      requested: performance
+        .getEntriesByType('resource')
+        .filter((entry) => /gallery|\\.wasm$/.test(entry.name)).length,
+    }))()`),
+    { frames: 0, requested: 0 },
+    "a browser that cannot draw the demo must not be made to download it",
+  );
+  await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
+
   // Without WebGPU the embed must say so rather than showing an empty frame.
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
     source: "Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined });",

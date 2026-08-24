@@ -116,9 +116,10 @@ gpui = { git = "https://github.com/zed-industries/zed" }`}</code>
       <section aria-labelledby="architecture">
         <h2 id="architecture">How this site works</h2>
         <p className="lede">
-          Every page is real HTML, built ahead of time. The demos are one shared WebAssembly binary
-          — the same gallery that runs natively — loaded once, only when a demo scrolls into view,
-          and drawn on a WebGPU canvas. Nothing here is a screenshot.
+          Every page is real HTML, built ahead of time. Every demo on the site is the same
+          WebAssembly binary — one build of the same gallery that runs natively — fetched only
+          when a frame scrolls into view, and drawn on a WebGPU canvas. Each frame runs its own
+          instance; what they share is the download. Nothing here is a screenshot.
         </p>
         <ul className="chips">
           <li className="chip">
