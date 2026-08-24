@@ -31,7 +31,11 @@
           stored = undefined;
         }
         var param = new URLSearchParams(window.location.search).get("theme") || undefined;
-        var choice = valid(param) || valid(stored) || "system";
+        // Nord Frost is the default; see DEFAULT in app/theme-resolve.mjs. If
+        // the registry ever stops shipping it the attribute simply matches no
+        // rule and :root shows, and the app corrects to "system" once it can
+        // see the registry for itself.
+        var choice = valid(param) || valid(stored) || "nord-frost";
         var applied =
           choice !== "system"
             ? choice

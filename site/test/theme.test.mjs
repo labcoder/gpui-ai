@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { SYSTEM, appliedTheme, resolveChoice } from "../app/theme-resolve.mjs";
+import { DEFAULT, SYSTEM, appliedTheme, resolveChoice } from "../app/theme-resolve.mjs";
 import themeFile from "../generated/themes.json" with { type: "json" };
 
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -16,15 +16,37 @@ test("a theme in the URL beats a stored one, and a stored one beats nothing", ()
   // for themselves.
   assert.equal(resolveChoice({ param: "ember-dusk", stored: "solstice" }), "ember-dusk");
   assert.equal(resolveChoice({ param: undefined, stored: "solstice" }), "solstice");
-  assert.equal(resolveChoice({}), SYSTEM);
-  assert.equal(resolveChoice(), SYSTEM);
+  assert.equal(resolveChoice({}), DEFAULT);
+  assert.equal(resolveChoice(), DEFAULT);
+});
+
+test("the default is a theme the registry actually ships", () => {
+  // The site opens on this name, and themes are files under `themes/`, so a
+  // rename could take it away without touching any code that mentions it.
+  // `app/theme.ts` falls back to following the system if that ever happens;
+  // this is how we find out rather than shipping the fallback unnoticed.
+  assert.ok(
+    themes.some((theme) => theme.slug === DEFAULT),
+    `the registry has no ${DEFAULT}; it ships ${themes.length} themes`,
+  );
+});
+
+test("a caller that can see the registry can override what nothing resolves to", () => {
+  assert.equal(resolveChoice({ fallback: SYSTEM }), SYSTEM);
+  assert.equal(resolveChoice({ fallback: "solstice" }), "solstice");
+  // A fallback the rule cannot accept is not applied either: following the
+  // system is the last thing left that is always true.
+  assert.equal(resolveChoice({ fallback: "NOT A SLUG" }), SYSTEM);
+  assert.equal(resolveChoice({ fallback: undefined }), DEFAULT);
+  // And it never outranks a real choice.
+  assert.equal(resolveChoice({ stored: "graphite", fallback: SYSTEM }), "graphite");
 });
 
 test("a name the registry could never contain is ignored, not applied", () => {
   for (const rubbish of ["", "  ", "-leading", "Upper", "has space", "semi;colon", null, 42, {}]) {
     assert.equal(
       resolveChoice({ param: rubbish, stored: rubbish }),
-      SYSTEM,
+      DEFAULT,
       `${JSON.stringify(rubbish)} must not survive`,
     );
   }
@@ -110,8 +132,8 @@ test("the inline script survives a browser that refuses it storage", async () =>
   const html = await readFile(path.join(siteRoot, "index.html"), "utf8");
   const source = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
 
-  assert.equal(runInlineScript(source, { storageThrows: true }), "light");
-  assert.equal(runInlineScript(source, { storageThrows: true, prefersDark: true }), "dark");
+  assert.equal(runInlineScript(source, { storageThrows: true }), DEFAULT);
+  assert.equal(runInlineScript(source, { storageThrows: true, prefersDark: true }), DEFAULT);
   assert.equal(
     runInlineScript(source, { storageThrows: true, search: "?theme=graphite" }),
     "graphite",

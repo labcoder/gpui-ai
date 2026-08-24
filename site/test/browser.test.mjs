@@ -936,7 +936,16 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       .map((button) => button.dataset.themeChoice),
   }))()`;
   const beforeMode = await cdp.evaluate(readMode);
-  assert.deepEqual(beforeMode.pressed, ["system"], "a visitor who has chosen nothing follows the system");
+  assert.equal(
+    beforeMode.theme,
+    "nord-frost",
+    "a visitor who has chosen nothing must land on the default theme",
+  );
+  assert.deepEqual(
+    beforeMode.pressed,
+    [],
+    "Nord Frost is none of the three modes, so none of them may claim to be current",
+  );
   await cdp.evaluate("document.querySelector('[data-theme-choice=\"dark\"]').click()");
   await waitForValue(cdp, "document.documentElement.dataset.theme === 'dark'", {
     label: "the dark control to change the mode",
@@ -995,8 +1004,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // would be a lie a screen reader repeats.
   assert.deepEqual(picked.pressed, []);
 
-  // Back to following the system, and then move the system. Nothing is stored
-  // and nothing is in the URL, so the only thing left to follow is the machine.
+  // Ask to follow the system, and then move the system. Following the machine
+  // is now a choice like any other — the site opens on Nord Frost, so it has
+  // to be recorded, or a reload would quietly overrule it.
   await cdp.evaluate(`(() => {
     const select = document.getElementById('site-theme');
     select.value = 'system';
@@ -1009,13 +1019,13 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   });
   assert.equal(
     await cdp.evaluate("window.localStorage.getItem('gpui-ai:theme')"),
-    null,
-    "following the system is the absence of a choice, not a stored one",
+    "system",
+    "asking to follow the system must survive a reload",
   );
   assert.equal(
     await cdp.evaluate("new URLSearchParams(window.location.search).get('theme')"),
-    null,
-    "the URL must stop naming a theme once the visitor stops choosing one",
+    "system",
+    "the URL must carry any choice that is not the default",
   );
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-color-scheme", value: "dark" }],
@@ -1033,6 +1043,29 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
+
+  // Choosing the default is the one choice the URL does not carry: the plain
+  // address already means Nord Frost, so naming it would be noise on every
+  // link the visitor copies afterwards. It is still stored, because it has to
+  // outrank a default that a later release might change.
+  await cdp.evaluate(`(() => {
+    const select = document.getElementById('site-theme');
+    select.value = 'nord-frost';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'nord-frost'", {
+    label: "the picker to return to the default theme",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.deepEqual(
+    await cdp.evaluate(`(() => ({
+      stored: window.localStorage.getItem('gpui-ai:theme'),
+      param: new URLSearchParams(window.location.search).get('theme'),
+    }))()`),
+    { stored: "nord-frost", param: null },
+    "the default must be remembered but left out of the URL",
+  );
 
   // Store a theme again, then reload: the inline script has to paint it
   // before anything else renders, or the page flashes the default first.

@@ -77,21 +77,23 @@ test("every page exposes keyboard-operable theme controls", async () => {
       assert.match(control, /type="button"/, `a theme control would submit a form: ${control}`);
       assert.match(control, /aria-pressed="(true|false)"/, `${control} states no pressed state`);
     }
-    // The pre-render has no browser to ask, so it renders the neutral choice —
-    // and so does the browser's first render, which is what lets React hydrate
-    // the markup instead of throwing it away.
-    assert.match(
-      html,
-      /data-theme-choice="system" aria-pressed="true"/,
-      `${route} must pre-render with the system choice pressed`,
-    );
+    // The pre-render has no browser to ask, so it renders the default, and so
+    // does the browser's first render — which is what lets React hydrate the
+    // markup instead of throwing it away. The default is Nord Frost, which is
+    // none of the three modes, so none of them may say it is current.
+    //
     // Counted within the mode group. Other controls report a pressed state
     // too — the home page's theme strip marks whichever theme is showing —
-    // and the claim here is only that the three modes never disagree.
+    // and a slug with a hyphen in it is not what this pattern matches.
     assert.equal(
       count(html, /data-theme-choice="[a-z]+" aria-pressed="true"/g),
-      1,
-      `${route} must show exactly one mode as current`,
+      0,
+      `${route} must not claim a mode while a named theme is showing`,
+    );
+    assert.match(
+      html,
+      /<option value="nord-frost"[^>]*selected[^>]*>/,
+      `${route} must pre-render with the default theme picked`,
     );
   }
 });

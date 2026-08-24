@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { themes } from "./data";
-import { SYSTEM, appliedTheme, resolveChoice } from "./theme-resolve.mjs";
+import { DEFAULT, SYSTEM, appliedTheme, resolveChoice } from "./theme-resolve.mjs";
 
-export { SYSTEM };
+export { DEFAULT, SYSTEM };
 
 /** Where a deliberate choice is kept between visits. */
 const STORAGE_KEY = "gpui-ai:theme";
@@ -16,6 +16,17 @@ const DARK_SLUGS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * The default, but only while the registry still ships it.
+ *
+ * Themes are files under `themes/`, so the default is a name that a future
+ * commit could rename or delete without touching this module. Rather than open
+ * on a theme that resolves to nothing, fall back to following the system.
+ * `site/test/theme.test.mjs` asserts the registry does ship it, so this is a
+ * net rather than an expectation.
+ */
+const FALLBACK: string = new Set(themes.map((theme) => theme.slug)).has(DEFAULT) ? DEFAULT : SYSTEM;
+
+/**
  * Everything the shell renders before it knows anything about the browser.
  *
  * The pre-render produces this, and so does the browser's first render, which
@@ -23,7 +34,7 @@ const DARK_SLUGS: ReadonlySet<string> = new Set(
  * in `site/index.html` has already painted the real palette by then — it works
  * on the document element, which is outside React's tree entirely.
  */
-const SERVER_SNAPSHOT = `${SYSTEM} light`;
+const SERVER_SNAPSHOT = `${FALLBACK} ${appliedTheme(FALLBACK, false)}`;
 
 // The snapshot carries the choice *and* what it currently resolves to, because
 // React re-renders on a changed snapshot and nothing else. The operating system
@@ -51,7 +62,7 @@ function prefersDark(): boolean {
 }
 
 function compute(): string {
-  const choice = resolveChoice({ param: readParam(), stored: readStored() });
+  const choice = resolveChoice({ param: readParam(), stored: readStored(), fallback: FALLBACK });
   return `${choice} ${appliedTheme(choice, prefersDark())}`;
 }
 
@@ -126,14 +137,17 @@ export function useTheme(): {
  */
 export function setChoice(choice: string): void {
   try {
-    if (choice === SYSTEM) window.localStorage.removeItem(STORAGE_KEY);
-    else window.localStorage.setItem(STORAGE_KEY, choice);
+    // Every choice is stored, `system` included. It used to be the state that
+    // meant "nothing chosen", so forgetting it was the same as recording it;
+    // now that the site opens on a named theme, a visitor who asks to follow
+    // their machine has said something, and it has to survive a reload.
+    window.localStorage.setItem(STORAGE_KEY, choice);
   } catch {
     // See readStored. The choice still applies for this page.
   }
 
   const url = new URL(window.location.href);
-  if (choice === SYSTEM) url.searchParams.delete(THEME_PARAM);
+  if (choice === FALLBACK) url.searchParams.delete(THEME_PARAM);
   else url.searchParams.set(THEME_PARAM, choice);
   window.history.replaceState(null, "", url);
 
