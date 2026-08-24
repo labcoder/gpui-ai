@@ -231,7 +231,9 @@ const CHAT_STORY_STATES: &[(&str, &str)] = crate::story::CHAT_STORY_VARIANTS;
 impl ChatStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let prompt = cx.new(|cx| {
+            // snippet:start(prompt-bar)
             let mut prompt = PromptBar::new("gallery-chat-prompt", window, cx);
+            // snippet:end
             prompt.set_models(
                 [
                     PromptModel::new("balanced", "Balanced")
@@ -257,7 +259,9 @@ impl ChatStory {
             prompt
         });
         let chat = cx.new(|cx| {
+            // snippet:start(chat)
             let mut chat = Chat::new("gallery-chat", prompt, window, cx);
+            // snippet:end
             chat.set_welcome(
                 Some(
                     ChatWelcome::new("What should we look into?")
@@ -682,9 +686,11 @@ impl ThreadListStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let sections = demo_thread_sections();
         let threads = cx.new(|cx| {
+            // snippet:start(thread-list)
             let mut list = ThreadList::new("gallery-threads", window, cx);
             list.set_sections(sections.clone(), cx);
             list.set_active(Some("supplier-pricing"), cx);
+            // snippet:end
             list
         });
         let subscription = cx.subscribe_in(
@@ -821,7 +827,9 @@ struct CommandSearchStory {
 
 impl CommandSearchStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // snippet:start(command-search)
         let ready = cx.new(|cx| CommandSearch::new("gallery-command-ready", window, cx));
+        // snippet:end
         ready.update(cx, |search, cx| {
             search.set_items(
                 [
@@ -1000,7 +1008,9 @@ struct SidebarNavStory {
 
 impl SidebarNavStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // snippet:start(sidebar-nav)
         let expanded = cx.new(|cx| SidebarNav::new("creamery-expanded", window, cx));
+        // snippet:end
         let collapsed = cx.new(|cx| SidebarNav::new("creamery-collapsed", window, cx));
         let filtered = cx.new(|cx| SidebarNav::new("creamery-filtered", window, cx));
         for nav in [&expanded, &collapsed, &filtered] {
@@ -1111,6 +1121,7 @@ impl FineTuneStory {
         let constrained_values =
             FineTuneValues::new(420., 260., 20., 0.68, "inter-regular").accent(cx.theme().success);
         let populated = cx.new(|cx| {
+            // snippet:start(fine-tune)
             FineTuneCard::new(
                 "gallery-fine-tune-populated",
                 populated_values.clone(),
@@ -1118,6 +1129,7 @@ impl FineTuneStory {
                 window,
                 cx,
             )
+            // snippet:end
         });
         let constrained = cx.new(|cx| {
             FineTuneCard::new(
@@ -1549,12 +1561,14 @@ struct SelectionActionsStory {
 impl SelectionActionsStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let selection = cx.new(|cx| {
+            // snippet:start(selection-actions)
             SelectionActions::new(
                 "gallery-selection-actions",
                 "## Weekly flavor review\n\nMint Chip demand softened while Vanilla recovered. Select any phrase in this readable analysis, then choose an action. Native **Ctrl/Cmd+A** and copy remain available.",
                 window,
                 cx,
             )
+            // snippet:end
         });
         selection.update(cx, |selection, cx| {
             selection.set_actions(
@@ -1791,7 +1805,9 @@ fn configured_records_table(
     window: &mut Window,
     cx: &mut Context<RecordsTable>,
 ) -> RecordsTable {
+    // snippet:start(records-table)
     let mut table = RecordsTable::new(id, label, window, cx);
+    // snippet:end
     table.set_columns(records_story_columns(), window, cx);
     table.set_records(records, window, cx);
     table
@@ -2126,7 +2142,9 @@ fn configured_diff_table(
     window: &mut Window,
     cx: &mut Context<DiffTable>,
 ) -> DiffTable {
+    // snippet:start(diff-table)
     let mut table = DiffTable::new(id, label, window, cx);
+    // snippet:end
     table.set_columns(diff_story_columns(), window, cx);
     table.set_rows(rows, window, cx);
     table
@@ -2623,7 +2641,9 @@ fn configured_filter_table(
     window: &mut Window,
     cx: &mut Context<FilterTable>,
 ) -> FilterTable {
+    // snippet:start(filter-table)
     let mut table = FilterTable::new(id, label, window, cx);
+    // snippet:end
     table.set_columns(filter_story_columns(), window, cx);
     table.set_filters(filters, cx);
     table.set_rows(rows, cx);
@@ -3024,7 +3044,9 @@ fn configured_comparison_table(
     window: &mut Window,
     cx: &mut Context<ComparisonTable>,
 ) -> ComparisonTable {
+    // snippet:start(comparison-table)
     let mut table = ComparisonTable::new(id, label, window, cx);
+    // snippet:end
     table.set_snapshot(snapshot, window, cx);
     if let Some(selected) = selected {
         table.set_selected_item(selected, window, cx);
@@ -3885,9 +3907,11 @@ impl Gallery {
                 story,
                 "Loading state",
                 || {
+                    // snippet:start(loading)
                     LoadingState::new()
                         .label("Reasoning about supplier pricing")
                         .elapsed(elapsed)
+                    // snippet:end
                 },
                 cx,
             ),
@@ -3895,6 +3919,7 @@ impl Gallery {
                 story,
                 "Tool chips",
                 || {
+                    // snippet:start(tool-chips)
                     h_flex()
                         .flex_wrap()
                         .gap_2()
@@ -3914,6 +3939,7 @@ impl Gallery {
                                 .status(ToolStatus::Failed)
                                 .detail("timeout"),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -3921,6 +3947,7 @@ impl Gallery {
                 story,
                 "Task rows",
                 || {
+                    // snippet:start(tasks)
                     v_flex()
                         .child(TaskRow::new(&Progressive::complete(
                             TaskSnapshot::new("index-catalog", "Index supplier catalog")
@@ -3938,6 +3965,7 @@ impl Gallery {
                             TaskSnapshot::new("sync-history", "Sync order history"),
                             "auth expired",
                         )))
+                    // snippet:end
                 },
                 cx,
             ),
@@ -3945,6 +3973,7 @@ impl Gallery {
                 story,
                 "Thinking",
                 || {
+                    // snippet:start(thinking)
                     let trace = ThinkingTrace::new()
                         .thought_for(Duration::from_secs(9))
                         .steps([
@@ -3998,6 +4027,7 @@ impl Gallery {
                                 )
                                 .open(true)),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4005,6 +4035,7 @@ impl Gallery {
                 story,
                 "Orbs",
                 || {
+                    // snippet:start(orbs)
                     let tokens = cx.theme().semantic_tokens();
                     v_flex()
                         .gap(tokens.spacing.md)
@@ -4055,6 +4086,7 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child("ambient thinking indicator — pick the choreography that matches your product's voice"),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4062,6 +4094,7 @@ impl Gallery {
                 story,
                 "Web search",
                 || {
+                    // snippet:start(search)
                     SearchResults::new("search", "alpenrose wholesale pricing")
                         .searching(self.sim.answer.is_streaming())
                         .results(if self.sim.answer.is_streaming() {
@@ -4088,6 +4121,7 @@ impl Gallery {
                         .on_event(cx.listener(|_, event: &SearchResultsEvent, _, _| {
                             println!("search event: {event:?}");
                         }))
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4095,6 +4129,7 @@ impl Gallery {
                 story,
                 "To-do list",
                 || {
+                    // snippet:start(todos)
                     TodoList::new("plan")
                         .title("Supplier switch plan")
                         .items([
@@ -4108,6 +4143,7 @@ impl Gallery {
                         .on_event(cx.listener(|_, event: &TodoListEvent, _, _| {
                             println!("todo event: {event:?}");
                         }))
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4115,6 +4151,7 @@ impl Gallery {
                 story,
                 "Image generation",
                 || {
+                    // snippet:start(image-generation)
                     // The demo placeholder must not read as a partially
                     // rendered image: a flat muted canvas behind the pulsing
                     // icon keeps the progress state honest until pixels
@@ -4122,6 +4159,7 @@ impl Gallery {
                     ImageGeneration::new("gen")
                         .label("Label sketch: alpine meadow, morning light")
                         .progress(self.sim.progress())
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4129,6 +4167,7 @@ impl Gallery {
                 story,
                 "Streaming text",
                 || {
+                    // snippet:start(streaming-text)
                     let cited_answer = Progressive::complete(
                         "Pistachio margins lead vanilla by eight points [[cite:margin-report]], while the supply forecast remains stable [[cite:supply-forecast]]."
                             .into(),
@@ -4188,6 +4227,7 @@ impl Gallery {
                                     },
                                 )),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4212,6 +4252,7 @@ impl Gallery {
                 story,
                 "Suggestions",
                 || {
+                    // snippet:start(suggestions)
                     let tokens = cx.theme().semantic_tokens();
                     let status: SharedString = match &self.last_suggestion {
                         Some(id) => format!("Selected: {id}").into(),
@@ -4250,6 +4291,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4257,6 +4299,7 @@ impl Gallery {
                 story,
                 "Attachment previews",
                 || {
+                    // snippet:start(attachments)
                     let tokens = cx.theme().semantic_tokens();
                     let composer_items = demo_attachments(&self.demo_thumbnail)
                         .into_iter()
@@ -4325,6 +4368,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4332,6 +4376,7 @@ impl Gallery {
                 story,
                 "Artifact panel",
                 || {
+                    // snippet:start(artifact)
                     let tokens = cx.theme().semantic_tokens();
                     let status: SharedString = self
                         .last_artifact_event
@@ -4447,6 +4492,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4454,6 +4500,7 @@ impl Gallery {
                 story,
                 "Voice controls",
                 || {
+                    // snippet:start(voice)
                     let tokens = cx.theme().semantic_tokens();
                     let status: SharedString = self
                         .last_voice_event
@@ -4519,6 +4566,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4526,6 +4574,7 @@ impl Gallery {
                 story,
                 "Message queue",
                 || {
+                    // snippet:start(queue)
                     let tokens = cx.theme().semantic_tokens();
                     let status: SharedString = self
                         .last_queue_event
@@ -4594,6 +4643,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4601,6 +4651,7 @@ impl Gallery {
                 story,
                 "Context meter",
                 || {
+                    // snippet:start(context-meter)
                     let tokens = cx.theme().semantic_tokens();
                     let comfortable = ContextUsage::new(84_300, 200_000)
                         .input(61_000)
@@ -4654,6 +4705,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4797,6 +4849,7 @@ impl Gallery {
                 story,
                 "Code diff",
                 || {
+                    // snippet:start(code-diff)
                     let tokens = cx.theme().semantic_tokens();
                     let mut file = DiffFile::from_unified(DEMO_PATCH).remove(0);
                     let hunks: Vec<DiffHunk> = file
@@ -4856,19 +4909,25 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
             StoryId::CodeBlock => self.section(
                 story,
                 "Code block",
-                || CodeBlock::streamed("code", &self.sim.code).language("rust"),
+                || {
+                    // snippet:start(code-block)
+                    CodeBlock::streamed("code", &self.sim.code).language("rust")
+                    // snippet:end
+                },
                 cx,
             ),
             StoryId::Approval => self.section(
                 story,
                 "Approval card",
                 || {
+                    // snippet:start(approval)
                     let tokens = cx.theme().semantic_tokens();
                     let decision_of = |id: &str| {
                         self.approval_decisions
@@ -4944,6 +5003,7 @@ impl Gallery {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(status),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -4951,6 +5011,7 @@ impl Gallery {
                 story,
                 "Plan card",
                 || {
+                    // snippet:start(plan)
                     let tokens = cx.theme().semantic_tokens();
                     let status: SharedString = self
                         .last_plan_event
@@ -5013,6 +5074,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -5020,6 +5082,7 @@ impl Gallery {
                 story,
                 "Recommendation card",
                 || {
+                    // snippet:start(recommendation)
                     RecommendationCard::new("rec", "Switch supplier to Alpenrose Dairy")
                         .description("Lower unit cost at equal volume; delivery risk unchanged.")
                         .confidence(0.87)
@@ -5027,6 +5090,7 @@ impl Gallery {
                         .on_event(cx.listener(|_, event: &RecommendationEvent, _, _| {
                             println!("recommendation event: {event:?}");
                         }))
+                    // snippet:end
                 },
                 cx,
             ),
@@ -5034,6 +5098,7 @@ impl Gallery {
                 story,
                 "Context cards",
                 || {
+                    // snippet:start(context)
                     v_flex()
                         .gap_2()
                         .child(
@@ -5052,6 +5117,7 @@ impl Gallery {
                                 .snippet("Alpenrose Dairy, Portland OR, net-30, 4.8 rating")
                                 .relevance(0.81),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -5059,6 +5125,7 @@ impl Gallery {
                 story,
                 "Insight card",
                 || {
+                    // snippet:start(insights)
                     v_flex()
                         .id("insight-story-scroll")
                         .debug_selector(|| "insight-story-scroll".into())
@@ -5119,6 +5186,7 @@ impl Gallery {
                                 .debug_selector(|| "insight-story-end".into())
                                 .h(px(1.)),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
@@ -5157,6 +5225,7 @@ impl Gallery {
                 story,
                 "Tool calls",
                 || {
+                    // snippet:start(tool-calls)
                     let running = self.sim.answer.is_streaming();
                     let read = Progressive::complete(
                         ToolInvocation::new("read-pricing", "read_file")
@@ -5242,6 +5311,7 @@ impl Gallery {
                             )
                             .selectable(true),
                         )
+                    // snippet:end
                 },
                 cx,
             ),
