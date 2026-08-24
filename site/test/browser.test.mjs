@@ -1186,6 +1186,67 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     /^Copied /,
     'a copy that says nothing is a copy a visitor cannot trust',
   );
+  // The themes page is the one that has to prove the whole claim: the site and
+  // the demos are painted from the same numbers. Choosing a card repaints the
+  // page and the running trio together, and the file behind Download is the
+  // theme itself rather than a picture of it.
+  await openPage("/themes/", 1280, 900);
+  await waitForValue(
+    cdp,
+    "document.querySelectorAll('[data-specimen-frame] iframe').length >= 2",
+    { label: "the themes page trio to promote", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  await waitForValue(
+    cdp,
+    "[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === 'light')",
+    {
+      label: "the trio to start on the site theme",
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+
+  const pageBackground = await cdp.evaluate("getComputedStyle(document.body).backgroundColor");
+  await cdp.evaluate("document.querySelector('[data-use-theme=\"nord-frost\"]').click()");
+  await settleTheme("Nord Frost", pageBackground);
+  assert.equal(await cdp.evaluate("document.documentElement.dataset.theme"), "nord-frost");
+  await waitForValue(
+    cdp,
+    "[...document.querySelectorAll('[data-specimen-frame] iframe')].every((frame) => frame.contentWindow?.gpuiAi?.currentTheme() === 'nord-frost')",
+    {
+      label: "every demo on the page to follow the card that was chosen",
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  assert.equal(
+    await cdp.evaluate("document.querySelector('[data-use-theme=\"nord-frost\"]').disabled"),
+    true,
+    "the card in use should not offer to be used again",
+  );
+
+  // Download is a real file at a real URL, not a blob built in the page from
+  // values the site derived — those would read back as a theme and not be one.
+  const download = await cdp.evaluate(`(async () => {
+    const link = document.querySelector('[data-theme-card="nord-frost"] a[download]');
+    const response = await fetch(link.href);
+    return { status: response.status, body: await response.json(), href: link.getAttribute('href') };
+  })()`);
+  assert.equal(download.status, 200, `${download.href} does not resolve`);
+  assert.equal(download.body.themes.length, 1);
+  assert.match(download.body.themes[0].name, /Nord Frost/);
+  assert.ok(
+    Object.keys(download.body.themes[0].colors).length > 3,
+    "the downloaded theme has no colours",
+  );
+
+  // Choosing a card is a durable choice, which is the point of it — so put the
+  // browser back to a visitor who has chosen nothing before the checks below.
+  await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
+  await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
+
   // The skip link is the first thing Tab reaches, and it moves focus rather
   // than only scrolling — which is the whole reason main carries tabindex.
   await openPage(`/components/${specimen.slug}/`, 1280, 900);

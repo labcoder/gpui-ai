@@ -978,6 +978,18 @@ pre.code {
 
 /* Themes ----------------------------------------------------------------- */
 
+.theme-trio {
+  display: grid;
+  gap: var(--space-6);
+  margin-bottom: var(--space-12);
+}
+
+@media (min-width: 60rem) {
+  .theme-trio {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .theme-cards {
   display: grid;
   gap: var(--space-4);
@@ -988,21 +1000,69 @@ pre.code {
 }
 
 .theme-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
   border: 1px solid var(--ai-border);
   border-radius: var(--ai-radius-lg);
   padding: var(--space-4);
   font-size: 0.875rem;
 }
 
+.theme-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.theme-current {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ai-muted);
+}
+
+.theme-readout {
+  margin: 0;
+  font-family: var(--ai-font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: var(--ai-muted);
+}
+
+.theme-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.theme-actions button,
+.theme-actions a {
+  font: inherit;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.theme-actions button:disabled {
+  color: var(--ai-muted);
+  cursor: default;
+}
+
 .swatches {
   display: flex;
   gap: var(--space-1);
-  margin-top: var(--space-3);
 }
 
 .swatches i {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: var(--ai-radius);
   border: 1px solid var(--ai-border);
 }

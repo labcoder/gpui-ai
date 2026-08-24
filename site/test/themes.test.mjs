@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -8,9 +8,12 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const generated = path.join(repositoryRoot, "site", "generated");
 
+const downloads = path.join(repositoryRoot, "site", "public", "themes");
+
 const readOutputs = async () => ({
   json: await readFile(path.join(generated, "themes.json"), "utf8"),
   css: await readFile(path.join(generated, "themes.css"), "utf8"),
+  files: (await readdir(downloads)).sort().join(" "),
 });
 
 test("the generated theme data is current and regenerating is idempotent", async () => {
@@ -33,6 +36,39 @@ test("the generated theme data is current and regenerating is idempotent", async
     committed.css,
     "site/generated/themes.css is stale — run npm run generate and commit the result",
   );
+  assert.equal(
+    regenerated.files,
+    committed.files,
+    "site/public/themes is stale — run npm run generate and commit the result",
+  );
+});
+
+test("every theme can be downloaded as the file the registry would read", async () => {
+  const { groups } = JSON.parse(await readFile(path.join(generated, "themes.json"), "utf8"));
+  const all = groups.flatMap((group) => group.themes);
+  const files = (await readdir(downloads)).filter((name) => name.endsWith(".json"));
+
+  assert.equal(
+    files.length,
+    all.length,
+    "the picker and the downloads describe different sets of themes",
+  );
+
+  for (const theme of all) {
+    const pack = JSON.parse(await readFile(path.join(downloads, `${theme.slug}.json`), "utf8"));
+
+    // A pack, not a palette. Someone downloading this wants to drop it into
+    // themes/ and have the registry read it — a reconstruction from the
+    // derived --ai-* values would look right and be a different theme.
+    assert.equal(pack.name, theme.registryName, `${theme.slug} was renamed on the way out`);
+    assert.equal(pack.themes.length, 1, `${theme.slug} should download on its own`);
+    assert.equal(pack.themes[0].name, theme.registryName);
+    assert.equal(pack.themes[0].mode ?? "light", theme.mode);
+    assert.ok(
+      Object.keys(pack.themes[0].colors ?? {}).length > 3,
+      `${theme.slug} downloads with no colours`,
+    );
+  }
 });
 
 test("every theme carries the full token set the chrome is painted from", async () => {
