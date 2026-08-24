@@ -525,6 +525,12 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   const baseUrl = `${serverHandle.origin}/manual`;
   const errors = [];
   await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable"), cdp.send("Log.enable")]);
+  // The site follows the operating system when nobody has chosen otherwise, so
+  // the runner's own preference would decide what every check below sees. Pin
+  // it; one step later flips it deliberately to prove the following works.
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "light" }],
+  });
   cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
   cdp.on("Runtime.consoleAPICalled", ({ type, args }) => {
     if (type === "error") errors.push(args.map((argument) => argument.value ?? argument.description).join(" "));
@@ -689,12 +695,17 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
         face: body.fontFamily,
       };
     };
+    const root = document.documentElement;
+    const was = root.dataset.theme;
     const before = read();
-    document.documentElement.dataset.theme = 'ember-dusk';
+    root.dataset.theme = 'ember-dusk';
     const after = read();
-    document.documentElement.removeAttribute('data-theme');
+    // Put back whatever the inline script decided, rather than removing the
+    // attribute: with no attribute the page falls to :root, which is a
+    // different theme, not the one it was showing.
+    root.dataset.theme = was;
     const restored = read();
-    return { before, after, restored };
+    return { before, after, restored, was };
   })()`);
   for (const property of ["background", "foreground", "border"]) {
     assert.notEqual(
@@ -703,7 +714,8 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       `switching data-theme left ${property} at ${repaint.before[property]}`,
     );
   }
-  assert.deepEqual(repaint.restored, repaint.before, "removing data-theme must restore the default");
+  assert.deepEqual(repaint.restored, repaint.before, "putting data-theme back must undo the change");
+  assert.ok(repaint.was, "the inline script must have painted a theme before anything rendered");
   // The face comes from a token too, so a theme that changed it would move the
   // chrome and the demos together.
   assert.match(repaint.before.face, /IBM Plex Sans/);
@@ -713,13 +725,29 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // mount, so the attribute appearing is this site's own signal that its
   // handlers are attached — and that the theme is applied after render rather
   // than baked into the pre-render, which is what keeps hydration clean.
-  const openPage = async (route, width, height) => {
-    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
-    await waitForValue(cdp, "document.documentElement.dataset.theme === 'light'", {
-      label: `${route} to hydrate and apply its theme`,
+  // Colours cross-fade over 200ms, so a read taken the instant the attribute
+  // changes still sees the old palette. Waiting for the class the fade runs
+  // under also proves it is added and then taken away again — a transition
+  // left in place would catch every later hover.
+  const settleTheme = async (label) => {
+    await waitForValue(cdp, "!document.documentElement.classList.contains('theming')", {
+      label: `the ${label} cross-fade to finish`,
       describe: GALLERY_DIAGNOSIS,
       errors,
     });
+  };
+
+  const openPage = async (route, width, height, expected = "light") => {
+    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
+    await waitForValue(
+      cdp,
+      `document.documentElement.dataset.theme === ${JSON.stringify(expected)}`,
+      {
+        label: `${route} to hydrate and apply its theme`,
+        describe: GALLERY_DIAGNOSIS,
+        errors,
+      },
+    );
   };
 
   // The drawer, driven the way a keyboard drives it. None of this is visible
@@ -885,13 +913,14 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       .map((button) => button.dataset.themeChoice),
   }))()`;
   const beforeMode = await cdp.evaluate(readMode);
-  assert.deepEqual(beforeMode.pressed, ["light"], "the shell must start on the mode it rendered");
+  assert.deepEqual(beforeMode.pressed, ["system"], "a visitor who has chosen nothing follows the system");
   await cdp.evaluate("document.querySelector('[data-theme-choice=\"dark\"]').click()");
   await waitForValue(cdp, "document.documentElement.dataset.theme === 'dark'", {
     label: "the dark control to change the mode",
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
+  await settleTheme("dark");
   const afterMode = await cdp.evaluate(readMode);
   assert.deepEqual(afterMode.pressed, ["dark"], "the control must state which mode is current");
   assert.notEqual(afterMode.background, beforeMode.background, "dark repainted nothing");
@@ -914,6 +943,129 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
 
+  // The whole theme engine, end to end, in the only place it can be checked.
+  // Picking a registry theme has to survive a reload, put itself in the URL so
+  // the page can be linked as it looks, and repaint chrome and demo together.
+  await cdp.evaluate(`(() => {
+    const select = document.getElementById('site-theme');
+    select.value = 'ember-dusk';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'ember-dusk'", {
+    label: 'the picker to apply a registry theme',
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await settleTheme("Ember Dusk");
+  const picked = await cdp.evaluate(`(() => ({
+    stored: window.localStorage.getItem('gpui-ai:theme'),
+    param: new URLSearchParams(window.location.search).get('theme'),
+    background: getComputedStyle(document.body).backgroundColor,
+    pressed: [...document.querySelectorAll('[data-theme-choice]')]
+      .filter((button) => button.getAttribute('aria-pressed') === 'true')
+      .map((button) => button.dataset.themeChoice),
+  }))()`);
+  assert.equal(picked.stored, 'ember-dusk', 'the choice must survive a reload');
+  assert.equal(picked.param, 'ember-dusk', 'the page must be linkable as it looks');
+  assert.notEqual(picked.background, afterMode.background, 'the registry theme repainted nothing');
+  // None of the three mode buttons is what is showing, and saying otherwise
+  // would be a lie a screen reader repeats.
+  assert.deepEqual(picked.pressed, []);
+
+  // Back to following the system, and then move the system. Nothing is stored
+  // and nothing is in the URL, so the only thing left to follow is the machine.
+  await cdp.evaluate(`(() => {
+    const select = document.getElementById('site-theme');
+    select.value = 'system';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'light'", {
+    label: "returning to the system preference",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.equal(
+    await cdp.evaluate("window.localStorage.getItem('gpui-ai:theme')"),
+    null,
+    "following the system is the absence of a choice, not a stored one",
+  );
+  assert.equal(
+    await cdp.evaluate("new URLSearchParams(window.location.search).get('theme')"),
+    null,
+    "the URL must stop naming a theme once the visitor stops choosing one",
+  );
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "dark" }],
+  });
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'dark'", {
+    label: "the page to follow the system flipping to dark",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "light" }],
+  });
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'light'", {
+    label: "the page to follow the system back to light",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+
+  // Store a theme again, then reload: the inline script has to paint it
+  // before anything else renders, or the page flashes the default first.
+  await cdp.evaluate("window.localStorage.setItem('gpui-ai:theme', 'ember-dusk')");
+
+  // Watch for the first time anything sets the attribute, and record what the
+  // document was doing at that moment. This is the only way to tell the inline
+  // script from the React effect: both leave the same attribute behind, and
+  // only one of them beats the stylesheet. `loading` means the head is still
+  // being parsed; anything else means the page painted the wrong palette first
+  // and then corrected itself, which is the flash the script exists to prevent.
+  const { identifier } = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `
+      window.__firstThemePaint = null;
+      var record = function () {
+        if (window.__firstThemePaint) return;
+        var root = document.documentElement;
+        if (!root || !root.getAttribute('data-theme')) return;
+        window.__firstThemePaint = {
+          theme: root.getAttribute('data-theme'),
+          readyState: document.readyState,
+        };
+      };
+      // Observed on the document rather than on documentElement: this runs
+      // before the page has any script of its own, and at that point there may
+      // be no element to attach to yet.
+      new MutationObserver(record).observe(document, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['data-theme'],
+      });
+      record();
+    `,
+  });
+  await openPage(`/components/${specimen.slug}/`, 1280, 900, "ember-dusk");
+  await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+
+  assert.deepEqual(
+    await cdp.evaluate("window.__firstThemePaint"),
+    { theme: "ember-dusk", readyState: "loading" },
+    "a stored theme must be painted while the head is still parsing, not after hydration",
+  );
+
+  // And a link carrying a theme wins over the stored one for that visit.
+  await cdp.navigate(
+    `${serverHandle.origin}/gpui-ai/components/${specimen.slug}/?theme=solstice`,
+    1280,
+    900,
+  );
+  assert.equal(
+    await cdp.evaluate('document.documentElement.dataset.theme'),
+    'solstice',
+    'a theme in the URL must win for the visit it was linked for',
+  );
+  await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
+  await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
   // The skip link is the first thing Tab reaches, and it moves focus rather
   // than only scrolling — which is the whole reason main carries tabindex.
   await openPage(`/components/${specimen.slug}/`, 1280, 900);

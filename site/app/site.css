@@ -404,20 +404,68 @@ main [id] {
   color: var(--ai-muted);
 }
 
-/* Mode switch ------------------------------------------------------------- */
+/* Theme controls ---------------------------------------------------------- */
+
+/* Two hundred milliseconds, and only while the colours are actually moving:
+   a permanent transition on these properties would also catch every hover and
+   make the whole page feel laggy. The reduced-motion rule at the end of this
+   file collapses it. */
+.theming,
+.theming *,
+.theming *::before,
+.theming *::after {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.theme-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.theme-picker {
+  display: none;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+/* The three buttons cover what most visitors want; the full registry is a
+   browsing decision, and a narrow screen has no room to offer both. */
+@media (min-width: 48rem) {
+  .theme-picker {
+    display: flex;
+  }
+}
+
+.theme-picker label {
+  color: var(--ai-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.theme-picker select {
+  font: inherit;
+  font-size: 0.8125rem;
+  max-width: 11rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  color: inherit;
+}
 
 .mode-switch {
   display: flex;
-  margin-left: auto;
   border: 1px solid var(--ai-border);
   border-radius: var(--ai-radius);
   overflow: hidden;
-}
-
-@media (min-width: 60rem) {
-  .mode-switch {
-    margin-left: 0;
-  }
 }
 
 .mode-switch button {

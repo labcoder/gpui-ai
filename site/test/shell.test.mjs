@@ -6,6 +6,7 @@ import { after, test } from "node:test";
 
 import { buildSite } from "../scripts/build.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
+import themeFile from "../generated/themes.json" with { type: "json" };
 
 // The assertions the S-02 rewrite parked in the order's plan under "S-04 (app
 // shell)", restored against the shell that now exists. They were written for a
@@ -57,13 +58,13 @@ test("every page exposes keyboard-operable theme controls", async () => {
 
     // A labelled group, so the three buttons are announced as one control
     // rather than three unrelated ones.
-    assert.match(html, /role="group" aria-label="Theme"/, `${route} has no theme group`);
+    assert.match(html, /role="group" aria-label="Mode"/, `${route} has no mode group`);
     assert.equal(
       count(html, /data-theme-choice="/g),
       3,
-      `${route} should offer light, dark, and contrast`,
+      `${route} should offer system, light, and dark`,
     );
-    for (const mode of ["light", "dark", "contrast"]) {
+    for (const mode of ["system", "light", "dark"]) {
       assert.match(html, new RegExp(`data-theme-choice="${mode}"`), `${route} is missing ${mode}`);
     }
 
@@ -76,11 +77,55 @@ test("every page exposes keyboard-operable theme controls", async () => {
       assert.match(control, /type="button"/, `a theme control would submit a form: ${control}`);
       assert.match(control, /aria-pressed="(true|false)"/, `${control} states no pressed state`);
     }
+    // The pre-render has no browser to ask, so it renders the neutral choice —
+    // and so does the browser's first render, which is what lets React hydrate
+    // the markup instead of throwing it away.
+    assert.match(
+      html,
+      /data-theme-choice="system" aria-pressed="true"/,
+      `${route} must pre-render with the system choice pressed`,
+    );
     assert.equal(
       count(html, /aria-pressed="true"/g),
       1,
       `${route} must show exactly one mode as current`,
     );
+  }
+});
+
+test("every page offers the whole registry, grouped and credited", async () => {
+  const { groups } = themeFile;
+  const upstream = groups.find((group) => group.id !== "gpui-ai");
+
+  for (const route of ROUTES) {
+    const html = await page(route);
+
+    assert.match(html, /<label for="site-theme">Theme<\/label>/, `${route} has no theme label`);
+    // A native select: forty-five options in three groups is what optgroup is
+    // for, and the platform's control already handles the keyboard, the screen
+    // reader, and small screens better than a hand-built listbox.
+    assert.match(html, /<select id="site-theme"/, `${route} has no theme picker`);
+    assert.match(html, /<option value="system"[^>]*>Follow the system<\/option>/);
+
+    for (const group of groups) {
+      for (const theme of group.themes) {
+        assert.match(
+          html,
+          new RegExp(`<option value="${theme.slug}"`),
+          `${route} does not offer ${theme.slug}`,
+        );
+      }
+    }
+
+    // The vendored pack is shown under its own name with its licence, which is
+    // the condition it is redistributed under.
+    assert.match(
+      html,
+      new RegExp(`<optgroup label="${upstream.label} \\(${upstream.license}\\)"`),
+      `${route} does not credit ${upstream.label}`,
+    );
+    assert.match(html, /<optgroup label="gpui-ai · Light"/);
+    assert.match(html, /<optgroup label="gpui-ai · Dark"/);
   }
 });
 

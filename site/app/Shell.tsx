@@ -1,26 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { build, componentsByCategory, type Component } from "./data";
+import { build, componentsByCategory, themeGroups, type Component } from "./data";
 import { href } from "./links";
 import type { Route } from "./routes";
+import { SYSTEM, paint, tellFrame, useTheme } from "./theme";
 
 /**
- * The three modes the site ships a control for.
+ * The control most visitors want, in front of the one most of them do not.
  *
- * The registry holds forty-five themes and S-05 builds the picker over all of
- * them; these are the ones a visitor reaches for without wanting to browse.
- * `contrast` is a real registry theme rather than a filter, so all three go
- * through the same `data-theme` attribute the generated stylesheet keys on.
+ * Forty-five themes is a browsing decision; light or dark is a reflex. These
+ * three are buttons in the masthead and the rest sit behind a picker, and both
+ * write to the same store, so neither can fall out of step with the other.
  */
 const MODES = [
+  { id: SYSTEM, label: "System" },
   { id: "light", label: "Light" },
   { id: "dark", label: "Dark" },
-  { id: "contrast", label: "Contrast" },
 ] as const;
-
-type Mode = (typeof MODES)[number]["id"];
-
-/** Modes the embedded gallery reads as dark when the host has not named one. */
-const DARK_MODES = new Set<Mode>(["dark", "contrast"]);
 
 /**
  * The site's chrome, on every page.
@@ -38,41 +33,28 @@ export function Shell({
   readonly route: Route;
   readonly children: ReactNode;
 }) {
-  const [mode, setMode] = useState<Mode>("light");
+  const { choice, applied, isDark, setChoice } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
-  // The document element is outside React's tree — the pre-render never emits
-  // it — so the attribute is written after mount. Reading a stored preference
-  // during render is what breaks hydration; S-05 adds persistence through an
-  // inline script in the document head, where React cannot disagree with it.
   useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.theme = mode;
-    // The embed guesses light or dark from this class when the host has not
-    // named a theme, which is how a frame starts in the right mode before
-    // anyone tells it anything.
-    root.classList.toggle("dark", DARK_MODES.has(mode));
+    // The inline script in the document head painted this before first paint.
+    // Repainting here is what keeps it right after a change, and `paint`
+    // returns early when nothing moved.
+    paint(applied, isDark);
 
-    // Guessing is not enough for a demo that is already running: it would sit
-    // there in the old theme, a white window inside a black page. The embed
-    // listens for this message and checks that it came from its own parent on
-    // its own origin, so telling it exactly which theme costs one post. The
-    // capture-phase listener catches frames the observer promotes later, which
-    // would otherwise only ever see the class. S-05 still owns persistence,
-    // the URL parameter, the full picker, and the cross-fade.
-    const tell = (frame: HTMLIFrameElement) =>
-      frame.contentWindow?.postMessage(
-        { type: "gpui-ai-theme", theme: mode },
-        window.location.origin,
-      );
-    for (const frame of document.querySelectorAll("iframe")) tell(frame);
+    // A demo already running would otherwise sit in the old theme — a lit
+    // window inside a dark page. The embed checks the message came from its
+    // own parent on its own origin before believing it. The capture-phase
+    // listener catches frames the observer promotes later, which would only
+    // ever see the class.
+    for (const frame of document.querySelectorAll("iframe")) tellFrame(frame, applied);
     const onLoad = (event: Event) => {
-      if (event.target instanceof HTMLIFrameElement) tell(event.target);
+      if (event.target instanceof HTMLIFrameElement) tellFrame(event.target, applied);
     };
     document.addEventListener("load", onLoad, true);
     return () => document.removeEventListener("load", onLoad, true);
-  }, [mode]);
+  }, [applied, isDark]);
 
   // A drawer left open across a resize would sit invisibly over a desktop
   // layout, holding focus and keeping the page inert.
@@ -92,7 +74,12 @@ export function Shell({
         Skip to content
       </a>
 
-      <Masthead mode={mode} onMode={setMode} drawerOpen={drawerOpen} onDrawer={setDrawerOpen} />
+      <Masthead
+        choice={choice}
+        onChoice={setChoice}
+        drawerOpen={drawerOpen}
+        onDrawer={setDrawerOpen}
+      />
 
       <div className="layout">
         <aside className="desktop-rail" aria-label="Component catalog">
@@ -125,13 +112,13 @@ export function Shell({
 }
 
 function Masthead({
-  mode,
-  onMode,
+  choice,
+  onChoice,
   drawerOpen,
   onDrawer,
 }: {
-  readonly mode: Mode;
-  readonly onMode: (mode: Mode) => void;
+  readonly choice: string;
+  readonly onChoice: (choice: string) => void;
   readonly drawerOpen: boolean;
   readonly onDrawer: (open: boolean) => void;
 }) {
@@ -155,41 +142,94 @@ function Masthead({
           <a href={href("/components/")}>Components</a>
           <a href={href("/themes/")}>Themes</a>
         </nav>
-        <ModeSwitch mode={mode} onMode={onMode} />
+        <div className="theme-controls">
+          <ModeSwitch choice={choice} onChoice={onChoice} />
+          <ThemePicker choice={choice} onChoice={onChoice} />
+        </div>
       </div>
     </header>
   );
 }
 
 /**
- * Light, dark, and contrast, as buttons rather than a menu.
+ * System, light, and dark, as buttons rather than a menu.
  *
  * Three toggle buttons in a labelled group: reachable by Tab, operable by Enter
  * and Space with no key handling of its own, and each states whether it is the
  * current mode. A styled `<div>` with a click handler would look identical and
- * be unusable without a mouse.
+ * be unusable without a mouse. Choosing any other theme leaves all three
+ * unpressed, which is the honest report — none of them is what is showing.
  */
 function ModeSwitch({
-  mode,
-  onMode,
+  choice,
+  onChoice,
 }: {
-  readonly mode: Mode;
-  readonly onMode: (mode: Mode) => void;
+  readonly choice: string;
+  readonly onChoice: (choice: string) => void;
 }) {
   return (
-    <div className="mode-switch" role="group" aria-label="Theme">
+    <div className="mode-switch" role="group" aria-label="Mode">
       {MODES.map((candidate) => (
         <button
           key={candidate.id}
           type="button"
           data-theme-choice={candidate.id}
-          aria-pressed={mode === candidate.id}
-          onClick={() => onMode(candidate.id)}
+          aria-pressed={choice === candidate.id}
+          onClick={() => onChoice(candidate.id)}
         >
           {candidate.label}
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Every theme in the registry, grouped the way it ships.
+ *
+ * A native select, deliberately: forty-five options in three groups is what
+ * `<optgroup>` is for, and the platform's own control already handles the
+ * keyboard, the screen reader, and the small-screen presentation better than a
+ * hand-built listbox would. The library's own themes are split by mode; the
+ * vendored pack is one group carrying its licence, which is the condition it
+ * is shipped under.
+ */
+function ThemePicker({
+  choice,
+  onChoice,
+}: {
+  readonly choice: string;
+  readonly onChoice: (choice: string) => void;
+}) {
+  const groups = useMemo(() => {
+    const own = themeGroups.find((group) => group.id === "gpui-ai");
+    const upstream = themeGroups.find((group) => group.id !== "gpui-ai");
+    const byMode = (mode: "light" | "dark") =>
+      own?.themes.filter((theme) => theme.mode === mode) ?? [];
+    const credit = upstream?.license ? ` (${upstream.license})` : "";
+    return [
+      { key: "own-light", label: "gpui-ai · Light", themes: byMode("light") },
+      { key: "own-dark", label: "gpui-ai · Dark", themes: byMode("dark") },
+      { key: "upstream", label: `${upstream?.label ?? ""}${credit}`, themes: upstream?.themes ?? [] },
+    ].filter((group) => group.themes.length > 0);
+  }, []);
+
+  return (
+    <p className="theme-picker">
+      <label htmlFor="site-theme">Theme</label>
+      <select id="site-theme" value={choice} onChange={(event) => onChoice(event.target.value)}>
+        <option value={SYSTEM}>Follow the system</option>
+        {groups.map((group) => (
+          <optgroup key={group.key} label={group.label}>
+            {group.themes.map((theme) => (
+              <option key={theme.slug} value={theme.slug}>
+                {theme.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </p>
   );
 }
 

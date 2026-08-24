@@ -4,6 +4,43 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>gpui-ai</title>
+    <!--
+      Paints the chosen theme before anything else renders.
+
+      Classic and inline on purpose: a module script is deferred, and the
+      stylesheet below it paints first, so the page would flash the default
+      palette and then swap. This runs before the body is parsed. It is also
+      outside React's tree — the pre-render never emits <html>, so there is no
+      markup for the browser to disagree with.
+
+      The rule it follows lives in app/theme-resolve.mjs. It cannot import, so
+      it is written out here, and site/test/theme.test.mjs pulls this very
+      script out of the document and checks it against that module for every
+      combination of URL, storage, and system preference.
+    -->
+    <script>
+      (function () {
+        var SLUG = /^[a-z0-9][a-z0-9-]*$/;
+        function valid(value) {
+          return typeof value === "string" && (value === "system" || SLUG.test(value)) ? value : undefined;
+        }
+        var stored;
+        try {
+          stored = window.localStorage.getItem("gpui-ai:theme") || undefined;
+        } catch (error) {
+          stored = undefined;
+        }
+        var param = new URLSearchParams(window.location.search).get("theme") || undefined;
+        var choice = valid(param) || valid(stored) || "system";
+        var applied =
+          choice !== "system"
+            ? choice
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        document.documentElement.dataset.theme = applied;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"><!--app-html--></div>
