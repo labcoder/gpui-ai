@@ -1,5 +1,6 @@
+import { Code } from "./CodePanel";
 import { Demo } from "./Demo";
-import { build, categories, components, componentsByCategory, hero, themes } from "./data";
+import { build, categories, components, componentsByCategory, hero, install, themes } from "./data";
 import { href } from "./links";
 import { useTheme } from "./theme";
 
@@ -46,11 +47,7 @@ export function HomePage() {
           <p className="lede">
             Not on crates.io yet: GPUI itself is only published from Git, so this is too.
           </p>
-          <pre className="code">
-            <code>{`[dependencies]
-gpui-ai = { git = "${build.repository}", tag = "v${build.version}" }
-gpui = { git = "https://github.com/zed-industries/zed" }`}</code>
-          </pre>
+          <Code lines={install.lines} fallback={install.code} />
         </div>
       </section>
 

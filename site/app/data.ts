@@ -156,6 +156,25 @@ export function highlighted(
   return highlightedBySlug[slug]?.[variant];
 }
 
+/** Code the site shows that was not cut from a story. */
+export interface CodeSample {
+  readonly lang: string;
+  readonly code: string;
+  readonly lines: readonly (readonly CodeToken[])[];
+}
+
+// Same widening as `highlightedBySlug`, and for the same reason.
+const extras = highlightJson.extras as unknown as { readonly install: CodeSample };
+
+/**
+ * The dependency lines the home page shows.
+ *
+ * Composed by the generate step from `build.json`, so the version and both
+ * repository URLs come from the manifests rather than from a string in a
+ * component, and the text the page prints is the text that was highlighted.
+ */
+export const install: CodeSample = extras.install;
+
 export function componentBySlug(slug: string): Component | undefined {
   return components.find((component) => component.slug === slug);
 }

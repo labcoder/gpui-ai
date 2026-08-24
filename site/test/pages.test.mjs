@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 import { buildSite } from "../scripts/build.mjs";
 import buildInfo from "../generated/build.json" with { type: "json" };
 import catalog from "../generated/catalog.json" with { type: "json" };
+import highlightFile from "../generated/highlight.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
 
 // What the pages must contain, checked against the HTML the build actually
@@ -16,6 +17,7 @@ import snippetFile from "../generated/snippets.json" with { type: "json" };
 // loses its prev/next links or its API link is broken for a visitor and for a
 // crawler, and nothing else would notice.
 const { components } = catalog;
+const installSnippet = highlightFile.extras.install;
 const BASE = "/gpui-ai";
 
 // The build is expensive, so every test reads one.
@@ -230,6 +232,30 @@ test("code is highlighted in the build, not in the browser", async () => {
     const source = await readFile(path.join(outDir, "assets", name), "utf8");
     assert.doesNotMatch(source, /shiki|textmate|oniguruma/i, `${name} carries a highlighter`);
   }
+});
+
+test("the home page's dependency lines are highlighted too", async () => {
+  const html = await page("/");
+
+  // They are TOML, not Rust, and they are not cut from a story — which is
+  // exactly why they were the one code block on the site still rendering as
+  // plain text.
+  const block = /<pre class="code"><code>([\s\S]*?)<\/code><\/pre>/.exec(html)?.[1];
+  assert.ok(block, "the home page has no code block");
+  assert.match(block, /<span class="t-type">dependencies<\/span>/, "the table header is plain");
+  assert.match(block, /<span class="t-string">&quot;https/, "the repository URL is plain");
+
+  // Whatever the highlighter did to it, the text is still the two lines that
+  // install this release, from the manifests rather than from a component.
+  // Every rendered line carries its own newline, the last one included.
+  const text = block.replaceAll(/<[^>]+>/g, "").replace(/\n$/, "");
+  assert.equal(text, asRendered(installSnippet.code));
+  // Quotes arrive escaped, so these compare rendered text, not source.
+  assert.ok(
+    text.includes(asRendered(`tag = "v${buildInfo.version}"`)),
+    `the page does not offer v${buildInfo.version}`,
+  );
+  assert.ok(text.includes(buildInfo.repository), "the page does not name this repository");
 });
 
 test("every component page links its own type under /api/", async () => {

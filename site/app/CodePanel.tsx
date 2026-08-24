@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { highlighted, snippet } from "./data";
+import { highlighted, snippet, type CodeToken } from "./data";
 
 /** How long the copy result stays on screen before the button is plain again. */
 const FEEDBACK_MS = 2_400;
@@ -39,22 +39,25 @@ export function CodePanel({
           </a>
         ))}
       </div>
-      <Code slug={slug} variant={variant} fallback={code} />
+      <Code lines={highlighted(slug, variant)} fallback={code} />
     </div>
   );
 }
 
-/** The tokens as spans, or the plain text if nothing highlighted this one. */
-function Code({
-  slug,
-  variant,
+/**
+ * The tokens as spans, or the plain text if nothing highlighted this one.
+ *
+ * Exported because the home page's dependency lines are highlighted the same
+ * way and have to be painted the same way; they are simply not cut from a
+ * story, so they arrive as tokens rather than as a slug.
+ */
+export function Code({
+  lines,
   fallback,
 }: {
-  readonly slug: string;
-  readonly variant: string;
+  readonly lines: readonly (readonly CodeToken[])[] | undefined;
   readonly fallback: string;
 }) {
-  const lines = highlighted(slug, variant);
   if (!lines) {
     return (
       <pre className="code">
