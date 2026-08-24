@@ -178,6 +178,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         }
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
+        | StoryId::GuidedDemo
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::Artifact
@@ -3903,6 +3904,11 @@ impl Gallery {
 
         match story {
             StoryId::All => div().hidden().into_any_element(),
+            StoryId::GuidedDemo => {
+                let guided =
+                    window.use_keyed_state("guided-demo-story-state", cx, GuidedDemoStory::new);
+                self.section(story, "Guided demo", || guided, cx)
+            }
             StoryId::Loading => self.section(
                 story,
                 "Loading state",
@@ -5514,14 +5520,14 @@ fn open_gallery_window(
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatStory, Gallery, GalleryTheme, filter_story_project_rows, filter_story_rows,
-        reduce_filter_story_projection,
+        ChatStory, Gallery, GalleryTheme, GuidedDemoStory, GuidedStage, filter_story_project_rows,
+        filter_story_rows, reduce_filter_story_projection,
     };
     use crate::StoryId;
     use gpui::{
-        AppContext as _, Context, Element as _, IntoElement as _, Modifiers, MouseButton, Render,
-        Role, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, Window, accesskit,
-        point, px, size,
+        AppContext as _, Context, Element as _, Entity, IntoElement as _, Modifiers, MouseButton,
+        Render, Role, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, Window,
+        accesskit, point, px, size,
     };
     use gpui_ai::{
         prelude::{FilterRow, FilterSortDirection, FilterTableEvent},
@@ -6627,5 +6633,522 @@ mod tests {
                 .expect("the isolated Filter viewport should construct its story");
             assert!(story.read(cx).performance_only);
         });
+    }
+
+    /// Runs the guided demo forward until it settles, or gives up.
+    fn drive_guided(story: &Entity<GuidedDemoStory>, cx: &mut VisualTestContext) -> usize {
+        for tick in 1..=600 {
+            cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+            cx.run_until_parked();
+            if story.read_with(cx, |story, _| story.stage) == GuidedStage::Settled {
+                return tick;
+            }
+        }
+        panic!("the guided demo never settled");
+    }
+
+    #[gpui::test]
+    fn the_guided_demo_scripts_tools_then_reasoning_then_a_settled_reply(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (story, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        story.read_with(cx, |story, _| {
+            assert_eq!(story.stage, GuidedStage::Idle);
+            assert!(story.reply.text().is_empty(), "nothing streams before Send");
+        });
+
+        cx.update(|window, cx| story.update(cx, |story, cx| story.start(window, cx)));
+        story.read_with(cx, |story, _| {
+            assert_eq!(
+                story.stage,
+                GuidedStage::Tools,
+                "Send starts the tool group"
+            );
+        });
+
+        // The stages must arrive in order, not merely end in the right place.
+        let mut seen = vec![GuidedStage::Tools];
+        for _ in 0..600 {
+            cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+            cx.run_until_parked();
+            let stage = story.read_with(cx, |story, _| story.stage);
+            if seen.last() != Some(&stage) {
+                seen.push(stage);
+            }
+            if stage == GuidedStage::Settled {
+                break;
+            }
+        }
+        assert_eq!(
+            seen,
+            vec![
+                GuidedStage::Tools,
+                GuidedStage::Reasoning,
+                GuidedStage::Replying,
+                GuidedStage::Settled,
+            ],
+            "the script must pass through every stage in order"
+        );
+
+        story.read_with(cx, |story, _| {
+            assert!(!story.reasoning.is_streaming(), "reasoning must finish");
+            assert!(!story.reply.is_streaming(), "the reply must finish");
+            assert!(
+                story.reply.text().contains("34 composed"),
+                "the settled reply must be the full copy"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn the_guided_demo_is_deterministic(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (first, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| first.update(cx, |story, cx| story.start(window, cx)));
+        let first_ticks = drive_guided(&first, cx);
+
+        // Reset and run it again: a scripted demo must not drift.
+        cx.update(|window, cx| first.update(cx, |story, cx| story.reset(window, cx)));
+        cx.update(|window, cx| first.update(cx, |story, cx| story.start(window, cx)));
+        let second_ticks = drive_guided(&first, cx);
+
+        assert_eq!(
+            first_ticks, second_ticks,
+            "the same script must take the same number of ticks every run"
+        );
+    }
+
+    #[gpui::test]
+    fn resetting_the_guided_demo_returns_it_to_the_opening_state(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (story, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| story.update(cx, |story, cx| story.start(window, cx)));
+        drive_guided(&story, cx);
+
+        cx.update(|window, cx| story.update(cx, |story, cx| story.reset(window, cx)));
+
+        story.read_with(cx, |story, _| {
+            assert_eq!(story.stage, GuidedStage::Idle);
+            assert!(story.reply.text().is_empty());
+            assert!(story.reasoning.text().is_empty());
+            assert!(story.driver.is_none(), "reset must stop the driver");
+        });
+
+        // And it can run again from there.
+        cx.update(|window, cx| story.update(cx, |story, cx| story.start(window, cx)));
+        drive_guided(&story, cx);
+        story.read_with(cx, |story, _| assert_eq!(story.stage, GuidedStage::Settled));
+    }
+
+    #[gpui::test]
+    fn reduced_motion_lands_on_the_finished_answer_without_ticking(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let (story, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.update(|window, cx| story.update(cx, |story, cx| story.start(window, cx)));
+
+        // No clock advance at all: the answer is already whole.
+        story.read_with(cx, |story, _| {
+            assert_eq!(story.stage, GuidedStage::Settled);
+            assert!(!story.reply.is_streaming());
+            assert!(story.reply.text().contains("34 composed"));
+            assert!(
+                story.driver.is_none(),
+                "reduced motion must not schedule a repeating task"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn the_guided_demo_names_its_stage_for_assistive_technology(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_story, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let idle = cx.debug_bounds("guided-demo").is_some();
+        assert!(idle, "the hero must render before anything is sent");
+
+        // Every stage has a distinct, human name rather than a code.
+        let mut labels = Vec::new();
+        for stage in [
+            GuidedStage::Idle,
+            GuidedStage::Tools,
+            GuidedStage::Reasoning,
+            GuidedStage::Replying,
+            GuidedStage::Settled,
+        ] {
+            let label = stage.label();
+            assert!(!label.is_empty(), "{stage:?} has no accessible name");
+            labels.push(label);
+        }
+        let mut unique = labels.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), labels.len(), "stage names must be distinct");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Guided demo — the website's hero.
+//
+// A scripted answer to one question, composed by hand from shipped components
+// because a `ChatMessage` cannot yet carry reasoning or tool-call parts (that
+// is item 23 in the tier-3 backlog). Everything here is gallery-side: the
+// library gains nothing for the hero's sake.
+// ---------------------------------------------------------------------------
+
+/// The question the composer opens with.
+const GUIDED_QUESTION: &str = "What is gpui-ai?";
+
+/// Reasoning shown while the answer is composed.
+///
+/// H-04 copy — reviewed with Oscar. Keep it specific and true: every claim
+/// here is checkable against the repository.
+const GUIDED_REASONING: &str = "The question is about the library itself, not a \
+supplier. I should describe what it gives a Rust developer rather than list \
+types.\n\nWorth naming what makes it different: these are composed components \
+above gpui-component, not a fork of it, and every value resolves through the \
+active theme.\n\nI should be honest that it is pre-1.0 and installed from git.";
+
+/// The assistant's reply. H-04 copy — reviewed with Oscar.
+const GUIDED_REPLY: &str = "**gpui-ai** is the interface layer AI applications \
+keep rebuilding, for [GPUI](https://gpui.rs) — streamed answers, reasoning \
+traces, tool calls, approval gates, and chat, as **34 composed \
+components**.\n\nThree things shape it:\n\n\
+- Components sit *above* [gpui-component](https://github.com/longbridge/gpui-component) rather than forking it\n\
+- Every colour, radius, and type style resolves through the active theme, so a \
+theme is a JSON file rather than a patch\n\
+- Your application owns the data and the async work; components report typed \
+intent by stable ID\n\n\
+It is pre-1.0 and installs from git — this page is running the same Rust \
+compiled to WebAssembly.";
+
+/// Ticks the tool group runs before the first call completes.
+const GUIDED_FIRST_TOOL_TICKS: usize = 6;
+/// Ticks before the second call completes and reasoning begins.
+const GUIDED_TOOLS_TICKS: usize = 14;
+/// Characters revealed per tick while reasoning and replying stream.
+const GUIDED_CHARS_PER_TICK: usize = 6;
+
+/// Where the scripted demo has got to.
+///
+/// The stages are ordered, so a render can ask "have we reached Reasoning yet"
+/// with a comparison rather than a match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum GuidedStage {
+    /// Nothing sent; the composer is waiting.
+    Idle,
+    /// The tool group is running.
+    Tools,
+    /// Reasoning is streaming.
+    Reasoning,
+    /// The reply is streaming.
+    Replying,
+    /// The reply finished and follow-ups are offered.
+    Settled,
+}
+
+impl GuidedStage {
+    /// A name for the status region, so the stage is readable without sight.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Idle => "Ready — send the question to run the demo",
+            Self::Tools => "Running tools",
+            Self::Reasoning => "Reasoning",
+            Self::Replying => "Writing the reply",
+            Self::Settled => "Answer complete",
+        }
+    }
+}
+
+/// The site hero: a prompt bar whose Send runs one deterministic script.
+struct GuidedDemoStory {
+    prompt: Entity<PromptBar>,
+    stage: GuidedStage,
+    ticks: usize,
+    reasoning: StreamedContent,
+    reply: StreamedContent,
+    reasoning_pos: usize,
+    reply_pos: usize,
+    driver: Option<Task<()>>,
+    _subscription: Subscription,
+}
+
+impl GuidedDemoStory {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let prompt = cx.new(|cx| PromptBar::new("guided-demo-prompt", window, cx));
+        prompt.update(cx, |prompt, cx| {
+            prompt.set_draft(GUIDED_QUESTION, window, cx);
+        });
+        let subscription = cx.subscribe_in(
+            &prompt,
+            window,
+            |this, _, event: &PromptBarEvent, window, cx| {
+                if matches!(event, PromptBarEvent::Submit { .. }) {
+                    this.start(window, cx);
+                }
+            },
+        );
+
+        Self {
+            prompt,
+            stage: GuidedStage::Idle,
+            ticks: 0,
+            reasoning: StreamedContent::new(),
+            reply: StreamedContent::new(),
+            reasoning_pos: 0,
+            reply_pos: 0,
+            driver: None,
+            _subscription: subscription,
+        }
+    }
+
+    /// Runs the script. Under reduced motion it lands on the finished answer
+    /// immediately: the demo is the content, not the animation.
+    fn start(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.stage != GuidedStage::Idle {
+            return;
+        }
+
+        if cx.reduce_motion() {
+            self.reasoning = StreamedContent::done(GUIDED_REASONING);
+            self.reply = StreamedContent::done(GUIDED_REPLY);
+            self.reasoning_pos = GUIDED_REASONING.len();
+            self.reply_pos = GUIDED_REPLY.len();
+            self.stage = GuidedStage::Settled;
+            self.emit_settled(cx);
+            cx.notify();
+            return;
+        }
+
+        self.stage = GuidedStage::Tools;
+        self.ticks = 0;
+        self.driver = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(sim::TICK_INTERVAL).await;
+                let running = this.update(cx, |this, cx| this.advance(cx));
+                match running {
+                    Ok(true) => {}
+                    // Finished, or the story went away.
+                    _ => break,
+                }
+            }
+        }));
+        cx.notify();
+    }
+
+    /// Advances one tick. Returns whether the script is still running, so the
+    /// driver stops itself rather than ticking a settled demo forever.
+    fn advance(&mut self, cx: &mut Context<Self>) -> bool {
+        match self.stage {
+            GuidedStage::Idle | GuidedStage::Settled => return false,
+            GuidedStage::Tools => {
+                self.ticks += 1;
+                if self.ticks >= GUIDED_TOOLS_TICKS {
+                    self.stage = GuidedStage::Reasoning;
+                }
+            }
+            GuidedStage::Reasoning => {
+                if advance_stream(
+                    GUIDED_REASONING,
+                    &mut self.reasoning_pos,
+                    &mut self.reasoning,
+                ) {
+                    self.stage = GuidedStage::Replying;
+                }
+            }
+            GuidedStage::Replying => {
+                if advance_stream(GUIDED_REPLY, &mut self.reply_pos, &mut self.reply) {
+                    self.stage = GuidedStage::Settled;
+                    self.emit_settled(cx);
+                }
+            }
+        }
+        cx.notify();
+        self.stage != GuidedStage::Settled
+    }
+
+    fn emit_settled(&self, cx: &mut Context<Self>) {
+        cues::emit(
+            cx,
+            Cue::ResponseSettled {
+                message_id: "guided-demo-reply".into(),
+                succeeded: true,
+            },
+        );
+    }
+
+    /// Returns the demo to its opening state so a visitor can run it again.
+    fn reset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.driver = None;
+        self.stage = GuidedStage::Idle;
+        self.ticks = 0;
+        self.reasoning = StreamedContent::new();
+        self.reply = StreamedContent::new();
+        self.reasoning_pos = 0;
+        self.reply_pos = 0;
+        self.prompt.update(cx, |prompt, cx| {
+            prompt.set_draft(GUIDED_QUESTION, window, cx);
+        });
+        cx.notify();
+    }
+
+    /// The two calls the script runs, at the completeness this tick implies.
+    fn tool_calls(&self) -> [Progressive<ToolInvocation>; 2] {
+        let catalog = ToolInvocation::new("read-catalog", "read_file")
+            .summary("site/generated/catalog.json")
+            .input("{\n  \"path\": \"site/generated/catalog.json\"\n}");
+        let count = ToolInvocation::new("count-stories", "count_stories")
+            .summary("crates/gallery/src/story.rs")
+            .input("{\n  \"registry\": \"StoryId::ALL\"\n}");
+
+        let past_first = self.stage > GuidedStage::Tools || self.ticks >= GUIDED_FIRST_TOOL_TICKS;
+        let past_second = self.stage > GuidedStage::Tools;
+
+        [
+            if past_first {
+                Progressive::complete(
+                    catalog
+                        .output("Read **34 components** across 8 categories.")
+                        .elapsed(Duration::from_millis(180)),
+                )
+            } else {
+                Progressive::running(catalog)
+            },
+            if past_second {
+                Progressive::complete(
+                    count
+                        .output("`StoryId::ALL` lists **34** stable stories.")
+                        .elapsed(Duration::from_millis(240)),
+                )
+            } else if past_first {
+                Progressive::running(count)
+            } else {
+                Progressive::pending(count)
+            },
+        ]
+    }
+}
+
+/// Reveals the next few characters of `target`; returns whether it finished.
+fn advance_stream(target: &str, pos: &mut usize, content: &mut StreamedContent) -> bool {
+    if *pos >= target.len() {
+        return true;
+    }
+    let mut end = *pos;
+    for _ in 0..GUIDED_CHARS_PER_TICK {
+        match target[end..].chars().next() {
+            Some(character) => end += character.len_utf8(),
+            None => break,
+        }
+    }
+    content.append(&target[*pos..end]);
+    *pos = end;
+    if *pos >= target.len() {
+        content.finish();
+        true
+    } else {
+        false
+    }
+}
+
+impl Render for GuidedDemoStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let started = self.stage > GuidedStage::Idle;
+        let [first_call, second_call] = self.tool_calls();
+
+        let reasoning_trace = ThinkingTrace::new().prose(self.reasoning.text().to_owned());
+        let reasoning = if self.stage > GuidedStage::Reasoning {
+            Progressive::complete(reasoning_trace.thought_for(Duration::from_secs(2)))
+        } else {
+            Progressive::running(reasoning_trace)
+        };
+
+        v_flex()
+            .id("guided-demo")
+            .debug_selector(|| "guided-demo".into())
+            .w_full()
+            .gap(tokens.spacing.lg)
+            .when(started, |this| {
+                this.child(
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            div()
+                                .id("guided-demo-question")
+                                .role(Role::Paragraph)
+                                .aria_label(GUIDED_QUESTION)
+                                .self_end()
+                                .max_w(px(420.))
+                                .px(tokens.spacing.md)
+                                .py(tokens.spacing.sm)
+                                .rounded(cx.theme().radius)
+                                .bg(cx.theme().accent)
+                                .text_color(cx.theme().accent_foreground)
+                                .child(GUIDED_QUESTION),
+                        )
+                        .child(
+                            ToolGroup::new("guided-demo-tools")
+                                .title("Looking at the repository")
+                                .count(2)
+                                .active(self.stage == GuidedStage::Tools)
+                                .open(true)
+                                .child(ToolCall::new(&first_call).into_any_element())
+                                .child(ToolCall::new(&second_call).into_any_element()),
+                        )
+                        .when(self.stage >= GuidedStage::Reasoning, |this| {
+                            this.child(
+                                Thinking::new("guided-demo-reasoning", &reasoning)
+                                    .open(self.stage == GuidedStage::Reasoning),
+                            )
+                        })
+                        .when(self.stage >= GuidedStage::Replying, |this| {
+                            this.child(
+                                StreamingText::new("guided-demo-reply", &self.reply).follow_ups(
+                                    if self.stage == GuidedStage::Settled {
+                                        vec![
+                                            FollowUp::new("components", "Browse all 34 components"),
+                                            FollowUp::new("theming", "How does theming work?"),
+                                            FollowUp::new("install", "Add it to my app"),
+                                        ]
+                                    } else {
+                                        Vec::new()
+                                    },
+                                ),
+                            )
+                        }),
+                )
+            })
+            .child(self.prompt.clone())
+            .child(
+                h_flex()
+                    .gap(tokens.spacing.sm)
+                    .child(
+                        Button::new("guided-demo-reset")
+                            .outline()
+                            .label("Reset")
+                            .on_click(cx.listener(|this, _, window, cx| this.reset(window, cx))),
+                    )
+                    .child(
+                        div()
+                            .id("guided-demo-status")
+                            .role(Role::Status)
+                            .aria_label(self.stage.label())
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(self.stage.label()),
+                    ),
+            )
     }
 }

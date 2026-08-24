@@ -75,6 +75,12 @@ pub enum StoryId {
     Queue,
     /// Actions anchored to a readable text selection.
     SelectionActions,
+    /// The website's scripted hero.
+    ///
+    /// Addressable like any story, but deliberately absent from
+    /// [`StoryId::ALL`]: it is one composition made for the home page, not a
+    /// component the catalog documents.
+    GuidedDemo,
 }
 
 /// Variants the Chat story switches between.
@@ -211,6 +217,7 @@ impl StoryId {
             Self::Voice => "voice",
             Self::Queue => "queue",
             Self::SelectionActions => "selection-actions",
+            Self::GuidedDemo => "guided-demo",
         }
     }
 
@@ -252,6 +259,7 @@ impl StoryId {
             Self::Voice => "Voice controls",
             Self::Queue => "Message queue",
             Self::SelectionActions => "Selection actions",
+            Self::GuidedDemo => "Guided demo",
         }
     }
 
@@ -261,7 +269,8 @@ impl StoryId {
     /// it has no entry.
     pub const fn meta(self) -> Option<StoryMeta> {
         Some(match self {
-            Self::All => return None,
+            // Neither the catalog view nor the site hero is a component.
+            Self::All | Self::GuidedDemo => return None,
             Self::Loading => StoryMeta {
                 category: "Progress",
                 summary: "A token-driven pixel field for work whose duration is not yet known.",
@@ -557,6 +566,10 @@ impl FromStr for StoryId {
     fn from_str(slug: &str) -> Result<Self, Self::Err> {
         if slug == Self::All.slug() {
             return Ok(Self::All);
+        }
+        // Addressable, but not a catalog component, so not in ALL.
+        if slug == Self::GuidedDemo.slug() {
+            return Ok(Self::GuidedDemo);
         }
 
         Self::ALL
