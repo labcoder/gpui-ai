@@ -110,6 +110,22 @@ pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
 /// the script changes shape and this number does not.
 pub const HERO_HEIGHT: u32 = 706;
 
+/// Which way a story's content outgrows the frame it is shown in.
+///
+/// Declared rather than inferred. The exporter used to decide this from
+/// [`StoryMeta::height`], on the reasoning that a tall story is the one with
+/// something to say about staying reachable — but height measures the story as
+/// it is composed, including any prose beneath the component, so editing that
+/// prose silently rewrote the published claim for four components. The two
+/// facts are independent, so they are recorded independently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overflow {
+    /// Content grows downward, and the claim is that it stays reachable.
+    Vertical,
+    /// Content is wider than the frame, and the claim is that context survives.
+    Wide,
+}
+
 /// Catalog metadata for one component story, exported to the website.
 ///
 /// This is the single source for the component index: the site is generated
@@ -133,6 +149,8 @@ pub struct StoryMeta {
     /// `story_heights_match_what_the_stories_measure` test fails when a story
     /// changes shape and this number does not.
     pub height: u32,
+    /// Which way this story's content outgrows its frame.
+    pub overflow: Overflow,
 }
 
 impl StoryId {
@@ -273,6 +291,7 @@ impl StoryId {
                 api: "LoadingState",
                 usage: "LoadingState::new().label(\"Thinking\")",
                 height: 52,
+                overflow: Overflow::Wide,
             },
             Self::ToolChips => StoryMeta {
                 category: "Agent work",
@@ -281,6 +300,7 @@ impl StoryId {
                 api: "ToolChip",
                 usage: "ToolChip::new(\"edit\", \"edit main.rs\")",
                 height: 84,
+                overflow: Overflow::Wide,
             },
             Self::ToolCalls => StoryMeta {
                 category: "Agent work",
@@ -289,6 +309,7 @@ impl StoryId {
                 api: "ToolCall",
                 usage: "ToolCall::new(&call_progress)",
                 height: 640,
+                overflow: Overflow::Vertical,
             },
             Self::Tasks => StoryMeta {
                 category: "Agent work",
@@ -297,6 +318,7 @@ impl StoryId {
                 api: "TaskRow",
                 usage: "TaskRow::new(&task_progress)",
                 height: 144,
+                overflow: Overflow::Wide,
             },
             Self::Thinking => StoryMeta {
                 category: "Progress",
@@ -305,6 +327,7 @@ impl StoryId {
                 api: "Thinking",
                 usage: "Thinking::new(\"reasoning\", &trace_progress)",
                 height: 306,
+                overflow: Overflow::Wide,
             },
             Self::Orbs => StoryMeta {
                 category: "Progress",
@@ -313,6 +336,7 @@ impl StoryId {
                 api: "Orbs",
                 usage: "Orbs::new()",
                 height: 195,
+                overflow: Overflow::Wide,
             },
             Self::Search => StoryMeta {
                 category: "Agent work",
@@ -321,6 +345,7 @@ impl StoryId {
                 api: "SearchResults",
                 usage: "SearchResults::new(\"research\", \"GPUI components\")",
                 height: 151,
+                overflow: Overflow::Wide,
             },
             Self::Todos => StoryMeta {
                 category: "Agent work",
@@ -329,6 +354,7 @@ impl StoryId {
                 api: "TodoList",
                 usage: "TodoList::new(\"release-plan\")",
                 height: 218,
+                overflow: Overflow::Wide,
             },
             Self::ImageGeneration => StoryMeta {
                 category: "Agent work",
@@ -337,6 +363,7 @@ impl StoryId {
                 api: "ImageGeneration",
                 usage: "ImageGeneration::new(\"hero-art\").progress(0.64)",
                 height: 212,
+                overflow: Overflow::Wide,
             },
             Self::StreamingText => StoryMeta {
                 category: "Readable output",
@@ -345,6 +372,7 @@ impl StoryId {
                 api: "StreamingText",
                 usage: "StreamingText::new(\"answer\", &content)",
                 height: 426,
+                overflow: Overflow::Vertical,
             },
             Self::Chat => StoryMeta {
                 category: "Composites",
@@ -353,6 +381,7 @@ impl StoryId {
                 api: "Chat",
                 usage: "Chat::new(\"conversation\", prompt, window, cx)",
                 height: 615,
+                overflow: Overflow::Vertical,
             },
             Self::Suggestions => StoryMeta {
                 category: "Composites",
@@ -361,6 +390,7 @@ impl StoryId {
                 api: "Suggestions",
                 usage: "Suggestions::new(\"starters\")",
                 height: 128,
+                overflow: Overflow::Wide,
             },
             Self::Attachments => StoryMeta {
                 category: "Composites",
@@ -369,6 +399,7 @@ impl StoryId {
                 api: "AttachmentStrip",
                 usage: "AttachmentStrip::new(\"files\").items(attachments)",
                 height: 486,
+                overflow: Overflow::Vertical,
             },
             Self::Artifact => StoryMeta {
                 category: "Composites",
@@ -377,6 +408,7 @@ impl StoryId {
                 api: "ArtifactPanel",
                 usage: "ArtifactPanel::new(\"doc\", &artifact)",
                 height: 504,
+                overflow: Overflow::Vertical,
             },
             Self::ContextMeter => StoryMeta {
                 category: "Progress",
@@ -385,6 +417,7 @@ impl StoryId {
                 api: "ContextMeter",
                 usage: "ContextMeter::new(\"context\", &usage)",
                 height: 120,
+                overflow: Overflow::Wide,
             },
             Self::CommandSearch => StoryMeta {
                 category: "Navigation",
@@ -393,6 +426,7 @@ impl StoryId {
                 api: "CommandSearch",
                 usage: "CommandSearch::new(\"commands\", window, cx)",
                 height: 494,
+                overflow: Overflow::Vertical,
             },
             Self::SidebarNav => StoryMeta {
                 category: "Navigation",
@@ -401,6 +435,7 @@ impl StoryId {
                 api: "SidebarNav",
                 usage: "SidebarNav::new(\"workspace-nav\", window, cx)",
                 height: 284,
+                overflow: Overflow::Wide,
             },
             Self::ThreadList => StoryMeta {
                 category: "Navigation",
@@ -409,6 +444,7 @@ impl StoryId {
                 api: "ThreadList",
                 usage: "ThreadList::new(\"threads\", window, cx)",
                 height: 436,
+                overflow: Overflow::Vertical,
             },
             Self::FineTune => StoryMeta {
                 category: "Composites",
@@ -417,6 +453,7 @@ impl StoryId {
                 api: "FineTuneCard",
                 usage: "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
                 height: 990,
+                overflow: Overflow::Vertical,
             },
             Self::RecordsTable => StoryMeta {
                 category: "Data tables",
@@ -425,6 +462,7 @@ impl StoryId {
                 api: "RecordsTable",
                 usage: "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
                 height: 288,
+                overflow: Overflow::Wide,
             },
             Self::DiffTable => StoryMeta {
                 category: "Data tables",
@@ -433,6 +471,7 @@ impl StoryId {
                 api: "DiffTable",
                 usage: "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
                 height: 288,
+                overflow: Overflow::Wide,
             },
             Self::FilterTable => StoryMeta {
                 category: "Data tables",
@@ -441,6 +480,7 @@ impl StoryId {
                 api: "FilterTable",
                 usage: "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
                 height: 288,
+                overflow: Overflow::Wide,
             },
             Self::ComparisonTable => StoryMeta {
                 category: "Data tables",
@@ -449,6 +489,7 @@ impl StoryId {
                 api: "ComparisonTable",
                 usage: "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
                 height: 432,
+                overflow: Overflow::Wide,
             },
             Self::CodeBlock => StoryMeta {
                 category: "Readable output",
@@ -457,6 +498,7 @@ impl StoryId {
                 api: "CodeBlock",
                 usage: "CodeBlock::new(\"patch\", source).language(\"rust\")",
                 height: 223,
+                overflow: Overflow::Wide,
             },
             Self::CodeDiff => StoryMeta {
                 category: "Readable output",
@@ -465,6 +507,7 @@ impl StoryId {
                 api: "CodeDiff",
                 usage: "CodeDiff::new(\"patch\", &file).reviewable(true)",
                 height: 461,
+                overflow: Overflow::Vertical,
             },
             Self::Approval => StoryMeta {
                 category: "Decisions",
@@ -473,6 +516,7 @@ impl StoryId {
                 api: "ApprovalCard",
                 usage: "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
                 height: 449,
+                overflow: Overflow::Wide,
             },
             Self::Plan => StoryMeta {
                 category: "Decisions",
@@ -481,6 +525,7 @@ impl StoryId {
                 api: "PlanCard",
                 usage: "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
                 height: 402,
+                overflow: Overflow::Vertical,
             },
             Self::Recommendation => StoryMeta {
                 category: "Decisions",
@@ -489,6 +534,7 @@ impl StoryId {
                 api: "RecommendationCard",
                 usage: "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
                 height: 262,
+                overflow: Overflow::Wide,
             },
             Self::Context => StoryMeta {
                 category: "Evidence",
@@ -497,6 +543,7 @@ impl StoryId {
                 api: "ContextCard",
                 usage: "ContextCard::new(\"design-doc\", \"Architecture\")",
                 height: 192,
+                overflow: Overflow::Wide,
             },
             Self::Insights => StoryMeta {
                 category: "Evidence",
@@ -505,6 +552,7 @@ impl StoryId {
                 api: "InsightCard",
                 usage: "InsightCard::new(\"retention\", \"Retention improved\")",
                 height: 452,
+                overflow: Overflow::Wide,
             },
             Self::PromptBar => StoryMeta {
                 category: "Composites",
@@ -513,6 +561,7 @@ impl StoryId {
                 api: "PromptBar",
                 usage: "PromptBar::new(\"agent-prompt\", window, cx)",
                 height: 592,
+                overflow: Overflow::Vertical,
             },
             Self::Voice => StoryMeta {
                 category: "Composites",
@@ -521,6 +570,7 @@ impl StoryId {
                 api: "VoiceControls",
                 usage: "VoiceControls::new(\"voice\", VoiceState::Idle)",
                 height: 90,
+                overflow: Overflow::Wide,
             },
             Self::Queue => StoryMeta {
                 category: "Composites",
@@ -529,6 +579,7 @@ impl StoryId {
                 api: "MessageQueue",
                 usage: "MessageQueue::new(\"queue\").items(queued)",
                 height: 240,
+                overflow: Overflow::Wide,
             },
             Self::SelectionActions => StoryMeta {
                 category: "Readable output",
@@ -537,6 +588,7 @@ impl StoryId {
                 api: "SelectionActions",
                 usage: "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
                 height: 288,
+                overflow: Overflow::Wide,
             },
         })
     }

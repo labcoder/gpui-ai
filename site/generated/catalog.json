@@ -258,7 +258,7 @@
         "ownership": "StreamingText renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed StreamingTextEvent contract and stable application IDs.",
         "semantics": "Selectable streaming Markdown with citations, sources, and follow-ups.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -465,7 +465,7 @@
         "ownership": "ThreadList renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed ThreadListEvent contract and stable application IDs.",
         "semantics": "A grouped conversation list with search, archived threads, and typed row actions.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -754,7 +754,7 @@
         "ownership": "CodeDiff renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed CodeDiffEvent contract and stable application IDs.",
         "semantics": "A unified patch with line gutters, change tints, per-hunk accept or reject, and a copyable source.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {
@@ -804,7 +804,7 @@
         "ownership": "PlanCard renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed PlanEvent contract and stable application IDs.",
         "semantics": "An agent's proposed steps with typed per-step status, approve or reject while proposed, and resolved states.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {

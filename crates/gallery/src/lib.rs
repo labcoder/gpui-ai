@@ -12,5 +12,6 @@ pub use gallery::{
     open_gallery_with_theme,
 };
 pub use story::{
-    CHAT_STORY_VARIANTS, HERO_HEIGHT, StoryId, StoryLookupError, StoryMeta, TABLE_STORY_VARIANTS,
+    CHAT_STORY_VARIANTS, HERO_HEIGHT, Overflow, StoryId, StoryLookupError, StoryMeta,
+    TABLE_STORY_VARIANTS,
 };
