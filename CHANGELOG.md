@@ -22,6 +22,13 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- A queued message that changes places travels there. Move up and Move down
+  redrew the row in its new spot, which reads as two rows swapping their
+  contents rather than one row moving. Each row now reports where it laid out
+  and springs from where it was — measured rather than counted from the index,
+  because a queued prompt that wraps to two lines and its one-line neighbour
+  are not the same height. Under reduced motion the list is simply reordered.
+
 - Nine component pages showed one line of code. Chat, Prompt bar, Command
   search, Sidebar nav and the four tables are entities, and the published
   region stopped at the constructor — everything that makes them worth using

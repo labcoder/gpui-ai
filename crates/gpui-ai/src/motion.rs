@@ -19,9 +19,9 @@
 //! ```
 
 use gpui::{
-    Animation, AnimationElement, AnimationExt as _, App, ElementId, Hsla, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
-    ease_in_out, pulsating_between, px, relative,
+    Animation, AnimationElement, AnimationExt as _, AnyElement, App, ElementId, Hsla, IntoElement,
+    ParentElement as _, Pixels, RenderOnce, SharedString, SpringConfig, SpringState,
+    StyleRefinement, Styled, Window, canvas, div, ease_in_out, pulsating_between, px, relative,
 };
 use gpui_base::animation::ease_out_cubic;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
@@ -42,6 +42,25 @@ const REVEAL_STAGGER: Duration = Duration::from_millis(40);
 const REVEAL_RISE: f32 = 6.0;
 /// One breathing cycle for ambient "still working" indicators.
 const BREATH_CYCLE: Duration = Duration::from_millis(1600);
+
+/// The spring a reordered row travels on.
+///
+/// Slightly under-damped: a row that arrives dead still reads as a redraw,
+/// and one that bounces reads as a toy. This overshoots by a few per cent,
+/// which is the amount that says "this row moved" without asking to be
+/// watched.
+const REORDER_SPRING: SpringConfig = SpringConfig {
+    stiffness: 220.0,
+    damping: 26.0,
+    mass: 1.0,
+};
+
+/// Under a pixel of displacement is not a move anyone can see.
+const REORDER_EPSILON: f32 = 0.5;
+
+/// A frame longer than this is a tab that was in the background, and stepping
+/// a spring by it would teleport every row.
+const LONGEST_FRAME: Duration = Duration::from_millis(64);
 
 /// Text with a soft highlight travelling across it — the ecosystem's
 /// "something is happening" label treatment for thinking, running tool
@@ -218,6 +237,112 @@ fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
         .top(px(REVEAL_RISE * (1.0 - progress)))
 }
 
+/// What one row remembers between frames: where it settled, and how far it
+/// currently is from there.
+///
+/// The frame clock is kept in a second slot rather than a field here, so that
+/// the type of an instant is never written down. `background_executor().now()`
+/// is not `std::time::Instant` — that one is unimplemented on
+/// `wasm32-unknown-unknown` and panics the moment it is read — and naming it
+/// would compile natively and break the demos.
+#[derive(Clone, Copy, Default)]
+struct Reorder {
+    /// Where the row lays out when nothing is displacing it.
+    settled: Option<Pixels>,
+    /// The row's displacement from `settled`, and how fast it is closing.
+    spring: SpringState,
+}
+
+/// Slides a row from where it was to where it is when a list reorders.
+///
+/// A list whose rows move — a queue being reordered, a plan whose steps are
+/// promoted — redraws them in their new places, and a row that is simply
+/// somewhere else on the next frame reads as two rows swapping content rather
+/// than one row moving. This carries the row: it is drawn where it was and
+/// springs to where it belongs.
+///
+/// Measured rather than calculated from the index. Rows here are not a uniform
+/// height — a queued prompt wraps to two lines, its neighbour to one — so
+/// index times a row height would be wrong by however much they differ. The
+/// row reports where it laid out and the displacement is the difference from
+/// last time, which is right whatever the rows contain.
+///
+/// Keyed by `id`, which must be the row's stable identity rather than its
+/// position: keyed by position, every row would "move" whenever any row did,
+/// which is the animation this exists to avoid.
+///
+/// Under reduced motion the row is returned untouched and no state is kept, so
+/// a reordered list simply is reordered.
+pub fn reorder<E>(element: E, id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    if cx.reduce_motion() {
+        return element.into_any_element();
+    }
+
+    let id = id.into();
+    let now = cx.background_executor().now();
+    let state = window.use_keyed_state((id.clone(), "reorder"), cx, |_, _| Reorder::default());
+    let clock = window.use_keyed_state((id, "reorder-clock"), cx, |_, _| now);
+
+    // Capped, because a tab that was in the background hands back one enormous
+    // frame, and stepping a spring by it would teleport every row.
+    let delta = clock
+        .update(cx, |last, _| {
+            let elapsed = now.saturating_duration_since(*last);
+            *last = now;
+            elapsed
+        })
+        .min(LONGEST_FRAME);
+
+    // Advance whatever is left of the last move before drawing this frame, so
+    // the displacement below is current rather than one frame stale.
+    let displacement = state.update(cx, |row, _| {
+        row.spring = REORDER_SPRING.step(row.spring, 0.0, delta.as_secs_f32());
+        if REORDER_SPRING.is_settled(row.spring, 0.0, REORDER_EPSILON) {
+            row.spring = SpringState::default();
+        }
+        row.spring.position
+    });
+
+    if displacement.abs() > REORDER_EPSILON {
+        window.request_animation_frame();
+    }
+
+    let measured = state.clone();
+    div()
+        .relative()
+        .w_full()
+        .top(px(displacement))
+        .child(element)
+        // Reports where this row laid out, with the displacement taken back
+        // out — otherwise the row would be measuring its own animation and
+        // chase itself down the page.
+        .child(
+            canvas(
+                move |bounds, _, cx| {
+                    let settled = bounds.origin.y - px(displacement);
+                    measured.update(cx, |row, _| {
+                        if let Some(previous) = row.settled {
+                            let moved = f32::from(previous - settled);
+                            if moved.abs() > REORDER_EPSILON {
+                                // It is now drawn where it was, and the step
+                                // above will carry it the rest of the way.
+                                row.spring.position += moved;
+                            }
+                        }
+                        row.settled = Some(settled);
+                    });
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0(),
+        )
+        .into_any_element()
+}
+
 /// Slowly breathes an element's opacity — for indicators that mean "still
 /// working" without a measurable progress value.
 pub fn breathing<E>(element: E, id: impl Into<ElementId>) -> AnimationElement<E>
@@ -256,5 +381,94 @@ mod tests {
         let capped = stagger_delay(100);
         assert_eq!(far, capped);
         assert!(stagger_delay(1) < far);
+    }
+
+    /// Steps the reorder spring the way a frame loop does, and reports where
+    /// the row is after each frame.
+    fn travel(from: f32, frames: usize) -> Vec<f32> {
+        let mut state = SpringState {
+            position: from,
+            velocity: 0.0,
+        };
+        let frame = Duration::from_millis(16).as_secs_f32();
+        (0..frames)
+            .map(|_| {
+                state = REORDER_SPRING.step(state, 0.0, frame);
+                state.position
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_reordered_row_travels_to_where_it_belongs_and_stays() {
+        // A row displaced by the height of its neighbour closes on zero.
+        let path = travel(64.0, 60);
+        let arrived = path.last().copied().expect("frames were stepped");
+        assert!(
+            arrived.abs() < REORDER_EPSILON,
+            "a row must arrive; it stopped {arrived}px away"
+        );
+        assert!(
+            REORDER_SPRING.is_settled(
+                SpringState {
+                    position: arrived,
+                    velocity: 0.0
+                },
+                0.0,
+                REORDER_EPSILON
+            ),
+            "and must be settled once it has, or it redraws for ever"
+        );
+    }
+
+    #[test]
+    fn a_reordered_row_arrives_within_a_second() {
+        // Longer than this and the list is still rearranging itself while the
+        // reader has moved on; the row is furniture, not an announcement.
+        let within_a_second = travel(64.0, 62);
+        assert!(
+            within_a_second
+                .last()
+                .copied()
+                .expect("frames were stepped")
+                .abs()
+                < REORDER_EPSILON
+        );
+    }
+
+    #[test]
+    fn a_reordered_row_overshoots_a_little_and_only_once() {
+        // Enough to read as movement, not enough to read as a toy: the spring
+        // crosses its target and comes back, and the return is small.
+        let path = travel(100.0, 90);
+        let overshoot = path
+            .iter()
+            .copied()
+            .filter(|position| *position < 0.0)
+            .fold(0.0_f32, |worst, position| worst.min(position));
+        assert!(overshoot < 0.0, "a row that never crosses reads as a redraw");
+        assert!(
+            overshoot.abs() < 10.0,
+            "overshot by {overshoot}px of 100, which is a bounce"
+        );
+    }
+
+    #[test]
+    fn a_row_that_has_not_moved_is_not_animated() {
+        // The common case by far: a list redraws and nothing changed places.
+        // Every frame of that must cost nothing and request nothing.
+        let settled = SpringState::default();
+        assert!(REORDER_SPRING.is_settled(settled, 0.0, REORDER_EPSILON));
+        assert_eq!(travel(0.0, 8), vec![0.0; 8]);
+    }
+
+    #[test]
+    fn a_long_frame_cannot_teleport_a_row() {
+        // A backgrounded tab hands back one enormous frame. Stepping a spring
+        // by it lands the row at its target instantly, which is the jump this
+        // exists to remove.
+        assert!(LONGEST_FRAME <= Duration::from_millis(100));
+        let capped = Duration::from_secs(30).min(LONGEST_FRAME);
+        assert_eq!(capped, LONGEST_FRAME);
     }
 }

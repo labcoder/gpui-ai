@@ -105,7 +105,7 @@ pub mod prelude {
         InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend,
     };
     pub use crate::loading::LoadingState;
-    pub use crate::motion::{Shimmer, breathing, reveal, reveal_staggered};
+    pub use crate::motion::{Shimmer, breathing, reorder, reveal, reveal_staggered};
     pub use crate::orbs::{OrbVariant, Orbs};
     pub use crate::plan::{PlanCard, PlanEvent, PlanState, PlanStep, PlanStepStatus};
     pub use crate::prompt_bar::{
