@@ -571,6 +571,24 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
 
+  // Popped out, with no host to report to. The canvas starts hidden — an
+  // unpresented WebGPU surface composites as solid black — and is revealed
+  // when GPUI has drawn into it, which is a decision this document makes for
+  // itself. Every check above is satisfied by a canvas that exists; this is
+  // the one that fails if it exists and is invisible, which is what a
+  // reader would get if revealing it depended on a host being there.
+  await waitForValue(cdp, "getComputedStyle(document.querySelector('canvas')).opacity === '1'", {
+    label: "the popped-out example to reveal its canvas",
+    fatal: GALLERY_GAVE_UP,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.equal(
+    await cdp.evaluate("'ready' in document.body.dataset"),
+    true,
+    "an example with no host must still decide for itself that it is drawing",
+  );
+
   // Themes come from the generated registry, so check one of each group: a
   // basic preset, the review theme, one gpui-ai original, and one vendored
   // from upstream.
