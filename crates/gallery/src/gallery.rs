@@ -19,7 +19,7 @@ use gpui_component::{
     h_flex,
     scroll::ScrollableElement as _,
     text::TextView,
-    theme::{Theme, ThemeMode, ThemeRegistry},
+    theme::{Theme, ThemeConfig, ThemeMode, ThemeRegistry},
     v_flex,
 };
 use std::collections::HashSet;
@@ -1697,11 +1697,60 @@ pub fn apply_gallery_theme(preset: GalleryTheme, window: Option<&mut Window>, cx
 
     let theme = Theme::global_mut(cx);
     if mode.is_dark() {
-        theme.dark_theme = config;
+        theme.dark_theme = config.clone();
     } else {
-        theme.light_theme = config;
+        theme.light_theme = config.clone();
     }
-    Theme::change(mode, window, cx);
+    Theme::change(mode, None, cx);
+    restore_unset_metrics(&config, cx);
+    if let Some(window) = window {
+        window.refresh();
+    }
+}
+
+/// Puts back the metrics the incoming theme does not mention.
+///
+/// A theme JSON may leave out `font.size`, `radius`, `shadow` and the rest, and
+/// gpui-component only overwrites a field the config declares. What it leaves
+/// behind is not the built-in default, though — it is whatever the *previous*
+/// theme set. So choosing Graphite, which asks for 14px type and square
+/// corners, and then choosing Nord Frost, which says nothing about either, left
+/// the whole gallery at 14px with square corners for the rest of the session,
+/// and no theme after it could ever look like itself again.
+///
+/// The website makes this easy to hit: forty-five themes in a picker, three of
+/// which set metrics the other forty-two do not.
+///
+/// Fixed here rather than upstream because the behaviour is defensible in a
+/// host that installs one theme and keeps it; it is only wrong when themes are
+/// swapped, which is what this gallery exists to do.
+fn restore_unset_metrics(config: &ThemeConfig, cx: &mut App) {
+    let defaults = Theme::default();
+    let theme = Theme::global_mut(cx);
+    if config.font_size.is_none() {
+        theme.font_size = defaults.font_size;
+    }
+    if config.mono_font_size.is_none() {
+        theme.mono_font_size = defaults.mono_font_size;
+    }
+    if config.font_family.is_none() {
+        theme.font_family = defaults.font_family.clone();
+    }
+    if config.mono_font_family.is_none() {
+        theme.mono_font_family = defaults.mono_font_family.clone();
+    }
+    if config.radius.is_none() {
+        theme.radius = defaults.radius;
+    }
+    if config.radius_lg.is_none() {
+        theme.radius_lg = defaults.radius_lg;
+    }
+    if config.shadow.is_none() {
+        theme.shadow = defaults.shadow;
+    }
+    // The Base layer keeps its own copy of the radius, so a scrollbar would go
+    // on painting with the corners the last theme gave it.
+    Theme::sync_base(cx);
 }
 
 fn records_story_columns() -> Vec<RecordColumn> {
@@ -5552,6 +5601,60 @@ mod tests {
             let contrast = GalleryTheme::from_slug("contrast").expect("contrast is bundled");
             super::apply_gallery_theme(contrast, None, cx);
             assert_eq!(cx.theme().dark_theme.name.as_ref(), "gpui-ai Contrast");
+        });
+    }
+
+    /// A theme that says nothing about type size must not inherit the last one's.
+    ///
+    /// gpui-component only overwrites a metric the incoming config declares,
+    /// and what it leaves behind is the previous theme's value rather than the
+    /// default. Three of the forty-five bundled themes set metrics the other
+    /// forty-two leave out, so on the website choosing Graphite and then
+    /// anything else left every demo at 14px with square corners until the
+    /// page was reloaded.
+    #[gpui::test]
+    fn a_theme_that_sets_no_metrics_gets_the_defaults_back(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        cx.update(|cx| {
+            let default_size = cx.theme().font_size;
+            let default_radius = cx.theme().radius;
+
+            let graphite = GalleryTheme::from_slug("graphite").expect("graphite is bundled");
+            super::apply_gallery_theme(graphite, None, cx);
+            assert_eq!(
+                cx.theme().font_size,
+                px(14.),
+                "graphite asks for 14px type and must get it"
+            );
+            assert_ne!(
+                cx.theme().radius,
+                default_radius,
+                "graphite asks for square corners, so this test needs it to differ"
+            );
+
+            // Nord Frost declares colours and nothing else.
+            let nord = GalleryTheme::from_slug("nord-frost").expect("nord-frost is bundled");
+            super::apply_gallery_theme(nord, None, cx);
+            assert_eq!(
+                cx.theme().font_size,
+                default_size,
+                "a theme with no font size must read at the default, not at the last theme's"
+            );
+            assert_eq!(
+                cx.theme().radius,
+                default_radius,
+                "a theme with no radius must use the default corners"
+            );
+
+            // And the other direction, so the restore cannot simply be
+            // clobbering every metric with a default.
+            let solstice = GalleryTheme::from_slug("solstice").expect("solstice is bundled");
+            super::apply_gallery_theme(solstice, None, cx);
+            assert_eq!(
+                cx.theme().font_size,
+                px(17.),
+                "a theme that does ask for a size must still get it"
+            );
         });
     }
 

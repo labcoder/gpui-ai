@@ -99,6 +99,12 @@ revision.
 
 ### Fixed
 
+- Choosing a theme that sets no type size, corner radius, or shadow no longer
+  leaves the last theme's. Three of the forty-five bundled themes declare those
+  metrics and the other forty-two do not, and only a declared value was ever
+  written — so picking Graphite, which asks for 14 px type and square corners,
+  and then picking anything else left every demo at 14 px with square corners
+  until the page was reloaded. No theme chosen after it could look like itself.
 - The page no longer moves under the reader as the self-hosted faces arrive.
   They come in through an `@import` inside the stylesheet, and Vite does not
   preload what an `@import` pulled in, so the chrome painted in the system
