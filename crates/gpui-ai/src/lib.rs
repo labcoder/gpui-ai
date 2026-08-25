@@ -1,11 +1,11 @@
 //! AI-native UI components for GPUI applications.
 //!
-//! `gpui-ai` sits on top of [`gpui_component`] the way Beautiful UI sits on
-//! top of shadcn/ui: opinionated, composed components for AI applications —
-//! streaming text, thinking traces, tool calls, approval gates — that inherit
-//! gpui-component's semantic-token theming. Every component resolves all of
-//! its presentation through the active theme, so light/dark modes, bundled
-//! themes, and custom JSON themes work without extra wiring.
+//! Composed, opinionated components for the surfaces an AI application keeps
+//! rebuilding — streaming text, thinking traces, tool calls, approval gates —
+//! built on [`gpui_component`] and inheriting its semantic-token theming.
+//! Every component resolves all of its presentation through the active theme,
+//! so light/dark modes, bundled themes, and custom JSON themes work without
+//! extra wiring.
 //!
 //! # Design rules
 //!

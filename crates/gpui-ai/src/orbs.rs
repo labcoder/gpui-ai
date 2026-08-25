@@ -271,8 +271,7 @@ impl RenderOnce for Orbs {
     }
 }
 
-/// Radians of rotation at each end of the settle cycle (~60°), matching the
-/// AICSS reference choreography.
+/// Radians of rotation at each end of the settle cycle (~60°).
 const SWIRL_RADIANS: f32 = 1.05;
 
 /// Outward push on top of the rotation, as a fraction of pitch.

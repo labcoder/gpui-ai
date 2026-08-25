@@ -525,7 +525,7 @@ impl Render for ChatStory {
         // A chat panel needs vertical room to show a real conversation —
         // transcript history, tool results, the streaming answer, and the
         // composer. 232px crushed all of that into ~1.5 visible messages;
-        // 480px shows the full story arc the way the reference demos do.
+        // 480px shows the whole arc: history, a tool result, and the answer.
         v_flex()
             .gap(tokens.spacing.xs)
             .child(story_state_switcher(
@@ -1194,8 +1194,8 @@ impl Render for FineTuneStory {
         let tokens = cx.theme().semantic_tokens();
         // The component is a design-property inspector. The story should show
         // it doing its job: one live inspector beside a preview that reflects
-        // the edited values in real time — the reference demos' arrangement —
-        // plus a compact constrained-height variant for the scroll contract.
+        // the edited values in real time, plus a compact constrained-height
+        // variant for the scroll contract.
         let populated_values = self
             .values
             .get("gallery-fine-tune-populated")
@@ -4123,7 +4123,7 @@ impl Gallery {
                     // The demo placeholder must not read as a partially
                     // rendered image: a flat muted canvas behind the pulsing
                     // icon keeps the progress state honest until pixels
-                    // arrive, matching Beautiful UI / AICSS treatments.
+                    // arrive.
                     ImageGeneration::new("gen")
                         .label("Label sketch: alpine meadow, morning light")
                         .progress(self.sim.progress())
