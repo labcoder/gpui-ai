@@ -97,6 +97,7 @@ test("every theme carries the full token set the chrome is painted from", async 
     // Derived rather than read out of the theme file: a status colour is a
     // fill, and the code panel needs text that can be read on its surface.
     "--ai-muted-text",
+    "--ai-accent-text",
     "--ai-code-comment",
     "--ai-code-keyword",
     "--ai-code-string",
@@ -178,7 +179,35 @@ test("secondary text is readable on the page and on a card, in every theme", asy
   assert.deepEqual(failures, [], `secondary text fails AA in ${failures.length} places`);
   // A theme that already cleared AA is left exactly as its author wrote it, so
   // this must never become "all of them".
-  assert.ok(nudged > 0 && nudged < 45, `${nudged} themes were altered, which is not plausible`);
+  const total = groups.reduce((count, group) => count + group.themes.length, 0);
+  assert.ok(nudged > 0 && nudged < total, `${nudged} of ${total} altered, which is not plausible`);
+});
+
+test("text on the accent surface is readable, in every theme", async () => {
+  const { groups } = JSON.parse(await readFile(path.join(generated, "themes.json"), "utf8"));
+
+  // The code panel's title strip and the demo window's own title bar are
+  // painted from `--ai-accent`, and `--ai-foreground` is derived against the
+  // page rather than against that: on a light accent it lands in the low fours
+  // — 4.21:1 in Everforest Light before this token existed.
+  const failures = [];
+  let nudged = 0;
+  for (const group of groups) {
+    for (const theme of group.themes) {
+      const { tokens } = theme;
+      if (tokens["--ai-accent-text"].toLowerCase() !== tokens["--ai-foreground"].toLowerCase()) {
+        nudged += 1;
+      }
+      const ratio = contrast(tokens["--ai-accent-text"], tokens["--ai-accent"]);
+      if (ratio < 4.5) {
+        failures.push(`${theme.slug}: ${tokens["--ai-accent-text"]} on accent is ${ratio.toFixed(2)}:1`);
+      }
+    }
+  }
+
+  assert.deepEqual(failures, [], `accent text fails AA in ${failures.length} themes`);
+  const total = groups.reduce((count, group) => count + group.themes.length, 0);
+  assert.ok(nudged > 0 && nudged < total, `${nudged} of ${total} altered, which is not plausible`);
 });
 
 test("the upstream group is credited separately from gpui-ai's own themes", async () => {

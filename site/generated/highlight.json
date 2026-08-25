@@ -10695,7 +10695,7 @@
   "extras": {
     "install": {
       "lang": "toml",
-      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.1.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }",
+      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.1.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\"] }",
       "lines": [
         [
           [
@@ -10738,6 +10738,51 @@
           ],
           [
             " }"
+          ]
+        ],
+        [
+          [
+            "gpui-component = { git = "
+          ],
+          [
+            "\"https://github.com/longbridge/gpui-component\"",
+            "string"
+          ],
+          [
+            " }"
+          ]
+        ],
+        [
+          [
+            "gpui_platform = { git = "
+          ],
+          [
+            "\"https://github.com/zed-industries/zed\"",
+            "string"
+          ],
+          [
+            ", features = ["
+          ],
+          [
+            "\"font-kit\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"x11\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"wayland\"",
+            "string"
+          ],
+          [
+            "] }"
           ]
         ]
       ]

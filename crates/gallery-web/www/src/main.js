@@ -1,23 +1,45 @@
 import './styles.css';
 import { hasDrawn } from './canvas.js';
-import { parseEmbedOptions, parseThemeEvent, statusMessage, themeMessage } from './query.js';
+import {
+  parseEmbedOptions,
+  parseStatusMessage,
+  parseThemeEvent,
+  statusMessage,
+  themeMessage,
+} from './query.js';
 import { pinScaleFactor } from './scale.js';
+
+/**
+ * Whether the page this example is embedded in is showing a dark theme.
+ *
+ * Returns undefined when there is no host to ask, or when it is on another
+ * origin. The host marks its own document with a `dark` class from the theme
+ * registry, which knows every theme's mode — this document knows only the
+ * three names below.
+ */
+function hostIsDark() {
+  try {
+    if (window.parent === window) return undefined;
+    return window.parent.document.documentElement.classList.contains('dark');
+  } catch {
+    return undefined;
+  }
+}
 
 function preferredTheme(explicit) {
   if (explicit !== undefined) return explicit;
-  try {
-    if (window.parent !== window) {
-      return window.parent.document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    }
-  } catch {
-    // Cross-origin embeds fall through to the viewer preference.
-  }
+  const host = hostIsDark();
+  if (host !== undefined) return host ? 'dark' : 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 function showFallback(error, expected = false) {
   const report = expected ? console.info : console.error;
   report('GPUI example fallback:', error);
+  // Left on the document as well as posted, for the same reason `ready` is: a
+  // host that had not finished attaching its listener would otherwise go on
+  // saying "Starting" over an example that has already given up.
+  document.body.dataset.failed = '';
   const fallback = document.getElementById('fallback');
   if (fallback) {
     fallback.hidden = false;
@@ -26,15 +48,30 @@ function showFallback(error, expected = false) {
   }
 }
 
-// Only the basic presets have a mode the host knows without asking. Every
-// other theme's mode lives in the registry, so until the host is told, keep
-// the page chrome on the viewer's own preference rather than guessing dark:
-// the demo canvas paints itself from the real theme either way.
+// Only the basic presets have a mode this document knows by name. Every other
+// theme's mode lives in the registry, which the host can see and this cannot.
 const HOST_MODES = Object.freeze({ light: false, dark: true, contrast: true });
 
+/**
+ * Which mode to put this document's own chrome in.
+ *
+ * The host comes before the viewer's preference, and it has to: this sets
+ * `color-scheme`, and a transparent iframe whose used colour scheme differs
+ * from its embedder's is composited *opaque* — white on a light scheme, near
+ * black on a dark one. So a site on a dark theme, viewed on a machine that
+ * prefers light, would paint a solid white rectangle over the demo window for
+ * the whole load. Matching the host keeps the frame transparent, which is what
+ * lets the window behind it show through until there are pixels.
+ *
+ * The theme's own name is consulted first because it is the more specific
+ * answer, and last comes the viewer's preference, for a document with no host
+ * to ask — popped out into a tab of its own.
+ */
 function hostPrefersDark(theme) {
   const known = HOST_MODES[theme];
   if (known !== undefined) return known;
+  const host = hostIsDark();
+  if (host !== undefined) return host;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
@@ -185,6 +222,35 @@ function initIndex() {
     apply();
   });
   apply();
+  watchExamples();
+}
+
+/**
+ * Says which examples on this page are still starting.
+ *
+ * The embed used to paint a card of its own while it loaded, and this page
+ * relied on it. It does not any more — a card in the middle of a frame the
+ * site draws a window around was the thing worth removing — so this page has
+ * to say it, the same way the site's demo window does.
+ */
+function watchExamples() {
+  const frames = [...document.querySelectorAll('.demo iframe')];
+  for (const frame of frames) {
+    const heading = frame.closest('.demo')?.querySelector('h2');
+    if (!heading) continue;
+    const hint = document.createElement('span');
+    hint.className = 'demo-status';
+    hint.setAttribute('role', 'status');
+    hint.textContent = 'Starting';
+    heading.append(hint);
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (!parseStatusMessage(event.data)) return;
+    const frame = frames.find((candidate) => candidate.contentWindow === event.source);
+    frame?.closest('.demo')?.querySelector('.demo-status')?.remove();
+  });
 }
 
 if (document.body.dataset.page === 'index') {

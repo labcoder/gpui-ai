@@ -982,5 +982,6 @@
         "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
       }
     }
-  ]
+  ],
+  "snippetSource": "crates/gallery/src/gallery.rs"
 }

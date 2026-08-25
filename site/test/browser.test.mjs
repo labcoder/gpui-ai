@@ -1139,11 +1139,20 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     source: `
       window.__firstThemePaint = null;
       window.__everyThemePaint = [];
-      var record = function () {
+      // Reads the records, not just the live attribute. MutationObserver
+      // batches everything from one task into a single callback, so a paint to
+      // the wrong theme and back within one task would leave the attribute
+      // already corrected by the time this ran — which is exactly the flash
+      // the sequence below exists to catch.
+      var record = function (records) {
         var root = document.documentElement;
         if (!root || !root.getAttribute('data-theme')) return;
-        var theme = root.getAttribute('data-theme');
         var seen = window.__everyThemePaint;
+        (records || []).forEach(function (entry) {
+          var was = entry.oldValue;
+          if (was && seen[seen.length - 1] !== was) seen.push(was);
+        });
+        var theme = root.getAttribute('data-theme');
         if (seen[seen.length - 1] !== theme) seen.push(theme);
         if (window.__firstThemePaint) return;
         window.__firstThemePaint = {
@@ -1157,6 +1166,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       new MutationObserver(record).observe(document, {
         attributes: true,
         subtree: true,
+        // Needed for the oldValue read above: without it every record reports
+        // null, and a paint that was already corrected leaves no trace.
+        attributeOldValue: true,
         attributeFilter: ['data-theme'],
       });
       record();
@@ -1196,6 +1208,33 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // The demo's own toolbar. The override is the interesting one: it has to
   // move this frame without moving the page, and without the frame being torn
   // down and rebuilt, which is why it travels as a message rather than a URL.
+  // Watch the whole of a demo's arrival, not just where it ends up. Every
+  // other check here reads the settled state, which is the same whether the
+  // canvas was hidden on the way or shown black the entire time.
+  const { identifier: watcher } = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `
+      window.__demoWatch = { samples: 0, sawStarting: false, shownUndrawn: 0 };
+      (function watch() {
+        var state = window.__demoWatch;
+        state.samples += 1;
+        if (document.querySelector('[data-demo-starting]')) state.sawStarting = true;
+        try {
+          var frame = document.querySelector('[data-specimen-frame] iframe');
+          var canvas = frame && frame.contentDocument && frame.contentDocument.querySelector('canvas');
+          // 300x150 is the backing store a canvas nothing has drawn into
+          // carries. Visible at that size is the black rectangle itself.
+          if (canvas && getComputedStyle(canvas).opacity === '1' &&
+              canvas.width === 300 && canvas.height === 150) {
+            state.shownUndrawn += 1;
+          }
+        } catch (error) {
+          // A frame mid-navigation is not readable, and is not evidence.
+        }
+        requestAnimationFrame(watch);
+      })();
+    `,
+  });
+
   await openPage(`/components/${specimen.slug}/`, 1280, 900);
   const frameTheme = (theme) =>
     `document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.currentTheme() === '${theme}'`;
@@ -1249,6 +1288,22 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
     "a demo must arrive by appearing in its window, not by flashing black first",
   );
+
+  // What the watcher saw on the way here. This is the half the settled reading
+  // cannot cover: delete the rule that hides the canvas and `shownUndrawn`
+  // climbs; delete the title-bar hint and `sawStarting` never becomes true.
+  const watched = await cdp.evaluate("window.__demoWatch");
+  await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: watcher });
+  // Enough frames that a flash lasting a few of them would have been caught.
+  // Headless throttles requestAnimationFrame, so this settles around thirty
+  // across the load rather than sixty a second.
+  assert.ok(watched.samples > 10, `only ${watched.samples} frames were sampled`);
+  assert.equal(
+    watched.shownUndrawn,
+    0,
+    "the canvas was visible before anything had been drawn into it",
+  );
+  assert.equal(watched.sawStarting, true, "the window never said the demo was starting");
 
   const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
   assert.equal(
@@ -1373,8 +1428,11 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await openPage("/themes/", 1280, 900);
   await waitForValue(
     cdp,
-    "document.querySelectorAll('[data-specimen-frame] iframe').length >= 2",
-    { label: "the themes page trio to promote", describe: GALLERY_DIAGNOSIS, errors },
+    // Three, exactly. "At least two" lets one of them fail to promote while
+    // every `.every()` below still passes, because those only visit the frames
+    // that exist.
+    "document.querySelectorAll('[data-specimen-frame] iframe').length === 3",
+    { label: "all three demos on the themes page to promote", describe: GALLERY_DIAGNOSIS, errors },
   );
   await waitForValue(
     cdp,

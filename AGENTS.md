@@ -8,7 +8,7 @@ Read [README.md](README.md) for the consumer-facing project surface, then inspec
 
 ## What this project is
 
-A layer of AI-native components above gpui-component: the surfaces an AI application keeps rebuilding — streamed answers, thinking traces, tool calls, approval gates — designed for GPUI rather than adapted from anywhere else. It is an application-independent library first; a showcase site comes later.
+A layer of AI-native components above gpui-component: the surfaces an AI application keeps rebuilding — streamed answers, thinking traces, tool calls, approval gates — designed for GPUI rather than adapted from anywhere else. It is an application-independent library first. The showcase site under `site/` is generated from that library and deployed to GitHub Pages; it documents the components and must never become the reason one exists.
 
 ## Architecture boundaries
 

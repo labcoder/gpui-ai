@@ -110,12 +110,21 @@ const build = JSON.parse(readFileSync(join(GENERATED, "build.json"), "utf8"));
  * this script on its own, after a version bump, emits the previous version.
  */
 function installSnippet() {
-  const gpui = build.upstream.find((pin) => pin.id === "gpui");
-  if (!gpui) throw new Error("build.json names no gpui pin to install alongside");
+  const pin = (id) => {
+    const found = build.upstream.find((entry) => entry.id === id);
+    if (!found) throw new Error(`build.json names no ${id} pin to install alongside`);
+    return found.repository;
+  };
+
+  // All four, because an application uses all four directly: gpui and
+  // gpui-component are what it writes UI against, and gpui_platform opens the
+  // window. Two lines would compile here and not in anyone else's project.
   return [
     "[dependencies]",
     `gpui-ai = { git = "${build.repository}", tag = "v${build.version}" }`,
-    `gpui = { git = "${gpui.repository}" }`,
+    `gpui = { git = "${pin("gpui")}" }`,
+    `gpui-component = { git = "${pin("gpui-component")}" }`,
+    `gpui_platform = { git = "${pin("gpui")}", features = ["font-kit", "x11", "wayland"] }`,
   ].join("\n");
 }
 

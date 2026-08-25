@@ -260,6 +260,14 @@ function mutedTextFor(tokens) {
     "--ai-muted-text":
       readableOnAll(tokens["--ai-muted"], [tokens["--ai-background"], tokens["--ai-surface"]]) ??
       tokens["--ai-foreground"],
+    // Text on `--ai-accent`: the code panel's title strip and the demo
+    // window's own title bar. `--ai-foreground` is derived against the page,
+    // not against the accent, and on a light accent it lands in the low fours
+    // — 4.21:1 in Everforest Light, 4.23:1 in Solarized Light. Same walk as
+    // the muted text: keep the hue, move the lightness until it clears AA.
+    "--ai-accent-text":
+      readableOnAll(tokens["--ai-foreground"], [tokens["--ai-accent"]]) ??
+      tokens["--ai-foreground"],
   };
 }
 

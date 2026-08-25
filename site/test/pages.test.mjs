@@ -243,13 +243,20 @@ test("code reads like an editor, and the line numbers are not in it", async () =
   const component = components.find((entry) => entry.slug === "chat") ?? components[0];
   const html = await page(`/components/${component.slug}/`);
 
-  // The file the snippet was cut from, on the strip above it. A path, not a
-  // label: it is the one in the repository, so a reader who wants the rest of
-  // it knows where to look before clicking anything.
+  // The file the snippet was cut from, on the strip above it. That is the
+  // gallery story, not the component's own implementation file: `source` says
+  // where the type lives, and the code on this page came from somewhere else.
+  // The snippet markers are only ever in one file, and the exporter publishes
+  // which one rather than the site assuming.
   assert.match(
     html,
-    new RegExp(`<span class="code-file" data-code-file="${component.source}">`),
-    `the snippet does not name ${component.source}`,
+    new RegExp(`<span class="code-file" data-code-file="${catalog.snippetSource}">`),
+    `the snippet does not name ${catalog.snippetSource}`,
+  );
+  assert.doesNotMatch(
+    html,
+    new RegExp(`data-code-file="${component.source}"`),
+    "the strip names the implementation file, which is not where the snippet came from",
   );
 
   // Every line is a .code-line, which is what the stylesheet counts to draw

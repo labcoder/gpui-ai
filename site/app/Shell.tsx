@@ -35,9 +35,20 @@ export function Shell({
 }) {
   const { choice, applied, isDark, setChoice } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
+  // Hydration renders the server snapshot, which is the default rather than
+  // whatever this visitor chose — that is what lets React reuse the markup
+  // instead of throwing it away. Painting on that first pass repaints the page
+  // to the default and straight back: a visitor with Ember Dusk stored gets
+  // ember-dusk from the inline script, nord-frost from here, then ember-dusk
+  // again. Waiting one render lets the store swap in the real value first, in
+  // the same pass, so this paints once and with the right answer.
+  useEffect(() => setHydrated(true), []);
+
   useEffect(() => {
+    if (!hydrated) return;
     // The inline script in the document head painted this before first paint.
     // Repainting here is what keeps it right after a change, and `paint`
     // returns early when nothing moved.
@@ -47,7 +58,7 @@ export function Shell({
     // it — and a shell that posted to every frame on every change would undo
     // that override the moment the page repainted, or a frame reloaded.
     paint(applied, isDark);
-  }, [applied, isDark]);
+  }, [hydrated, applied, isDark]);
 
   // A drawer left open across a resize would sit invisibly over a desktop
   // layout, holding focus and keeping the page inert.

@@ -111,6 +111,15 @@ export const build = buildJson as BuildInfo;
 export const components = catalogJson.components as readonly Component[];
 export const categories = catalogJson.categories as readonly string[];
 export const hero = catalogJson.hero as Hero;
+
+/**
+ * The file every snippet is cut from.
+ *
+ * Not a component's own `source`: that is where its type is implemented, which
+ * is a different file. The code on a component page comes from the gallery
+ * story that page runs, and the strip above it says so.
+ */
+export const snippetSource = catalogJson.snippetSource as string;
 export const themeGroups = themesJson.groups as readonly ThemeGroup[];
 
 /** Every theme across both groups, in picker order. */

@@ -72,12 +72,24 @@ function prefersDark(): boolean {
  */
 let chosen: string | undefined;
 
+/** Every slug the registry ships, which the shape-only rule cannot know. */
+const KNOWN: ReadonlySet<string> = new Set(themes.map((theme) => theme.slug));
+
 function compute(): string {
-  const choice = resolveChoice({
+  const asked = resolveChoice({
     param: chosen ?? readParam(),
     stored: readStored(),
     fallback: FALLBACK,
   });
+
+  // The rule checks the shape of a name and nothing else, because the inline
+  // script that shares it cannot see the registry. This can, and a name the
+  // registry does not ship is worse than useless: `[data-theme="gone"]`
+  // matches no rule so the page keeps whatever :root paints, the picker has no
+  // option to select, `isDark` answers for a theme that is not showing, and
+  // every embed is told a theme it will reject. A theme that was renamed or
+  // removed, or a link someone mistyped, lands here.
+  const choice = asked === SYSTEM || KNOWN.has(asked) ? asked : FALLBACK;
   return `${choice} ${appliedTheme(choice, prefersDark())}`;
 }
 

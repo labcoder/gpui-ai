@@ -627,11 +627,10 @@ section + section {
   font-size: 0.8125rem;
 }
 
-/* Painted from --ai-accent, where --ai-muted-text is not guaranteed legible:
-   it is derived against the page and a card, not this. */
+/* Painted from --ai-accent, so it uses the token derived against that. */
 .code-file {
   margin-right: auto;
-  color: var(--ai-foreground);
+  color: var(--ai-accent-text);
   font-family: var(--ai-font-mono);
   font-size: 0.75rem;
 }
@@ -685,7 +684,11 @@ pre.code-plain {
 }
 
 .code-line::before {
-  content: counter(line);
+  /* The empty alternative text is what keeps this out of the accessibility
+     tree. Generated content is announced like any other text, so without it a
+     screen reader reads a number before every line of every snippet — and
+     `user-select: none` does nothing about that, it only governs selection. */
+  content: counter(line) / "";
   position: sticky;
   left: 0;
   display: inline-block;
@@ -816,15 +819,15 @@ pre.code-plain {
 
 /* Pushed to the trailing edge of the title bar, where a window puts the thing
    it is doing rather than the thing it is. */
-/* The title bar is painted from --ai-accent, and --ai-muted-text is only
-   derived to be readable on the page and on a card. Size, casing, and letter
-   spacing carry the hierarchy here instead of colour. */
+/* The title bar is painted from --ai-accent, so this uses the token derived
+   against that. Size, casing, and letter spacing carry the hierarchy; colour
+   is doing legibility, not emphasis. */
 .demo-starting {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
-  color: var(--ai-foreground);
+  color: var(--ai-accent-text);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;

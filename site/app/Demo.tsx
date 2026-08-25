@@ -84,7 +84,9 @@ export function Demo({
     // leaves the same answer on its own document, which is same-origin and
     // readable, so ask rather than rely on having been listening in time.
     try {
-      if (iframe.current?.contentDocument?.body?.dataset.ready !== undefined) setStatus("ready");
+      const already = iframe.current?.contentDocument?.body?.dataset;
+      if (already?.ready !== undefined) setStatus("ready");
+      else if (already?.failed !== undefined) setStatus("failed");
     } catch {
       // A document that is not there to be read yet has not started either.
     }
@@ -245,7 +247,12 @@ export function Demo({
           <button type="button" data-specimen-reload onClick={reload} disabled={!src}>
             Reload
           </button>
-          <a data-specimen-open href={demoSrc(story, override === FOLLOW ? undefined : override)}>
+          {/* Always the effective theme, not just an override. Popped out
+              there is no page around the frame to follow, and an embed told
+              nothing guesses from the viewer's own light/dark preference — so
+              "Follow site" used to open the demo in a theme the site was not
+              showing. */}
+          <a data-specimen-open href={demoSrc(story, effective)}>
             Pop out
           </a>
           <button type="button" data-specimen-link onClick={copyLink}>

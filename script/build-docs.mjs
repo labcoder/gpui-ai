@@ -8,7 +8,7 @@
 // redirects `/api/` to `/api/gpui_ai/`.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,13 @@ import { stripDeadReadMore } from "./docs-cleanup.mjs";
 const CRATE = "gpui_ai";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUTPUT = join(ROOT, "target", "doc");
+
+// Cleared first. `cargo doc` writes pages but never removes them, and CI
+// restores `target/` from a cache that outlives the commit it was built for —
+// so a type that has been renamed or moved leaves its old page behind, the
+// component-link check below is satisfied by that stale page, and it is
+// published alongside the current ones.
+rmSync(OUTPUT, { force: true, recursive: true });
 
 const build = spawnSync("cargo", ["doc", "--no-deps", "-p", "gpui-ai"], {
   cwd: ROOT,

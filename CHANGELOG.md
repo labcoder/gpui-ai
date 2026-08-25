@@ -21,11 +21,13 @@ revision.
   strip above it, and line numbers in a gutter. The numbers are drawn with a
   CSS counter rather than written into the document, so they cannot reach the
   clipboard by any route.
-- Nothing that ships names another component library any more. A published code
+- Nothing that ships claims kinship with another component library any more. A published code
   sample, the crate's own front page, and a constant in `orbs.rs` each credited
   one, which reads as a claim that this is a port of it. It is not: every
   component here is an original design for GPUI. The comparisons stay in
-  `docs/internal/reference-comparisons.md`, which is not checked in.
+  `docs/internal/reference-comparisons.md`, which is not checked in. The
+  vendored theme pack keeps its shadcn attribution: that is credit for data
+  this project ships, and removing it would be the opposite of the point.
 - The README is rewritten around what the library offers: a live demo, explicit
   requirements, installation with pinning guidance, and a component table where
   every entry links to its own running demo.

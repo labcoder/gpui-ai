@@ -106,7 +106,10 @@ body[data-page='embed'][data-ready] > canvas {
 .showcase button { padding: 10px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); cursor: pointer; }
 .demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .demo { overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
-.demo h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.demo h2 { display: flex; align-items: center; gap: 12px; margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+/* Says an example is still starting, now that the embed no longer paints a
+   card of its own. Removed when the frame reports for itself. */
+.demo-status { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
 .demo iframe { display: block; width: 100%; height: 430px; border: 0; background: var(--surface); }
 
 @media (max-width: 760px) { .demo-grid { grid-template-columns: 1fr; } .showcase header { align-items: start; flex-direction: column; } }

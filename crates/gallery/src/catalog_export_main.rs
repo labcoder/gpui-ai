@@ -17,6 +17,9 @@ use std::{fs, path::PathBuf};
 /// that has been verified.
 const LIMITATION: &str = "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.";
 
+/// The single file every snippet marker lives in, as the site should name it.
+const SNIPPET_SOURCE: &str = "crates/gallery/src/gallery.rs";
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -234,6 +237,14 @@ fn main() {
     );
     document.insert("categories".to_owned(), Value::Array(categories));
     document.insert("components".to_owned(), Value::Array(components));
+    // The one file every snippet is cut from. A component's own `source` is
+    // where the type is implemented, which is a different file and a different
+    // claim: the site shows this above the code so that what it says the code
+    // came from is where the code came from.
+    document.insert(
+        "snippetSource".to_owned(),
+        Value::String(SNIPPET_SOURCE.to_owned()),
+    );
 
     let output = root.join("site").join("generated");
     fs::create_dir_all(&output).expect("site/generated must be writable");
@@ -244,11 +255,7 @@ fn main() {
     );
     fs::write(&path, rendered).expect("the catalog must be writable");
 
-    let gallery_source = root
-        .join("crates")
-        .join("gallery")
-        .join("src")
-        .join("gallery.rs");
+    let gallery_source = root.join(SNIPPET_SOURCE);
     let gallery = fs::read_to_string(&gallery_source).expect("the gallery source must be readable");
     let mut by_story: Map<String, Value> = Map::new();
     for (slug, variant, code) in snippets(&gallery) {

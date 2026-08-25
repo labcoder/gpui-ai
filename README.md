@@ -31,7 +31,7 @@ A window opens with every component, live simulated agent activity, and a theme 
 
 | | |
 |---|---|
-| **Rust** | 1.85 or newer (edition 2024) |
+| **Rust** | 1.89 or newer. Edition 2024 needs 1.85; the pinned dependency graph raises the floor |
 | **Platforms** | macOS, Linux, Windows — the same three GPUI supports. CI builds all three; the test suite runs on Linux |
 | **Linux** | run [`script/install-linux.sh`](script/install-linux.sh) once for system dependencies |
 | **Browser** (for the web gallery only) | WebGPU. There is no WebGL fallback; a browser without it is told so rather than made to download the binary |
@@ -44,9 +44,11 @@ Not on crates.io. GPUI publishes there only rarely and its last release predates
 [dependencies]
 gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v0.1.0" }
 gpui = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 ```
 
-Declare `gpui` yourself, exactly as above, so Cargo unifies it with the copy gpui-ai uses.
+Four crates, because an application uses all four directly. `gpui` and `gpui-component` are what you write UI against; `gpui_platform` opens the window, and its features are what a Linux build needs. Declare each of them yourself, exactly as above, so Cargo unifies them with the copies gpui-ai uses.
 
 - **Pin gpui-ai**, with `tag` or `rev`. The API moves between revisions; [CHANGELOG.md](CHANGELOG.md) records what each one changed.
 - **Do not pin `gpui`.** gpui-component declares it without a `rev`, and two different git specs make Cargo build two incompatible copies.
@@ -54,7 +56,7 @@ Declare `gpui` yourself, exactly as above, so Cargo unifies it with the copy gpu
 
 ## Quick start
 
-Every window calls `gpui_component::init(cx)` before building UI, and its first-level view is wrapped in gpui-component's `Root` — which owns dialogs, notifications, and text selection:
+Every window calls `gpui_ai::init(cx)` before building UI — it runs `gpui_component`'s own init and registers the key bindings gpui-ai's components need — and its first-level view is wrapped in gpui-component's `Root`, which owns dialogs, notifications, and text selection:
 
 ```rust
 use gpui_ai::prelude::*;
@@ -62,7 +64,7 @@ use gpui_component::Root;
 
 fn main() {
     gpui_platform::application().run(move |cx| {
-        gpui_component::init(cx);
+        gpui_ai::init(cx);
         cx.spawn(async move |cx| {
             cx.open_window(Default::default(), |window, cx| {
                 let workspace = cx.new(|_| MyApp);
@@ -134,7 +136,7 @@ chat.update(cx, |chat, cx| {
 });
 ```
 
-Every type is documented: [the API reference](https://labcoder.github.io/gpui-ai/api/gpui_ai/) is published alongside the demos, and `cargo doc --open` builds the same thing from a checkout.
+Every type is documented: [the API reference](https://labcoder.github.io/gpui-ai/api/gpui_ai/) is published alongside the demos. `cargo doc --open` builds the same documentation from a checkout, with your dependencies' pages alongside it — the published tree is `--no-deps`, so its links into GPUI and gpui-component go to their own docs instead.
 
 ## Components
 
