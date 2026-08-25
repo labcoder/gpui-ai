@@ -108,8 +108,11 @@ test("the inline script agrees with the rule, for every combination", async () =
   assert.match(source, /prefers-color-scheme/, "the script never asks about the system");
   assert.match(source, /gpui-ai:theme/, "the script never reads the stored choice");
 
-  const params = [undefined, "ember-dusk", "tokyo-night", "not a slug", ""];
-  const stores = [undefined, "solstice", "graphite", "ALSO NOT A SLUG"];
+  // `system` appears in both lists because it is now a choice like any other:
+  // the site opens on a named theme, so a stored or linked `system` has to
+  // send the script back to the machine rather than to the default.
+  const params = [undefined, "ember-dusk", "tokyo-night", SYSTEM, "not a slug", ""];
+  const stores = [undefined, "solstice", "graphite", SYSTEM, "ALSO NOT A SLUG"];
 
   for (const param of params) {
     for (const stored of stores) {

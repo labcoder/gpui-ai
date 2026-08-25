@@ -61,8 +61,23 @@ function prefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+/**
+ * What was chosen in this tab, which outranks storage and the URL alike.
+ *
+ * Storage can be readable and unwritable at the same time — a full quota, a
+ * browser that permits reads and denies writes — and then `setChoice` records
+ * nothing while the previous value stays readable. Without this the very next
+ * read would hand back the value the write failed to replace and quietly undo
+ * the visitor's choice.
+ */
+let chosen: string | undefined;
+
 function compute(): string {
-  const choice = resolveChoice({ param: readParam(), stored: readStored(), fallback: FALLBACK });
+  const choice = resolveChoice({
+    param: chosen ?? readParam(),
+    stored: readStored(),
+    fallback: FALLBACK,
+  });
   return `${choice} ${appliedTheme(choice, prefersDark())}`;
 }
 
@@ -136,6 +151,8 @@ export function useTheme(): {
  * rather than pushed: choosing a theme is not somewhere to go Back to.
  */
 export function setChoice(choice: string): void {
+  chosen = choice;
+
   try {
     // Every choice is stored, `system` included. It used to be the state that
     // meant "nothing chosen", so forgetting it was the same as recording it;
@@ -143,13 +160,23 @@ export function setChoice(choice: string): void {
     // their machine has said something, and it has to survive a reload.
     window.localStorage.setItem(STORAGE_KEY, choice);
   } catch {
-    // See readStored. The choice still applies for this page.
+    // See readStored. `chosen` above is what keeps the choice applied for the
+    // rest of this visit when the write is refused.
   }
 
-  const url = new URL(window.location.href);
-  if (choice === FALLBACK) url.searchParams.delete(THEME_PARAM);
-  else url.searchParams.set(THEME_PARAM, choice);
-  window.history.replaceState(null, "", url);
+  try {
+    // Every choice, the default included. A reader who picks a theme and
+    // copies the address expects the link to show what they were looking at,
+    // and the plain address cannot do that: it means "the default", which is
+    // whatever the person opening it has already chosen for themselves.
+    const url = new URL(window.location.href);
+    url.searchParams.set(THEME_PARAM, choice);
+    window.history.replaceState(null, "", url);
+  } catch {
+    // A sandboxed frame refuses history writes. Between this and storage,
+    // both places a choice is normally recorded can be closed off, and
+    // `chosen` is what still makes the page obey it.
+  }
 
   publish();
 }

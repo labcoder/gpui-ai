@@ -1047,10 +1047,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     errors,
   });
 
-  // Choosing the default is the one choice the URL does not carry: the plain
-  // address already means Nord Frost, so naming it would be noise on every
-  // link the visitor copies afterwards. It is still stored, because it has to
-  // outrank a default that a later release might change.
+  // Choosing the default is still a choice, and it goes in the URL like any
+  // other: a plain address means "the default", which for the person opening
+  // the link is whatever they have already chosen for themselves, not what the
+  // sender was looking at.
   await cdp.evaluate(`(() => {
     const select = document.getElementById('site-theme');
     select.value = 'nord-frost';
@@ -1066,9 +1066,46 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       stored: window.localStorage.getItem('gpui-ai:theme'),
       param: new URLSearchParams(window.location.search).get('theme'),
     }))()`),
-    { stored: "nord-frost", param: null },
-    "the default must be remembered but left out of the URL",
+    { stored: "nord-frost", param: "nord-frost" },
+    "choosing the default must be remembered and linkable like any other choice",
   );
+
+  // Close off both places a choice is normally recorded — a storage that
+  // reads but refuses to write, and a frame that refuses history writes — and
+  // the choice must still apply. Neither is hypothetical: a full quota does
+  // the first and a sandboxed iframe does the second, and in both cases the
+  // stale value stays readable, which is what used to overrule the visitor.
+  await cdp.evaluate(`(() => {
+    window.localStorage.setItem('gpui-ai:theme', 'ember-dusk');
+    const storage = Object.getPrototypeOf(window.localStorage);
+    window.__setItem = storage.setItem;
+    storage.setItem = () => { throw new Error('quota exceeded'); };
+    window.__replaceState = window.history.replaceState;
+    window.history.replaceState = () => { throw new Error('sandboxed'); };
+  })()`);
+  await cdp.evaluate(`(() => {
+    const select = document.getElementById('site-theme');
+    select.value = 'solstice';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitForValue(cdp, "document.documentElement.dataset.theme === 'solstice'", {
+    label: "a choice to apply when nothing can record it",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.deepEqual(
+    await cdp.evaluate(`(() => ({
+      stored: window.localStorage.getItem('gpui-ai:theme'),
+      param: new URLSearchParams(window.location.search).get('theme'),
+    }))()`),
+    { stored: "ember-dusk", param: "nord-frost" },
+    "the test must really have blocked both records, or it proves nothing",
+  );
+  await cdp.evaluate(`(() => {
+    Object.getPrototypeOf(window.localStorage).setItem = window.__setItem;
+    window.history.replaceState = window.__replaceState;
+    window.localStorage.removeItem('gpui-ai:theme');
+  })()`);
 
   // Store a theme again, then reload: the inline script has to paint it
   // before anything else renders, or the page flashes the default first.
@@ -1083,12 +1120,16 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   const { identifier } = await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
       window.__firstThemePaint = null;
+      window.__everyThemePaint = [];
       var record = function () {
-        if (window.__firstThemePaint) return;
         var root = document.documentElement;
         if (!root || !root.getAttribute('data-theme')) return;
+        var theme = root.getAttribute('data-theme');
+        var seen = window.__everyThemePaint;
+        if (seen[seen.length - 1] !== theme) seen.push(theme);
+        if (window.__firstThemePaint) return;
         window.__firstThemePaint = {
-          theme: root.getAttribute('data-theme'),
+          theme: theme,
           readyState: document.readyState,
         };
       };
@@ -1110,6 +1151,15 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     await cdp.evaluate("window.__firstThemePaint"),
     { theme: "ember-dusk", readyState: "loading" },
     "a stored theme must be painted while the head is still parsing, not after hydration",
+  );
+  // Not just the first paint: every value the attribute ever took. Hydration
+  // renders the default snapshot before the store reports the stored choice,
+  // so a shell that painted on that first pass would repaint the page to the
+  // default and back, and the check above would not notice.
+  assert.deepEqual(
+    await cdp.evaluate("window.__everyThemePaint"),
+    ["ember-dusk"],
+    "the page must never be painted a theme the visitor did not ask for",
   );
 
   // And a link carrying a theme wins over the stored one for that visit.
