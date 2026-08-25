@@ -9,6 +9,32 @@ revision.
 
 ## [Unreleased]
 
+### Changed
+
+- The website opens on the Nord Frost theme rather than following the machine's
+  light or dark. Following the system is still offered, is now recorded like any
+  other choice, and remains the fallback if the registry ever stops shipping the
+  default. Every choice — the default included — is written to the URL, so the
+  address always reproduces what the sender was looking at.
+- Secondary text on the website is painted from a derived `--ai-muted-text`
+  rather than from the registry's `muted.foreground`. Measured against their own
+  backgrounds, 26 of the 45 themes put that text below 4.5:1 and nine below
+  3:1. Themes that already cleared AA are unchanged.
+- The home page shows how to install the library above the hero demo.
+- The gallery stories no longer carry "Reference comparison" notes. They were
+  published as part of the site and its code snippets, and read as though the
+  components were ports of the libraries they named. The comparisons are
+  maintainer notes and now live in `docs/internal/reference-comparisons.md`.
+
+### Fixed
+
+- The home page's dependency lines are syntax-highlighted like every other code
+  block on the site, and are generated from the workspace manifests rather than
+  written out in a component.
+- A story now declares which way its content overflows instead of the exporter
+  guessing from the story's measured height, which meant editing prose beneath a
+  component could silently rewrite the published claim about it.
+
 ## [0.1.0] - 2026-08-23
 
 ### Added
