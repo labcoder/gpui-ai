@@ -441,6 +441,31 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     errors,
   });
 
+  // D-10. Running is not a one-way door. Every live demo is one instance of
+  // the shared binary, its own WASM heap, and a WebGPU surface; a reader going
+  // down a long page would collect one of each per demo passed, and nothing
+  // above would notice — every check so far is satisfied by a frame that
+  // starts and never stops.
+  await cdp.evaluate("document.querySelector('#limits').scrollIntoView()");
+  await waitForValue(cdp, "document.querySelectorAll('[data-specimen-frame] iframe').length === 0", {
+    label: `the ${deep.slug} demo to be torn down once it is a viewport behind`,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  // And it comes back. A demo that only ever stopped would be worse than one
+  // that never stopped: the reader who scrolls back is looking straight at it.
+  await cdp.evaluate("window.scrollTo(0, 0)");
+  await waitForValue(
+    cdp,
+    "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
+    {
+      label: `the ${deep.slug} demo to start again on the way back`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+
   // S-03's whole claim: the chrome is painted from the generated tokens, so
   // setting the attribute the registry keys on repaints it. Nothing static can
   // check this — a stylesheet full of var() references looks correct whether or

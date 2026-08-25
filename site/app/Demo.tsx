@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { themeGroups, themes } from "./data";
+import { distanceAway, dropSeat, wantSeat } from "./frames.mjs";
 import { demoSrc, posterSrc, POSTER_WIDTH } from "./links";
 import { tellFrame, useTheme } from "./theme";
 
@@ -18,6 +19,14 @@ const FOLLOW = "follow";
  * visitor reading prose should not pay for it. Starting: the iframe exists and
  * the title bar says so. Running. And no WebGPU, where the honest thing is to
  * say so and never start a seventeen megabyte download that cannot be used.
+ *
+ * Running is not a one-way door. A demo scrolled more than a viewport away
+ * goes back to idle and its frame is destroyed, taking the WASM instance and
+ * the WebGPU surface with it — a reader who scrolls a long catalog page would
+ * otherwise accumulate one of each per demo passed. `frames.mjs` decides which
+ * demos may run; this component only says how far away it is and does as it is
+ * told. Coming back restarts the story from the beginning, which is what a
+ * story that is not being watched is worth.
  *
  * Starting is said in the title bar, and nowhere else. The embed used to paint
  * a card in the middle of this window announcing itself, over a page of its
@@ -63,13 +72,18 @@ export function Demo({
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
-  const [src, setSrc] = useState<string>();
+  const [running, setRunning] = useState(false);
   const [reloads, setReloads] = useState(0);
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [scrolls, setScrolls] = useState(false);
   const [override, setOverride] = useState<string>(FOLLOW);
   const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const overrideId = useId();
+
+  // Derived, not stored: what the frame points at is a function of whether it
+  // is allowed to run, and keeping a second copy in state is how the two come
+  // to disagree.
+  const src = running ? demoSrc(story) : undefined;
 
   const site = useTheme();
   const effective = override === FOLLOW ? site.applied : override;
@@ -144,18 +158,31 @@ export function Demo({
 
   const starting = Boolean(src) && status === "starting" && webgpu !== false;
 
+  // This demo's claim on one of the machine's live frames. Identity has to
+  // outlast a render, or the governor would be tracking a new demo every time
+  // React re-ran this component.
+  const seat = useMemo(() => ({ live: setRunning }), []);
+
   useEffect(() => {
     const element = frame.current;
-    if (!element || src || webgpu !== true) return;
+    if (!element || webgpu !== true) return;
     if (typeof IntersectionObserver !== "function") {
-      setSrc(demoSrc(story));
-      return;
+      // No way to tell where anything is, so this demo always wants a seat and
+      // the governor's limit is the only thing bounding the page.
+      wantSeat(seat, 0);
+      return () => dropSeat(seat);
     }
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setSrc(demoSrc(story));
-          observer.disconnect();
+        for (const entry of entries) {
+          // Intersecting here means within one viewport, because of the margin
+          // below — so this is both "start it before it arrives" and "stop it
+          // once it is that far behind", in one signal.
+          if (entry.isIntersecting) {
+            wantSeat(seat, distanceAway(entry.boundingClientRect, window.innerHeight));
+          } else {
+            dropSeat(seat);
+          }
         }
       },
       // One viewport of lead time, so the demo is running by the time it
@@ -163,8 +190,11 @@ export function Demo({
       { rootMargin: "100% 0px" },
     );
     observer.observe(element);
-    return () => observer.disconnect();
-  }, [story, src, webgpu]);
+    return () => {
+      observer.disconnect();
+      dropSeat(seat);
+    };
+  }, [seat, webgpu]);
 
   // Each frame is told its theme by the component that owns it, and by nothing
   // else. The theme travels as a message rather than in the URL, so a frame
@@ -301,7 +331,7 @@ export function Demo({
               </optgroup>
             ))}
           </select>
-          <button type="button" data-specimen-reload onClick={reload} disabled={!src}>
+          <button type="button" data-specimen-reload onClick={reload} disabled={!running}>
             Reload
           </button>
           {/* Always the effective theme, not just an override. Popped out

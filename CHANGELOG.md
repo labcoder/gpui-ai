@@ -22,6 +22,13 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- A demo more than a viewport away stops running, and at most three run at
+  once. Every live demo is an instance of the shared gallery binary with its
+  own WASM heap and WebGPU surface, and starting was previously a one-way door:
+  a reader going down a long page collected one of each for every demo they
+  passed. A demo that has been stopped restarts when it comes back into range,
+  and one evicted by a nearer demo takes its seat back on its own.
+
 ### Changed
 
 - The wheel scrolls the page over a demo. GPUI's web platform calls
