@@ -124,7 +124,9 @@ function installSnippet() {
     `gpui-ai = { git = "${build.repository}", tag = "v${build.version}" }`,
     `gpui = { git = "${pin("gpui")}" }`,
     `gpui-component = { git = "${pin("gpui-component")}" }`,
-    `gpui_platform = { git = "${pin("gpui")}", features = ["font-kit", "x11", "wayland"] }`,
+    `gpui_platform = { git = "${pin("gpui")}", features = [${build.platformFeatures
+      .map((feature) => `"${feature}"`)
+      .join(", ")}] }`,
   ].join("\n");
 }
 

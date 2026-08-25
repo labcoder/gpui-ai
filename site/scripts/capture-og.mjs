@@ -27,6 +27,7 @@ import { browserPath, closeBrowser, launchBrowser, serve, settleAll, waitForValu
 import { CARD } from "./build.mjs";
 import { socialCardName } from "../app/route-path.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
+import { docs } from "../app/docs.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 import buildInfo from "../generated/build.json" with { type: "json" };
 
@@ -84,6 +85,22 @@ function cards() {
       summary: "The site, the gallery, and the demos are painted from the same tokens.",
       poster: null,
     },
+    {
+      path: "/docs/",
+      eyebrow: "Documentation",
+      title: "How it fits together",
+      summary: "Installing it, theming it, and who owns what between it and your application.",
+      poster: FLAGSHIP,
+    },
+    ...docs.map((doc) => ({
+      path: `/docs/${doc.slug}/`,
+      eyebrow: "Documentation",
+      title: doc.title,
+      summary: doc.summary,
+      // Prose, not a component. A still of Chat beside a page about theming
+      // would be decoration pretending to be an illustration.
+      poster: null,
+    })),
     ...catalog.components.map(component),
   ];
 }
@@ -197,6 +214,34 @@ function escape(value) {
     .replaceAll('"', "&quot;");
 }
 
+/**
+ * Every card the built site says it has, read out of the pages themselves.
+ *
+ * The build writes an `og:image` for every route it emits, so this is the
+ * complete list of promises made — and the list this script has to keep.
+ */
+async function claimedCards(siteDir) {
+  const found = [];
+  const walk = async (directory, page) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const here = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        // The gallery is the demo embed and the API is rustdoc; neither is a
+        // page this site renders, and neither carries a card.
+        if (["gallery", "api", "og", "assets", "posters", "themes"].includes(entry.name)) continue;
+        await walk(here, `${page}${entry.name}/`);
+        continue;
+      }
+      if (entry.name !== "index.html") continue;
+      const html = await readFile(here, "utf8");
+      const claimed = /property="og:image" content="[^"]*?\/(og\/[^"]+)"/.exec(html);
+      if (claimed) found.push({ page, file: claimed[1] });
+    }
+  };
+  await walk(siteDir, "/");
+  return found;
+}
+
 /** A card with nothing on it compresses to almost nothing. */
 const SMALLEST_REAL_CARD = 4_000;
 const CAPTURE_TIMEOUT_MS = 30_000;
@@ -294,6 +339,20 @@ export async function captureSocialCards({
       "utf8",
     );
     if (!html.includes(file)) throw new Error(`${route} does not name the card written for it`);
+  }
+
+  // And the other direction, which is the one that goes wrong: a route added
+  // to the site gets a card tag from the build for free, and gets a card from
+  // here only if someone remembered. Five documentation pages and their index
+  // shipped tags pointing at nothing. Checked against the built pages rather
+  // than against a route list, because the tag is what makes the promise.
+  if (!only) {
+    const rendered = new Set(written.map((entry) => entry.file));
+    for (const claimed of await claimedCards(siteDir)) {
+      if (!rendered.has(claimed.file)) {
+        throw new Error(`${claimed.page} claims ${claimed.file}, which nothing here renders`);
+      }
+    }
   }
   return written;
 }

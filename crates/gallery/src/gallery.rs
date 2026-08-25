@@ -3460,6 +3460,14 @@ pub enum GalleryChrome {
 pub struct Gallery {
     selected: StoryId,
     chrome: GalleryChrome,
+    /// Bumped by [`Gallery::reset_story`], and part of the key of every story
+    /// entity the window holds.
+    ///
+    /// Those entities are not fields here — they live in the window's keyed
+    /// state, which outlives this struct — so replacing this struct left a
+    /// reset chat still holding its transcript and a reset table still
+    /// sorted. Changing the key is what actually asks for a new one.
+    generation: usize,
     catalog_list: ListState,
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
@@ -3593,6 +3601,7 @@ impl Gallery {
                 }
             }),
             chrome: GalleryChrome::Full,
+            generation: 0,
             autoscroll: None,
             wheel: WheelAccelerator::new(),
             #[cfg(any(test, feature = "performance"))]
@@ -4042,7 +4051,7 @@ impl Gallery {
             StoryId::All => div().hidden().into_any_element(),
             StoryId::GuidedDemo => {
                 let guided =
-                    window.use_keyed_state("guided-demo-story-state", cx, GuidedDemoStory::new);
+                    window.use_keyed_state(("guided-demo-story-state", self.generation), cx, GuidedDemoStory::new);
                 self.section(story, "Guided demo", || guided, cx)
             }
             StoryId::Loading => self.section(
@@ -4369,7 +4378,7 @@ impl Gallery {
             StoryId::Chat => {
                 let answer = self.sim.answer.clone();
                 let chat_story = window.use_keyed_state(
-                    "chat-story-state",
+                    ("chat-story-state", self.generation),
                     cx,
                     ChatStory::new,
                 );
@@ -4804,7 +4813,7 @@ impl Gallery {
             ),
             StoryId::CommandSearch => {
                 let command_story = window.use_keyed_state(
-                    "command-search-story-state",
+                    ("command-search-story-state", self.generation),
                     cx,
                     CommandSearchStory::new,
                 );
@@ -4817,7 +4826,7 @@ impl Gallery {
             }
             StoryId::SidebarNav => {
                 let sidebar_story = window.use_keyed_state(
-                    "sidebar-nav-story-state",
+                    ("sidebar-nav-story-state", self.generation),
                     cx,
                     SidebarNavStory::new,
                 );
@@ -4825,12 +4834,12 @@ impl Gallery {
             }
             StoryId::ThreadList => {
                 let thread_story =
-                    window.use_keyed_state("thread-list-story-state", cx, ThreadListStory::new);
+                    window.use_keyed_state(("thread-list-story-state", self.generation), cx, ThreadListStory::new);
                 self.section(story, "Thread list", || thread_story, cx)
             }
             StoryId::FineTune => {
                 let fine_tune_story = window.use_keyed_state(
-                    "fine-tune-story-state",
+                    ("fine-tune-story-state", self.generation),
                     cx,
                     FineTuneStory::new,
                 );
@@ -4838,7 +4847,7 @@ impl Gallery {
             }
             StoryId::RecordsTable => {
                 let records_story = window.use_keyed_state(
-                    "records-table-story-state",
+                    ("records-table-story-state", self.generation),
                     cx,
                     RecordsTableStory::new,
                 );
@@ -4861,7 +4870,7 @@ impl Gallery {
             }
             StoryId::DiffTable => {
                 let diff_story = window.use_keyed_state(
-                    "diff-table-story-state",
+                    ("diff-table-story-state", self.generation),
                     cx,
                     DiffTableStory::new,
                 );
@@ -4884,7 +4893,7 @@ impl Gallery {
             }
             StoryId::FilterTable => {
                 let filter_story = window.use_keyed_state(
-                    "filter-table-story-state",
+                    ("filter-table-story-state", self.generation),
                     cx,
                     FilterTableStory::new,
                 );
@@ -4914,7 +4923,7 @@ impl Gallery {
             }
             StoryId::ComparisonTable => {
                 let comparison_story = window.use_keyed_state(
-                    "comparison-table-story-state",
+                    ("comparison-table-story-state", self.generation),
                     cx,
                     ComparisonTableStory::new,
                 );
@@ -5264,7 +5273,7 @@ impl Gallery {
             ),
             StoryId::PromptBar => {
                 let prompt_story = window.use_keyed_state(
-                    "prompt-bar-story-state",
+                    ("prompt-bar-story-state", self.generation),
                     cx,
                     PromptBarStory::new,
                 );
@@ -5382,7 +5391,7 @@ impl Gallery {
             ),
             StoryId::SelectionActions => {
                 let selection_story = window.use_keyed_state(
-                    "selection-actions-story-state",
+                    ("selection-actions-story-state", self.generation),
                     cx,
                     SelectionActionsStory::new,
                 );
@@ -5562,8 +5571,14 @@ impl Gallery {
     /// page's decisions rather than the story's.
     pub fn reset_story(&mut self, cx: &mut Context<Self>) {
         let chrome = self.chrome;
+        // The stories the window holds are keyed by this, so a new number is
+        // how they are asked for again. Without it a reset chat kept its
+        // transcript and a reset table kept its sort: replacing this struct
+        // only reaches the state this struct owns.
+        let generation = self.generation.wrapping_add(1);
         *self = Self::new_with_theme(self.selected, Some(self.theme), cx);
         self.chrome = chrome;
+        self.generation = generation;
         cx.notify();
     }
 }
@@ -5794,6 +5809,42 @@ mod tests {
             assert_eq!(gallery.theme, ember);
             assert_eq!(gallery.chrome, super::GalleryChrome::Embedded);
         });
+    }
+
+    /// Reset reaches the stories this struct does not own.
+    ///
+    /// Twelve stories are entities held in the window's keyed state rather
+    /// than fields here, and that state outlives this struct — so replacing
+    /// the struct left a reset chat holding its transcript and a reset table
+    /// still sorted. They are keyed by a generation, and reset is a new one.
+    #[gpui::test]
+    fn resetting_a_story_asks_for_new_entities_too(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::Chat, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|_, cx| {
+            gallery.update(cx, |gallery, cx| {
+                gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+            })
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let key_of =
+            |cx: &mut VisualTestContext| gallery.read_with(cx, |gallery, _| gallery.generation);
+        let before = key_of(cx);
+
+        cx.update(|_, cx| gallery.update(cx, |gallery, cx| gallery.reset_story(cx)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert_ne!(
+            key_of(cx),
+            before,
+            "a reset that reused the key would hand back the same chat, still holding \
+             everything the reader had done to it"
+        );
+        // And the story still draws afterwards, which is what says the new key
+        // built a story rather than losing one.
+        assert!(cx.debug_bounds("story-chat").is_some());
     }
 
     /// A theme that says nothing about type size must not inherit the last one's.

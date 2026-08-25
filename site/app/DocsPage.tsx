@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Code, CodeFrame } from "./CodePanel";
 import { build, components, install, sample, themes } from "./data";
-import { docBySlug, docs } from "./docs";
+import { docBySlug, docs } from "./docs.mjs";
 import { href } from "./links";
 
 /**
@@ -215,8 +215,16 @@ function Theming() {
         </p>
         <p>
           Each file declares a name, a mode, and its colours, and may declare a corner radius, a
-          shadow flag, and a base font size. Anything it leaves out falls back to the default —
-          not to whatever the previously applied theme happened to set.
+          shadow flag, and a base font size.
+        </p>
+        <p>
+          Anything a theme leaves out is worth knowing about. Applying a theme writes only the
+          metrics that theme names, and what it leaves behind is the <em>previous</em>{" "}
+          theme&rsquo;s value rather than the default. An application that installs one theme and
+          keeps it never sees this. One that lets a person switch does: a theme asking for 14&nbsp;px
+          type leaves every theme chosen after it at 14&nbsp;px until the process restarts. Three of
+          the {themes.length} bundled themes declare metrics and the rest do not, so the sample
+          below puts back what the incoming theme does not mention.
         </p>
       </Section>
 
@@ -242,9 +250,12 @@ function Ownership() {
     <>
       <Section id="who-owns" title="Applications own state; components render snapshots">
         <p>
-          No component in this library holds a timer, fetches anything, or keeps fixture data. Your
-          application owns the content, the lifecycle, and the clock, and hands a component the
-          current state each frame. That is what makes every component testable without a network,
+          No component in this library fetches anything, keeps fixture data, or runs a clock of its
+          own. Your application owns the content, the lifecycle, and the timing of the work, and
+          hands a component the current state each frame. A component may still time something it
+          is entirely responsible for — the &ldquo;Copied&rdquo; confirmation on a chat message
+          clears itself after a couple of seconds, and dropping the chat drops it — but nothing
+          that a snapshot describes is ever advanced from inside. That is what makes every component testable without a network,
           and what makes a streamed reply resumable, cancellable, and replayable by you rather than
           by us.
         </p>

@@ -1,5 +1,5 @@
 import { components } from "./data";
-import { docs } from "./docs";
+import { docs } from "./docs.mjs";
 import { normalizeRoutePath } from "./route-path.mjs";
 
 /** One page the site emits as real HTML. */

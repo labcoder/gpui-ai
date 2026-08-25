@@ -1,21 +1,18 @@
-/**
- * The documentation pages, in reading order.
- *
- * One list, used by the routes, the index, the rail, and the previous/next
- * links, so a page cannot exist without being reachable or be linked without
- * existing. The order is the order someone new reads them in: install it, make
- * it look right, learn who owns what, then the two things that are true of
- * every component.
- */
-export interface Doc {
-  readonly slug: string;
-  /** The page's heading, and the link text everywhere it is linked. */
-  readonly title: string;
-  /** One sentence, used for the page metadata and the index card. */
-  readonly summary: string;
-}
+// The documentation pages, in reading order.
+//
+// One list, used by the routes, the index, the previous/next links, and the
+// social-card capture — so a page cannot exist without being reachable, be
+// linked without existing, or claim a card nobody renders. The order is the
+// order someone new reads them in: install it, make it look right, learn who
+// owns what, then the two things that are true of every component.
+//
+// Plain JavaScript, like `route-path.mjs` and `theme-resolve.mjs`, because
+// `site/scripts/capture-og.mjs` reads it and cannot import TypeScript.
 
-export const docs: readonly Doc[] = [
+/** @typedef {{ slug: string, title: string, summary: string }} Doc */
+
+/** @type {readonly Doc[]} */
+export const docs = [
   {
     slug: "getting-started",
     title: "Getting started",
@@ -43,6 +40,7 @@ export const docs: readonly Doc[] = [
   },
 ];
 
-export function docBySlug(slug: string): Doc | undefined {
+/** @param {string} slug */
+export function docBySlug(slug) {
   return docs.find((doc) => doc.slug === slug);
 }

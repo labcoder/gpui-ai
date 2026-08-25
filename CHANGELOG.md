@@ -64,6 +64,24 @@ revision.
   category happened to fall. Pressing `/` puts the cursor in whichever search
   box is on screen, and opens the drawer when neither is.
 
+- The documentation index and its five pages each carried a social-card tag
+  pointing at a card nothing rendered: six broken unfurls. The capture now
+  covers them, and refuses to finish if any page claims a card it did not
+  write.
+- Reset on a demo reaches the stories it did not appear to. Twelve of them are
+  entities the window holds rather than gallery state, so a reset chat kept its
+  transcript and a reset table stayed sorted.
+- The published theming sample now puts back the metrics an incoming theme does
+  not name, and the page says why. The behaviour was only ever true of this
+  site's own gallery; an application following the sample got the leak.
+- The install block's `gpui_platform` features are read from the workspace
+  manifest instead of written into the generator, where they had already
+  drifted — `runtime_shaders` was in the manifest and missing from the block.
+- The crate's front page and the ownership documentation no longer claim that
+  no component holds a timer. One does: the "Copied" confirmation on a chat
+  message clears itself. Nothing a snapshot describes is advanced from inside,
+  which is the claim that was meant.
+
 - Every page carries a canonical link and a social card, so a link to this site
   expands into a title, a description and a picture of the component instead of
   a line of grey text. The cards are rendered from the site's own stylesheet

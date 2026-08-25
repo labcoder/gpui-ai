@@ -4,6 +4,12 @@
   "repository": "https://github.com/labcoder/gpui-ai",
   "homepage": "https://labcoder.github.io/gpui-ai/",
   "license": "MIT",
+  "platformFeatures": [
+    "font-kit",
+    "x11",
+    "wayland",
+    "runtime_shaders"
+  ],
   "upstream": [
     {
       "id": "gpui",

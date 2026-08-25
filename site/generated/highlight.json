@@ -13599,7 +13599,7 @@
   "extras": {
     "install": {
       "lang": "toml",
-      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.1.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\"] }",
+      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.1.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\", \"runtime_shaders\"] }",
       "lines": [
         [
           [
@@ -13683,6 +13683,13 @@
           ],
           [
             "\"wayland\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"runtime_shaders\"",
             "string"
           ],
           [
@@ -14847,7 +14854,7 @@
     },
     "theme-custom": {
       "lang": "rust",
-      "code": "use gpui::App;\nuse gpui_component::theme::{Theme, ThemeMode, ThemeRegistry};\n\n/// Registers a theme pack and switches to one of the themes in it.\n///\n/// A pack is the same JSON the bundled themes use: a name and a `themes`\n/// array, each entry declaring a mode, its colours, and optionally a radius,\n/// a shadow flag, and a base font size.\nfn install(pack: &str, name: &str, cx: &mut App) -> anyhow::Result<()> {\n    ThemeRegistry::global_mut(cx).load_themes_from_str(pack)?;\n\n    let config = ThemeRegistry::global(cx)\n        .themes()\n        .get(name)\n        .cloned()\n        .ok_or_else(|| anyhow::anyhow!(\"the pack declares no theme called {name}\"))?;\n\n    let mode = config.mode;\n    let theme = Theme::global_mut(cx);\n    match mode {\n        ThemeMode::Dark => theme.dark_theme = config,\n        _ => theme.light_theme = config,\n    }\n    Theme::change(mode, None, cx);\n    Ok(())\n}",
+      "code": "use gpui::App;\nuse gpui_component::theme::{Theme, ThemeConfig, ThemeMode, ThemeRegistry};\nuse std::rc::Rc;\n\n/// Registers a theme pack and switches to one of the themes in it.\n///\n/// A pack is the same JSON the bundled themes use: a name and a `themes`\n/// array, each entry declaring a mode, its colours, and optionally a radius,\n/// a shadow flag, and a base font size.\nfn install(pack: &str, name: &str, cx: &mut App) -> anyhow::Result<()> {\n    ThemeRegistry::global_mut(cx).load_themes_from_str(pack)?;\n\n    let config = ThemeRegistry::global(cx)\n        .themes()\n        .get(name)\n        .cloned()\n        .ok_or_else(|| anyhow::anyhow!(\"the pack declares no theme called {name}\"))?;\n\n    let mode = config.mode;\n    let theme = Theme::global_mut(cx);\n    match mode {\n        ThemeMode::Dark => theme.dark_theme = config.clone(),\n        _ => theme.light_theme = config.clone(),\n    }\n    Theme::change(mode, None, cx);\n    restore_unset_metrics(&config, cx);\n    Ok(())\n}\n\n/// Puts back the metrics the incoming theme does not mention.\n///\n/// Applying a theme writes only the metrics that theme names, and what it\n/// leaves behind is the *previous* theme's value rather than the default. In\n/// an application that installs one theme and keeps it that never shows. In\n/// one that lets a person switch, a theme asking for 14px type leaves every\n/// theme chosen after it at 14px until the process restarts.\nfn restore_unset_metrics(config: &ThemeConfig, cx: &mut App) {\n    let defaults = Theme::default();\n    let theme = Theme::global_mut(cx);\n    if config.font_size.is_none() {\n        theme.font_size = defaults.font_size;\n    }\n    if config.mono_font_size.is_none() {\n        theme.mono_font_size = defaults.mono_font_size;\n    }\n    if config.radius.is_none() {\n        theme.radius = defaults.radius;\n    }\n    if config.radius_lg.is_none() {\n        theme.radius_lg = defaults.radius_lg;\n    }\n    if config.shadow.is_none() {\n        theme.shadow = defaults.shadow;\n    }\n    // The Base layer keeps its own copy of the radius, so a scrollbar would go\n    // on painting with the corners the last theme gave it.\n    Theme::sync_base(cx);\n}",
       "lines": [
         [
           [
@@ -14902,6 +14909,13 @@
             ", "
           ],
           [
+            "ThemeConfig",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
             "ThemeMode",
             "type"
           ],
@@ -14914,6 +14928,36 @@
           ],
           [
             "};"
+          ]
+        ],
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "rc",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Rc",
+            "type"
+          ],
+          [
+            ";"
           ]
         ],
         [],
@@ -15124,12 +15168,12 @@
             "type"
           ],
           [
-            " => theme.dark_theme = config,"
+            " => theme.dark_theme = config.clone(),"
           ]
         ],
         [
           [
-            "        _ => theme.light_theme = config,"
+            "        _ => theme.light_theme = config.clone(),"
           ]
         ],
         [
@@ -15158,6 +15202,11 @@
         ],
         [
           [
+            "    restore_unset_metrics(&config, cx);"
+          ]
+        ],
+        [
+          [
             "    "
           ],
           [
@@ -15166,6 +15215,262 @@
           ],
           [
             "(())"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
+        [
+          [
+            "/// Puts back the metrics the incoming theme does not mention.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "///",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// Applying a theme writes only the metrics that theme names, and what it",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// leaves behind is the *previous* theme's value rather than the default. In",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// an application that installs one theme and keeps it that never shows. In",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// one that lets a person switch, a theme asking for 14px type leaves every",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// theme chosen after it at 14px until the process restarts.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " restore_unset_metrics(config: &"
+          ],
+          [
+            "ThemeConfig",
+            "type"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " defaults = "
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            "::default();"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " theme = "
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            "::global_mut(cx);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " config.font_size.is_none() {"
+          ]
+        ],
+        [
+          [
+            "        theme.font_size = defaults.font_size;"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " config.mono_font_size.is_none() {"
+          ]
+        ],
+        [
+          [
+            "        theme.mono_font_size = defaults.mono_font_size;"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " config.radius.is_none() {"
+          ]
+        ],
+        [
+          [
+            "        theme.radius = defaults.radius;"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " config.radius_lg.is_none() {"
+          ]
+        ],
+        [
+          [
+            "        theme.radius_lg = defaults.radius_lg;"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " config.shadow.is_none() {"
+          ]
+        ],
+        [
+          [
+            "        theme.shadow = defaults.shadow;"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// The Base layer keeps its own copy of the radius, so a scrollbar would go",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// on painting with the corners the last theme gave it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            "::sync_base(cx);"
           ]
         ],
         [

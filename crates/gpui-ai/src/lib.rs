@@ -13,7 +13,10 @@
 //!   composites are entities. Callbacks use `on_*` methods.
 //! - Progressive output flows through one model: [`stream::StreamedContent`].
 //!   Components render snapshots; applications own the state and the clock.
-//! - No component holds a timer or fixture data.
+//! - No component runs a clock over the state it is given, or keeps fixture
+//!   data. A component may time something it alone owns — a "Copied"
+//!   confirmation clearing itself — but nothing a snapshot describes is ever
+//!   advanced from inside.
 //!
 //! Further components land phase by phase; see the repository roadmap.
 
