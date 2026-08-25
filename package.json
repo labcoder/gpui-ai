@@ -13,7 +13,7 @@
     "build:web": "npm --prefix crates/gallery-web/www run build && npm run build:site",
     "build:site": "npm --prefix site run build",
     "build:docs": "node script/build-docs.mjs",
-    "generate": "npm run generate:catalog && npm run generate:themes && npm run generate:build-info && npm run generate:highlight",
+    "generate": "npm run generate:catalog && npm run generate:themes && npm run generate:highlight",
     "generate:catalog": "cargo run -q -p gallery --features export --bin gallery-catalog-export",
     "generate:themes": "node script/generate-themes.mjs",
     "check": "npm run check:format && npm run check:clippy && npm run check:scripts && npm run test && npm run check:docs",
@@ -32,6 +32,6 @@
     "check:upstream": "node script/run-bash.mjs script/update-upstream.sh --check",
     "update:upstream": "node script/run-bash.mjs script/update-upstream.sh",
     "generate:build-info": "node script/generate-build-info.mjs",
-    "generate:highlight": "npm --prefix site run generate:highlight"
+    "generate:highlight": "npm run generate:build-info && npm --prefix site run generate:highlight"
   }
 }

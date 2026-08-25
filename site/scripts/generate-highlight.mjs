@@ -103,8 +103,11 @@ const build = JSON.parse(readFileSync(join(GENERATED, "build.json"), "utf8"));
  * Composed here rather than in the page so the version, this repository, and
  * the GPUI pin all come from `build.json` — the same file the rest of the
  * release information is read from — and so the only copy of the text is the
- * one that was highlighted. `npm run generate` writes `build.json` before this
- * runs, which is why the order in that script matters.
+ * one that was highlighted.
+ *
+ * That makes this step depend on `build.json` being current, which is why the
+ * repository's `generate:highlight` runs `generate:build-info` first. Running
+ * this script on its own, after a version bump, emits the previous version.
  */
 function installSnippet() {
   const gpui = build.upstream.find((pin) => pin.id === "gpui");
