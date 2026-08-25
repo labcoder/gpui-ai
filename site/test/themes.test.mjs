@@ -5,6 +5,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { DEFAULT } from "../app/theme-resolve.mjs";
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const generated = path.join(repositoryRoot, "site", "generated");
 
@@ -193,15 +195,33 @@ test("the upstream group is credited separately from gpui-ai's own themes", asyn
   assert.ok(upstream.themes.length > 20, "the vendored pack should be substantial");
 });
 
-test("the stylesheet gives light the default selector and every theme a data-theme rule", async () => {
+test("the stylesheet gives the default theme :root and every theme a data-theme rule", async () => {
   const [{ themes: ours }, { themes: upstream }] = JSON.parse(
     await readFile(path.join(generated, "themes.json"), "utf8"),
   ).groups;
   const css = await readFile(path.join(generated, "themes.css"), "utf8");
 
-  assert.match(css, /^:root,\n\[data-theme="light"\] \{/m, "light must paint the default chrome");
+  // A visitor with JavaScript disabled never runs the inline script, so
+  // whatever :root paints is what they see — it has to be the theme the rest
+  // of the page says is current.
+  const root = css.indexOf(":root {");
+  assert.ok(root >= 0, "no rule paints the default chrome");
+  assert.equal(css.match(/^:root \{/gm)?.length, 1, "exactly one rule may claim :root");
+  const defaultTokens = [...ours, ...upstream].find((theme) => theme.slug === DEFAULT)?.tokens;
+  assert.ok(defaultTokens, `the registry does not ship ${DEFAULT}`);
+  const rootBlock = css.slice(root, css.indexOf("}", root));
+  assert.ok(
+    rootBlock.includes(`--ai-background: ${defaultTokens["--ai-background"]};`),
+    `:root must paint ${DEFAULT}, not something else`,
+  );
+  // :root and [data-theme="…"] have the same specificity, so a base rule
+  // written after any theme would override it. This is the ordering that makes
+  // every theme rule win.
+  assert.ok(
+    root < css.indexOf('[data-theme="'),
+    ":root must come before every theme rule, or it overrides the ones above it",
+  );
   for (const theme of [...ours, ...upstream]) {
-    if (theme.slug === "light") continue;
     assert.ok(
       css.includes(`[data-theme="${theme.slug}"] {`),
       `themes.css has no rule for ${theme.slug}`,

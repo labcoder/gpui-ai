@@ -2,8 +2,36 @@
 /* The page chrome is painted only from these properties, so choosing a
    theme reskins the site and every demo from the same numbers. */
 
+/* Default chrome — Nord Frost */
+:root {
+  color-scheme: dark;
+  --ai-background: #2e3440;
+  --ai-foreground: #eceff4;
+  --ai-muted: #a7b1c2;
+  --ai-border: #3b4252;
+  --ai-surface: #333a47;
+  --ai-primary: #88c0d0;
+  --ai-primary-foreground: #2e3440;
+  --ai-accent: #434c5e;
+  --ai-danger: #bf616a;
+  --ai-success: #a3be8c;
+  --ai-warning: #ebcb8b;
+  --ai-info: #81a1c1;
+  --ai-radius: 6px;
+  --ai-radius-lg: 10px;
+  --ai-font-size: 16px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-muted-text: #a7b1c2;
+  --ai-code-comment: #b4bdcb;
+  --ai-code-keyword: #dfb0b5;
+  --ai-code-string: #acc598;
+  --ai-code-type: #adc2d7;
+  --ai-code-number: #ebcb8b;
+}
+
 /* Default Light — gpui-ai, light */
-:root,
 [data-theme="light"] {
   color-scheme: light;
   --ai-background: #ffffff;

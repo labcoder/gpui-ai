@@ -16,6 +16,11 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The one place the site's default theme is named, imported rather than
+// restated so the stylesheet's base rule and the resolution rule cannot
+// disagree about which theme a visitor who has chosen nothing is looking at.
+import { DEFAULT } from "../site/app/theme-resolve.mjs";
+
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const THEMES = join(ROOT, "themes");
 const OUTPUT = join(ROOT, "site", "generated");
@@ -371,17 +376,37 @@ const blocks = [
   "   theme reskins the site and every demo from the same numbers. */",
   "",
 ];
-for (const group of groups) {
-  for (const theme of group.themes) {
-    const selector =
-      theme.slug === "light" ? `:root,\n[data-theme="light"]` : `[data-theme="${theme.slug}"]`;
-    const body = Object.entries(theme.tokens)
-      .map(([name, value]) => `  ${name}: ${value};`)
-      .join("\n");
-    blocks.push(`/* ${theme.registryName} — ${group.label}, ${theme.mode} */`);
-    blocks.push(`${selector} {\n  color-scheme: ${theme.mode};\n${body}\n}`);
-    blocks.push("");
-  }
+const declarations = (theme) =>
+  `  color-scheme: ${theme.mode};\n${Object.entries(theme.tokens)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join("\n")}`;
+
+const everyTheme = groups.flatMap((group) =>
+  group.themes.map((theme) => ({ theme, group })),
+);
+
+// Whichever theme the site opens on also paints `:root`, so a browser that
+// never runs the inline script — JavaScript disabled, or the script blocked —
+// still shows the palette the rest of the page claims to be current. Falling
+// back to light keeps the page painted at all if the default is ever a name the
+// registry does not ship.
+const base =
+  everyTheme.find(({ theme }) => theme.slug === DEFAULT) ??
+  everyTheme.find(({ theme }) => theme.slug === "light");
+if (!base) throw new Error("no theme to paint the default chrome from");
+
+// First, and on its own: `:root` and `[data-theme="…"]` have the same
+// specificity, so whichever comes last in the file wins. Emitting the base
+// inline with its own group would silently override every theme declared
+// above it.
+blocks.push(`/* Default chrome — ${base.theme.registryName} */`);
+blocks.push(`:root {\n${declarations(base.theme)}\n}`);
+blocks.push("");
+
+for (const { theme, group } of everyTheme) {
+  blocks.push(`/* ${theme.registryName} — ${group.label}, ${theme.mode} */`);
+  blocks.push(`[data-theme="${theme.slug}"] {\n${declarations(theme)}\n}`);
+  blocks.push("");
 }
 writeFileSync(join(OUTPUT, "themes.css"), `${blocks.join("\n")}`);
 
