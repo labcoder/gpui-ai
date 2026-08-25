@@ -22,7 +22,7 @@
       "id": "gpui-component",
       "label": "gpui-component",
       "repository": "https://github.com/longbridge/gpui-component",
-      "commit": "ad097c4346422c53c6ac08fc07578a1596030922",
+      "commit": "d5821f270317754f2a311a0bb148ec32cbb0ced4",
       "note": "The upstream component library gpui-ai composes."
     }
   ]

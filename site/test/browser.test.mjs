@@ -7,7 +7,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
-import { capturePosters, POSTER_WIDTH } from "../scripts/capture-posters.mjs";
+import {
+  capturePosters,
+  posterFrameLooksReal,
+  POSTER_WIDTH,
+} from "../scripts/capture-posters.mjs";
 import { captureSocialCards } from "../scripts/capture-og.mjs";
 import { CARD } from "../scripts/build.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
@@ -154,6 +158,19 @@ test("a successful wait reports no diagnosis and describes nothing", async () =>
 
   assert.equal(await waitForValue(cdp, "true", { describe: "({ describeMarker: 1 })" }), true);
   assert.equal(describes, 0, "describing a healthy page is wasted work");
+});
+
+test("poster validation reads visible pixels instead of encoded WebP size", () => {
+  assert.equal(
+    posterFrameLooksReal({ encodedBytes: 1_958, visiblePixels: 16 }),
+    true,
+    "the sparse loading poster captured in CI is still a real component",
+  );
+  assert.equal(
+    posterFrameLooksReal({ encodedBytes: 8_192, visiblePixels: 0 }),
+    false,
+    "a large but uniform image is still blank",
+  );
 });
 
 test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {

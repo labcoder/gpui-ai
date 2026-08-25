@@ -70,11 +70,18 @@ export function posterStories() {
 /** Where a story's poster is written, relative to `site/public`. */
 export const posterFile = (slug, mode) => `posters/${slug}-${mode}.webp`;
 
-// A solid rectangle compresses to a few hundred bytes at any size, so anything
-// near that floor is a canvas with nothing on it — the exact failure this
-// script exists to prevent, and the one that would otherwise ship silently as
-// an empty card on every browser without WebGPU.
-const SMALLEST_REAL_POSTER = 2_000;
+// A real component must put more than compression noise on the page. WebP byte
+// length cannot answer that: the sparse Loading State frame is 1,958 bytes in
+// Linux Chromium and about 2,100 in Windows Edge, despite showing the same
+// content. Decode the captured frame in Chromium and count pixels that visibly
+// differ from its background instead.
+const MINIMUM_VISIBLE_PIXELS = 16;
+const VISIBLE_CHANNEL_DELTA = 8;
+
+/** Whether a captured frame contains visible content rather than a solid fill. */
+export function posterFrameLooksReal({ encodedBytes, visiblePixels }) {
+  return encodedBytes > 0 && visiblePixels >= MINIMUM_VISIBLE_PIXELS;
+}
 
 // Half of these stories are still arriving when they first paint: Streaming
 // Text is one glyph, Code Block is a bare cursor, a task list has no rows yet.
@@ -100,9 +107,9 @@ const STILL_GROWING = 1.02;
 const CAPTURE_TIMEOUT_MS = 30_000;
 
 /**
- * The fullest frame this story produces, as WebP bytes.
+ * The fullest frame this story produces and its visible-pixel evidence.
  *
- * Returns the largest sample rather than the last: a story whose animation
+ * Keeps the largest sample rather than the last: a story whose animation
  * ends on an empty frame — a reveal that fades out, a toast that clears —
  * would otherwise be published as the empty one.
  */
@@ -122,9 +129,52 @@ async function fullestFrame(cdp) {
     const grew = bytes.length > best.length * STILL_GROWING;
     if (bytes.length > best.length) best = bytes;
     settled = grew ? 0 : settled + 1;
-    if (settled >= 2 && best.length >= SMALLEST_REAL_POSTER) break;
+    if (settled >= 2) {
+      const visiblePixels = await visiblePixelsInFrame(cdp, best);
+      if (posterFrameLooksReal({ encodedBytes: best.length, visiblePixels })) {
+        return { bytes: best, visiblePixels };
+      }
+    }
   }
-  return best;
+  return { bytes: best, visiblePixels: await visiblePixelsInFrame(cdp, best) };
+}
+
+/** Count enough pixels unlike the top-left background to classify the frame. */
+async function visiblePixelsInFrame(cdp, bytes) {
+  const source = `data:image/webp;base64,${bytes.toString("base64")}`;
+  return cdp.evaluate(
+    `new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+          reject(new Error('Chromium could not inspect the captured poster'));
+          return;
+        }
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        const background = [pixels[0], pixels[1], pixels[2], pixels[3]];
+        let visiblePixels = 0;
+        for (let ix = 0; ix < pixels.length; ix += 4) {
+          const delta = Math.max(
+            Math.abs(pixels[ix] - background[0]),
+            Math.abs(pixels[ix + 1] - background[1]),
+            Math.abs(pixels[ix + 2] - background[2]),
+            Math.abs(pixels[ix + 3] - background[3]),
+          );
+          if (delta > ${VISIBLE_CHANNEL_DELTA}) visiblePixels += 1;
+          if (visiblePixels >= ${MINIMUM_VISIBLE_PIXELS}) break;
+        }
+        resolve(visiblePixels);
+      };
+      image.onerror = () => reject(new Error('Chromium could not decode the captured poster'));
+      image.src = ${JSON.stringify(source)};
+    })`,
+    CAPTURE_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -172,10 +222,10 @@ export async function capturePosters({ outDir = posterDir, only, log = () => {} 
             describe: GALLERY_DIAGNOSIS,
           },
         );
-        const bytes = await fullestFrame(cdp);
-        if (bytes.length < SMALLEST_REAL_POSTER) {
+        const { bytes, visiblePixels } = await fullestFrame(cdp);
+        if (!posterFrameLooksReal({ encodedBytes: bytes.length, visiblePixels })) {
           throw new Error(
-            `${slug} in ${mode} captured ${bytes.length} bytes, which is a blank frame, not a component`,
+            `${slug} in ${mode} captured ${bytes.length} bytes but fewer than ${MINIMUM_VISIBLE_PIXELS} visible pixels, which is a blank frame, not a component`,
           );
         }
         const file = posterFile(slug, mode);
