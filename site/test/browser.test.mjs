@@ -1477,6 +1477,61 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
 
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
 
+  // S-12. The search is only worth having if it ranks, and only worth reaching
+  // for if it is one key away. Both are browser facts: the ranking has unit
+  // tests, but nothing outside a browser can say whether the box the shortcut
+  // lands in is the one on screen.
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/`, 1280, 900);
+  await waitForValue(cdp, "Boolean(document.querySelector('#component-filter'))", {
+    label: "the catalog to render its search box",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  // Typed as a reader types it, rather than by setting `value` — React listens
+  // for input events, and an assignment fires none.
+  await cdp.evaluate(`(() => {
+    const box = document.querySelector('#component-filter');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(box, 'approv');
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitForValue(
+    cdp,
+    "document.querySelectorAll('main [data-component]').length > 0 && document.querySelectorAll('main [data-component]').length < 10",
+    { label: "the catalog to narrow", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('main [data-component]').getAttribute('data-component')",
+    ),
+    "approval",
+    "the component named for the word must come before the ones that only mention it",
+  );
+
+  // The shortcut, from the page rather than from the box. On a wide window the
+  // rail is showing, so that is where the cursor belongs — a hidden input can
+  // still take focus, which would put the cursor somewhere nobody can see.
+  await cdp.evaluate("document.activeElement?.blur()");
+  await cdp.key("/", "Slash", 191);
+  assert.equal(
+    await cdp.evaluate("document.activeElement?.id"),
+    "rail-component-search",
+    "slash must land in the search box the reader can actually see",
+  );
+
+  // And a slash typed into a field is a slash. Without this the shortcut would
+  // make it impossible to search for one.
+  await cdp.evaluate(`(() => {
+    const box = document.querySelector('#component-filter');
+    box.focus();
+  })()`);
+  await cdp.key("/", "Slash", 191);
+  assert.equal(
+    await cdp.evaluate("document.activeElement?.id"),
+    "component-filter",
+    "the shortcut must not steal the cursor from a field being typed into",
+  );
+
   // S-14. A mistyped address gets the site's own page, and — the part only a
   // browser can check — hydrates as that page. The client used to fall back to
   // the first route for a path it did not recognise, so every 404 would have

@@ -94,7 +94,7 @@ test("the catalog filter is labelled and reports a live result count", async () 
   // A search box with no label and no announced count is unusable with a
   // screen reader, and the count is how a visitor knows the filter did
   // anything when the matches are below the fold.
-  assert.match(html, /<label for="component-filter">Filter components<\/label>/);
+  assert.match(html, /<label for="component-filter">Search components<\/label>/);
   assert.match(html, /id="component-filter"/);
   assert.match(html, /aria-live="polite"/);
   assert.match(

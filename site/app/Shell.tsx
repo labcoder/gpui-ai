@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { build, componentsByCategory, themeGroups, type Component } from "./data";
+import { narrow } from "./CatalogPage";
+import { build, themeGroups } from "./data";
 import { href } from "./links";
 import type { Route } from "./routes";
 import { SYSTEM, paint, useTheme } from "./theme";
@@ -35,6 +36,7 @@ export function Shell({
 }) {
   const { choice, applied, isDark, setChoice } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [focusSearch, setFocusSearch] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
@@ -59,6 +61,49 @@ export function Shell({
     // that override the moment the page repainted, or a frame reloaded.
     paint(applied, isDark);
   }, [hydrated, applied, isDark]);
+
+  // `/` puts the cursor in the search box, from anywhere on the page.
+  //
+  // Which box: the one on screen. The rail carries it on a wide window, the
+  // catalog page carries its own, and on a narrow window neither is showing —
+  // there the shortcut opens the drawer, which is where the search lives.
+  // `offsetParent` is what "on screen" means here: the rail is display:none
+  // below 60rem, and a hidden input can still be focused, which would take the
+  // cursor somewhere the reader cannot see it.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      // Someone typing a slash into a field means a slash.
+      if (target?.isContentEditable) return;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+
+      const boxes = [...document.querySelectorAll<HTMLInputElement>("input[data-site-search]")];
+      const showing = boxes.find((box) => box.offsetParent !== null);
+      event.preventDefault();
+      if (showing) {
+        showing.focus();
+        showing.select();
+        return;
+      }
+      setDrawerOpen(true);
+      setFocusSearch(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Opening the drawer to search it and then having to reach for the box would
+  // be half a shortcut. The drawer's input does not exist until it is open, so
+  // this runs after the render that created it.
+  useEffect(() => {
+    if (!drawerOpen || !focusSearch) return;
+    setFocusSearch(false);
+    const box = document.querySelector<HTMLInputElement>(
+      ".nav-drawer input[data-site-search]",
+    );
+    box?.focus();
+  }, [drawerOpen, focusSearch]);
 
   // A drawer left open across a resize would sit invisibly over a desktop
   // layout, holding focus and keeping the page inert.
@@ -347,22 +392,16 @@ function Drawer({
  *
  * Rendered twice — rail and drawer — so its ids are prefixed. The query starts
  * empty in the pre-render and in the first client render, which is what keeps
- * the two in agreement; S-12 replaces the substring match with a real index
- * over events and prose and adds the `/` shortcut.
+ * the two in agreement.
+ *
+ * It searches the same index the catalog page does, so the rail and the page
+ * can never disagree about what a word matches.
  */
 function ComponentNav({ route, idPrefix }: { readonly route: Route; readonly idPrefix: string }) {
   const [query, setQuery] = useState("");
   const searchId = `${idPrefix}-component-search`;
-  const needle = query.trim().toLowerCase();
 
-  const groups = useMemo(() => {
-    const matches = (component: Component) =>
-      !needle ||
-      `${component.title} ${component.category} ${component.api}`.toLowerCase().includes(needle);
-    return componentsByCategory()
-      .map(([category, entries]) => [category, entries.filter(matches)] as const)
-      .filter(([, entries]) => entries.length > 0);
-  }, [needle]);
+  const { grouped, groups } = useMemo(() => narrow(query), [query]);
 
   const shown = groups.reduce((total, [, entries]) => total + entries.length, 0);
 
@@ -373,16 +412,23 @@ function ComponentNav({ route, idPrefix }: { readonly route: Route; readonly idP
         <input
           id={searchId}
           type="search"
+          data-site-search=""
           value={query}
           placeholder="chat, table, approval…"
           onChange={(event) => setQuery(event.target.value)}
         />
+        {/* Only worth telling someone who has a keyboard to press it with, and
+            aria-hidden because a screen reader reading "slash" after the label
+            of every search box is noise, not a shortcut. */}
+        <kbd className="search-key" aria-hidden="true">
+          /
+        </kbd>
         <output htmlFor={searchId} aria-live="polite">{`${shown} shown`}</output>
       </div>
       <nav aria-label="All components">
         {groups.map(([category, entries]) => (
           <section key={category}>
-            <h3>{category}</h3>
+            {grouped ? <h3>{category}</h3> : null}
             <ul>
               {entries.map((component) => {
                 const current = route.kind === "component" && route.slug === component.slug;

@@ -22,6 +22,16 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- The catalog and the rail search a real index instead of matching substrings.
+  Typing "approv" now finds the Approval card, which never contained the word;
+  an event name finds the component that emits it; and a second word narrows
+  the answer rather than widening it. Results are ranked by where the words
+  landed — a type name means far more than a passing mention in a behaviour
+  note — and while there is a query the category headings give way to one
+  ordered list, so the best answer is at the top rather than wherever its
+  category happened to fall. Pressing `/` puts the cursor in whichever search
+  box is on screen, and opens the drawer when neither is.
+
 - Every page carries a canonical link and a social card, so a link to this site
   expands into a title, a description and a picture of the component instead of
   a line of grey text. The cards are rendered from the site's own stylesheet

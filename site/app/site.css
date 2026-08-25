@@ -392,11 +392,39 @@ main [id] {
   font: inherit;
   font-size: 0.875rem;
   width: 100%;
-  padding: var(--space-1) var(--space-2);
+  /* Room on the right for the shortcut hint, which sits over the field. */
+  padding: var(--space-1) var(--space-8) var(--space-1) var(--space-2);
   border: 1px solid var(--ai-muted);
   border-radius: var(--ai-radius);
   background: var(--ai-surface);
   color: inherit;
+}
+
+/* The key that puts the cursor here. In the field rather than beside it,
+   because a hint below the box would push the catalog down for something a
+   reader needs to see once. */
+.nav-search {
+  position: relative;
+}
+
+.search-key {
+  position: absolute;
+  top: 1.55rem;
+  right: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  color: var(--ai-muted-text);
+  font-family: var(--ai-font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* Once the box has the cursor the shortcut has done its job, and a slash
+   floating over what is being typed is just something in the way. */
+.nav-search input:focus + .search-key {
+  opacity: 0;
 }
 
 .nav-search output {
