@@ -234,6 +234,40 @@ test("code is highlighted in the build, not in the browser", async () => {
   }
 });
 
+test("code reads like an editor, and the line numbers are not in it", async () => {
+  const component = components.find((entry) => entry.slug === "chat") ?? components[0];
+  const html = await page(`/components/${component.slug}/`);
+
+  // The file the snippet was cut from, on the strip above it. A path, not a
+  // label: it is the one in the repository, so a reader who wants the rest of
+  // it knows where to look before clicking anything.
+  assert.match(
+    html,
+    new RegExp(`<span class="code-file" data-code-file="${component.source}">`),
+    `the snippet does not name ${component.source}`,
+  );
+
+  // Every line is a .code-line, which is what the stylesheet counts to draw
+  // the gutter.
+  const block = /<pre class="code"><code>([\s\S]*?)<\/code><\/pre>/.exec(html)?.[1];
+  assert.ok(block, "the component page has no code block");
+  const snippetText = snippetFile.snippets[component.slug].default;
+  assert.equal(
+    (block.match(/<span class="code-line">/g) ?? []).length,
+    snippetText.split("\n").length,
+    "one .code-line per line, or the numbering skips",
+  );
+
+  // And nothing else. The numbers are generated content, so they are not in
+  // the document at all: a number that reached the clipboard would be a
+  // snippet that does not compile, and the surest way to prevent that is for
+  // it never to be text on the page. Copy reads the data layer, but a reader
+  // dragging a selection across the block does not.
+  const text = block.replaceAll(/<[^>]+>/g, "").replace(/\n$/, "");
+  assert.equal(text, asRendered(snippetText), "the code block holds more than the code");
+  assert.doesNotMatch(block, /counter|line-number|data-line/, "a number leaked into the markup");
+});
+
 test("the home page's dependency lines are highlighted too", async () => {
   const html = await page("/");
 

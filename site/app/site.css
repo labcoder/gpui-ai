@@ -610,13 +610,30 @@ section + section {
   max-width: var(--demo-width);
 }
 
+/* The strip along the top of a snippet: the file it came from on the left,
+   everything that acts on it on the right. Joined to the code below rather
+   than floating above it, so the two read as one editor pane. */
 .code-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2) var(--space-4);
-  margin-bottom: var(--space-2);
+  max-width: var(--demo-width);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--ai-border);
+  border-bottom: 0;
+  border-radius: var(--ai-radius-lg) var(--ai-radius-lg) 0 0;
+  background: var(--ai-accent);
   font-size: 0.8125rem;
+}
+
+/* Painted from --ai-accent, where --ai-muted-text is not guaranteed legible:
+   it is derived against the page and a card, not this. */
+.code-file {
+  margin-right: auto;
+  color: var(--ai-foreground);
+  font-family: var(--ai-font-mono);
+  font-size: 0.75rem;
 }
 
 .code-actions button {
@@ -630,7 +647,7 @@ section + section {
 }
 
 .code-actions .copy-status {
-  color: var(--ai-muted-text);
+  color: var(--ai-foreground);
 }
 
 pre.code {
@@ -638,12 +655,48 @@ pre.code {
   max-width: var(--demo-width);
   overflow-x: auto;
   border: 1px solid var(--ai-border);
-  border-radius: var(--ai-radius-lg);
+  border-radius: 0 0 var(--ai-radius-lg) var(--ai-radius-lg);
   background: var(--ai-accent);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
   font-size: 0.8125rem;
   line-height: 1.55;
   tab-size: 4;
+  counter-reset: line;
+}
+
+/* No highlighting for this one, so no lines to number either. */
+pre.code-plain {
+  padding-left: var(--space-4);
+}
+
+/* Line numbers, drawn rather than written.
+
+   Generated content is not in the document, so nothing here can be copied by
+   the Copy button — which reads the snippet from the data layer — and nothing
+   here can be dragged into a selection either, because the gutter opts out of
+   selection explicitly. A number in the clipboard is a snippet that does not
+   compile, and the only way to be sure of that is for the number not to be
+   text on the page at all. */
+/* Left inline. Each line already ends in a real newline, which is what a
+   selection dragged across the block has to contain to paste as code; making
+   these blocks as well would break every line twice. */
+.code-line {
+  counter-increment: line;
+}
+
+.code-line::before {
+  content: counter(line);
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  width: 3.25rem;
+  margin-right: var(--space-3);
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--ai-border);
+  background: var(--ai-accent);
+  color: var(--ai-code-comment);
+  text-align: right;
+  user-select: none;
 }
 
 /* Syntax, painted from the theme rather than from a palette of its own, so

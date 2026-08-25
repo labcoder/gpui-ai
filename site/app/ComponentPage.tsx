@@ -61,6 +61,7 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
         <CodePanel
           slug={component.slug}
           label={`the ${component.title} snippet`}
+          file={component.source}
           actions={[
             { href: demoSrc(component.slug), text: "Open in the gallery" },
             { href: sourceHref(component, build.repository), text: "Implementation" },
@@ -220,6 +221,7 @@ function Variants({ component }: { readonly component: Component }) {
               slug={component.slug}
               variant={variant.id}
               label={`the ${variant.label} snippet`}
+              file={component.source}
             />
           </div>
         ))

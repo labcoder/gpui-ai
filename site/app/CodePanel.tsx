@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { highlighted, snippet, type CodeToken } from "./data";
 
 /** How long the copy result stays on screen before the button is plain again. */
@@ -19,11 +19,13 @@ export function CodePanel({
   slug,
   variant = "default",
   label,
+  file,
   actions,
 }: {
   readonly slug: string;
   readonly variant?: string;
   readonly label: string;
+  readonly file: string;
   readonly actions?: readonly { readonly href: string; readonly text: string }[];
 }) {
   const code = snippet(slug, variant);
@@ -31,15 +33,45 @@ export function CodePanel({
 
   return (
     <div className="code-panel">
-      <div className="code-actions">
+      <CodeFrame file={file}>
         <CopyButton code={code} label={label} />
         {actions?.map((action) => (
           <a key={action.href} href={action.href}>
             {action.text}
           </a>
         ))}
-      </div>
+      </CodeFrame>
       <Code lines={highlighted(slug, variant)} fallback={code} />
+    </div>
+  );
+}
+
+/**
+ * The strip above a snippet, naming the file it was cut from.
+ *
+ * An editor's tab, in effect, and it carries real information: the path is the
+ * one in the repository, so a reader who wants the rest of it knows where to
+ * look before clicking anything. Whatever else belongs to the snippet — Copy,
+ * a link to the gallery, a link to the implementation — sits on the same row,
+ * because they are all about this code rather than about the page.
+ *
+ * `--ai-foreground`, not `--ai-muted-text`: this strip is painted from
+ * `--ai-accent`, and the muted colour is only derived to be readable on the
+ * page and on a card.
+ */
+export function CodeFrame({
+  file,
+  children,
+}: {
+  readonly file: string;
+  readonly children?: ReactNode;
+}) {
+  return (
+    <div className="code-actions">
+      <span className="code-file" data-code-file={file}>
+        {file}
+      </span>
+      {children}
     </div>
   );
 }
@@ -60,7 +92,7 @@ export function Code({
 }) {
   if (!lines) {
     return (
-      <pre className="code">
+      <pre className="code code-plain">
         <code>{fallback}</code>
       </pre>
     );

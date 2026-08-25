@@ -1,4 +1,4 @@
-import { Code } from "./CodePanel";
+import { Code, CodeFrame } from "./CodePanel";
 import { Demo } from "./Demo";
 import { build, categories, components, componentsByCategory, hero, install, themes } from "./data";
 import { href } from "./links";
@@ -47,6 +47,7 @@ export function HomePage() {
           <p className="lede">
             Not on crates.io yet: GPUI itself is only published from Git, so this is too.
           </p>
+          <CodeFrame file="Cargo.toml" />
           <Code lines={install.lines} fallback={install.code} />
         </div>
       </section>

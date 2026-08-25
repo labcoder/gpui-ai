@@ -1322,6 +1322,32 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     /^Copied /,
     'a copy that says nothing is a copy a visitor cannot trust',
   );
+
+  // And the other way anyone copies code: dragging across it. A line number in
+  // the middle of the result would be a snippet that does not compile.
+  //
+  // This engine leaves generated content out of a selection on its own, so
+  // passing here is not proof that the `user-select: none` on the gutter is
+  // doing anything — that rule is for the ones that do not. What this does
+  // check is the whole rendered path, which the markup assertions cannot: what
+  // a reader ends up holding.
+  assert.equal(
+    (
+      await cdp.evaluate(`(() => {
+        const code = document.querySelector('pre.code code');
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const text = selection.toString();
+        selection.removeAllRanges();
+        return text;
+      })()`)
+    ).replaceAll("\r\n", "\n").replace(/\n$/, ""),
+    snippetFile.snippets[specimen.slug].default,
+    "a selection dragged across the code must give back the code, and nothing else",
+  );
   // The themes page is the one that has to prove the whole claim: the site and
   // the demos are painted from the same numbers. Choosing a card repaints the
   // page and the running trio together, and the file behind Download is the
