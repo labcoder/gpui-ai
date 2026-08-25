@@ -8,7 +8,7 @@
 
 use crate::{
     handlers::SharedHandler,
-    motion::{reorder, reveal_staggered},
+    motion::reveal_staggered,
     surface::{eyebrow, icon_button, meta},
     theme::SemanticStyledExt as _,
 };
@@ -346,26 +346,14 @@ fn render_row(
                 }),
         )
         .child(controls);
-    // Reveal for a row that has just arrived, reorder for one that was already
-    // here and has moved: Move up and Move down change a row's neighbours, and
-    // a row that is simply somewhere else on the next frame reads as two rows
-    // swapping their contents rather than one row moving.
-    //
-    // Keyed by the message id, never by the index — keyed by index every row
-    // would appear to move whenever any row did.
-    reorder(
-        reveal_staggered(
-            div().w_full().min_w_0().child(row),
-            (root_id.clone(), format!("reveal-{}", item.id)),
-            index,
-            window,
-            cx,
-        ),
-        (root_id.clone(), format!("reorder-{}", item.id)),
+    reveal_staggered(
+        div().w_full().min_w_0().child(row),
+        (root_id.clone(), format!("reveal-{}", item.id)),
         index,
         window,
         cx,
     )
+    .into_any_element()
 }
 
 #[cfg(test)]
