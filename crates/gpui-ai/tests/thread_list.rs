@@ -196,3 +196,37 @@ fn constrained_list_keeps_the_last_thread_reachable(cx: &mut TestAppContext) {
     );
     assert!(last.top() >= host.top() - px(1.));
 }
+
+#[gpui::test]
+fn search_keeps_one_line_height_under_an_overlong_query(cx: &mut TestAppContext) {
+    let (view, _, cx) = harness(cx, 600.);
+    let one_line = cx
+        .debug_bounds("thread-list-search")
+        .expect("the search field should render")
+        .size
+        .height;
+    view.update_in(cx, |probe, window, cx| {
+        probe.threads.update(cx, |threads, cx| {
+            threads.set_query("margin analysis ".repeat(24), window, cx);
+        });
+    });
+    draw(cx);
+    // Upstream mounts its editor scrollbar only for multi-line input, so a
+    // single-line field keeps exactly one line of height however long its
+    // value grows; the overflow stays reachable inside the field instead of
+    // wrapping, growing, or gaining a scrollbar strip.
+    let overlong = cx
+        .debug_bounds("thread-list-search")
+        .expect("the search field should survive an overlong query")
+        .size
+        .height;
+    assert_eq!(one_line, overlong);
+    assert!(cx.debug_bounds("thread-list-empty").is_some());
+    view.update_in(cx, |probe, window, cx| {
+        probe
+            .threads
+            .update(cx, |threads, cx| threads.set_query("", window, cx));
+    });
+    draw(cx);
+    assert!(cx.debug_bounds("thread-supplier").is_some());
+}

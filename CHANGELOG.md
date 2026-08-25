@@ -104,6 +104,12 @@ revision.
 
 ### Changed
 
+- gpui-component, its assets, and gpui-base moved together from `ad097c43` to
+  `d5821f27` — the four-commit range that stops single-line inputs painting
+  scrollbars and takes GPUI's profiler feature out of the workspace-wide
+  dependency. GPUI itself stays at `8b1497db`, still the exact revision
+  upstream's own lock selects. The range also adds and immediately reverts a
+  dialog focus-reclaim change, so no dialog behavior moves.
 - The wheel scrolls the page over a demo. GPUI's web platform calls
   `preventDefault()` on every wheel event before looking at it, so a demo
   swallowed the wheel whether or not its story had anything to scroll: with the
@@ -179,25 +185,21 @@ revision.
   nothing. `cargo doc --no-deps` leaves rustdoc no page to point at for a trait
   implemented from a dependency, so it emitted anchors with no `href`; the
   publish step removes them and leaves the 1,533 that resolve.
-
-### Known issues
-
-- Pressing Tab, Shift+Tab, or Ctrl+C inside a live demo on the website freezes
-  that demo. The page around it keeps working and reloading brings the demo
-  back. Native builds are unaffected.
-
-  gpui-component enables gpui's `profiler` feature for everything that depends
-  on it, and `gpui/src/profiler/actions.rs` reads the clock through
-  `std::time::Instant` where the rest of that module uses the wasm-safe
-  `scheduler::Instant`. `std::time` is unimplemented on
-  `wasm32-unknown-unknown`, so dispatching any action panics with "time not
-  implemented on this platform". The panic happens while the app's `RefCell` is
-  mutably borrowed, and WebAssembly aborts rather than unwinding, so the borrow
-  is never released and every later update fails with "RefCell already
-  borrowed" — which is why the demo never recovers.
-
-  The fix belongs upstream, in one import. Until it lands, live demos are
-  pointer-driven only.
+- Single-line inputs — FineTuneCard's numeric fields, SidebarNav's filter, and
+  ThreadList's search — no longer mount upstream's editor scrollbar, which
+  could paint a stray scrollbar strip inside a one-line field. Three new
+  regressions pin the contract from both sides: a single-line field keeps
+  exactly one line of height under an overlong value, and the prompt composer
+  still grows per line to its auto-grow cap and scrolls past it.
+- Keyboard actions no longer abort the website's live demos. GPUI's profiler —
+  whose action path reads `std::time::Instant`, unimplemented on
+  `wasm32-unknown-unknown` — is no longer compiled into the web build at all:
+  the upstream fix moved the feature from the workspace-wide dependency onto
+  the one crate that uses it, and the default web feature graph went from
+  three `gpui/profiler` occurrences to zero. Validated against the release
+  artifact in a real browser: Tab, Shift+Tab, arrow keys, a pointer text
+  selection, and Ctrl+C all left the demo live and responsive with no console
+  errors. Live demos are no longer pointer-only.
 
 ## [0.1.0] - 2026-08-23
 

@@ -390,19 +390,19 @@ function BrowserDemos() {
         </p>
       </Section>
 
-      <Section id="keyboard" title="Keyboard dispatch is native-only">
+      <Section id="keyboard" title="Keyboard in the browser">
         <p>
-          Pressing Tab, Shift+Tab, or Ctrl+C inside a live demo freezes that demo. The page around
-          it keeps working and reloading brings it back. Native builds are unaffected.
+          Keyboard input works in the live demos: Tab and Shift+Tab move focus, arrow keys reach
+          the components that use them, and text selection and Ctrl+C behave. Earlier builds froze
+          a demo on the first key press because GPUI&rsquo;s profiler — whose action path reads a
+          clock that <code>wasm32-unknown-unknown</code> does not implement — was compiled into
+          everything. Upstream now scopes that feature to the one crate that uses it, so the web
+          build no longer contains the failing path at all.
         </p>
         <p>
-          The cause is upstream and specific: gpui-component enables GPUI&rsquo;s profiler feature
-          for everything that depends on it, and the profiler&rsquo;s action handling reads the
-          clock through <code>std::time::Instant</code> where the rest of that module uses the
-          WebAssembly-safe one. <code>std::time</code> is unimplemented on{" "}
-          <code>wasm32-unknown-unknown</code>, so dispatching any action panics — and because
-          WebAssembly aborts rather than unwinding, a borrow held across the panic is never
-          released and every later update fails. It is a one-import fix in the wrong repository.
+          The native build remains the runtime the keyboard, clipboard, and accessibility test
+          suites actually exercise; treat the browser as a faithful demonstration rather than the
+          verified surface.
         </p>
       </Section>
 

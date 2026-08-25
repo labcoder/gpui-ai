@@ -626,6 +626,7 @@ impl Render for ThreadList {
             )
             .child(
                 h_flex()
+                    .debug_selector(|| "thread-list-search".into())
                     .w_full()
                     .items_center()
                     .gap(tokens.spacing.xs)

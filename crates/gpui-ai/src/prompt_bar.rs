@@ -1149,7 +1149,12 @@ impl Render for PromptBar {
                         })),
                 )
             })
-            .child(Textarea::new(&self.editor))
+            .child(
+                div()
+                    .debug_selector(|| "prompt-bar-editor".to_owned())
+                    .w_full()
+                    .child(Textarea::new(&self.editor)),
+            )
             .when(!suggestions.is_empty(), |this| {
                 this.child(
                     prompt_listbox(
@@ -1998,5 +2003,49 @@ mod tests {
             assert_eq!(prompt.mentions.len(), 1, "mentions must be unchanged");
             assert_eq!(prompt.commands.len(), 1, "commands must be unchanged");
         });
+    }
+
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
+    #[gpui::test]
+    fn composer_grows_per_line_and_stops_at_its_auto_grow_cap(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured_events = events.clone();
+        let (harness, cx) =
+            cx.add_window_view(move |window, cx| PromptHarness::new(captured_events, window, cx));
+        let mut measure = |cx: &mut gpui::VisualTestContext, draft: String| {
+            cx.update(|window, cx| {
+                let prompt = harness.read(cx).prompt.clone();
+                prompt.update(cx, |prompt, cx| prompt.set_draft(draft, window, cx));
+                window.draw(cx).clear(cx);
+            });
+            cx.debug_bounds("prompt-bar-editor")
+                .expect("the composer should render")
+                .size
+                .height
+        };
+        let one = measure(cx, "first".into());
+        let three = measure(cx, "first\nsecond\nthird".into());
+        let five = measure(
+            cx,
+            ["l1", "l2", "l3", "l4", "l5"].join("\n"),
+        );
+        let nine = measure(
+            cx,
+            (1..=9)
+                .map(|line| format!("line {line}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        // The composer is deliberately multi-line: each added line grows it
+        // until the auto-grow cap, and past the cap it scrolls instead of
+        // growing — the half of the upstream input contract the single-line
+        // fields must not have.
+        assert!(three > one, "{three:?} vs {one:?}");
+        assert!(five > three, "{five:?} vs {three:?}");
+        assert_eq!(nine, five);
     }
 }

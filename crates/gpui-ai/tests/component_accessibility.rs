@@ -1986,3 +1986,35 @@ fn public_selection_actions_keep_long_final_action_reachable_in_a_narrow_root(
         "{final_action:?} vs {surface:?}"
     );
 }
+
+#[gpui::test]
+fn sidebar_filter_keeps_one_line_height_under_an_overlong_query(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    let one_line = cx
+        .debug_bounds("sidebar-nav-filter")
+        .expect("the filter field should render")
+        .size
+        .height;
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| {
+            nav.set_query("wholesale scorecards ".repeat(24), window, cx);
+        });
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    // A single-line filter holds one line of height however long the query
+    // grows; upstream reserves its editor scrollbar for multi-line input.
+    let overlong = cx
+        .debug_bounds("sidebar-nav-filter")
+        .expect("the filter field should survive an overlong query")
+        .size
+        .height;
+    assert_eq!(one_line, overlong);
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("", window, cx));
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-item-orders").is_some());
+}
