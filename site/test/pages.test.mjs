@@ -24,6 +24,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const { components } = catalog;
 const installSnippet = highlightFile.extras.install;
 const BASE = "/gpui-ai";
+const ROUTES = ["/", "/components/", "/themes/", `/components/${components[0].slug}/`];
 
 // The build is expensive, so every test reads one.
 let built;
@@ -431,6 +432,39 @@ test("the README's Kind column matches what each type implements", async () => {
   }
 
   assert.deepEqual(wrong, [], `the table describes ${wrong.length} components wrongly`);
+});
+
+test("every face the build produced is preloaded, on every page", async () => {
+  const { outDir } = await site();
+  const faces = (await readdir(path.join(outDir, "assets"))).filter((name) =>
+    name.endsWith(".woff2"),
+  );
+  assert.ok(faces.length > 0, "the build produced no .woff2 faces");
+
+  // The faces arrive through an @import inside site.css, and Vite does not
+  // preload what an @import pulled in. Without these the chrome paints in the
+  // system fallback and moves when Plex and Lilex land.
+  for (const route of ROUTES) {
+    const html = await page(route);
+    const links = html.match(/<link rel="preload" as="font"[^>]*>/g) ?? [];
+    assert.equal(
+      links.length,
+      faces.length,
+      `${route} preloads ${links.length} of the ${faces.length} faces the build wrote`,
+    );
+    for (const face of faces) {
+      assert.ok(
+        links.some((link) => link.includes(face)),
+        `${route} does not preload ${face}`,
+      );
+    }
+    // Fonts are fetched in CORS mode even from the same origin; a preload
+    // without this is a second download rather than a head start.
+    for (const link of links) {
+      assert.match(link, /crossorigin/, `a font preload on ${route} is missing crossorigin`);
+      assert.match(link, /type="font\/woff2"/);
+    }
+  }
 });
 
 test("every font the site uses is served from the site", async () => {

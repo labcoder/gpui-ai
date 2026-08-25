@@ -56,6 +56,12 @@ revision.
 
 ### Fixed
 
+- The page no longer moves under the reader as the self-hosted faces arrive.
+  They come in through an `@import` inside the stylesheet, and Vite does not
+  preload what an `@import` pulled in, so the chrome painted in the system
+  fallback and shifted about a second into a cold visit. The build now emits a
+  preload for each face it wrote: measured cold and throttled, cumulative layout
+  shift on the home page goes from 0.0029 to zero.
 - The home page's dependency lines are syntax-highlighted like every other code
   block on the site, and are generated from the workspace manifests rather than
   written out in a component.

@@ -96,13 +96,15 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
     pathToFileURL(path.join(ssrDir, "prerender.js")).href
   );
 
+  const preloads = await fontPreloads(stageDir, template);
+
   for (const route of routes) {
     const html = template
       .replace(APP_MARKER, render(route.path))
       .replace("<title>gpui-ai</title>", `<title>${escapeHtml(route.title)}</title>`)
       .replace(
         "</head>",
-        `  <meta name="description" content="${escapeHtml(route.description)}">\n  </head>`,
+        `  <meta name="description" content="${escapeHtml(route.description)}">\n${preloads}  </head>`,
       );
     const directory = path.join(stageDir, ...route.path.split("/").filter(Boolean));
     await mkdir(directory, { recursive: true });
@@ -110,6 +112,34 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
   }
 
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });
+}
+
+/**
+ * `<link rel="preload">` for every face the stylesheet asks for.
+ *
+ * The faces arrive through `@import "@fontsource/…"` inside site.css, and Vite
+ * does not preload what an @import pulled in — so the chrome painted in the
+ * system fallback and moved when Plex and Lilex landed, about a second into a
+ * cold visit. Discovering the names from the build rather than writing them
+ * down is the only version that survives a hashed filename.
+ *
+ * Only `.woff2`: the `.woff` beside it is the fallback for browsers that will
+ * never be asked for it here, and preloading both would double the bytes for
+ * nothing. `crossorigin` is not optional — fonts are fetched in CORS mode even
+ * same-origin, and a preload without it is fetched twice.
+ */
+async function fontPreloads(stageDir, template) {
+  const base = /href="([^"]*)\/assets\//.exec(template)?.[1] ?? "";
+  const assets = path.join(stageDir, "assets");
+  const faces = (await readdir(assets).catch(() => []))
+    .filter((name) => name.endsWith(".woff2"))
+    .sort();
+
+  if (faces.length === 0) throw new Error("the build produced no .woff2 faces to preload");
+
+  return faces
+    .map((name) => `  <link rel="preload" as="font" type="font/woff2" crossorigin href="${base}/assets/${name}">\n`)
+    .join("");
 }
 
 /** Runs Vite's CLI from the site root and fails loudly. */

@@ -1701,6 +1701,61 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "This live example requires a browser with WebGPU support.",
   );
   assert.equal(await cdp.evaluate("document.querySelectorAll('canvas').length"), 0);
+
+  // Nothing on the page may move as the faces arrive.
+  //
+  // The four faces come in through `@import "@fontsource/…"` inside site.css,
+  // and Vite does not preload what an @import pulled in — so the chrome
+  // painted in the system fallback and shifted about a second later when Plex
+  // and Lilex landed. Measured cold and throttled, that was 0.0029 on the home
+  // page; the build now emits a preload per face and it is zero.
+  //
+  // Cold and slow on purpose: with a warm cache and a local server the faces
+  // arrive before first paint whether or not anything preloaded them, and this
+  // would be a check that cannot fail. The themes page is left out — its three
+  // demo frames race each other and the number moves run to run, which is not
+  // the fonts and not something to gate.
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `
+      window.__shift = 0;
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (!entry.hadRecentInput) window.__shift += entry.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+    `,
+  });
+  await cdp.send("Network.enable");
+  await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
+  await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 120,
+    downloadThroughput: 400 * 1024,
+    uploadThroughput: 400 * 1024,
+  });
+
+  for (const route of ["/", `/components/${specimen.slug}/`]) {
+    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, 1280, 900);
+    await delay(5_000);
+    assert.equal(
+      await cdp.evaluate("window.__shift"),
+      0,
+      `${route} moved under the reader as the webfonts arrived`,
+    );
+    assert.ok(
+      (await cdp.evaluate("document.querySelectorAll('link[rel=preload][as=font]').length")) > 0,
+      `${route} ships no font preloads, which is what keeps that at zero`,
+    );
+  }
+
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  });
+  await cdp.send("Network.setCacheDisabled", { cacheDisabled: false });
 });
 
 test("every theme the site offers can be read", {
