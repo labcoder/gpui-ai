@@ -35,6 +35,25 @@ revision.
   guessing from the story's measured height, which meant editing prose beneath a
   component could silently rewrite the published claim about it.
 
+### Known issues
+
+- Pressing Tab, Shift+Tab, or Ctrl+C inside a live demo on the website freezes
+  that demo. The page around it keeps working and reloading brings the demo
+  back. Native builds are unaffected.
+
+  gpui-component enables gpui's `profiler` feature for everything that depends
+  on it, and `gpui/src/profiler/actions.rs` reads the clock through
+  `std::time::Instant` where the rest of that module uses the wasm-safe
+  `scheduler::Instant`. `std::time` is unimplemented on
+  `wasm32-unknown-unknown`, so dispatching any action panics with "time not
+  implemented on this platform". The panic happens while the app's `RefCell` is
+  mutably borrowed, and WebAssembly aborts rather than unwinding, so the borrow
+  is never released and every later update fails with "RefCell already
+  borrowed" — which is why the demo never recovers.
+
+  The fix belongs upstream, in one import. Until it lands, live demos are
+  pointer-driven only.
+
 ## [0.1.0] - 2026-08-23
 
 ### Added
