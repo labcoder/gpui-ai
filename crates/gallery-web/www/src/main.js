@@ -6,6 +6,7 @@ import {
   parseThemeEvent,
   sizeMessage,
   statusMessage,
+  variantMessage,
   themeMessage,
   wheelMessage,
 } from './query.js';
@@ -176,6 +177,51 @@ function revealWhenDrawn(story) {
 }
 
 /**
+ * Opens the story in the state the address asked for, and reports every change.
+ *
+ * A story draws its own switcher inside the canvas, so the page around it
+ * cannot see which state is showing — and until now a link to a demo always
+ * opened where the story opens rather than where the sender was. The address
+ * can now name one, and the page is told whenever it changes, whether that was
+ * the address or the reader pressing the switcher.
+ *
+ * Polled rather than pushed, for the same reason the size is: a reader changes
+ * this a handful of times and a callback per layout would be a message a frame.
+ */
+function shareTheVariant(story, wanted, wasm) {
+  // A switcher registers itself as it draws, and `run` returns before the
+  // first frame — so asking now would be asking nobody. Kept up until it
+  // lands, then dropped: a story with no states never lands and must not be
+  // asked for ever.
+  let asking = Boolean(wanted);
+  const startedAt = performance.now();
+  let last;
+
+  const check = () => {
+    let variant;
+    try {
+      if (asking) {
+        if (wasm.set_story_variant(wanted) || performance.now() - startedAt > FIRST_FRAME_TIMEOUT_MS) {
+          asking = false;
+        }
+      }
+      variant = wasm.story_variant() ?? null;
+    } catch {
+      // A module that has gone away has no state to report.
+      return;
+    }
+    if (variant !== last) {
+      last = variant;
+      if (window.parent !== window) {
+        window.parent.postMessage(variantMessage(story, variant), window.location.origin);
+      }
+    }
+    window.requestAnimationFrame(check);
+  };
+  window.requestAnimationFrame(check);
+}
+
+/**
  * Keeps the running gallery in step with the reader's motion preference.
  *
  * GPUI takes reduced motion from the platform, and the web platform does not
@@ -341,10 +387,14 @@ async function initEmbed() {
     await wasm.run(options.story, themeChannel.current(), assetEndpoint());
     themeChannel.connect(wasm);
     followMotionPreference(options.motion, wasm);
+    shareTheVariant(options.story, options.variant, wasm);
     window.gpuiAi = Object.freeze({
       currentTheme: () => wasm.gallery_theme(),
       storyHeight: () => wasm.story_height(),
       reducedMotion: () => wasm.reduced_motion(),
+      variants: () => wasm.story_variants(),
+      variant: () => wasm.story_variant(),
+      setVariant: (id) => wasm.set_story_variant(id),
       // Cheaper than replacing the frame by the size of the binary: reloading
       // tears down a seventeen-megabyte instance to reach a state the story
       // gets back to in one frame.

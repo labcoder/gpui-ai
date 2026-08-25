@@ -109,6 +109,8 @@ export function Demo({
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [scrolls, setScrolls] = useState(false);
   const [measured, setMeasured] = useState<number>();
+  const [variant, setVariant] = useState<string>();
+  const [wanted, setWanted] = useState<string>();
   const [override, setOverride] = useState<string>(FOLLOW);
   const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const overrideId = useId();
@@ -116,7 +118,7 @@ export function Demo({
   // Derived, not stored: what the frame points at is a function of whether it
   // is allowed to run, and keeping a second copy in state is how the two come
   // to disagree.
-  const src = running ? demoSrc(story) : undefined;
+  const src = running ? demoSrc(story, undefined, wanted) : undefined;
 
   const site = useTheme();
   const effective = override === FOLLOW ? site.applied : override;
@@ -150,10 +152,16 @@ export function Demo({
         state?: unknown;
         captured?: unknown;
         height?: unknown;
+        variant?: unknown;
       } | null;
       if (message?.story !== story) return;
       if (message.type === "gpui-ai-wheel" && typeof message.captured === "boolean") {
         setScrolls(message.captured);
+        return;
+      }
+      if (message.type === "gpui-ai-variant") {
+        // Null means a story with no states, which is most of them.
+        setVariant(typeof message.variant === "string" ? message.variant : undefined);
         return;
       }
       if (message.type === "gpui-ai-size" && typeof message.height === "number") {
@@ -224,6 +232,15 @@ export function Demo({
   );
 
   const starting = Boolean(src) && status === "starting" && webgpu !== false;
+
+  // The state a link asked for, read after mount rather than during render:
+  // the pre-render has no address to read, and a frame that differed between
+  // the two would be thrown away and rebuilt. The demo does not start until
+  // after mount either, so this is known in time to be the state it opens in.
+  useEffect(() => {
+    const asked = new URL(window.location.href).searchParams.get("variant");
+    if (asked) setWanted(asked);
+  }, []);
 
   // This demo's claim on one of the machine's live frames. Identity has to
   // outlast a render, or the governor would be tracking a new demo every time
@@ -302,6 +319,10 @@ export function Demo({
     const url = new URL(window.location.href);
     url.hash = "";
     if (override !== FOLLOW) url.searchParams.set("theme", override);
+    // The state the reader switched to, which they did inside the canvas where
+    // this page cannot see it. Without it a shared link opens the story where
+    // the story opens, which is not where the sender was.
+    if (variant) url.searchParams.set("variant", variant);
     try {
       await navigator.clipboard.writeText(url.toString());
       setLinkState("copied");
@@ -311,7 +332,7 @@ export function Demo({
       setLinkState("failed");
     }
     window.setTimeout(() => setLinkState("idle"), 2_400);
-  }, [override]);
+  }, [override, variant]);
 
   return (
     <figure className="demo">
@@ -430,7 +451,7 @@ export function Demo({
               nothing guesses from the viewer's own light/dark preference — so
               "Follow site" used to open the demo in a theme the site was not
               showing. */}
-          <a data-specimen-open href={demoSrc(story, effective)}>
+          <a data-specimen-open href={demoSrc(story, effective, variant)}>
             Pop out
           </a>
           <button type="button" data-specimen-link onClick={copyLink}>

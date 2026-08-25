@@ -24,6 +24,18 @@ export function parseMotion(value) {
   return undefined;
 }
 
+/**
+ * The state the address asks the story to open in.
+ *
+ * Same shape rule as a theme name, a lowercase slug, because the gallery is
+ * the only thing that knows which states a story has, and the host must not
+ * gatekeep a list it does not own. An unknown one is simply not applied.
+ */
+export function parseVariant(value) {
+  if (!value) return undefined;
+  return THEME_SLUG.test(value) ? value : undefined;
+}
+
 export function parseEmbedOptions(search) {
   const params = new URLSearchParams(search);
   const story = params.get('story') || undefined;
@@ -32,6 +44,7 @@ export function parseEmbedOptions(search) {
     story,
     theme: normalizeTheme(params.get('theme')),
     motion: parseMotion(params.get('motion')),
+    variant: parseVariant(params.get('variant')),
   };
 }
 
@@ -104,6 +117,25 @@ export function parseSizeMessage(data) {
   // number this page should not be resizing anything from.
   if (!Number.isFinite(data.height) || data.height <= 0 || data.height > 20_000) return undefined;
   return { story: data.story, height: Math.round(data.height) };
+}
+
+/**
+ * Which state the story is showing, for the page's Copy link and Pop out.
+ *
+ * The switcher a story draws is inside its canvas, so a reader can change what
+ * they are looking at without the page around it knowing. Without this, a
+ * shared link always opened the story where the story opens, which is not
+ * where the sender was.
+ */
+export function variantMessage(story, variant) {
+  return { type: 'gpui-ai-variant', story: story ?? '', variant: variant ?? null };
+}
+
+export function parseVariantMessage(data) {
+  if (data?.type !== 'gpui-ai-variant') return undefined;
+  if (typeof data.story !== 'string') return undefined;
+  if (data.variant !== null && parseVariant(data.variant) === undefined) return undefined;
+  return { story: data.story, variant: data.variant };
 }
 
 export function parseStatusMessage(data) {

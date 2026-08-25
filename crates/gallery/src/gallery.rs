@@ -23,6 +23,8 @@ use gpui_component::{
     v_flex,
 };
 use std::collections::HashSet;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 // Catalog keyboard actions: page and jump navigation for the story feed.
@@ -118,6 +120,50 @@ fn height_probe() -> impl IntoElement {
     .inset_0()
 }
 
+/// The state switcher the story currently on screen is drawing, if it has one.
+///
+/// Five of the thirty-four stories offer states to switch between — the chat
+/// story and the four tables — and each draws its own switcher inside the
+/// canvas, owned by its own entity. Nothing outside the canvas could reach one:
+/// the entities live in the window's keyed state, and their setters have five
+/// different signatures.
+///
+/// So the switcher registers itself as it draws, boxed down to "put this index
+/// on screen". That is what lets an address name a state — `variant=welcome`
+/// — and what lets Copy link give back the state the reader was actually
+/// looking at rather than the one the story opens in.
+///
+/// One slot, because the embed draws one story. The full gallery draws
+/// thirty-four and the last one wins, which is meaningless there and unread:
+/// the bridge that uses this exists only on the web, and the web draws the
+/// embed.
+type VariantSetter = Rc<dyn Fn(usize, &mut App)>;
+
+thread_local! {
+    static ACTIVE_SWITCHER: RefCell<Option<(usize, VariantSetter)>> = const { RefCell::new(None) };
+}
+
+/// Which state the story on screen is showing, if it offers any.
+pub fn active_variant_index() -> Option<usize> {
+    ACTIVE_SWITCHER.with(|switcher| switcher.borrow().as_ref().map(|(index, _)| *index))
+}
+
+/// Puts the story on screen into one of the states it offers.
+///
+/// Returns whether there was a switcher to tell.
+pub fn set_active_variant(index: usize, cx: &mut App) -> bool {
+    let Some(apply) = ACTIVE_SWITCHER.with(|switcher| {
+        switcher
+            .borrow()
+            .as_ref()
+            .map(|(_, apply)| Rc::clone(apply))
+    }) else {
+        return false;
+    };
+    apply(index, cx);
+    true
+}
+
 /// Ticks the height measurement runs a streaming story for.
 ///
 /// The answer stream is the longest and finishes well inside this; the code
@@ -184,6 +230,16 @@ fn story_state_switcher<T: 'static>(
     active_index: usize,
     apply: fn(&mut T, usize, &mut Context<T>),
 ) -> Stateful<Div> {
+    let registered = owner.clone();
+    ACTIVE_SWITCHER.with(|switcher| {
+        *switcher.borrow_mut() = Some((
+            active_index,
+            Rc::new(move |index: usize, cx: &mut App| {
+                let _ = registered.update(cx, |story, cx| apply(story, index, cx));
+            }) as VariantSetter,
+        ));
+    });
+
     h_flex()
         .id(format!("{slug}-state-switcher"))
         .debug_selector(move || format!("{slug}-state-switcher"))

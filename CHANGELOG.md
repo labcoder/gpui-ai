@@ -22,6 +22,12 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- A link to a demo can name the state the story opens in, and Copy link gives
+  back the one the reader was actually looking at. Five stories offer states to
+  switch between and each draws its switcher inside its own canvas, so the page
+  around it could not see which was showing: a shared link always opened where
+  the story opens, which is not where the sender was.
+
 - Demos follow the reader's motion preference. GPUI takes reduced motion from
   the platform and the web platform has none, so every demo on the site
   shimmered and breathed at someone who had asked their machine for stillness,

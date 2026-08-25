@@ -1563,6 +1563,80 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     },
   );
 
+  // D-04. A story draws its own switcher inside the canvas, so a reader can
+  // change what they are looking at without the page knowing — and Copy link
+  // handed over the state the story opens in rather than the one they were on.
+  // The address can name a state now, and the demo says which it is showing.
+  const switchable = components.find((component) => component.variants.length > 1);
+  assert.ok(switchable, "the catalog must have a story with states to switch between");
+  const wanted = switchable.variants[1];
+
+  await cdp.navigate(
+    `${serverHandle.origin}/gpui-ai/components/${switchable.slug}/?variant=${wanted.id}`,
+    1280,
+    900,
+  );
+  await waitForValue(
+    cdp,
+    "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
+    {
+      label: `the ${switchable.slug} demo to start`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  // The frame was pointed at the state before it started, rather than being
+  // switched afterwards: a reader following a link should not watch the demo
+  // open on one state and jump to another.
+  assert.match(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').getAttribute('src')",
+    ),
+    new RegExp(`variant=${wanted.id}$`),
+    "a link naming a state must open the frame on it",
+  );
+  await waitForValue(
+    cdp,
+    `document.querySelector('[data-specimen-frame] iframe').contentWindow.gpuiAi?.variant() === ${JSON.stringify(wanted.id)}`,
+    {
+      label: `the ${switchable.slug} story to be showing ${wanted.id}`,
+      fatal: GALLERY_GAVE_UP,
+      describe: `(() => ({
+        asked: ${JSON.stringify(wanted.id)},
+        showing: document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.variant() ?? null,
+        offers: document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.variants() ?? null,
+      }))()`,
+      errors,
+    },
+  );
+  // The states the gallery says it has are the states the catalog published.
+  assert.deepEqual(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').contentWindow.gpuiAi.variants()",
+    ),
+    switchable.variants.map((entry) => entry.id),
+    "the catalog and the running story must agree about what states exist",
+  );
+
+  // And the page hears about a change it did not make, which is what Copy link
+  // needs: the switcher is inside the canvas.
+  const first = switchable.variants[0];
+  await cdp.evaluate(
+    `document.querySelector('[data-specimen-frame] iframe').contentWindow.gpuiAi.setVariant(${JSON.stringify(first.id)})`,
+  );
+  await waitForValue(
+    cdp,
+    `document.querySelector('[data-specimen-open]').getAttribute('href').includes('variant=${first.id}')`,
+    {
+      label: "the page to be told which state the story switched to",
+      describe: `(() => ({
+        popOut: document.querySelector('[data-specimen-open]')?.getAttribute('href'),
+      }))()`,
+      errors,
+    },
+  );
+
   // D-04. The library's claim about reduced motion is that a run with it on
   // lands on a useful static frame rather than an empty one, and until now
   // nothing on the web could ask for it — GPUI reads the preference from the

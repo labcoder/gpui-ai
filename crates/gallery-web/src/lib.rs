@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 
 thread_local! {
+    static SELECTED: Cell<Option<StoryId>> = const { Cell::new(None) };
     static APPLICATION: RefCell<Option<ApplicationHandle>> = const { RefCell::new(None) };
     static GALLERY: RefCell<Option<Entity<Gallery>>> = const { RefCell::new(None) };
     static ACTIVE_THEME: Cell<Option<GalleryTheme>> = const { Cell::new(None) };
@@ -146,6 +147,72 @@ pub fn reset_story() -> bool {
     reset.get()
 }
 
+/// The states the running story offers, as slugs, in the order it draws them.
+///
+/// Five of the thirty-four stories have any: the chat story and the four
+/// tables. The rest return an empty list, which is the honest answer and not a
+/// failure.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn story_variants() -> Vec<String> {
+    SELECTED
+        .with(|selected| selected.get())
+        .map(|story| {
+            story
+                .variants()
+                .iter()
+                .map(|(slug, _)| (*slug).to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Which state the running story is showing, if it offers any.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn story_variant() -> Option<String> {
+    let story = SELECTED.with(|selected| selected.get())?;
+    let index = gallery::active_variant_index()?;
+    story
+        .variants()
+        .get(index)
+        .map(|(slug, _)| (*slug).to_owned())
+}
+
+/// Puts the running story into one of the states it offers.
+///
+/// This is what lets an address name a state. Without it a link to a demo
+/// always opened the story where the story opens, so Copy link handed over
+/// something other than what the sender was looking at.
+///
+/// Returns whether the story took it: an unknown slug, a story with no states,
+/// or a story that has not drawn yet are all "no" rather than an error, because
+/// the caller is an address bar and a wrong guess there is not exceptional.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn set_story_variant(variant: String) -> bool {
+    let Some(story) = SELECTED.with(|selected| selected.get()) else {
+        return false;
+    };
+    let Some(index) = story
+        .variants()
+        .iter()
+        .position(|(slug, _)| *slug == variant)
+    else {
+        return false;
+    };
+
+    let applied = Cell::new(false);
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| {
+                if gallery::set_active_variant(index, cx) {
+                    cx.refresh_windows();
+                    applied.set(true);
+                }
+            });
+        }
+    });
+    applied.get()
+}
+
 /// Returns the theme preset most recently applied by the running Rust gallery.
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub fn gallery_theme() -> Option<String> {
@@ -174,6 +241,7 @@ pub fn run(
     asset_base: Option<String>,
 ) -> Result<(), JsValue> {
     let selected = parse_story(story).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    SELECTED.with(|current| current.set(Some(selected)));
     let theme = parse_theme(theme).map_err(|error| JsValue::from_str(&error))?;
     console_error_panic_hook::set_once();
     #[cfg(not(target_family = "wasm"))]

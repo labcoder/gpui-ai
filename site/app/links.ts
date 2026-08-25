@@ -21,9 +21,12 @@ export function href(path: string): string {
 }
 
 /** Where the shared WASM gallery lives, relative to the site root. */
-export function demoSrc(story: string, theme?: string): string {
+export function demoSrc(story: string, theme?: string, variant?: string): string {
   const query = new URLSearchParams({ story });
   if (theme) query.set("theme", theme);
+  // Only when there is one to name. Five of the thirty-four stories offer
+  // states; the rest would carry an empty parameter for nothing.
+  if (variant) query.set("variant", variant);
   return `${href("/gallery/embed.html")}?${query.toString()}`;
 }
 

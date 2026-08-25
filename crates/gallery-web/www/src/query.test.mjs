@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   parseEmbedOptions,
   parseMotion,
+  parseVariant,
+  parseVariantMessage,
   parseStatusMessage,
   parseThemeEvent,
   parseThemeMessage,
@@ -17,6 +19,7 @@ test('parses a story and explicit dark theme', () => {
     story: 'streaming-text',
     theme: 'dark',
     motion: undefined,
+    variant: undefined,
   });
 });
 
@@ -25,6 +28,7 @@ test('parses explicit light theme', () => {
     story: 'thinking',
     theme: 'light',
     motion: undefined,
+    variant: undefined,
   });
 });
 
@@ -33,6 +37,7 @@ test('parses the explicit contrast review theme', () => {
     story: 'loading',
     theme: 'contrast',
     motion: undefined,
+    variant: undefined,
   });
 });
 
@@ -41,6 +46,7 @@ test('omits empty story and lets system theme decide', () => {
     story: undefined,
     theme: undefined,
     motion: undefined,
+    variant: undefined,
   });
 });
 
@@ -50,6 +56,7 @@ test('parses a bundled theme the host has no list for', () => {
     story: 'approval',
     theme: 'graphite',
     motion: undefined,
+    variant: undefined,
   });
 });
 
@@ -154,5 +161,39 @@ test('the address can pin the motion preference, or leave it to the machine', ()
     story: 'orbs',
     theme: undefined,
     motion: true,
+    variant: undefined,
   });
+});
+
+test('the address can name the state a story opens in', () => {
+  // The gallery owns the list of states a story has, so the host only checks
+  // the shape: gatekeeping a list it does not own is how the two drift apart.
+  assert.equal(parseVariant('welcome'), 'welcome');
+  assert.equal(parseVariant('populated'), 'populated');
+  assert.equal(parseVariant(''), undefined);
+  assert.equal(parseVariant(null), undefined);
+  assert.equal(parseVariant('Welcome!'), undefined);
+  assert.equal(parseVariant('-leading'), undefined);
+
+  assert.deepEqual(parseEmbedOptions('?story=chat&variant=welcome'), {
+    story: 'chat',
+    theme: undefined,
+    motion: undefined,
+    variant: 'welcome',
+  });
+});
+
+test('a story tells the page which state it is showing', () => {
+  assert.deepEqual(parseVariantMessage({ type: 'gpui-ai-variant', story: 'chat', variant: 'welcome' }), {
+    story: 'chat',
+    variant: 'welcome',
+  });
+  // Null is the answer for a story with no states at all, and is not a
+  // malformed message.
+  assert.deepEqual(parseVariantMessage({ type: 'gpui-ai-variant', story: 'orbs', variant: null }), {
+    story: 'orbs',
+    variant: null,
+  });
+  assert.equal(parseVariantMessage({ type: 'gpui-ai-variant', story: 'chat', variant: 'Nope!' }), undefined);
+  assert.equal(parseVariantMessage({ type: 'other', story: 'chat', variant: 'welcome' }), undefined);
 });
