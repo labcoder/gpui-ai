@@ -1377,6 +1377,36 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   assert.notEqual(await scrollY(), leftAt, "the page must have the wheel again once the pointer leaves");
   await cdp.evaluate("window.scrollTo(0, 0)");
 
+  // The same question with a finger. The canvas ships with an inline
+  // `touch-action: none`, which stopped a drag over a demo scrolling anything
+  // at all. A touch pointer stops existing when the finger lifts, so the
+  // capture is released with it and vertical panning stays with the page —
+  // being unable to scroll a page is worse than being unable to pan a
+  // transcript, and this is the assertion that keeps it that way.
+  const touchAction = () =>
+    cdp.evaluate(
+      "getComputedStyle(document.querySelector('[data-specimen-frame] iframe').contentDocument.querySelector('canvas')).touchAction",
+    );
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  assert.equal(await touchAction(), "pan-y", "a finger must be able to scroll the page over a demo");
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: overDemo.x, y: overDemo.y }],
+  });
+  await waitForValue(cdp, "Boolean(document.querySelector('[data-demo-scrolls]'))", {
+    label: "a demo to take the gesture while the finger is down",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await waitForValue(cdp, "!document.querySelector('[data-demo-scrolls]')", {
+    label: "the demo to let go when the finger lifts",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.equal(await touchAction(), "pan-y", "a tap must not leave a demo holding the page");
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+
   const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
   assert.equal(
     await readout(),

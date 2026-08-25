@@ -71,10 +71,15 @@ body[data-page='embed'] > canvas { opacity: 0; }
 
 /* The touch half of the same problem the wheel has.
    `gpui_web` creates the canvas with an inline `touch-action: none`, so a
-   finger dragged over a demo scrolls nothing at all — not the story, not the
-   page. Until the reader taps into the example, vertical panning belongs to
-   the page; afterwards the story gets the whole gesture. `!important` because
-   the value being overridden is inline. */
+   finger dragged over a demo scrolled nothing at all — not the story, not the
+   page. `!important` because the value being overridden is inline.
+
+   A touch pointer stops existing when the finger lifts, so the browser fires
+   `pointerleave` immediately after `pointerup` and the capture is released
+   with it. In practice that means a tap never leaves a demo holding the
+   gesture, and vertical panning stays with the page on a touch screen — which
+   is the right way round: being unable to scroll a page is worse than being
+   unable to pan a transcript, and the demo still gets every tap. */
 body[data-page='embed']:not([data-captured]) > canvas {
   touch-action: pan-y !important;
 }
