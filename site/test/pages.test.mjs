@@ -396,6 +396,43 @@ test("the README links every component, and every link it makes resolves", async
   assert.match(readme, new RegExp(`themes-${themeCount}-blue`), `the badge does not say ${themeCount} themes`);
 });
 
+test("the README's Kind column matches what each type implements", async () => {
+  const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
+  const directory = path.join(repositoryRoot, "crates", "gpui-ai", "src");
+  const sources = (
+    await Promise.all(
+      (await readdir(directory))
+        .filter((name) => name.endsWith(".rs"))
+        .map((name) => readFile(path.join(directory, name), "utf8")),
+    )
+  ).join("\n");
+
+  // "stateless" and "entity" are the two things a reader plans around: one is
+  // a builder they can drop into a render, the other is state they have to own
+  // and keep. The table said "entity" for two `RenderOnce` builders, which is
+  // the kind of mistake that only shows up when someone writes `cx.new` for
+  // something that never needed it.
+  const rows = [...readme.matchAll(/^\|\s*\[`([^`]+)`\]\([^)]*\)\s*\|\s*(stateless|entity)\s*\|/gm)];
+  assert.ok(rows.length > 25, `only ${rows.length} rows were read out of the table`);
+
+  const wrong = [];
+  for (const [, cell, kind] of rows) {
+    // One cell can name two types: "ToolCall` / `ToolGroup".
+    for (const name of cell.split("/").map((part) => part.replaceAll("`", "").trim())) {
+      const entity = new RegExp(`impl Render for ${name}\\b`).test(sources);
+      const builder = new RegExp(`impl RenderOnce for ${name}\\b`).test(sources);
+      if (!entity && !builder) {
+        wrong.push(`${name} implements neither Render nor RenderOnce in this crate`);
+        continue;
+      }
+      const actual = entity ? "entity" : "stateless";
+      if (actual !== kind) wrong.push(`${name} is ${actual}, the table says ${kind}`);
+    }
+  }
+
+  assert.deepEqual(wrong, [], `the table describes ${wrong.length} components wrongly`);
+});
+
 test("every font the site uses is served from the site", async () => {
   const { outDir } = await site();
   const assets = await readdir(path.join(outDir, "assets"));

@@ -32,7 +32,7 @@ A window opens with every component, live simulated agent activity, and a theme 
 | | |
 |---|---|
 | **Rust** | 1.89 or newer. Edition 2024 needs 1.85; the pinned dependency graph raises the floor |
-| **Platforms** | macOS, Linux, Windows — the same three GPUI supports. CI builds all three; the test suite runs on Linux |
+| **Platforms** | macOS, Linux, Windows — the same three GPUI supports. CI type-checks all three; the test suite runs on Linux |
 | **Linux** | run [`script/install-linux.sh`](script/install-linux.sh) once for system dependencies |
 | **Browser** (for the web gallery only) | WebGPU. There is no WebGL fallback; a browser without it is told so rather than made to download the binary |
 
@@ -153,12 +153,12 @@ Thirty-four components across eight categories. Each one links to its live demo.
 | [`ToolChip`](https://labcoder.github.io/gpui-ai/components/tool-chips/) | stateless | Compact tool-call / file-edit chips with status |
 | [`ToolCall` / `ToolGroup`](https://labcoder.github.io/gpui-ai/components/tool-calls/) | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
 | [`TaskRow` / `TaskSnapshot`](https://labcoder.github.io/gpui-ai/components/tasks/) | stateless | Live agent task status rows |
-| [`TodoList`](https://labcoder.github.io/gpui-ai/components/todos/) | entity | Agent to-do list with progress |
+| [`TodoList`](https://labcoder.github.io/gpui-ai/components/todos/) | stateless | Agent to-do list with progress |
 | [`ImageGeneration`](https://labcoder.github.io/gpui-ai/components/image-generation/) | stateless | Image-generation frame with progress |
 | [`SearchResults`](https://labcoder.github.io/gpui-ai/components/search/) | stateless | Web-search result cards |
 | [`ApprovalCard`](https://labcoder.github.io/gpui-ai/components/approval/) | stateless | Human-in-the-loop gate with default and destructive tones, optional "Always allow", and resolved states |
 | [`PlanCard`](https://labcoder.github.io/gpui-ai/components/plan/) | stateless | An agent's proposed steps with typed per-step status, lifecycle badge, Approve/Reject/Edit while proposed, and step activation by stable ID |
-| [`RecommendationCard`](https://labcoder.github.io/gpui-ai/components/recommendation/) | entity | Agent suggestion with confidence meter |
+| [`RecommendationCard`](https://labcoder.github.io/gpui-ai/components/recommendation/) | stateless | Agent suggestion with confidence meter |
 | [`ContextCard`](https://labcoder.github.io/gpui-ai/components/context/) | stateless | Retrieved knowledge chunks with sources |
 | [`InsightCard`](https://labcoder.github.io/gpui-ai/components/insights/) | stateless | Paged insight cards with sparkline charts |
 | [`PromptBar`](https://labcoder.github.io/gpui-ai/components/prompt-bar/) | entity | Composer: @ mentions, / commands, provider-grouped model picker with descriptions and context windows, attachments |
