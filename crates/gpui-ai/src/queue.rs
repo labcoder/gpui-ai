@@ -362,6 +362,7 @@ fn render_row(
             cx,
         ),
         (root_id.clone(), format!("reorder-{}", item.id)),
+        index,
         window,
         cx,
     )

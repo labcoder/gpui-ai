@@ -249,6 +249,8 @@ fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
 struct Reorder {
     /// Where the row lays out when nothing is displacing it.
     settled: Option<Pixels>,
+    /// Which place in the list it last held.
+    place: Option<usize>,
     /// The row's displacement from `settled`, and how fast it is closing.
     spring: SpringState,
 }
@@ -261,11 +263,16 @@ struct Reorder {
 /// than one row moving. This carries the row: it is drawn where it was and
 /// springs to where it belongs.
 ///
-/// Measured rather than calculated from the index. Rows here are not a uniform
-/// height — a queued prompt wraps to two lines, its neighbour to one — so
-/// index times a row height would be wrong by however much they differ. The
-/// row reports where it laid out and the displacement is the difference from
-/// last time, which is right whatever the rows contain.
+/// The index says *whether* the row moved and the measurement says *how far*.
+///
+/// Both are needed. An index alone cannot give a distance, because these rows
+/// are not a uniform height — a queued prompt wraps to two lines and its
+/// neighbour does not — so index times a row height would be wrong by however
+/// much they differ. A measurement alone cannot say whether it moved: element
+/// bounds are window coordinates, so scrolling past a list changes every row's
+/// position without changing anything about the list, and a row that sprang
+/// whenever its window position moved would make the whole list swim under a
+/// reader who only scrolled past it.
 ///
 /// Keyed by `id`, which must be the row's stable identity rather than its
 /// position: keyed by position, every row would "move" whenever any row did,
@@ -276,6 +283,7 @@ struct Reorder {
 pub fn reorder<E>(
     element: E,
     id: impl Into<ElementId>,
+    index: usize,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement
@@ -329,7 +337,8 @@ where
                 move |bounds, _, cx| {
                     let settled = bounds.origin.y - px(displacement);
                     measured.update(cx, |row, _| {
-                        if let Some(previous) = row.settled {
+                        let changed_places = row.place.is_some_and(|previous| previous != index);
+                        if let (true, Some(previous)) = (changed_places, row.settled) {
                             let moved = f32::from(previous - settled);
                             if moved.abs() > REORDER_EPSILON {
                                 // It is now drawn where it was, and the step
@@ -337,7 +346,10 @@ where
                                 row.spring.position += moved;
                             }
                         }
+                        // Recorded either way, so a row that was scrolled past
+                        // has an accurate baseline the next time it does move.
                         row.settled = Some(settled);
+                        row.place = Some(index);
                     });
                 },
                 |_, _, _, _| {},
