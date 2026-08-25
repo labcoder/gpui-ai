@@ -9,9 +9,7 @@ mod story;
 
 pub use gallery::{
     Gallery, GalleryChrome, GalleryTheme, active_variant_index, apply_gallery_theme, init,
-    measured_story_height, set_active_variant,
-    open_gallery,
-    open_gallery_with_theme,
+    measured_story_height, open_gallery, open_gallery_with_theme, set_active_variant,
 };
 pub use story::{
     CHAT_STORY_VARIANTS, HERO_HEIGHT, Overflow, StoryId, StoryLookupError, StoryMeta,

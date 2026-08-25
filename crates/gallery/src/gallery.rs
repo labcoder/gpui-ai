@@ -22,8 +22,8 @@ use gpui_component::{
     theme::{Theme, ThemeConfig, ThemeMode, ThemeRegistry},
     v_flex,
 };
-use std::collections::HashSet;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -5775,7 +5775,10 @@ mod tests {
         cx.update(|_, cx| gallery.update(cx, |gallery, cx| gallery.reset_story(cx)));
 
         gallery.read_with(cx, |gallery, _| {
-            assert!(gallery.trace_open, "reset must put the trace back as it opened");
+            assert!(
+                gallery.trace_open,
+                "reset must put the trace back as it opened"
+            );
             assert_eq!(gallery.tool_group_open, None);
             assert!(gallery.approval_decisions.is_empty());
             assert_eq!(gallery.last_approval_event, None);

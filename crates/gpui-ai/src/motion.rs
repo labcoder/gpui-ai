@@ -273,7 +273,12 @@ struct Reorder {
 ///
 /// Under reduced motion the row is returned untouched and no state is kept, so
 /// a reordered list simply is reordered.
-pub fn reorder<E>(element: E, id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> AnyElement
+pub fn reorder<E>(
+    element: E,
+    id: impl Into<ElementId>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement
 where
     E: IntoElement + Styled + 'static,
 {
@@ -446,7 +451,10 @@ mod tests {
             .copied()
             .filter(|position| *position < 0.0)
             .fold(0.0_f32, |worst, position| worst.min(position));
-        assert!(overshoot < 0.0, "a row that never crosses reads as a redraw");
+        assert!(
+            overshoot < 0.0,
+            "a row that never crosses reads as a redraw"
+        );
         assert!(
             overshoot.abs() < 10.0,
             "overshot by {overshoot}px of 100, which is a bounce"

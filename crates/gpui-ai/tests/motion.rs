@@ -50,8 +50,13 @@ fn painted_at(painted: &Arc<Mutex<Option<f32>>>) -> f32 {
         .expect("the row should have painted")
 }
 
-fn harness(cx: &mut TestAppContext) -> (Rc<Cell<f32>>, Arc<Mutex<Option<f32>>>, &mut VisualTestContext)
-{
+fn harness(
+    cx: &mut TestAppContext,
+) -> (
+    Rc<Cell<f32>>,
+    Arc<Mutex<Option<f32>>>,
+    &mut VisualTestContext,
+) {
     cx.update(gpui_ai::init);
     let spacer = Rc::new(Cell::new(20.0));
     let painted = Arc::new(Mutex::new(None));
