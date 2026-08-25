@@ -27,7 +27,7 @@ export const routes: readonly Route[] = [
   {
     path: "/",
     title: "gpui-ai",
-    description: "AI-native UI components for GPUI, the Rust UI framework behind Zed.",
+    description: "Components for AI applications built with GPUI.",
     kind: "home",
   },
   {

@@ -356,7 +356,24 @@ test("the home page puts installing it above the demo", async () => {
   assert.ok(install < demo, `install is at ${install}, below the demo at ${demo}`);
 });
 
-test("the README links every component, and every link it makes resolves", async () => {
+test("the home page aligns the install panel and demo with space between them", async () => {
+  const html = await page("/");
+  const css = await readFile(path.join(repositoryRoot, "site", "app", "site.css"), "utf8");
+
+  assert.match(html, /<section class="home-install" aria-labelledby="install">/);
+  assert.match(
+    css,
+    /\.home-install\s*\{[^}]*max-width:\s*var\(--demo-width\)/s,
+    "the install section does not share the demo width",
+  );
+  assert.match(
+    css,
+    /\.home-install \+ \.demo\s*\{[^}]*margin-top:\s*var\(--space-6\)/s,
+    "the install panel and demo have no gap",
+  );
+});
+
+test("the README links every component, and every site link it makes resolves", async () => {
   const { outDir } = await site();
   const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
   const origin = buildInfo.homepage.replace(/\/$/, "");
@@ -386,15 +403,22 @@ test("the README links every component, and every link it makes resolves", async
     [],
     "the README's component table has to stay the whole list",
   );
+  assert.match(readme, new RegExp(`<summary>View all ${components.length} components</summary>`));
+  assert.match(readme, /<summary>Stateless and stateful examples<\/summary>/);
 
-  // And the counts it advertises, which are the first claim a reader checks.
+  // Keep the two public counts tied to generated data without requiring badges
+  // or an exhaustive table in the README.
   assert.match(
     readme,
-    new RegExp(`components-${components.length}-blue`),
-    `the badge does not say ${components.length} components`,
+    new RegExp(`all ${components.length} components`, "i"),
+    `the README does not say there are ${components.length} components`,
   );
   const themeCount = themeFile.groups.reduce((total, group) => total + group.themes.length, 0);
-  assert.match(readme, new RegExp(`themes-${themeCount}-blue`), `the badge does not say ${themeCount} themes`);
+  assert.match(
+    readme,
+    new RegExp(`includes ${themeCount} themes`, "i"),
+    `the README does not say there are ${themeCount} themes`,
+  );
 });
 
 test("the README's Kind column matches what each type implements", async () => {
@@ -408,18 +432,15 @@ test("the README's Kind column matches what each type implements", async () => {
     )
   ).join("\n");
 
-  // "stateless" and "entity" are the two things a reader plans around: one is
-  // a builder they can drop into a render, the other is state they have to own
-  // and keep. The table said "entity" for two `RenderOnce` builders, which is
-  // the kind of mistake that only shows up when someone writes `cx.new` for
-  // something that never needed it.
-  const rows = [...readme.matchAll(/^\|\s*\[`([^`]+)`\]\([^)]*\)\s*\|\s*(stateless|entity)\s*\|/gm)];
-  assert.ok(rows.length > 25, `only ${rows.length} rows were read out of the table`);
+  const rows = [
+    ...readme.matchAll(/^\|\s*\[([^\]]+)\]\([^)]*\)\s*\|\s*(stateless|entity)\s*\|/gm),
+  ];
+  assert.equal(rows.length, components.length, `the table contains ${rows.length} component rows`);
 
   const wrong = [];
   for (const [, cell, kind] of rows) {
-    // One cell can name two types: "ToolCall` / `ToolGroup".
-    for (const name of cell.split("/").map((part) => part.replaceAll("`", "").trim())) {
+    const names = [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
+    for (const name of names) {
       const entity = new RegExp(`impl Render for ${name}\\b`).test(sources);
       const builder = new RegExp(`impl RenderOnce for ${name}\\b`).test(sources);
       if (!entity && !builder) {

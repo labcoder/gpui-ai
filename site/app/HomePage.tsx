@@ -1,17 +1,10 @@
 import { Code, CodeFrame } from "./CodePanel";
 import { Demo } from "./Demo";
-import { build, categories, components, componentsByCategory, hero, install, themes } from "./data";
+import { build, components, componentsByCategory, hero, install, themes } from "./data";
 import { href } from "./links";
 import { useTheme } from "./theme";
 
-/**
- * Themes offered on the front page, as a row of swatches.
- *
- * A short, deliberately mixed set: the two defaults, the accessible one, and
- * four that look nothing like each other. The masthead picker has all
- * forty-five; this is here so a visitor finds out within one click that the
- * page and the demo above it are painted from the same file.
- */
+/** A mixed sample of the themes available from the full picker. */
 const STRIP = [
   "light",
   "dark",
@@ -22,30 +15,23 @@ const STRIP = [
   "solstice",
 ] as const;
 
-/**
- * What gpui-ai is, shown before it is described.
- *
- * The two lines that install it come first, because someone who has already
- * decided wants them and should not have to scroll a demo to reach them. Then
- * the hero: the guided demo, a working prompt bar that runs a scripted
- * exchange when it is sent. It is the same binary every other demo on the site
- * runs, which is the claim the whole site makes.
- */
+/** The project overview, install snippet, and guided demo. */
 export function HomePage() {
   return (
-    <div className="shell">
-      <h1>Components for software that thinks out loud</h1>
+    <div className="shell home">
+      <h1>Components for AI applications built with GPUI</h1>
       <p className="lede">
-        {"AI-native UI for "}
+        {`${components.length} components for chat, streamed responses, tool calls, approvals, and more. Built for `}
         <a href="https://gpui.rs/">GPUI</a>
-        {`, the Rust framework behind Zed. ${components.length} components across ${categories.length} categories and ${themes.length} themes, each one demonstrated by the real compiled component rather than a screenshot.`}
+        {` and gpui-component, with ${themes.length} included themes.`}
       </p>
 
-      <section aria-labelledby="install">
-        <h2 id="install">Install the latest release</h2>
+      <section className="home-install" aria-labelledby="install">
+        <h2 id="install">Install</h2>
         <div className="install">
           <p className="lede">
-            Not on crates.io yet: GPUI itself is only published from Git, so this is too.
+            gpui-ai installs from Git because its current GPUI dependencies are not available on
+            crates.io.
           </p>
           <CodeFrame file="Cargo.toml" />
           <Code lines={install.lines} fallback={install.code} />
@@ -57,14 +43,14 @@ export function HomePage() {
           story={hero.slug}
           title={hero.windowTitle}
           height={hero.height}
-          caption="Send the question, or pick a suggestion. The tool calls, the reasoning and the reply are a fixed script — this demonstrates the components, not a language model."
+          caption="Send the question or choose a suggestion. The demo runs a fixed script with tool calls, reasoning, and a streamed reply."
         />
       ) : null}
 
       <ThemeStrip />
 
       <section aria-labelledby="categories">
-        <h2 id="categories">What is in it</h2>
+        <h2 id="categories">Components</h2>
         <ul className="cards">
           {componentsByCategory().map(([category, entries]) => (
             <li className="card" key={category}>
@@ -82,32 +68,29 @@ export function HomePage() {
         <h2 id="principles">How it is built</h2>
         <dl className="notes">
           <div>
-            <dt>Composed, never forked</dt>
+            <dt>Uses gpui-component</dt>
             <dd>
-              Everything here is built on gpui-component rather than replacing it, so an
-              application already using it keeps its own controls, its own theme, and its upgrade
-              path.
+              gpui-ai composes gpui-component controls and themes. Custom components use GPUI
+              directly.
             </dd>
           </div>
           <div>
-            <dt>The application owns the data</dt>
+            <dt>Your application owns state</dt>
             <dd>
-              A component renders what it is given and reports what was done to it through a typed
-              event. None of them fetch, retry, or persist anything on your behalf.
+              Components render your data and send typed events. Your application handles
+              requests, retries, and storage.
             </dd>
           </div>
           <div>
-            <dt>Themes are files</dt>
+            <dt>JSON themes</dt>
             <dd>
-              A theme is JSON in a directory. Adding one adds it to the registry, to this site, and
-              to every demo on it, with no code to change.
+              Add a theme file to include it in the registry, the gallery, and this website.
             </dd>
           </div>
           <div>
-            <dt>Motion you can turn off</dt>
+            <dt>Reduced motion</dt>
             <dd>
-              Every animation has a reduced-motion path that lands on a useful state rather than
-              stopping partway through one.
+              Animations respect reduced-motion settings and keep their state readable.
             </dd>
           </div>
         </dl>
@@ -116,10 +99,9 @@ export function HomePage() {
       <section aria-labelledby="architecture">
         <h2 id="architecture">How this site works</h2>
         <p className="lede">
-          Every page is real HTML, built ahead of time. Every demo on the site is the same
-          WebAssembly binary — one build of the same gallery that runs natively — fetched only
-          when a frame scrolls into view, and drawn on a WebGPU canvas. Each frame runs its own
-          instance; what they share is the download. Nothing here is a screenshot.
+          The site serves static HTML. Your browser runs the gallery&apos;s GPUI components through
+          WebAssembly and WebGPU. It downloads the shared gallery once and starts each demo as it
+          scrolls into view.
         </p>
         <ul className="chips">
           <li className="chip">
@@ -140,11 +122,10 @@ export function HomePage() {
       </section>
 
       <section aria-labelledby="build">
-        <h2 id="build">What these demos were built from</h2>
+        <h2 id="build">Build details</h2>
         <p className="lede">
-          This site is built from <code>main</code>, so the demos can be ahead of the release
-          above. These are the commits they were compiled against — for a Git dependency that is
-          the only thing that pins what you get.
+          We build this site from <code>main</code>, so the demos may be ahead of the latest
+          release. The links below show the exact revisions.
         </p>
         <dl className="facts">
           <div>
@@ -175,13 +156,7 @@ export function HomePage() {
   );
 }
 
-/**
- * Try it in — a row of swatches that repaint the whole page.
- *
- * Each button is painted from its own theme's values, so the row shows what it
- * is offering rather than naming it. Choosing one is the same choice the
- * masthead picker makes, through the same store, and it lasts.
- */
+/** Theme swatches that use the same store as the masthead picker. */
 function ThemeStrip() {
   const { applied, setChoice } = useTheme();
   const offered = STRIP.map((slug) => themes.find((theme) => theme.slug === slug)).filter(
@@ -190,7 +165,7 @@ function ThemeStrip() {
 
   return (
     <section className="theme-strip" aria-labelledby="try-it-in">
-      <h2 id="try-it-in">Try it in</h2>
+      <h2 id="try-it-in">Preview themes</h2>
       <ul>
         {offered.map((theme) => (
           <li key={theme.slug}>

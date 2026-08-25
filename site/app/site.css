@@ -1066,6 +1066,16 @@ pre.code-plain {
 
 /* Home ------------------------------------------------------------------- */
 
+.home-install {
+  max-width: var(--demo-width);
+}
+
+/* The install panel and demo are one sequence on the home page. Keep their
+   outside edges aligned and leave a clear break between them. */
+.home-install + .demo {
+  margin-top: var(--space-6);
+}
+
 /* Each swatch is painted from its own theme rather than the page's, which is
    the only way a row of them can show what it is offering. */
 .theme-strip {
@@ -1108,6 +1118,7 @@ pre.code-plain {
 }
 
 .install {
+  max-width: var(--demo-width);
   border: 1px solid var(--ai-border);
   border-radius: var(--ai-radius-lg);
   padding: var(--space-6);
