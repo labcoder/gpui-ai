@@ -78,6 +78,17 @@ export function Demo({
       if (message.state === "ready" || message.state === "failed") setStatus(message.state);
     };
     window.addEventListener("message", onMessage);
+
+    // A message sent before this listener existed is gone, and the title bar
+    // would say "Starting" over a demo that had already started. The embed
+    // leaves the same answer on its own document, which is same-origin and
+    // readable, so ask rather than rely on having been listening in time.
+    try {
+      if (iframe.current?.contentDocument?.body?.dataset.ready !== undefined) setStatus("ready");
+    } catch {
+      // A document that is not there to be read yet has not started either.
+    }
+
     return () => window.removeEventListener("message", onMessage);
   }, [src, story, reloads]);
 

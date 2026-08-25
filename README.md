@@ -32,7 +32,7 @@ A window opens with every component, live simulated agent activity, and a theme 
 | | |
 |---|---|
 | **Rust** | 1.85 or newer (edition 2024) |
-| **Platforms** | macOS, Linux, Windows — the same three GPUI supports, all three built and tested in CI |
+| **Platforms** | macOS, Linux, Windows — the same three GPUI supports. CI builds all three; the test suite runs on Linux |
 | **Linux** | run [`script/install-linux.sh`](script/install-linux.sh) once for system dependencies |
 | **Browser** (for the web gallery only) | WebGPU. There is no WebGL fallback; a browser without it is told so rather than made to download the binary |
 
