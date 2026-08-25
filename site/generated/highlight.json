@@ -39,6 +39,289 @@
           [
             ", window, cx);"
           ]
+        ],
+        [
+          [
+            "prompt.set_models("
+          ]
+        ],
+        [
+          [
+            "    ["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "PromptModel",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"balanced\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Balanced\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .provider("
+          ],
+          [
+            "\"Anthropic\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .description("
+          ],
+          [
+            "\"Claude Sonnet 5 · everyday work\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .context_window("
+          ],
+          [
+            "200_000",
+            "number"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "PromptModel",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"fast\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Fast\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .provider("
+          ],
+          [
+            "\"Anthropic\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .description("
+          ],
+          [
+            "\"Claude Haiku 4.5 · quick replies\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .context_window("
+          ],
+          [
+            "200_000",
+            "number"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "    ],"
+          ]
+        ],
+        [
+          [
+            "    cx,"
+          ]
+        ],
+        [
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "prompt.set_selected_model("
+          ],
+          [
+            "\"balanced\"",
+            "string"
+          ],
+          [
+            ", cx);"
+          ]
+        ],
+        [
+          [
+            "prompt.set_mentions(["
+          ],
+          [
+            "PromptMention",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"suppliers\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Suppliers\"",
+            "string"
+          ],
+          [
+            ")], cx);"
+          ]
+        ],
+        [
+          [
+            "prompt.set_commands("
+          ]
+        ],
+        [
+          [
+            "    ["
+          ],
+          [
+            "PromptCommand",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"compare\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"compare\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "        .description("
+          ],
+          [
+            "\"Compare current supplier context\"",
+            "string"
+          ],
+          [
+            ")],"
+          ]
+        ],
+        [
+          [
+            "    cx,"
+          ]
+        ],
+        [
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "prompt.set_attachments(["
+          ],
+          [
+            "PromptAttachment",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"pricing\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"pricing.md\"",
+            "string"
+          ],
+          [
+            ")], cx);"
+          ]
+        ],
+        [
+          [
+            "prompt.set_draft("
+          ],
+          [
+            "\"Ask a follow-up about suppliers\"",
+            "string"
+          ],
+          [
+            ", window, cx);"
+          ]
+        ],
+        [
+          [
+            "prompt"
+          ]
         ]
       ]
     },
@@ -72,6 +355,922 @@
           ],
           [
             ", prompt, window, cx);"
+          ]
+        ],
+        [
+          [
+            "chat.set_welcome("
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "("
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ChatWelcome",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"What should we look into?\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .description("
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "\"Ask about suppliers, pricing, or delivery risk. Suggestions send \\",
+            "string"
+          ]
+        ],
+        [
+          [
+            "                 immediately; the composer stays yours.\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "            )"
+          ]
+        ],
+        [
+          [
+            "            .suggestions(["
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "Suggestion",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"compare\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Compare supplier prices\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "Suggestion",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"risk\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Explain this week's delivery risk\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "Suggestion",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"draft\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Draft the order confirmations\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            ]),"
+          ]
+        ],
+        [
+          [
+            "    ),"
+          ]
+        ],
+        [
+          [
+            "    cx,"
+          ]
+        ],
+        [
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "chat"
+          ]
+        ],
+        [],
+        [
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " subscription = cx.subscribe_in("
+          ]
+        ],
+        [
+          [
+            "    &chat,"
+          ]
+        ],
+        [
+          [
+            "    window,"
+          ]
+        ],
+        [
+          [
+            "    |this, chat, event: &"
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            ", window, cx| {"
+          ]
+        ],
+        [
+          [
+            "        this.last_event = format!("
+          ],
+          [
+            "\"{event:?}\"",
+            "string"
+          ],
+          [
+            ").into();"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " prompt = chat.read(cx).prompt_bar().clone();"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "match",
+            "keyword"
+          ],
+          [
+            " event {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "SuggestionSelected",
+            "type"
+          ],
+          [
+            " { suggestion_id } => {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " draft = "
+          ],
+          [
+            "match",
+            "keyword"
+          ],
+          [
+            " suggestion_id.as_ref() {"
+          ]
+        ],
+        [
+          [
+            "                    "
+          ],
+          [
+            "\"compare\"",
+            "string"
+          ],
+          [
+            " => "
+          ],
+          [
+            "\"Compare supplier prices\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "                    "
+          ],
+          [
+            "\"risk\"",
+            "string"
+          ],
+          [
+            " => "
+          ],
+          [
+            "\"Explain this week's delivery risk\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "                    _ => "
+          ],
+          [
+            "\"Draft the order confirmations\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "                };"
+          ]
+        ],
+        [
+          [
+            "                prompt.update(cx, |prompt, cx| {"
+          ]
+        ],
+        [
+          [
+            "                    prompt.set_draft(draft, window, cx);"
+          ]
+        ],
+        [
+          [
+            "                });"
+          ]
+        ],
+        [
+          [
+            "                this.show_welcome = "
+          ],
+          [
+            "false",
+            "keyword"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "BranchSelected",
+            "type"
+          ],
+          [
+            " { message_id, index } => {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " message_id.as_ref() == "
+          ],
+          [
+            "\"latest-question\"",
+            "string"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "                    this.question_version = *index;"
+          ]
+        ],
+        [
+          [
+            "                    this.question_text = "
+          ],
+          [
+            "None",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                    this.answer = "
+          ],
+          [
+            "None",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                }"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "EditSubmitted",
+            "type"
+          ],
+          [
+            " { message_id, text } => {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " message_id.as_ref() == "
+          ],
+          [
+            "\"latest-question\"",
+            "string"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "                    this.question_text = "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "(text.clone());"
+          ]
+        ],
+        [
+          [
+            "                    this.answer = "
+          ],
+          [
+            "None",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                }"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "EditCancelled",
+            "type"
+          ],
+          [
+            " { .. } | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "AttachmentActivated",
+            "type"
+          ],
+          [
+            " { .. } => {}"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::Prompt("
+          ],
+          [
+            "PromptBarEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "ModelChanged",
+            "type"
+          ],
+          [
+            " { model_id, .. }) => {"
+          ]
+        ],
+        [
+          [
+            "                prompt.update(cx, |prompt, cx| {"
+          ]
+        ],
+        [
+          [
+            "                    prompt.set_selected_model(model_id.clone(), cx);"
+          ]
+        ],
+        [
+          [
+            "                });"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::Prompt("
+          ],
+          [
+            "PromptBarEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Submit",
+            "type"
+          ],
+          [
+            " { .. }) => {"
+          ]
+        ],
+        [
+          [
+            "                prompt.update(cx, |prompt, cx| {"
+          ]
+        ],
+        [
+          [
+            "                    prompt.set_progress("
+          ],
+          [
+            "ProgressState",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Running",
+            "type"
+          ],
+          [
+            ", cx);"
+          ]
+        ],
+        [
+          [
+            "                });"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::Prompt("
+          ],
+          [
+            "PromptBarEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "CancelRequested",
+            "type"
+          ],
+          [
+            " { .. }) => {"
+          ]
+        ],
+        [
+          [
+            "                prompt.update(cx, |prompt, cx| {"
+          ]
+        ],
+        [
+          [
+            "                    prompt.set_progress("
+          ],
+          [
+            "ProgressState",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Complete",
+            "type"
+          ],
+          [
+            ", cx);"
+          ]
+        ],
+        [
+          [
+            "                });"
+          ]
+        ],
+        [
+          [
+            "            }"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::Prompt(_)"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "RetryRequested",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "FollowUpSelected",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "CitationActivated",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "SourceActivated",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "MessageCopied",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "RegenerateRequested",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "EditRequested",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "FeedbackSubmitted",
+            "type"
+          ],
+          [
+            " { .. }"
+          ]
+        ],
+        [
+          [
+            "            | "
+          ],
+          [
+            "ChatEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "JumpedToLatest",
+            "type"
+          ],
+          [
+            " => {}"
+          ]
+        ],
+        [
+          [
+            "        }"
+          ]
+        ],
+        [
+          [
+            "        cx.notify();"
+          ]
+        ],
+        [
+          [
+            "    },"
+          ]
+        ],
+        [
+          [
+            ");"
           ]
         ]
       ]
@@ -158,6 +1357,291 @@
           [
             ", window, cx));"
           ]
+        ],
+        [
+          [
+            "ready.update(cx, |search, cx| {"
+          ]
+        ],
+        [
+          [
+            "    search.set_items("
+          ]
+        ],
+        [
+          [
+            "        ["
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "CommandSearchItem",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"supplier-report\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Open report\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .subtitle("
+          ],
+          [
+            "\"Supplier pricing and margin summary\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .keywords(["
+          ],
+          [
+            "\"cost\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"margin\"",
+            "string"
+          ],
+          [
+            "])"
+          ]
+        ],
+        [
+          [
+            "                .shortcut("
+          ],
+          [
+            "\"Ctrl+R\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "CommandSearchItem",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"delivery-calendar\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Open delivery calendar\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .subtitle("
+          ],
+          [
+            "\"Review upcoming supplier windows\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .keywords(["
+          ],
+          [
+            "\"schedule\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"dates\"",
+            "string"
+          ],
+          [
+            "])"
+          ]
+        ],
+        [
+          [
+            "                .shortcut("
+          ],
+          [
+            "\"Ctrl+D\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "CommandSearchItem",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"duplicate-report\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Open report\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .subtitle("
+          ],
+          [
+            "\"Inventory risk summary\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .keywords(["
+          ],
+          [
+            "\"stock\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"risk\"",
+            "string"
+          ],
+          [
+            "]),"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "CommandSearchItem",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"offline-sync\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Sync offline catalog\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .subtitle("
+          ],
+          [
+            "\"Unavailable while disconnected\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                .disabled("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        ],"
+          ]
+        ],
+        [
+          [
+            "        window,"
+          ]
+        ],
+        [
+          [
+            "        cx,"
+          ]
+        ],
+        [
+          [
+            "    );"
+          ]
+        ],
+        [
+          [
+            "});"
+          ]
         ]
       ]
     },
@@ -180,6 +1664,124 @@
           ],
           [
             "\"creamery-expanded\"",
+            "string"
+          ],
+          [
+            ", window, cx));"
+          ]
+        ],
+        [
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " collapsed = cx.new(|cx| "
+          ],
+          [
+            "SidebarNav",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"creamery-collapsed\"",
+            "string"
+          ],
+          [
+            ", window, cx));"
+          ]
+        ],
+        [
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " filtered = cx.new(|cx| "
+          ],
+          [
+            "SidebarNav",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"creamery-filtered\"",
+            "string"
+          ],
+          [
+            ", window, cx));"
+          ]
+        ],
+        [
+          [
+            "for",
+            "keyword"
+          ],
+          [
+            " nav "
+          ],
+          [
+            "in",
+            "keyword"
+          ],
+          [
+            " [&expanded, &collapsed, &filtered] {"
+          ]
+        ],
+        [
+          [
+            "    nav.update(cx, |nav, cx| {"
+          ]
+        ],
+        [
+          [
+            "        nav.set_sections(creamery_sidebar_sections(), cx);"
+          ]
+        ],
+        [
+          [
+            "        nav.set_active_item("
+          ],
+          [
+            "\"all-orders\"",
+            "string"
+          ],
+          [
+            ", cx);"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [
+          [
+            "collapsed.update(cx, |nav, cx| nav.set_collapsed("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ", cx));"
+          ]
+        ],
+        [
+          [
+            "filtered.update(cx, |nav, cx| nav.set_query("
+          ],
+          [
+            "\"pistachio\"",
             "string"
           ],
           [
@@ -294,6 +1896,240 @@
       "default": [
         [
           [
+            "fn",
+            "keyword"
+          ],
+          [
+            " records_story_columns() -> "
+          ],
+          [
+            "Vec",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "RecordColumn",
+            "type"
+          ],
+          [
+            "> {"
+          ]
+        ],
+        [
+          [
+            "    vec!["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "RecordColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"supplier\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Supplier\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .fixed("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "240",
+            "number"
+          ],
+          [
+            ".)),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "RecordColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"region\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Region\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "130",
+            "number"
+          ],
+          [
+            ".)),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "RecordColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"products\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Products\"",
+            "string"
+          ],
+          [
+            ").width(px("
+          ],
+          [
+            "220",
+            "number"
+          ],
+          [
+            ".)),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "RecordColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Status\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "140",
+            "number"
+          ],
+          [
+            ".)),"
+          ]
+        ],
+        [
+          [
+            "    ]"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
+        [
+          [
             "let",
             "keyword"
           ],
@@ -314,11 +2150,227 @@
           [
             "::new(id, label, window, cx);"
           ]
+        ],
+        [
+          [
+            "table.set_columns(records_story_columns(), window, cx);"
+          ]
+        ],
+        [
+          [
+            "table.set_records(records, window, cx);"
+          ]
+        ],
+        [
+          [
+            "table"
+          ]
         ]
       ]
     },
     "diff-table": {
       "default": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " diff_story_columns() -> "
+          ],
+          [
+            "Vec",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "DiffColumn",
+            "type"
+          ],
+          [
+            "> {"
+          ]
+        ],
+        [
+          [
+            "    vec!["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "DiffColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"flavor\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Flavor\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "240",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .fixed("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "DiffColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"category\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Category\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "220",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "DiffColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"supplier\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Supplier\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "240",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "    ]"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
         [
           [
             "let",
@@ -341,11 +2393,248 @@
           [
             "::new(id, label, window, cx);"
           ]
+        ],
+        [
+          [
+            "table.set_columns(diff_story_columns(), window, cx);"
+          ]
+        ],
+        [
+          [
+            "table.set_rows(rows, window, cx);"
+          ]
+        ],
+        [
+          [
+            "table"
+          ]
         ]
       ]
     },
     "filter-table": {
       "default": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " filter_story_columns() -> ["
+          ],
+          [
+            "FilterColumn",
+            "type"
+          ],
+          [
+            "; "
+          ],
+          [
+            "4",
+            "number"
+          ],
+          [
+            "] {"
+          ]
+        ],
+        [
+          [
+            "    ["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "FilterColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"task\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Task name\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "230",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .fixed("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "FilterColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"date\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Date\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "110",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "FilterColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Status\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
+          ],
+          [
+            "130",
+            "number"
+          ],
+          [
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .sortable("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "FilterColumn",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"advisor\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Advisor\"",
+            "string"
+          ],
+          [
+            ").width(px("
+          ],
+          [
+            "190",
+            "number"
+          ],
+          [
+            ".)),"
+          ]
+        ],
+        [
+          [
+            "    ]"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
         [
           [
             "let",
@@ -368,11 +2657,583 @@
           [
             "::new(id, label, window, cx);"
           ]
+        ],
+        [
+          [
+            "table.set_columns(filter_story_columns(), window, cx);"
+          ]
+        ],
+        [
+          [
+            "table.set_filters(filters, cx);"
+          ]
+        ],
+        [
+          [
+            "table.set_rows(rows, cx);"
+          ]
+        ],
+        [
+          [
+            "table"
+          ]
         ]
       ]
     },
     "comparison-table": {
       "default": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " comparison_story_snapshot(item_states: &["
+          ],
+          [
+            "ComparisonItemState",
+            "type"
+          ],
+          [
+            "]) -> "
+          ],
+          [
+            "ComparisonSnapshot",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " labels = ["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "\"Starter\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "\"Business\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "\"Enterprise with dedicated regional support\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "    ];"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " items = labels.into_iter().enumerate().map(|(index, label)| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ComparisonItem",
+            "type"
+          ],
+          [
+            "::new(format!("
+          ],
+          [
+            "\"plan-{index}\"",
+            "string"
+          ],
+          [
+            "), label)"
+          ]
+        ],
+        [
+          [
+            "            .description(format!("
+          ],
+          [
+            "\"Plan {} details\"",
+            "string"
+          ],
+          [
+            ", index + "
+          ],
+          [
+            "1",
+            "number"
+          ],
+          [
+            "))"
+          ]
+        ],
+        [
+          [
+            "            .state("
+          ]
+        ],
+        [
+          [
+            "                item_states"
+          ]
+        ],
+        [
+          [
+            "                    .get(index)"
+          ]
+        ],
+        [
+          [
+            "                    .copied()"
+          ]
+        ],
+        [
+          [
+            "                    .unwrap_or("
+          ],
+          [
+            "ComparisonItemState",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Default",
+            "type"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            )"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "ComparisonSnapshot",
+            "type"
+          ],
+          [
+            "::try_new("
+          ]
+        ],
+        [
+          [
+            "        items,"
+          ]
+        ],
+        [
+          [
+            "        ["
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ComparisonFeature",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"price\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Monthly price\"",
+            "string"
+          ],
+          [
+            ").values(["
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-0\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"$12\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-1\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"$24\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-2\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Custom\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            ]),"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ComparisonFeature",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"seats\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Included team seats\"",
+            "string"
+          ],
+          [
+            ").values(["
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-0\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"3\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-1\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"25\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"plan-2\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Unlimited\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            ]),"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "ComparisonFeature",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"support\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Priority support\"",
+            "string"
+          ],
+          [
+            ").values(["
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::included("
+          ],
+          [
+            "\"plan-0\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "false",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::included("
+          ],
+          [
+            "\"plan-1\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ComparisonValue",
+            "type"
+          ],
+          [
+            "::included("
+          ],
+          [
+            "\"plan-2\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            ]),"
+          ]
+        ],
+        [
+          [
+            "        ],"
+          ]
+        ],
+        [
+          [
+            "    )"
+          ]
+        ],
+        [
+          [
+            "    .expect("
+          ],
+          [
+            "\"gallery comparison fixture must satisfy the bounded contract\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
         [
           [
             "let",
@@ -394,6 +3255,49 @@
           ],
           [
             "::new(id, label, window, cx);"
+          ]
+        ],
+        [
+          [
+            "table.set_snapshot(snapshot, window, cx);"
+          ]
+        ],
+        [
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "(selected) = selected {"
+          ]
+        ],
+        [
+          [
+            "    table.set_selected_item(selected, window, cx);"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [
+          [
+            "table"
           ]
         ]
       ]

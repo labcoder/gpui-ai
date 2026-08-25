@@ -22,6 +22,12 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- Nine component pages showed one line of code. Chat, Prompt bar, Command
+  search, Sidebar nav and the four tables are entities, and the published
+  region stopped at the constructor — everything that makes them worth using
+  happened on the lines after it. The regions now cover the configuration, the
+  columns a table is given, and, for Chat, the events an application answers.
+
 - A link to a demo can name the state the story opens in, and Copy link gives
   back the one the reader was actually looking at. Five stories offer states to
   switch between and each draws its switcher inside its own canvas, so the page

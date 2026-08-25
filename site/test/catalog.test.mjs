@@ -109,6 +109,18 @@ test("every component page has a snippet cut from the gallery's own source", () 
           `${component.slug}'s snippet never mentions ${component.api}`,
         );
       }
+      // A snippet that is one `let x = Type::new(...)` is a page with a
+      // constructor on it and nothing else. Nine stories published exactly
+      // that, because their components are entities and everything that makes
+      // them worth using — columns, items, the states they answer with —
+      // happens on the lines after the region ended.
+      const lines = code.split(String.fromCharCode(10)).filter((line) => line.trim().length > 0);
+      const bareConstructor = /^\s*let (mut )?[a-z_]+ = [A-Za-z]+::new\(.*\);?$/;
+      assert.ok(
+        !(lines.length === 1 && bareConstructor.test(lines[0])),
+        `${component.slug}/${variant} publishes only a constructor: ${lines[0]}`,
+      );
+
       // Named variants must be states the story actually offers.
       if (variant !== "default") {
         assert.ok(

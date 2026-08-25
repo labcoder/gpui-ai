@@ -341,7 +341,6 @@ impl ChatStory {
         let prompt = cx.new(|cx| {
             // snippet:start(prompt-bar)
             let mut prompt = PromptBar::new("gallery-chat-prompt", window, cx);
-            // snippet:end
             prompt.set_models(
                 [
                     PromptModel::new("balanced", "Balanced")
@@ -365,11 +364,11 @@ impl ChatStory {
             prompt.set_attachments([PromptAttachment::new("pricing", "pricing.md")], cx);
             prompt.set_draft("Ask a follow-up about suppliers", window, cx);
             prompt
+            // snippet:end
         });
         let chat = cx.new(|cx| {
             // snippet:start(chat)
             let mut chat = Chat::new("gallery-chat", prompt, window, cx);
-            // snippet:end
             chat.set_welcome(
                 Some(
                     ChatWelcome::new("What should we look into?")
@@ -386,7 +385,9 @@ impl ChatStory {
                 cx,
             );
             chat
+            // snippet:end
         });
+        // snippet:start(chat)
         let subscription = cx.subscribe_in(
             &chat,
             window,
@@ -448,6 +449,7 @@ impl ChatStory {
                 cx.notify();
             },
         );
+        // snippet:end
         // Cues arrive while the emitting entity is still borrowed, so the
         // readout updates on the next turn of the loop.
         let story = cx.weak_entity();
@@ -930,7 +932,6 @@ impl CommandSearchStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // snippet:start(command-search)
         let ready = cx.new(|cx| CommandSearch::new("gallery-command-ready", window, cx));
-        // snippet:end
         ready.update(cx, |search, cx| {
             search.set_items(
                 [
@@ -953,6 +954,7 @@ impl CommandSearchStory {
                 cx,
             );
         });
+        // snippet:end
         let empty = cx.new(|cx| CommandSearch::new("gallery-command-empty", window, cx));
         let no_results = cx.new(|cx| CommandSearch::new("gallery-command-no-results", window, cx));
         no_results.update(cx, |search, cx| {
@@ -1104,7 +1106,6 @@ impl SidebarNavStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // snippet:start(sidebar-nav)
         let expanded = cx.new(|cx| SidebarNav::new("creamery-expanded", window, cx));
-        // snippet:end
         let collapsed = cx.new(|cx| SidebarNav::new("creamery-collapsed", window, cx));
         let filtered = cx.new(|cx| SidebarNav::new("creamery-filtered", window, cx));
         for nav in [&expanded, &collapsed, &filtered] {
@@ -1115,6 +1116,7 @@ impl SidebarNavStory {
         }
         collapsed.update(cx, |nav, cx| nav.set_collapsed(true, cx));
         filtered.update(cx, |nav, cx| nav.set_query("pistachio", window, cx));
+        // snippet:end
 
         let subscriptions = [&expanded, &collapsed, &filtered]
             .into_iter()
@@ -1853,6 +1855,7 @@ fn restore_unset_metrics(config: &ThemeConfig, cx: &mut App) {
     Theme::sync_base(cx);
 }
 
+// snippet:start(records-table)
 fn records_story_columns() -> Vec<RecordColumn> {
     vec![
         RecordColumn::new("supplier", "Supplier")
@@ -1868,6 +1871,7 @@ fn records_story_columns() -> Vec<RecordColumn> {
             .width(px(140.)),
     ]
 }
+// snippet:end
 
 fn records_story_rows() -> Vec<RecordRow> {
     vec![
@@ -1923,10 +1927,10 @@ fn configured_records_table(
 ) -> RecordsTable {
     // snippet:start(records-table)
     let mut table = RecordsTable::new(id, label, window, cx);
-    // snippet:end
     table.set_columns(records_story_columns(), window, cx);
     table.set_records(records, window, cx);
     table
+    // snippet:end
 }
 
 struct RecordsTableStory {
@@ -2177,6 +2181,7 @@ impl Render for RecordsTableStory {
     }
 }
 
+// snippet:start(diff-table)
 fn diff_story_columns() -> Vec<DiffColumn> {
     vec![
         DiffColumn::new("flavor", "Flavor")
@@ -2191,6 +2196,7 @@ fn diff_story_columns() -> Vec<DiffColumn> {
             .sortable(true),
     ]
 }
+// snippet:end
 
 fn diff_story_rows() -> Vec<DiffRow> {
     vec![
@@ -2266,10 +2272,10 @@ fn configured_diff_table(
 ) -> DiffTable {
     // snippet:start(diff-table)
     let mut table = DiffTable::new(id, label, window, cx);
-    // snippet:end
     table.set_columns(diff_story_columns(), window, cx);
     table.set_rows(rows, window, cx);
     table
+    // snippet:end
 }
 
 struct DiffTableStory {
@@ -2540,6 +2546,7 @@ impl Render for DiffTableStory {
     }
 }
 
+// snippet:start(filter-table)
 fn filter_story_columns() -> [FilterColumn; 4] {
     [
         FilterColumn::new("task", "Task name")
@@ -2554,6 +2561,7 @@ fn filter_story_columns() -> [FilterColumn; 4] {
         FilterColumn::new("advisor", "Advisor").width(px(190.)),
     ]
 }
+// snippet:end
 
 fn filter_story_rows() -> Vec<FilterRow> {
     [
@@ -2754,11 +2762,11 @@ fn configured_filter_table(
 ) -> FilterTable {
     // snippet:start(filter-table)
     let mut table = FilterTable::new(id, label, window, cx);
-    // snippet:end
     table.set_columns(filter_story_columns(), window, cx);
     table.set_filters(filters, cx);
     table.set_rows(rows, cx);
     table
+    // snippet:end
 }
 
 struct FilterTableStory {
@@ -3101,6 +3109,7 @@ impl Render for FilterTableStory {
     }
 }
 
+// snippet:start(comparison-table)
 fn comparison_story_snapshot(item_states: &[ComparisonItemState]) -> ComparisonSnapshot {
     let labels = [
         "Starter",
@@ -3139,6 +3148,7 @@ fn comparison_story_snapshot(item_states: &[ComparisonItemState]) -> ComparisonS
     )
     .expect("gallery comparison fixture must satisfy the bounded contract")
 }
+// snippet:end
 
 fn configured_comparison_table(
     id: &str,
@@ -3150,12 +3160,12 @@ fn configured_comparison_table(
 ) -> ComparisonTable {
     // snippet:start(comparison-table)
     let mut table = ComparisonTable::new(id, label, window, cx);
-    // snippet:end
     table.set_snapshot(snapshot, window, cx);
     if let Some(selected) = selected {
         table.set_selected_item(selected, window, cx);
     }
     table
+    // snippet:end
 }
 
 struct ComparisonTableStory {
