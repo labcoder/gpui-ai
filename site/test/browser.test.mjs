@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
 import { capturePosters, POSTER_WIDTH } from "../scripts/capture-posters.mjs";
+import { captureSocialCards } from "../scripts/capture-og.mjs";
+import { CARD } from "../scripts/build.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
@@ -185,6 +187,13 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await capturePosters({ only: [POSTER_SPECIMEN, IDLE_SPECIMEN] });
 
   await buildSite({ galleryDir: releaseGalleryDir, outDir });
+  // The social cards are rendered out of the built site — its stylesheet, its
+  // faces, its posters — so they come after it. Two of the thirty-seven: the
+  // chain being proved is the same whichever route runs through it.
+  const cardsWritten = await captureSocialCards({
+    siteDir: outDir,
+    only: ["/", `/components/${POSTER_SPECIMEN}/`],
+  });
   serverHandle = await serve(outDir);
   browserHandle = await launchBrowser(userDataDir);
   const { cdp } = browserHandle;
@@ -1467,6 +1476,72 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
 
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
+
+  // S-14. A mistyped address gets the site's own page, and — the part only a
+  // browser can check — hydrates as that page. The client used to fall back to
+  // the first route for a path it did not recognise, so every 404 would have
+  // been served as "page not found" and then quietly rebuilt as the home page
+  // the moment React took over.
+  const before = errors.length;
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/nothing-is-here/`, 1280, 900);
+  await waitForValue(cdp, "Boolean(document.querySelector('.missing-ways'))", {
+    label: "an address that names nothing to get the site's own page",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  assert.deepEqual(
+    await cdp.evaluate(`(() => ({
+      heading: document.querySelector('h1')?.textContent,
+      ways: document.querySelectorAll('.missing-ways a').length,
+      masthead: Boolean(document.querySelector('.masthead')),
+      // Still the 404 after hydration. A mismatch here would have React throw
+      // the server's markup away and rebuild, which is invisible in a
+      // screenshot and obvious in the DOM a moment later.
+      settled: document.querySelector('h1')?.textContent,
+    }))()`),
+    { heading: "Page not found", ways: 3, masthead: true, settled: "Page not found" },
+  );
+  // The 404 status is itself a console error, and is the point. Anything else
+  // on this page is React saying the markup it was given was not the markup it
+  // would have drawn.
+  const complaints = errors
+    .splice(before)
+    .filter((text) => !/Failed to load resource.*404/.test(text));
+  assert.deepEqual(
+    complaints,
+    [],
+    "the 404 page hydrated with complaints, which means the client drew a different page",
+  );
+
+  // S-14. A shared link is the one part of this site nobody visiting it can
+  // check, so the card behind every og:image is read off disk: the right
+  // format, the size the tags claim, and named by the page that points at it.
+  // A tag pointing at a card nobody rendered breaks an unfurl rather than
+  // degrading it, which is worse than having no tag at all.
+  assert.equal(cardsWritten.length, 2, "both cards asked for must have been written");
+  for (const card of cardsWritten) {
+    const bytes = await readFile(path.join(outDir, card.file));
+    assert.deepEqual(
+      [...bytes.subarray(0, 8)],
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+      `${card.file} is not a PNG, whatever its name says`,
+    );
+    // IHDR is the first chunk in every PNG, and its width and height are the
+    // four bytes each at 16 and 20. Reading them needs no image library and
+    // cannot be satisfied by a file that merely exists.
+    assert.equal(bytes.readUInt32BE(16), CARD.width, `${card.file} is the wrong width`);
+    assert.equal(bytes.readUInt32BE(20), CARD.height, `${card.file} is the wrong height`);
+
+    const served = await cdp.evaluate(
+      `new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve(image.naturalWidth);
+        image.onerror = () => resolve(0);
+        image.src = ${JSON.stringify(`/gpui-ai/${card.file}`)};
+      })`,
+    );
+    assert.equal(served, CARD.width, `${card.file} is not served where its tag says it is`);
+  }
 
   // Without WebGPU the embed must say so rather than showing an empty frame.
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {

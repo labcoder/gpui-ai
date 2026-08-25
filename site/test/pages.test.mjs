@@ -6,7 +6,8 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildSite } from "../scripts/build.mjs";
+import { buildSite, CARD } from "../scripts/build.mjs";
+import { socialCardName } from "../app/route-path.mjs";
 import buildInfo from "../generated/build.json" with { type: "json" };
 import catalog from "../generated/catalog.json" with { type: "json" };
 import highlightFile from "../generated/highlight.json" with { type: "json" };
@@ -532,4 +533,97 @@ test("no page links to a bare index.html", async () => {
     // makes the client resolve a route the pre-render did not write.
     assert.doesNotMatch(html, /href="[^"]*\/index\.html"/, `${route} links a bare index.html`);
   }
+});
+
+test("every page carries a canonical link and an unfurl", async () => {
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+
+  for (const route of ROUTES) {
+    const html = await page(route);
+    const url = `${origin}${route}`;
+    const card = `${origin}/og/${socialCardName(route)}.png`;
+
+    // The same page answers at `/x/` and at `/x/index.html`, and a crawler
+    // that finds both counts them as two pages competing with each other.
+    assert.match(
+      html,
+      new RegExp(`<link rel="canonical" href="${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}">`),
+      `${route} has no canonical link`,
+    );
+    // What a link to this site expands into in a chat window. Without these
+    // the unfurl is the bare URL, which is what every share produced before.
+    for (const property of ["og:title", "og:description", "og:url", "og:image", "og:type"]) {
+      assert.match(html, new RegExp(`property="${property}"`), `${route} is missing ${property}`);
+    }
+    assert.match(html, new RegExp(`content="${card.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, /name="twitter:card" content="summary_large_image"/);
+    // Declared, because a card whose size is not stated is fetched before the
+    // unfurl can be laid out and is often dropped instead.
+    assert.match(html, new RegExp(`property="og:image:width" content="${CARD.width}"`));
+    assert.match(html, new RegExp(`property="og:image:height" content="${CARD.height}"`));
+  }
+});
+
+test("the unfurl for a component page describes that component", async () => {
+  const component = components[0];
+  const html = await page(`/components/${component.slug}/`);
+
+  // The generic tags are easy to emit once and never vary. These are the ones
+  // that make a shared link worth opening.
+  assert.match(
+    html,
+    new RegExp(`property="og:title" content="${asRendered(component.title)} · gpui-ai"`),
+  );
+  assert.match(html, new RegExp(`property="og:description" content="${asRendered(component.summary)}"`));
+  assert.match(html, new RegExp(`content="[^"]*/og/components-${component.slug}\\.png"`));
+});
+
+test("the sitemap lists every page and nothing else", async () => {
+  const { outDir } = await site();
+  const xml = await readFile(path.join(outDir, "sitemap.xml"), "utf8");
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+
+  // Written out rather than read from routes.ts, which is TypeScript this test
+  // cannot import — and which makes this an independent statement of what the
+  // site is, instead of the same list compared against itself.
+  const expected = [
+    "/",
+    "/components/",
+    "/themes/",
+    ...components.map((component) => `/components/${component.slug}/`),
+  ].map((route) => `${origin}${route}`);
+
+  const listed = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  assert.deepEqual(listed, expected, "the sitemap and the site must be the same set");
+  // A 404 in an index is a 404 in search results.
+  assert.ok(!listed.some((url) => url.includes("/404")), "the sitemap must not list the 404 page");
+});
+
+test("robots.txt allows the site, keeps the embeds out, and names the sitemap", async () => {
+  const { outDir } = await site();
+  const text = await readFile(path.join(outDir, "robots.txt"), "utf8");
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+
+  assert.match(text, /^User-agent: \*$/m);
+  assert.match(text, /^Allow: \/$/m);
+  // One page per story, each of them a canvas and nothing else. Indexing
+  // seventy of those buries the pages that have something to read.
+  assert.match(text, /^Disallow: \/gallery\/$/m);
+  assert.equal(text.includes(`Sitemap: ${origin}/sitemap.xml`), true);
+});
+
+test("the 404 page is the site's own, and tells crawlers to forget it", async () => {
+  const { outDir } = await site();
+  const html = await readFile(path.join(outDir, "404.html"), "utf8");
+
+  assert.match(html, /<title>Page not found · gpui-ai<\/title>/);
+  assert.match(html, /<meta name="robots" content="noindex">/);
+  // The site's chrome, not a bare apology: a visitor who mistypes an address
+  // should land somewhere they can navigate from.
+  assert.match(html, /class="masthead"/, "the 404 page has no masthead");
+  assert.match(html, /class="missing-ways"/, "the 404 page offers no way out");
+  assert.match(html, new RegExp(`href="${BASE}/components/"`));
+  // Not a destination, so nothing may point at it as one.
+  assert.doesNotMatch(html, /rel="canonical"/);
+  assert.doesNotMatch(html, /property="og:/);
 });

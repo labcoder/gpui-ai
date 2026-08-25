@@ -2,6 +2,7 @@ import "./site.css";
 import { CatalogPage } from "./CatalogPage";
 import { ComponentPage } from "./ComponentPage";
 import { HomePage } from "./HomePage";
+import { MissingPage } from "./MissingPage";
 import { Shell } from "./Shell";
 import { ThemesPage } from "./ThemesPage";
 import type { Route } from "./routes";
@@ -25,5 +26,7 @@ function Page({ route }: { readonly route: Route }) {
       return <ThemesPage />;
     case "component":
       return <ComponentPage slug={route.slug ?? ""} />;
+    case "missing":
+      return <MissingPage />;
   }
 }

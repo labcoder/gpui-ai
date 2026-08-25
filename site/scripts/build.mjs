@@ -3,12 +3,27 @@ import { access, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import buildInfo from "../generated/build.json" with { type: "json" };
+import { socialCardName } from "../app/route-path.mjs";
+
 
 const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = path.resolve(siteRoot, "..");
 const VITE_BIN = path.join(siteRoot, "node_modules", "vite", "bin", "vite.js");
 /** Where React's markup goes; Vite copies it through from index.html. */
 const APP_MARKER = "<!--app-html-->";
+
+/**
+ * Where the site is published, from the crate's own `homepage`.
+ *
+ * Absolute URLs are not a style choice here: a canonical link, a sitemap entry
+ * and an Open Graph image are all read by something that is not the browser
+ * showing the page, and a relative path means nothing to any of them.
+ */
+const ORIGIN = buildInfo.homepage.replace(/\/$/, "");
+
+/** Where the social cards are written, relative to the site root. */
+const socialCard = (routePath) => `/og/${socialCardName(routePath)}.png`;
 
 export async function buildSite({
   outDir = path.join(siteRoot, "dist"),
@@ -92,7 +107,7 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
     throw new Error(`the built index.html lost its ${APP_MARKER} placeholder`);
   }
 
-  const { render, routes } = await import(
+  const { render, renderNotFound, routes } = await import(
     pathToFileURL(path.join(ssrDir, "prerender.js")).href
   );
 
@@ -102,16 +117,110 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
     const html = template
       .replace(APP_MARKER, render(route.path))
       .replace("<title>gpui-ai</title>", `<title>${escapeHtml(route.title)}</title>`)
-      .replace(
-        "</head>",
-        `  <meta name="description" content="${escapeHtml(route.description)}">\n${preloads}  </head>`,
-      );
+      .replace("</head>", `${head(route)}${preloads}  </head>`);
     const directory = path.join(stageDir, ...route.path.split("/").filter(Boolean));
     await mkdir(directory, { recursive: true });
     await writeFile(path.join(directory, "index.html"), html);
   }
 
+  await writeFile(path.join(stageDir, "sitemap.xml"), sitemap(routes));
+  await writeFile(path.join(stageDir, "robots.txt"), robots());
+  await writeFile(path.join(stageDir, "404.html"), notFound(template, renderNotFound, preloads));
+
   await cp(galleryDir, path.join(stageDir, "gallery"), { recursive: true });
+}
+
+/**
+ * The metadata every page carries, beyond its title.
+ *
+ * A canonical link, because the same page answers at `/components/chat/` and
+ * at `/components/chat/index.html` and a crawler that sees both counts them as
+ * two. The Open Graph and Twitter tags are what a link to this site expands
+ * into in a chat window or a timeline; without them the unfurl is the URL and
+ * nothing else, which is what every share of this site produced until now.
+ *
+ * `og:image` names a file `npm run generate:og` writes after this build. The
+ * pair is checked by the site's own tests rather than trusted: a tag pointing
+ * at a card nobody rendered is worse than no tag, because the unfurl breaks
+ * instead of degrading.
+ */
+function head(route) {
+  const url = `${ORIGIN}${route.path}`;
+  const tags = [
+    ["link", { rel: "canonical", href: url }],
+    ["meta", { name: "description", content: route.description }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "gpui-ai" }],
+    ["meta", { property: "og:title", content: route.title }],
+    ["meta", { property: "og:description", content: route.description }],
+    ["meta", { property: "og:url", content: url }],
+    ["meta", { property: "og:image", content: `${ORIGIN}${socialCard(route.path)}` }],
+    ["meta", { property: "og:image:width", content: String(CARD.width) }],
+    ["meta", { property: "og:image:height", content: String(CARD.height) }],
+    ["meta", { property: "og:image:alt", content: route.description }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:title", content: route.title }],
+    ["meta", { name: "twitter:description", content: route.description }],
+    ["meta", { name: "twitter:image", content: `${ORIGIN}${socialCard(route.path)}` }],
+  ];
+  return tags
+    .map(([tag, attributes]) => {
+      const written = Object.entries(attributes)
+        .map(([name, value]) => `${name}="${escapeHtml(value)}"`)
+        .join(" ");
+      return `  <${tag} ${written}>\n`;
+    })
+    .join("");
+}
+
+/** The size every social card is rendered at. */
+export const CARD = { width: 1_200, height: 630 };
+
+/**
+ * Every page, for a crawler that would otherwise have to find them by link.
+ *
+ * No `lastmod`: the only honest value would be the commit each page's content
+ * came from, and writing the build date instead tells a crawler every page
+ * changed every time anything did.
+ */
+function sitemap(routes) {
+  const urls = routes
+    .map((route) => `  <url><loc>${escapeHtml(`${ORIGIN}${route.path}`)}</loc></url>`)
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+}
+
+/**
+ * Everything is public, and the sitemap says where it is.
+ *
+ * `/gallery/` is excluded: it is the demo embed, one page per story with no
+ * prose of its own, and a crawler indexing seventy copies of a canvas would be
+ * indexing noise. The component pages already link every story.
+ */
+function robots() {
+  return `User-agent: *\nAllow: /\nDisallow: /gallery/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`;
+}
+
+/**
+ * The page a mistyped URL gets.
+ *
+ * GitHub Pages serves `404.html` for anything it cannot find, and without one
+ * a visitor gets GitHub's own page with no way back. This is the site's own
+ * chrome — masthead, rail, footer — around a short explanation, rendered by
+ * the same component tree as every other page, so it cannot drift out of the
+ * site's design.
+ *
+ * No canonical link and no social card: this page is not a destination, and
+ * telling a crawler it is one is how a 404 ends up in search results.
+ */
+function notFound(template, renderNotFound, preloads) {
+  return template
+    .replace(APP_MARKER, renderNotFound())
+    .replace("<title>gpui-ai</title>", "<title>Page not found · gpui-ai</title>")
+    .replace(
+      "</head>",
+      `  <meta name="robots" content="noindex">\n${preloads}  </head>`,
+    );
 }
 
 /**

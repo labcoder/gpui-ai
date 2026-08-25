@@ -80,6 +80,9 @@ jobs:
         # a couple of minutes rather than after the fat-LTO WASM build.
         run: npm run build:docs
       - name: Build the shared gallery artifact and the site
+        # build:web renders the posters between the gallery build and the site
+        # build, and the social cards after it: both need a browser, and both
+        # are derived output rather than checked-in files.
         run: |
           npm run build:wasm
           npm run build:web

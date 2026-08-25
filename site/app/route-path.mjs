@@ -24,3 +24,20 @@ export function normalizeRoutePath(pathname, base = "/") {
   if (!path.endsWith("/")) path = `${path}/`;
   return path;
 }
+
+/**
+ * The file name a route's social card is published under.
+ *
+ * A route path is a directory tree and a file name cannot be, so this flattens
+ * one to the other: `/` is `home`, `/components/chat/` is `components-chat`.
+ * The build writes the tags that point at these and the capture writes the
+ * files, from this one function, so a route that gains a card cannot end up
+ * with a tag naming a file nobody made.
+ *
+ * @param {string} routePath a canonical route path, as `normalizeRoutePath` returns
+ * @returns {string} a file name with no extension
+ */
+export function socialCardName(routePath) {
+  const parts = routePath.split("/").filter(Boolean);
+  return parts.length === 0 ? "home" : parts.join("-");
+}

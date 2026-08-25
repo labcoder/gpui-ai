@@ -10,7 +10,7 @@ export interface Route {
   /** What the page is, for metadata. */
   readonly description: string;
   /** Which page component renders it. */
-  readonly kind: "home" | "index" | "component" | "themes";
+  readonly kind: "home" | "index" | "component" | "themes" | "missing";
   /** Present for `kind: "component"`. */
   readonly slug?: string;
 }
@@ -52,6 +52,23 @@ export const routes: readonly Route[] = [
     }),
   ),
 ];
+
+/**
+ * The page a URL that names nothing gets.
+ *
+ * Not in `routes`: it is emitted as `404.html` rather than as a directory,
+ * because that is the one file GitHub Pages serves for a path it cannot find,
+ * and it is deliberately absent from the sitemap. It exists as a route anyway
+ * so that the pre-render and the browser agree about what to draw — the client
+ * used to fall back to the home route for an unknown path, which would have
+ * hydrated the 404 into a copy of the front page.
+ */
+export const missingRoute: Route = {
+  path: "/404/",
+  title: "Page not found · gpui-ai",
+  description: "That page is not here.",
+  kind: "missing",
+};
 
 export function routeFor(path: string, base = "/"): Route | undefined {
   const normalized = normalizeRoutePath(path, base);

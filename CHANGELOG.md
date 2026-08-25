@@ -22,6 +22,19 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- Every page carries a canonical link and a social card, so a link to this site
+  expands into a title, a description and a picture of the component instead of
+  a line of grey text. The cards are rendered from the site's own stylesheet
+  around the still captured for each story, so they cannot drift from the pages
+  they describe.
+- A `sitemap.xml` listing every page, and a `robots.txt` that names it and keeps
+  crawlers out of the demo embeds — one page per story, each a canvas with
+  nothing to read.
+- A 404 page in the site's own chrome, with three ways out. GitHub Pages served
+  its own until now. The client also used to fall back to the home route for an
+  address it did not recognise, which would have rebuilt every 404 as the front
+  page the moment React took over.
+
 - A demo more than a viewport away stops running, and at most three run at
   once. Every live demo is an instance of the shared gallery binary with its
   own WASM heap and WebGPU surface, and starting was previously a one-way door:

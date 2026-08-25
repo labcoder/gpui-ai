@@ -1214,6 +1214,40 @@ pre.code-plain {
   overflow-wrap: anywhere;
 }
 
+/* Not found --------------------------------------------------------------- */
+
+/* Three ways out, as cards rather than a list of links: this page exists to be
+   left, and a destination should look like something to press. */
+.missing-ways {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--prose-width);
+  margin-top: var(--space-8);
+}
+
+.missing-ways a {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius-lg);
+  background: var(--ai-surface);
+  text-decoration: none;
+}
+
+.missing-ways a:hover {
+  border-color: var(--ai-primary);
+}
+
+.missing-ways strong {
+  font-size: 0.9375rem;
+}
+
+.missing-ways span {
+  color: var(--ai-muted-text);
+  font-size: 0.8125rem;
+}
+
 /* Themes ----------------------------------------------------------------- */
 
 /* One column, not two. Each height in the catalog was measured at the demo

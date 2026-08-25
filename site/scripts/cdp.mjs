@@ -82,8 +82,18 @@ export async function serve(directory) {
       response.setHeader("content-type", contentType);
       response.end(await readFile(file));
     } catch {
+      // What GitHub Pages does: an address that names nothing is answered with
+      // `404.html` if the site ships one, still under a 404 status. Serving a
+      // line of plain text instead would mean the site's own not-found page
+      // was the one page nothing here ever looked at.
       response.statusCode = 404;
-      response.end("not found");
+      try {
+        const page = await readFile(path.join(directory, "404.html"));
+        response.setHeader("content-type", "text/html");
+        response.end(page);
+      } catch {
+        response.end("not found");
+      }
     }
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
