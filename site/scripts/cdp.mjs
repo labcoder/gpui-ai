@@ -254,6 +254,24 @@ export class Cdp {
   }
 }
 
+/**
+ * How long to wait for Chromium to write its debugging port.
+ *
+ * Sixty seconds, which is absurd for a browser starting and is not really
+ * about the browser. This runs after a fat-LTO WebAssembly build and a Vite
+ * build on a two-core CI runner, against a cold page cache, and twenty seconds
+ * was not enough: run 32809933880 timed out on the first launch and then
+ * launched a second browser successfully seventeen seconds later, once the
+ * binary was warm. A wait that is too short turns a slow machine into a red
+ * build; a wait that is too long costs nothing, because the two ways this
+ * really fails — the browser exiting, or there being no browser — are both
+ * detected immediately below.
+ */
+const PORT_READY_TIMEOUT_MS = 60_000;
+
+/** How much of Chromium's own complaint to quote when it will not start. */
+const STDERR_KEPT = 4_000;
+
 export async function launchBrowser(userDataDir) {
   const child = spawn(browserPath, [
     "--headless=new",
@@ -262,7 +280,31 @@ export async function launchBrowser(userDataDir) {
     "--no-first-run",
     "--no-default-browser-check",
     "about:blank",
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", "ignore", "pipe"] });
+
+  // Kept, rather than discarded. A browser that will not start says why — a
+  // missing library, a sandbox it cannot enter, a profile it cannot write —
+  // and throwing that away leaves "the port did not become ready", which is
+  // the one thing every failure here has in common and the least useful thing
+  // to be told.
+  let complaint = "";
+  child.stderr?.on("data", (chunk) => {
+    complaint = `${complaint}${chunk}`.slice(-STDERR_KEPT);
+  });
+  let exit;
+  child.once("exit", (code, signal) => {
+    exit = signal ? `signal ${signal}` : `exit code ${code}`;
+  });
+
+  const reason = () => {
+    const said = complaint.trim().split(/\r?\n/).slice(-6).join("\n");
+    return [
+      exit ? `it stopped with ${exit}` : `it is still running`,
+      `browser: ${browserPath}`,
+      said ? `it said:\n${said}` : "it said nothing",
+    ].join("; ");
+  };
+
   let socket;
   try {
     const portFile = path.join(userDataDir, "DevToolsActivePort");
@@ -270,7 +312,8 @@ export async function launchBrowser(userDataDir) {
     // Chromium creates DevToolsActivePort before it writes the port into it, so
     // a successful read is not proof of a usable value. Keep waiting until the
     // first line is non-empty, and allow for a cold start on a loaded machine.
-    for (let attempt = 0; attempt < 400; attempt += 1) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < PORT_READY_TIMEOUT_MS) {
       try {
         const [line] = (await readFile(portFile, "utf8")).trim().split(/\r?\n/);
         if (line) {
@@ -280,9 +323,15 @@ export async function launchBrowser(userDataDir) {
       } catch {
         // The file only appears once Chromium has bound its debugging port.
       }
+      // A browser that has exited is never going to write the file, and
+      // waiting the rest of the minute to say so helps nobody.
+      if (exit) break;
       await delay(50);
     }
-    if (!port) throw new Error("Chromium DevTools port did not become ready within 20s");
+    if (!port) {
+      const waited = Math.round((Date.now() - startedAt) / 1000);
+      throw new Error(`Chromium wrote no DevTools port in ${waited}s: ${reason()}`);
+    }
     const target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" }).then((response) => response.json());
     socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {

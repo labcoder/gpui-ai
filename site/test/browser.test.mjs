@@ -160,10 +160,17 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   skip: !browserPath && !releaseGateIsMandatory
     ? "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate"
     : releaseIntegrationRequested ? false : "Run npm run check:web:release for the built-artifact integration gate",
-  // Generous because this gate is one long story about one built artifact,
-  // and splitting it would mean building and booting that artifact several
-  // times to check things that are all true of the same run.
-  timeout: 150_000,
+  // Generous because this gate is one long story about one built artifact, and
+  // splitting it would mean building and booting that artifact several times to
+  // check things that are all true of the same run.
+  //
+  // The number is set from CI rather than from this machine: the gate ran in
+  // 47s there against 29s here before the poster and card captures were added,
+  // so a local minute is closer to two there. It also has to contain up to a
+  // minute of waiting for a browser to start — see PORT_READY_TIMEOUT_MS —
+  // because a launch that is slow but succeeds should not be reported as a
+  // test that hung.
+  timeout: 240_000,
 }, async (context) => {
   assert.ok(
     browserPath,
