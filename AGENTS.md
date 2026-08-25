@@ -64,7 +64,7 @@ GPUI's crates.io release is outdated; the real work lives in the Zed repository.
 1. Compiles natively and for `wasm32-unknown-unknown`.
 2. Has a gallery story exercising its real states (loading, streaming, error, done — whichever apply).
 3. Verified against at least three themes including light and dark — no hardcoded-color leaks.
-4. Visually compared side-by-side with its beautifului.dev reference; deliberate differences noted in the story.
+4. Visually compared side-by-side with its beautifului.dev reference; deliberate differences noted in `docs/internal/reference-comparisons.md`. Not in the story: the stories are published on the website, and a comparison rendered there reads as though gpui-ai were a port of the library it names rather than its own rust-first, gpui-component-first design.
 5. Readable content can be selected/copied where expected; every control is keyboard-operable with visible focus, and semantic state is covered by an AccessKit regression test.
 6. Reduced-motion behavior is useful, and constrained layouts keep all content reachable by scrolling or another explicit overflow design.
 7. Public API documented; `cargo doc` builds without warnings.
