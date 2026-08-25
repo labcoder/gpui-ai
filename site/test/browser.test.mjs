@@ -338,6 +338,24 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // unpinned ratio lays the story out at double size and it overflows a frame
   // sized from the catalog. Nothing else here would notice.
   const specimen = components.find((component) => component.slug === POSTER_SPECIMEN) ?? components[0];
+  // Records every size the demo reports and whether the embed had drawn by
+  // then, for the ordering assertion below. Installed before the page exists;
+  // no-ops inside the frames themselves.
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `if (window.top === window && !window.__demoSizes) {
+      window.__demoSizes = [];
+      window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (!message || message.type !== 'gpui-ai-size') return;
+        let ready = false;
+        try {
+          const frame = document.querySelector('[data-specimen-frame] iframe');
+          ready = frame?.contentDocument?.body?.dataset?.ready !== undefined;
+        } catch {}
+        window.__demoSizes.push({ height: message.height, ready });
+      });
+    }`,
+  });
   await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900, 2);
   await waitForValue(
     cdp,
@@ -386,6 +404,60 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     ),
     1,
     "the embed must pin its scale factor or every measured height is wrong",
+  );
+
+  // The height the host is told is measured at the width the story is really
+  // shown at, which means after the first drawn frame and never before: a
+  // report taken while the canvas still had the parser's default width wraps
+  // the story into a tall column, and the frame's tallest-wins reservation
+  // keeps it forever — the published voice page reserved 1,381 px for a 90 px
+  // story exactly this way.
+  await waitForValue(
+    cdp,
+    "(() => { try { const frame = document.querySelector('[data-specimen-frame] iframe'); return frame?.contentDocument?.body?.dataset?.ready !== undefined; } catch { return false; } })()",
+    {
+      label: `the ${specimen.slug} demo to report its first drawn frame`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  await delay(600);
+  for (const sizeReport of JSON.parse(await cdp.evaluate("JSON.stringify(window.__demoSizes ?? [])"))) {
+    assert.equal(
+      sizeReport.ready,
+      true,
+      `a height of ${sizeReport.height} was reported before the first drawn frame`,
+    );
+  }
+  const settledHeight = await cdp.evaluate(
+    "Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height)",
+  );
+  assert.ok(
+    settledHeight < specimen.height * 4,
+    `the frame settled at ${settledHeight}px for a ${specimen.height}px story — a pre-draw width has been ratcheted in`,
+  );
+
+  // The embed's first paint must composite transparent over the host, which
+  // means agreeing on a colour scheme before its module arrives: the pin is
+  // inline in the built embed's head, ahead of the module that later owns it —
+  // a scheme-mismatched transparent iframe composites opaque white over a
+  // dark host for the whole of the module's network round-trip.
+  const embedMarkup = await cdp.evaluate(
+    "fetch('/gpui-ai/gallery/embed.html').then((response) => response.text())",
+  );
+  const schemePinAt = embedMarkup.indexOf("colorScheme");
+  const moduleAt = embedMarkup.indexOf('type="module"');
+  assert.ok(
+    schemePinAt !== -1 && moduleAt !== -1 && schemePinAt < moduleAt,
+    "the built embed must pin its colour scheme before its module script",
+  );
+  assert.equal(
+    await cdp.evaluate(
+      "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return frame.contentDocument.documentElement.classList.contains('dark') === document.documentElement.classList.contains('dark'); })()",
+    ),
+    true,
+    "the running embed's scheme must match its host's",
   );
 
   // The other half of lazy: a frame that is nowhere near the viewport must not

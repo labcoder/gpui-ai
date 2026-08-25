@@ -42,3 +42,40 @@ test('nothing is left of the loading card the window replaced', async () => {
   assert.match(embed, /id="fallback"/);
   assert.match(styles, /\.fallback-card\s*\{/);
 });
+
+test('the embed pins its colour scheme before its first paint', async () => {
+  const embed = await readFile(new URL('../embed.html', import.meta.url), 'utf8');
+
+  // A transparent iframe whose used colour scheme differs from its embedder's
+  // is composited opaque — solid white over a dark host — and the module that
+  // would correct it arrives whole network round-trips after the first paint.
+  // So the head carries an inline pin, ahead of the module script.
+  const pin = embed.indexOf('style.colorScheme');
+  const module = embed.indexOf('type="module"');
+  assert.ok(pin !== -1, 'the head must set an inline colour scheme');
+  assert.ok(module !== -1 && pin < module, 'the pin must come before the module script');
+  // It answers the way the module later does: address first, then the host's
+  // own mark, then the viewer's preference.
+  for (const source of ["get('theme')", "classList.contains('dark')", 'prefers-color-scheme']) {
+    assert.ok(embed.includes(source), `the pin must consult ${source}`);
+  }
+});
+
+test('the size report waits for the first drawn frame', async () => {
+  const main = await readFile(new URL('./main.js', import.meta.url), 'utf8');
+
+  // A height measured before the canvas has the window's width is a story
+  // wrapped at the parser's default width — far taller than it will ever
+  // really be — and the host keeps the tallest height it is ever told. The
+  // report starts inside the reveal, where there are pixels to measure.
+  assert.match(
+    main,
+    /revealWhenDrawn\(options\.story,\s*\(\)\s*=>\s*reportSize\(/,
+    'reportSize must start from revealWhenDrawn, not before it',
+  );
+  assert.doesNotMatch(
+    main,
+    /^\s*reportSize\(options\.story,\s*wasm\);/m,
+    'a bare reportSize call would race the first frame again',
+  );
+});

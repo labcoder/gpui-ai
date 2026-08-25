@@ -110,6 +110,11 @@ function watchTheme(initialTheme) {
     document.documentElement.classList.toggle('dark', hostPrefersDark(theme));
     document.documentElement.classList.toggle('contrast', theme === 'contrast');
     document.documentElement.dataset.theme = theme;
+    // The head script pinned an inline scheme so the document's first paint
+    // could not composite opaque over a mismatched host. From here on the
+    // classes above are the authority; the pin must not outlive them or a
+    // later light↔dark switch would change the palette but not the scheme.
+    document.documentElement.style.colorScheme = '';
     sync();
   };
 
@@ -155,13 +160,18 @@ const FIRST_FRAME_TIMEOUT_MS = 8000;
  *
  * The timeout is deliberate. If upstream ever stops sizing the canvas this
  * way, a demo nobody can see is a worse failure than a moment of black.
+ *
+ * `whenDrawn` runs once, alongside the reveal, for work that is meaningless
+ * before there are pixels — measuring, above all: a story laid out before the
+ * canvas has taken the window's size is a story at the parser's default width.
  */
-function revealWhenDrawn(story) {
+function revealWhenDrawn(story, whenDrawn) {
   const startedAt = performance.now();
 
   const show = () => {
     document.body.dataset.ready = '';
     announce(story, 'ready');
+    whenDrawn?.();
   };
 
   const check = () => {
@@ -280,6 +290,14 @@ function followMotionPreference(pinned, wasm) {
  *
  * It stops when the story has been still for a while, and starts again on a
  * resize, which is the other thing that can change the answer.
+ *
+ * It must not start before the first frame has drawn. The canvas takes the
+ * window's size when GPUI first presents; before that the story lays out at
+ * the parser's default canvas width, where prose wraps into a column far
+ * taller than the story will ever really be. The host keeps the tallest
+ * height it is ever told — a settling story only grows — so one report from
+ * that width reserved 1,381 px for a 90 px story, permanently. The caller
+ * holds this back until `revealWhenDrawn` says there are pixels.
  */
 const SIZE_SETTLES_AFTER_MS = 12_000;
 
@@ -416,9 +434,11 @@ async function initEmbed() {
       reset: () => wasm.reset_story(),
     });
     // Not "ready" yet: `run` returns before the first frame. The host keeps
-    // saying "Starting" in the demo window's title bar until there are pixels.
-    revealWhenDrawn(options.story);
-    reportSize(options.story, wasm);
+    // saying "Starting" in the demo window's title bar until there are pixels
+    // — and is told nothing about size either, because a height measured
+    // before the canvas has the window's width is wrong in the one direction
+    // the host cannot recover from.
+    revealWhenDrawn(options.story, () => reportSize(options.story, wasm));
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));
     announce(options.story, 'failed');

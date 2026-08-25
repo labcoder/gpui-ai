@@ -5,6 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
     <title>gpui-ai example</title>
+    <script>
+      // Before this document's first paint, not after the module loads: a
+      // transparent iframe whose used colour scheme differs from its
+      // embedder's is composited opaque — solid white over a dark host — and
+      // the module that sets the scheme properly arrives whole network
+      // round-trips after the first paint. Same order of preference as the
+      // module's own answer: the address, then the host's mark, then the
+      // viewer. Inline `color-scheme` rather than waiting for the stylesheet,
+      // which travels with that same module; the module erases the pin once
+      // its classes are the authority.
+      (() => {
+        try {
+          const theme = new URLSearchParams(window.location.search).get('theme');
+          const known = { light: false, dark: true, contrast: true };
+          let dark = known[theme];
+          if (dark === undefined && window.parent !== window) {
+            try {
+              dark = window.parent.document.documentElement.classList.contains('dark');
+            } catch {
+              // A cross-origin host cannot be asked; fall through.
+            }
+          }
+          if (dark === undefined) {
+            dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+          document.documentElement.classList.toggle('dark', Boolean(dark));
+          document.documentElement.classList.toggle('contrast', theme === 'contrast');
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch {
+          // A document that cannot answer paints as it would have anyway.
+        }
+      })();
+    </script>
   </head>
   <body data-page="embed" data-asset-base="./upstream">
     <!--
