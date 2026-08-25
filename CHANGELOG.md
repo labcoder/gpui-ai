@@ -110,6 +110,13 @@ revision.
   dependency. GPUI itself stays at `8b1497db`, still the exact revision
   upstream's own lock selects. The range also adds and immediately reverts a
   dialog focus-reclaim change, so no dialog behavior moves.
+- A reordered table row now travels on a spring instead of a one-shot
+  transition. Filtering again while rows are still moving retargets them from
+  wherever they visibly are, carrying their momentum, instead of restarting
+  the easing from a recomputed offset; the first frame of every move still
+  paints the row at its old place, settled rows own no motion state, and
+  reduced motion still snaps to the final order immediately. Public FilterTable
+  and RecordsTable APIs are unchanged.
 - The wheel scrolls the page over a demo. GPUI's web platform calls
   `preventDefault()` on every wheel event before looking at it, so a demo
   swallowed the wheel whether or not its story had anything to scroll: with the
