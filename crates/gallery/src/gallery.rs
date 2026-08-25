@@ -137,7 +137,7 @@ fn height_probe() -> impl IntoElement {
 /// thirty-four and the last one wins, which is meaningless there and unread:
 /// the bridge that uses this exists only on the web, and the web draws the
 /// embed.
-type VariantSetter = Rc<dyn Fn(usize, &mut App)>;
+type VariantSetter = Rc<dyn Fn(usize, &mut App) -> bool>;
 
 thread_local! {
     static ACTIVE_SWITCHER: RefCell<Option<(usize, VariantSetter)>> = const { RefCell::new(None) };
@@ -160,8 +160,7 @@ pub fn set_active_variant(index: usize, cx: &mut App) -> bool {
     }) else {
         return false;
     };
-    apply(index, cx);
-    true
+    apply(index, cx)
 }
 
 /// Ticks the height measurement runs a streaming story for.
@@ -234,8 +233,13 @@ fn story_state_switcher<T: 'static>(
     ACTIVE_SWITCHER.with(|switcher| {
         *switcher.borrow_mut() = Some((
             active_index,
+            // The entity may be gone — a switcher registers as it draws and
+            // nothing unregisters it — so whether the story took the change is
+            // the answer, not whether a setter was found.
             Rc::new(move |index: usize, cx: &mut App| {
-                let _ = registered.update(cx, |story, cx| apply(story, index, cx));
+                registered
+                    .update(cx, |story, cx| apply(story, index, cx))
+                    .is_ok()
             }) as VariantSetter,
         ));
     });
