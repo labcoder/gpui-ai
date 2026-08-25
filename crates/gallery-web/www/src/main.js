@@ -187,7 +187,15 @@ function revealWhenDrawn(story) {
  *
  * Polled rather than pushed, for the same reason the size is: a reader changes
  * this a handful of times and a callback per layout would be a message a frame.
+ *
+ * On a timer rather than an animation frame, and unlike the size this one never
+ * stops — a reader can press the switcher at any moment, so there is no quiet
+ * period after which the answer cannot change. Four times a second is far more
+ * than a press needs; sixty would be a call into WebAssembly every frame for
+ * the life of the page, on every demo at once.
  */
+const VARIANT_POLL_MS = 250;
+
 function shareTheVariant(story, wanted, wasm) {
   // A switcher registers itself as it draws, and `run` returns before the
   // first frame — so asking now would be asking nobody. Kept up until it
@@ -196,18 +204,23 @@ function shareTheVariant(story, wanted, wasm) {
   let asking = Boolean(wanted);
   const startedAt = performance.now();
   let last;
+  let polling;
 
   const check = () => {
     let variant;
     try {
       if (asking) {
-        if (wasm.set_story_variant(wanted) || performance.now() - startedAt > FIRST_FRAME_TIMEOUT_MS) {
+        if (
+          wasm.set_story_variant(wanted) ||
+          performance.now() - startedAt > FIRST_FRAME_TIMEOUT_MS
+        ) {
           asking = false;
         }
       }
       variant = wasm.story_variant() ?? null;
     } catch {
       // A module that has gone away has no state to report.
+      window.clearInterval(polling);
       return;
     }
     if (variant !== last) {
@@ -216,9 +229,11 @@ function shareTheVariant(story, wanted, wasm) {
         window.parent.postMessage(variantMessage(story, variant), window.location.origin);
       }
     }
-    window.requestAnimationFrame(check);
   };
-  window.requestAnimationFrame(check);
+
+  polling = window.setInterval(check, VARIANT_POLL_MS);
+  // Asked straight away too, so a link naming a state does not wait a beat.
+  check();
 }
 
 /**
