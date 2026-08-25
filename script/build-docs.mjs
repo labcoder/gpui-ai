@@ -12,6 +12,8 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { stripDeadReadMore } from "./docs-cleanup.mjs";
+
 const CRATE = "gpui_ai";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUTPUT = join(ROOT, "target", "doc");
@@ -36,6 +38,26 @@ writeFileSync(
 <p><a href="${CRATE}/index.html">gpui-ai API documentation</a></p>
 `,
 );
+
+/** Every `.html` file in the tree, deepest first order not being important. */
+function pages(directory, found = []) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) pages(path, found);
+    else if (entry.name.endsWith(".html")) found.push(path);
+  }
+  return found;
+}
+
+let deadLinks = 0;
+let cleanedPages = 0;
+for (const page of pages(OUTPUT)) {
+  const { html, removed } = stripDeadReadMore(readFileSync(page, "utf8"));
+  if (removed === 0) continue;
+  writeFileSync(page, html);
+  deadLinks += removed;
+  cleanedPages += 1;
+}
 
 function measure(directory) {
   let files = 0;
@@ -80,6 +102,7 @@ if (missing.length > 0) {
 const { files, bytes } = measure(OUTPUT);
 process.stdout.write(
   `rustdoc tree ready: ${files.toLocaleString()} files, ${(bytes / 1024 / 1024).toFixed(1)} MB\n` +
+    `removed ${deadLinks.toLocaleString()} dead "Read more" links from ${cleanedPages} pages\n` +
     `every one of the ${catalog.components.length} component API links resolves\n` +
     `entry: target/doc/${CRATE}/index.html (root index.html redirects to it)\n`,
 );
