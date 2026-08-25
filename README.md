@@ -2,59 +2,59 @@
 
 [![CI](https://github.com/labcoder/gpui-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/labcoder/gpui-ai/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Demos: coming soon](https://img.shields.io/badge/demos-coming%20soon-lightgrey)
+[![Components](https://img.shields.io/badge/components-34-blue)](https://labcoder.github.io/gpui-ai/components/)
+[![Themes](https://img.shields.io/badge/themes-45-blue)](https://labcoder.github.io/gpui-ai/themes/)
 
-AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of Zed.
+AI-native UI components for [GPUI](https://gpui.rs), the Rust UI framework from the makers of [Zed](https://zed.dev).
 
-Streamed answers, thinking traces, tool calls, approval gates, chat with @-mentions, live task status — the interface patterns every AI application rebuilds. Web developers get them from [Beautiful UI](https://www.beautifului.dev) and [AIcss](https://www.aicss.dev); **gpui-ai** brings them to Rust, built on top of [gpui-component](https://github.com/longbridge/gpui-component) the way Beautiful UI builds on shadcn/ui.
+Streamed answers, thinking traces, tool calls, approval gates, chat with @-mentions, live task status, agent plans, context meters — the interface an AI application needs and every AI application rebuilds. **gpui-ai** is 34 of them, designed for GPUI and composed on top of [gpui-component](https://github.com/longbridge/gpui-component), so they inherit its semantic theming and sit beside its controls rather than replacing them.
 
-## Status
-
-Early development, pre-1.0. The API moves between revisions, so pin one. The crate is not on crates.io yet — see [Installation](#installation) — and [CHANGELOG.md](CHANGELOG.md) records what each version changed.
-
-**The native runtime is authoritative.** The browser gallery demonstrates the components; it does not prove them. It requires WebGPU, its keyboard action dispatch is limited by the pinned upstream GPUI revision, and browser accessibility is a separate capability that has not been claimed. Every component is verified natively — light, dark, and a third theme, AccessKit semantics, keyboard operation, and constrained-overflow behavior — and the browser build is checked afterwards. A demo running in a tab is not evidence that the same path works for a screen reader or a keyboard-only user there.
+Nothing here fetches, retries, or persists anything. A component renders the state you give it and reports what was done to it as a typed event keyed by your own IDs, which is what makes it possible to drop one into an application that already owns its data.
 
 ## Live demo
 
-Browse every component with working demos at **https://labcoder.github.io/gpui-ai/** (coming soon).
+**[labcoder.github.io/gpui-ai](https://labcoder.github.io/gpui-ai/)** — every component, running.
 
-To run the gallery locally instead:
+Each demo on that site is the real component compiled to WebAssembly, not a screenshot or a video: the same gallery binary that runs natively, drawn on a WebGPU canvas, in any of the 45 themes. Each page carries the snippet it runs, cut from the gallery's own source, so the code on the page cannot drift from the thing above it.
+
+To run the same gallery natively:
 
 ```sh
 git clone https://github.com/labcoder/gpui-ai
 cd gpui-ai
-cargo run -p gallery        # or: npm run dev
+cargo run -p gallery
 ```
 
-A native window opens showing all components with live simulated agent activity and a theme switcher that cycles the gpui-ai presets (Light · Dark · Contrast · Midnight Violet · Nord Frost · Ember Dusk · Paper Light · Graphite · Solstice). Use `npm run prod` for the optimized build.
+A window opens with every component, live simulated agent activity, and a theme switcher. `npm run prod` builds it optimized; `npm run dev:fast` iterates quickly with dependencies optimized and workspace crates not.
+
+## Requirements
+
+| | |
+|---|---|
+| **Rust** | 1.85 or newer (edition 2024) |
+| **Platforms** | macOS, Linux, Windows — the same three GPUI supports, all three built and tested in CI |
+| **Linux** | run [`script/install-linux.sh`](script/install-linux.sh) once for system dependencies |
+| **Browser** (for the web gallery only) | WebGPU. There is no WebGL fallback; a browser without it is told so rather than made to download the binary |
 
 ## Installation
 
-`gpui` itself is under heavy development upstream and its crates.io release is far behind, so gpui-ai currently ships from GitHub only:
+Not on crates.io. GPUI publishes there only rarely and its last release predates everything this is built on, and crates.io requires every dependency to have a crates.io version — so gpui-ai ships from Git until that changes.
 
 ```toml
 [dependencies]
-gpui-ai = { git = "https://github.com/labcoder/gpui-ai" }
-```
-
-Your app will also need GPUI itself, declared exactly the same way so Cargo unifies them into one copy:
-
-```toml
-[dependencies]
+gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v0.1.0" }
 gpui = { git = "https://github.com/zed-industries/zed" }
 ```
 
-> **Why no version numbers?** crates.io publishing requires every dependency to have a crates.io version, and the published `gpui` release predates everything gpui-ai builds on. Once upstream starts releasing regularly, gpui-ai will publish to crates.io too.
+Declare `gpui` yourself, exactly as above, so Cargo unifies it with the copy gpui-ai uses.
 
-Pin gpui-ai by adding `rev = "<commit>"` or `tag = "<tag>"` to *its* line. Do not add one to the `gpui` line: gpui-component declares that dependency without a `rev`, and differing git specs make Cargo build two incompatible copies of gpui.
+- **Pin gpui-ai**, with `tag` or `rev`. The API moves between revisions; [CHANGELOG.md](CHANGELOG.md) records what each one changed.
+- **Do not pin `gpui`.** gpui-component declares it without a `rev`, and two different git specs make Cargo build two incompatible copies.
+- Each release names the `gpui-component` and `zed` revision pair it was built against. In a checkout that pair lives in `Cargo.toml` and `Cargo.lock`, and `npm run check:upstream` verifies the two still agree.
 
-Every release names the `gpui-component` and `zed` revision pair it supports on its release page. In a checkout, that pair lives in `Cargo.toml` and `Cargo.lock`, and `npm run check:upstream` verifies the two still agree.
+## Quick start
 
-Requirements: Rust stable (edition 2024 — 1.85+). On Linux, run `script/install-linux.sh` for system dependencies first.
-
-## Usage
-
-Every window must call `gpui_component::init(cx)` before building UI, and its first-level view must be wrapped in gpui-component's `Root`:
+Every window calls `gpui_component::init(cx)` before building UI, and its first-level view is wrapped in gpui-component's `Root` — which owns dialogs, notifications, and text selection:
 
 ```rust
 use gpui_ai::prelude::*;
@@ -74,6 +74,8 @@ fn main() {
     });
 }
 ```
+
+## Usage
 
 ### Stateless components
 
@@ -132,56 +134,56 @@ chat.update(cx, |chat, cx| {
 });
 ```
 
-The full API is documented on each type. Run `cargo doc --open` from a checkout to browse it while the Git-sourced dependency graph keeps the crate unpublished.
+Every type is documented: [the API reference](https://labcoder.github.io/gpui-ai/api/gpui_ai/) is published alongside the demos, and `cargo doc --open` builds the same thing from a checkout.
 
 ## Components
 
+Thirty-four components across eight categories. Each one links to its live demo.
+
 | Component | Kind | What it does |
 |---|---|---|
-| `LoadingState` | stateless | Pixel-grid loader with shimmer and elapsed time |
-| `Orbs` | stateless | Ambient dot-lattice thinking indicator, five choreographies |
-| `Thinking` | stateless | Reasoning disclosure that opens while streaming, shimmers, pins a live preview, then collapses to "Thought for Ns" |
-| `StreamingText` | stateless | Streaming markdown answer with hover-previewed citations, favicon-style source chips, follow-ups |
-| `CodeBlock` | stateless | Syntax-highlighted code with header, copy button, stream reveal |
-| `CodeDiff` | stateless | Unified patch viewer (`DiffFile::from_unified`) with rem-aligned gutters, change tints, per-hunk accept/reject by path and index, and a copyable source |
-| `ToolChip` | stateless | Compact tool-call / file-edit chips with status |
-| `ToolCall` / `ToolGroup` | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
-| `TaskRow` / `TaskSnapshot` | stateless | Live agent task status rows |
-| `TodoList` | entity | Agent to-do list with progress |
-| `ImageGeneration` | stateless | Image-generation frame with progress |
-| `SearchResults` | stateless | Web-search result cards |
-| `ApprovalCard` | stateless | Human-in-the-loop gate with default and destructive tones, optional "Always allow", and resolved approved/rejected states |
-| `PlanCard` | stateless | An agent's proposed steps with typed per-step status, lifecycle badge, Approve/Reject/Edit while proposed, and step activation by stable ID |
-| `RecommendationCard` | entity | Agent suggestion with confidence meter |
-| `ContextCard` | stateless | Retrieved knowledge chunks with sources |
-| `InsightCard` | stateless | Paged insight cards with sparkline charts |
-| `PromptBar` | entity | Composer: @ mentions, / commands, provider-grouped model picker with descriptions and context windows, attachments |
-| `VoiceControls` | stateless | Dictate and speak controls for an application-owned voice state: live level meter, interim transcript status, typed `VoiceEvent`s |
-| `MessageQueue` | stateless | Prompts waiting while the agent runs: named list with move, edit, send-now, remove, and clear by stable ID |
-| `Chat` | entity | Virtualized transcript + composer with hover-revealed message actions (copy, regenerate, feedback), in-place edit, branch version switcher, message attachments, welcome state, unread & jump-to-latest |
-| `Suggestions` | stateless | Starter and follow-up prompt chips with staggered reveal and stable IDs |
-| `AttachmentStrip` / `AttachmentPreview` | stateless | Composer and message attachments with thumbnails, kind glyphs, typed upload state, and open/remove events by stable ID |
-| `ArtifactPanel` | stateless | Side panel for generated documents and code: streamed source, kind-driven preview or source view, version switcher, typed actions, close |
-| `ContextMeter` | stateless | Context-window usage ring / bar / text with severity tones and a hover breakdown |
-| `CommandSearch` | entity | Command palette with filtering and keyboard navigation |
-| `SidebarNav` | entity | Collapsible, filterable workspace navigation |
-| `ThreadList` | entity | Grouped conversation list: new, switch, search, archived toggle, rename / archive / delete row actions |
-| `FineTuneCard` | entity | Design-property inspector (size, radius, opacity, typeface) |
-| `SelectionActions` | entity | Selection-anchored Ask / Explain / Rewrite actions |
-| `RecordsTable` | entity | CRM-style virtualized grid with sorting |
-| `DiffTable` | entity | AI-proposed edits over tabular data |
-| `FilterTable` | entity | Status-chip filtered, reorderable table |
-| `ComparisonTable` | entity | Feature-by-plan comparison matrix |
-
-Keyboard action dispatch in the browser WASM gallery is limited by the pinned upstream GPUI revision: pointer activation works, while action-based keyboard paths such as Command Search navigation remain native-only until that upstream seam is fixed.
-
-All components style themselves through gpui-component's semantic theme tokens, so light/dark, bundled themes, custom JSON themes, and live token editing work without per-component overrides.
+| [`LoadingState`](https://labcoder.github.io/gpui-ai/components/loading/) | stateless | Pixel-grid loader with shimmer and elapsed time |
+| [`Orbs`](https://labcoder.github.io/gpui-ai/components/orbs/) | stateless | Ambient dot-lattice thinking indicator, five choreographies |
+| [`Thinking`](https://labcoder.github.io/gpui-ai/components/thinking/) | stateless | Reasoning disclosure that opens while streaming, shimmers, pins a live preview, then collapses to "Thought for Ns" |
+| [`StreamingText`](https://labcoder.github.io/gpui-ai/components/streaming-text/) | stateless | Streaming markdown answer with hover-previewed citations, source chips, follow-ups |
+| [`CodeBlock`](https://labcoder.github.io/gpui-ai/components/code-block/) | stateless | Syntax-highlighted code with header, copy button, stream reveal |
+| [`CodeDiff`](https://labcoder.github.io/gpui-ai/components/code-diff/) | stateless | Unified patch viewer (`DiffFile::from_unified`) with rem-aligned gutters, change tints, per-hunk accept/reject by path and index, and a copyable source |
+| [`ToolChip`](https://labcoder.github.io/gpui-ai/components/tool-chips/) | stateless | Compact tool-call / file-edit chips with status |
+| [`ToolCall` / `ToolGroup`](https://labcoder.github.io/gpui-ai/components/tool-calls/) | stateless | Collapsible tool-call cards — input, output, failure, Allow/Deny — and a shimmering group that folds a burst of calls |
+| [`TaskRow` / `TaskSnapshot`](https://labcoder.github.io/gpui-ai/components/tasks/) | stateless | Live agent task status rows |
+| [`TodoList`](https://labcoder.github.io/gpui-ai/components/todos/) | entity | Agent to-do list with progress |
+| [`ImageGeneration`](https://labcoder.github.io/gpui-ai/components/image-generation/) | stateless | Image-generation frame with progress |
+| [`SearchResults`](https://labcoder.github.io/gpui-ai/components/search/) | stateless | Web-search result cards |
+| [`ApprovalCard`](https://labcoder.github.io/gpui-ai/components/approval/) | stateless | Human-in-the-loop gate with default and destructive tones, optional "Always allow", and resolved states |
+| [`PlanCard`](https://labcoder.github.io/gpui-ai/components/plan/) | stateless | An agent's proposed steps with typed per-step status, lifecycle badge, Approve/Reject/Edit while proposed, and step activation by stable ID |
+| [`RecommendationCard`](https://labcoder.github.io/gpui-ai/components/recommendation/) | entity | Agent suggestion with confidence meter |
+| [`ContextCard`](https://labcoder.github.io/gpui-ai/components/context/) | stateless | Retrieved knowledge chunks with sources |
+| [`InsightCard`](https://labcoder.github.io/gpui-ai/components/insights/) | stateless | Paged insight cards with sparkline charts |
+| [`PromptBar`](https://labcoder.github.io/gpui-ai/components/prompt-bar/) | entity | Composer: @ mentions, / commands, provider-grouped model picker with descriptions and context windows, attachments |
+| [`VoiceControls`](https://labcoder.github.io/gpui-ai/components/voice/) | stateless | Dictate and speak controls for an application-owned voice state: live level meter, interim transcript status, typed `VoiceEvent`s |
+| [`MessageQueue`](https://labcoder.github.io/gpui-ai/components/queue/) | stateless | Prompts waiting while the agent runs: named list with move, edit, send-now, remove, and clear by stable ID |
+| [`Chat`](https://labcoder.github.io/gpui-ai/components/chat/) | entity | Virtualized transcript + composer with hover-revealed message actions, in-place edit, branch version switcher, message attachments, welcome state, unread & jump-to-latest |
+| [`Suggestions`](https://labcoder.github.io/gpui-ai/components/suggestions/) | stateless | Starter and follow-up prompt chips with staggered reveal and stable IDs |
+| [`AttachmentStrip` / `AttachmentPreview`](https://labcoder.github.io/gpui-ai/components/attachments/) | stateless | Composer and message attachments with thumbnails, kind glyphs, typed upload state, and open/remove events by stable ID |
+| [`ArtifactPanel`](https://labcoder.github.io/gpui-ai/components/artifact/) | stateless | Side panel for generated documents and code: streamed source, kind-driven preview or source view, version switcher, typed actions, close |
+| [`ContextMeter`](https://labcoder.github.io/gpui-ai/components/context-meter/) | stateless | Context-window usage ring / bar / text with severity tones and a hover breakdown |
+| [`CommandSearch`](https://labcoder.github.io/gpui-ai/components/command-search/) | entity | Command palette with filtering and keyboard navigation |
+| [`SidebarNav`](https://labcoder.github.io/gpui-ai/components/sidebar-nav/) | entity | Collapsible, filterable workspace navigation |
+| [`ThreadList`](https://labcoder.github.io/gpui-ai/components/thread-list/) | entity | Grouped conversation list: new, switch, search, archived toggle, rename / archive / delete row actions |
+| [`FineTuneCard`](https://labcoder.github.io/gpui-ai/components/fine-tune/) | entity | Design-property inspector (size, radius, opacity, typeface) |
+| [`SelectionActions`](https://labcoder.github.io/gpui-ai/components/selection-actions/) | entity | Selection-anchored Ask / Explain / Rewrite actions |
+| [`RecordsTable`](https://labcoder.github.io/gpui-ai/components/records-table/) | entity | CRM-style virtualized grid with sorting |
+| [`DiffTable`](https://labcoder.github.io/gpui-ai/components/diff-table/) | entity | AI-proposed edits over tabular data |
+| [`FilterTable`](https://labcoder.github.io/gpui-ai/components/filter-table/) | entity | Status-chip filtered, reorderable table |
+| [`ComparisonTable`](https://labcoder.github.io/gpui-ai/components/comparison-table/) | entity | Feature-by-plan comparison matrix |
 
 Shared building blocks are public too: `gpui_ai::motion` (reduced-motion-aware text shimmer, one-shot reveals, breathing), `gpui_ai::status` (the one tone scale and status pill every lifecycle uses), and `gpui_ai::cues` (typed interaction cues — message arrived, response settled, copied, submitted, decided — that an application can observe in one place to play sounds or haptics; gpui-ai never plays audio itself).
 
 ## Theming
 
-Components inherit whatever gpui-component theme is active — there is no gpui-ai-specific styling layer. To ship your own look, define a theme in gpui-component's JSON format:
+Components inherit whatever gpui-component theme is active. There is no gpui-ai styling layer: every colour, radius, spacing value, shadow, and type style resolves through `cx.theme()`, which is what makes light/dark, bundled themes, custom JSON themes, and live token editing work with nothing to override per component.
+
+A theme is a JSON file. To ship your own:
 
 ```rust
 use gpui_component::theme::ThemeRegistry;
@@ -190,13 +192,28 @@ ThemeRegistry::global_mut(cx)
     .load_themes_from_str(MY_THEME_JSON)?;
 ```
 
-Nine gpui-ai presets ship as JSON in [`themes/gpui-ai/`](themes/gpui-ai) — Light and Dark come from gpui-component, and the rest are original: [Contrast](themes/gpui-ai/contrast.json), [Midnight Violet](themes/gpui-ai/midnight-violet.json), [Nord Frost](themes/gpui-ai/nord-frost.json), [Ember Dusk](themes/gpui-ai/ember-dusk.json), [Paper Light](themes/gpui-ai/paper-light.json), [Graphite](themes/gpui-ai/graphite.json), and [Solstice](themes/gpui-ai/solstice.json). Dropping another file in that directory adds it to the gallery with no code change. The gallery also registers gpui-component's own [vendored pack](themes/upstream) of 36 themes, credited under Apache-2.0.
+Forty-five presets ship, in two groups. Nine are the gpui-ai set in [`themes/gpui-ai/`](themes/gpui-ai) — Light and Dark come from gpui-component, and [Contrast](themes/gpui-ai/contrast.json), [Midnight Violet](themes/gpui-ai/midnight-violet.json), [Nord Frost](themes/gpui-ai/nord-frost.json), [Ember Dusk](themes/gpui-ai/ember-dusk.json), [Paper Light](themes/gpui-ai/paper-light.json), [Graphite](themes/gpui-ai/graphite.json) and [Solstice](themes/gpui-ai/solstice.json) are original. The other 36 are gpui-component's own [vendored pack](themes/upstream), credited under Apache-2.0. Dropping another file into the directory adds it to the registry, the gallery, and the website, with no code to change.
+
+Every one of them is downloadable from [the themes page](https://labcoder.github.io/gpui-ai/themes/) as the file the registry reads.
+
+## What is verified, and where
+
+**The native runtime is authoritative.** Every component is verified natively — light, dark and a third theme, AccessKit semantics for roles, names, values and actions, keyboard operation, and constrained-overflow behaviour — and the browser build is checked afterwards. A demo running in a tab is not evidence that the same path works for a screen reader or a keyboard-only user there; browser accessibility is a separate capability and is not claimed.
+
+The website's demos demonstrate the components. They do not prove them.
+
+One known limitation of the web gallery: pressing Tab, Shift+Tab, or Ctrl+C inside a live demo freezes that demo — the page around it keeps working, and reloading brings it back. The cause is upstream and is one import; [CHANGELOG.md](CHANGELOG.md) records the detail. Native builds are unaffected.
 
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the gates, and commit conventions, and [AGENTS.md](AGENTS.md) for architecture rules and the definition of done. `npm run check` must pass before review.
 
-What changed in each version is recorded in [CHANGELOG.md](CHANGELOG.md). Report vulnerabilities privately rather than in an issue — see [SECURITY.md](SECURITY.md).
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md). Report vulnerabilities privately rather than in an issue — see [SECURITY.md](SECURITY.md).
+
+## Built on
+
+- **[GPUI](https://gpui.rs)** — the GPU-accelerated Rust UI framework from the Zed team, which does the drawing, layout, and platform work all of this stands on.
+- **[gpui-component](https://github.com/longbridge/gpui-component)** by Longbridge — the component library and semantic theme system gpui-ai composes. Its controls, its theming, and its vendored theme pack are used as they are shipped, never forked or copied.
 
 ## License
 

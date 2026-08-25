@@ -11,6 +11,24 @@ revision.
 
 ### Changed
 
+- A demo now appears in its window instead of flashing black first. The embed
+  paints no background of its own and its canvas is held hidden until GPUI has
+  drawn into it — an unpresented WebGPU surface composites as solid black,
+  because gpui_web configures it opaque — and the "Loading GPUI example" card
+  in the middle of the window is replaced by the window's own title bar saying
+  "Starting".
+- Code samples read like an editor: the file each snippet was cut from on a
+  strip above it, and line numbers in a gutter. The numbers are drawn with a
+  CSS counter rather than written into the document, so they cannot reach the
+  clipboard by any route.
+- Nothing that ships names another component library any more. A published code
+  sample, the crate's own front page, and a constant in `orbs.rs` each credited
+  one, which reads as a claim that this is a port of it. It is not: every
+  component here is an original design for GPUI. The comparisons stay in
+  `docs/internal/reference-comparisons.md`, which is not checked in.
+- The README is rewritten around what the library offers: a live demo, explicit
+  requirements, installation with pinning guidance, and a component table where
+  every entry links to its own running demo.
 - The website opens on the Nord Frost theme rather than following the machine's
   light or dark. Following the system is still offered, is now recorded like any
   other choice, and remains the fallback if the registry ever stops shipping the

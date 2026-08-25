@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
 import buildInfo from "../generated/build.json" with { type: "json" };
 import catalog from "../generated/catalog.json" with { type: "json" };
 import highlightFile from "../generated/highlight.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
+import themeFile from "../generated/themes.json" with { type: "json" };
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 // What the pages must contain, checked against the HTML the build actually
 // writes rather than against the components in isolation. These assertions
@@ -341,6 +346,47 @@ test("the home page puts installing it above the demo", async () => {
   assert.ok(install > 0, "the home page has no install section");
   assert.ok(demo > 0, "the home page has no demo");
   assert.ok(install < demo, `install is at ${install}, below the demo at ${demo}`);
+});
+
+test("the README links every component, and every link it makes resolves", async () => {
+  const { outDir } = await site();
+  const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+
+  // The README is the first thing anyone reads and the only page here nothing
+  // generates, so its links are the ones most able to rot. A renamed component
+  // is a 404 for whoever followed it.
+  const missing = [];
+  const linked = new Set();
+  for (const [, link] of readme.matchAll(
+    new RegExp(`\\]\\((${origin.replace(/[/.]/g, "\\$&")}[^)]*)\\)`, "g"),
+  )) {
+    const route = link.slice(origin.length) || "/";
+    // /api/ is rustdoc's tree, built by `npm run build:docs` and assembled by
+    // the Pages workflow rather than by this build.
+    if (route.startsWith("/api/")) continue;
+    if (!existsSync(path.join(outDir, ...route.split("/").filter(Boolean), "index.html"))) {
+      missing.push(route);
+    }
+    const slug = /^\/components\/([a-z0-9-]+)\/$/.exec(route)?.[1];
+    if (slug) linked.add(slug);
+  }
+  assert.deepEqual(missing, [], "the README points at pages the site does not build");
+
+  assert.deepEqual(
+    components.map((component) => component.slug).filter((slug) => !linked.has(slug)),
+    [],
+    "the README's component table has to stay the whole list",
+  );
+
+  // And the counts it advertises, which are the first claim a reader checks.
+  assert.match(
+    readme,
+    new RegExp(`components-${components.length}-blue`),
+    `the badge does not say ${components.length} components`,
+  );
+  const themeCount = themeFile.groups.reduce((total, group) => total + group.themes.length, 0);
+  assert.match(readme, new RegExp(`themes-${themeCount}-blue`), `the badge does not say ${themeCount} themes`);
 });
 
 test("every font the site uses is served from the site", async () => {
