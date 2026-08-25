@@ -13,16 +13,24 @@ const FOLLOW = "follow";
  * the gallery measures from its own laid-out bounds. That is what keeps a
  * three-chip row from sitting in the same tall box as a data table.
  *
- * Four states, and the site owns three of them. Idle: the frame is drawn and
+ * Four states, and the site owns all of them. Idle: the frame is drawn and
  * nothing has been fetched, because the whole catalog is one binary and a
- * visitor reading prose should not pay for it. Promoted: the iframe exists and
- * the embed shows its own loading card while the module arrives. Running. And
- * no WebGPU, where the honest thing is to say so and never start a seventeen
- * megabyte download that cannot be used.
+ * visitor reading prose should not pay for it. Starting: the iframe exists and
+ * the title bar says so. Running. And no WebGPU, where the honest thing is to
+ * say so and never start a seventeen megabyte download that cannot be used.
+ *
+ * Starting is said in the title bar, and nowhere else. The embed used to paint
+ * a card in the middle of this window announcing itself, over a page of its
+ * own painted the theme's background — so opening a page meant watching the
+ * window turn black, put up a card, and take it away again. The frame is
+ * transparent now and this window's own surface is what shows until there are
+ * pixels; the strip that already names the demo is where a window says it is
+ * still opening. The embed reports `ready` or `failed` when it knows.
  *
  * The idle state deliberately does not say "loading" and does not shimmer. A
  * frame two viewports down is not loading, will not load, and may never load;
- * animating it would be a prettier version of the same untruth.
+ * animating it would be a prettier version of the same untruth. Starting is
+ * different: something really is happening, and the dot says so.
  *
  * There are no variant tabs here. The story draws its own switcher inside the
  * canvas, and a second one on the outside would need a variant parameter
@@ -44,12 +52,34 @@ export function Demo({
   const iframe = useRef<HTMLIFrameElement>(null);
   const [src, setSrc] = useState<string>();
   const [reloads, setReloads] = useState(0);
+  const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [override, setOverride] = useState<string>(FOLLOW);
   const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const overrideId = useId();
 
   const site = useTheme();
   const effective = override === FOLLOW ? site.applied : override;
+  const painted = themes.find((candidate) => candidate.slug === effective);
+
+  // Every frame the embed replaces starts over. Reload is the case that
+  // matters: it swaps the iframe for a new one, and a window that kept saying
+  // "ready" would be describing a document that no longer exists.
+  useEffect(() => setStatus("starting"), [src, reloads]);
+
+  useEffect(() => {
+    if (!src) return;
+    const onMessage = (event: MessageEvent) => {
+      // Same origin, and this component's own frame — a page shows three of
+      // these at once on /themes/, and they must not answer for each other.
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== iframe.current?.contentWindow) return;
+      const message = event.data as { type?: unknown; story?: unknown; state?: unknown } | null;
+      if (message?.type !== "gpui-ai-status" || message.story !== story) return;
+      if (message.state === "ready" || message.state === "failed") setStatus(message.state);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [src, story, reloads]);
 
   // Asked after mount, never during render: `navigator` does not exist in the
   // pre-render, and the answer would differ between the two anyway.
@@ -67,6 +97,8 @@ export function Demo({
     () => setWebgpu(Boolean((navigator as Navigator & { gpu?: unknown }).gpu)),
     [],
   );
+
+  const starting = Boolean(src) && status === "starting" && webgpu !== false;
 
   useEffect(() => {
     const element = frame.current;
@@ -128,6 +160,12 @@ export function Demo({
             <i />
           </span>
           <span className="demo-title">{title}</span>
+          {starting ? (
+            <span className="demo-starting" role="status" data-demo-starting>
+              <i aria-hidden="true" />
+              Starting
+            </span>
+          ) : null}
         </div>
         <div
           className="demo-body"
@@ -135,7 +173,21 @@ export function Demo({
           data-story={story}
           data-src={demoSrc(story)}
           ref={frame}
-          style={{ ["--demo-height" as string]: `${height}px` }}
+          style={{
+            ["--demo-height" as string]: `${height}px`,
+            // What the canvas is about to paint, taken from the same theme
+            // JSON the gallery loads. The frame is transparent until it draws,
+            // so this is what fills the window in the meantime — the demo's
+            // own background rather than a neutral one that has to change.
+            //
+            // Only once there is a frame. Idle and no-WebGPU are the site
+            // speaking, and their text is coloured from the site's tokens; a
+            // demo overridden to another theme would leave that text standing
+            // on a background it was never checked against.
+            ...(src && painted
+              ? { ["--demo-surface" as string]: painted.tokens["--ai-background"] }
+              : {}),
+          }}
         >
           {webgpu === false ? (
             <div className="demo-unavailable" data-webgpu-fallback>

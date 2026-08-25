@@ -398,7 +398,7 @@ async function waitForValue(
 const GALLERY_DIAGNOSIS = `(() => ({
   documentReady: document.readyState,
   hasCanvas: Boolean(document.querySelector('canvas')),
-  stillLoading: Boolean(document.getElementById('loading')),
+  stillStarting: Boolean(document.querySelector('[data-demo-starting]')),
   fallbackVisible: (() => { const f = document.getElementById('fallback'); return Boolean(f && !f.hidden); })(),
   fallbackText: document.querySelector('#fallback [data-error]')?.textContent ?? null,
   hostTheme: document.documentElement.dataset.theme ?? null,
@@ -423,7 +423,7 @@ test("a timed-out wait names the condition, its state, and the collected page er
       evaluated.push(expression);
       return evaluated.length === 1
         ? { ok: false, timedOut: true }
-        : { hasCanvas: false, stillLoading: true, reportedTheme: null };
+        : { hasCanvas: false, stillStarting: true, reportedTheme: null };
     },
   };
 
@@ -438,7 +438,7 @@ test("a timed-out wait names the condition, its state, and the collected page er
       assert.match(error.message, /Timed out after 10ms waiting for the loading specimen to start/);
       // The point of the diagnosis: which part was false, not just "false".
       assert.match(error.message, /"hasCanvas": false/);
-      assert.match(error.message, /"stillLoading": true/);
+      assert.match(error.message, /"stillStarting": true/);
       assert.match(error.message, /ReferenceError: WebSocket is not defined/);
       return true;
     },
@@ -562,7 +562,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await cdp.navigate(embed("loading", "light"), 1280, 900);
   await waitForValue(
     cdp,
-    `Boolean(document.querySelector('canvas') && !document.getElementById('loading') && window.gpuiAi?.currentTheme() === 'light')`,
+    `Boolean(document.querySelector('canvas') && window.gpuiAi?.currentTheme() === 'light')`,
     {
       label: "the release artifact to start and report the light theme",
       fatal: GALLERY_GAVE_UP,
@@ -1187,6 +1187,50 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
+
+  // How a demo arrives. The embed used to paint its own page and put a card
+  // in the middle of this window while it started, so opening a page meant
+  // watching the window go black, show a card, and take it away. It paints
+  // nothing now, and the canvas — which composites as solid black until GPUI
+  // presents a frame, because gpui_web configures the surface opaque — stays
+  // at zero opacity until it has been drawn at the window's real size.
+  //
+  // Waited for rather than read straight away: the reveal is a 140ms fade, and
+  // reading mid-fade is a race that says nothing about the mechanism.
+  await waitForValue(
+    cdp,
+    `getComputedStyle(document.querySelector('[data-specimen-frame] iframe').contentDocument.querySelector('canvas')).opacity === '1'`,
+    { label: "the demo to finish appearing", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  assert.deepEqual(
+    await cdp.evaluate(`(() => {
+      const frame = document.querySelector('[data-specimen-frame] iframe');
+      const inner = frame.contentDocument;
+      const canvas = inner.querySelector('canvas');
+      return {
+        ready: 'ready' in inner.body.dataset,
+        htmlBackground: getComputedStyle(inner.documentElement).backgroundColor,
+        bodyBackground: getComputedStyle(inner.body).backgroundColor,
+        canvasOpacity: getComputedStyle(canvas).opacity,
+        drawnAtFullSize: canvas.width >= canvas.clientWidth && canvas.clientWidth > 0,
+        loadingCard: Boolean(inner.getElementById('loading')),
+        windowBackground: getComputedStyle(document.querySelector('[data-specimen-frame]')).backgroundColor,
+      };
+    })()`),
+    {
+      ready: true,
+      htmlBackground: "rgba(0, 0, 0, 0)",
+      bodyBackground: "rgba(0, 0, 0, 0)",
+      canvasOpacity: "1",
+      drawnAtFullSize: true,
+      loadingCard: false,
+      // Nord Frost's own --ai-background, which is what the canvas paints too,
+      // so the window fills in and the component appears inside it without
+      // anything changing colour.
+      windowBackground: "rgb(46, 52, 64)",
+    },
+    "a demo must arrive by appearing in its window, not by flashing black first",
+  );
 
   const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
   assert.equal(

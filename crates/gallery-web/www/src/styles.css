@@ -32,7 +32,6 @@ body {
   width: 100%;
   min-height: 100%;
   margin: 0;
-  background: var(--page);
   color: var(--text);
   /* The canvas draws IBM Plex Sans, which gpui_web links into the binary.
      This chrome only shows before that starts, so it takes the viewer's own
@@ -40,11 +39,46 @@ body {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Deliberately not on `html, body`. An embed is nearly always inside the
+   site's demo window, which has already painted the theme's surface behind
+   it; painting this page as well means a reader watches that surface turn
+   #0a0a0a and then turn into the canvas. With no background at all the frame
+   is transparent and the window shows through until there are pixels to show.
+
+   Popped out to a tab of its own there is nothing behind it, and the browser
+   paints its default canvas from the `color-scheme` on :root — which is why
+   that is declared with the palette rather than alongside this. */
+body:not([data-page='embed']) { background: var(--page); }
+
 body[data-page='embed'] { overflow: hidden; }
 body[data-page='embed'] > canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+/* Hidden until GPUI has actually drawn something.
+
+   The canvas is appended to the body before the adapter is even requested,
+   and gpui_web configures its surface with `transparent: false`, which is
+   `CompositeAlphaMode::Opaque`. Under that mode the compositor ignores the
+   canvas's alpha, so an unpresented surface — cleared to transparent black —
+   reads as solid #000 for the whole of adapter selection, device creation,
+   and the wait for the first frame. That is the black flash; it is the canvas
+   itself, not a background, so no colour set anywhere can cover it.
+
+   `opacity` rather than `display`: a canvas with no layout reports no size,
+   rendering is skipped while the physical size is zero, and the frame would
+   never draw at all. Opacity keeps the box, the ResizeObserver, and the GPU
+   work exactly as they were, and only stops the black being shown. */
+body[data-page='embed'] > canvas { opacity: 0; }
+
+body[data-page='embed'][data-ready] > canvas {
+  opacity: 1;
+  transition: opacity 140ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page='embed'][data-ready] > canvas { transition: none; }
+}
 [hidden] { display: none !important; }
 
-.loading,
 .fallback {
   position: fixed;
   inset: 0;
@@ -53,7 +87,6 @@ body[data-page='embed'] > canvas { position: fixed; inset: 0; width: 100%; heigh
   padding: 24px;
 }
 
-.loading-card,
 .fallback-card {
   width: min(420px, 100%);
   padding: 20px;
@@ -63,17 +96,7 @@ body[data-page='embed'] > canvas { position: fixed; inset: 0; width: 100%; heigh
   box-shadow: 0 18px 45px rgb(0 0 0 / 10%);
 }
 
-.pulse {
-  width: 28px;
-  height: 28px;
-  margin-bottom: 14px;
-  border-radius: 999px;
-  background: currentColor;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.fallback-card p,
-.loading-card p { margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
+.fallback-card p { margin: 6px 0 0; color: var(--muted); line-height: 1.5; }
 .fallback-card [data-error] { font-family: ui-monospace, monospace; font-size: 12px; }
 
 .showcase { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0 80px; }
@@ -86,5 +109,4 @@ body[data-page='embed'] > canvas { position: fixed; inset: 0; width: 100%; heigh
 .demo h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
 .demo iframe { display: block; width: 100%; height: 430px; border: 0; background: var(--surface); }
 
-@keyframes pulse { 50% { opacity: 0.25; transform: scale(0.82); } }
 @media (max-width: 760px) { .demo-grid { grid-template-columns: 1fr; } .showcase header { align-items: start; flex-direction: column; } }

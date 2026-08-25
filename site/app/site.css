@@ -761,9 +761,56 @@ pre.code {
   background: var(--ai-border);
 }
 
+/* Pushed to the trailing edge of the title bar, where a window puts the thing
+   it is doing rather than the thing it is. */
+/* The title bar is painted from --ai-accent, and --ai-muted-text is only
+   derived to be readable on the page and on a card. Size, casing, and letter
+   spacing carry the hierarchy here instead of colour. */
+.demo-starting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  color: var(--ai-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.demo-starting i {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--ai-primary);
+  animation: demo-starting 1.4s ease-in-out infinite;
+}
+
+@keyframes demo-starting {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/* The word is the message; the dot only keeps it company. */
+@media (prefers-reduced-motion: reduce) {
+  .demo-starting i {
+    animation: none;
+  }
+}
+
 .demo-body {
   position: relative;
   height: var(--demo-height);
+  /* The embed paints no background of its own, so this is what a reader sees
+     while the gallery starts. It is set from the demo's own theme, which is
+     the colour the canvas is about to paint — the window fills in and then
+     the component appears inside it, with nothing changing colour.
+
+     Only while there is a frame. Idle and no-WebGPU are the site talking, in
+     the site's own words and colours, and standing them on the demo's
+     background would put site-coloured text on a surface that is not the
+     site's. `transparent` lets the window's own surface show. */
+  background: var(--demo-surface, transparent);
 }
 
 .demo-body iframe {

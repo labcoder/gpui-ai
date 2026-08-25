@@ -1,5 +1,5 @@
 import './styles.css';
-import { parseEmbedOptions, parseThemeEvent, themeMessage } from './query.js';
+import { parseEmbedOptions, parseThemeEvent, statusMessage, themeMessage } from './query.js';
 import { pinScaleFactor } from './scale.js';
 
 function preferredTheme(explicit) {
@@ -17,7 +17,6 @@ function preferredTheme(explicit) {
 function showFallback(error, expected = false) {
   const report = expected ? console.info : console.error;
   report('GPUI example fallback:', error);
-  document.getElementById('loading')?.remove();
   const fallback = document.getElementById('fallback');
   if (fallback) {
     fallback.hidden = false;
@@ -97,14 +96,77 @@ function assetEndpoint() {
   return new URL(configured, window.location.href).href.replace(/\/+$/, '');
 }
 
+/** Tells the host how this example is doing, when there is a host to tell. */
+function announce(story, state) {
+  if (window.parent === window) return;
+  window.parent.postMessage(statusMessage(story, state), window.location.origin);
+}
+
+/** Longest the canvas is kept hidden waiting for a frame that may never come. */
+const FIRST_FRAME_TIMEOUT_MS = 8000;
+
+/**
+ * Whether GPUI has drawn a frame at this window's real size.
+ *
+ * `gpui_web` never touches the canvas's backing store outside `draw`, so a
+ * canvas still carrying the 300×150 the HTML default gave it has never been
+ * drawn into. It does not go straight from that to the right size either: the
+ * surface is seeded at 0×0, clamped to 1×1, and only resized once the
+ * `ResizeObserver` reports the real geometry. Stretching that one pixel across
+ * the window is its own kind of flash, so the test is that the backing store
+ * covers the box — which, with the device pixel ratio pinned to 1, means it
+ * matches it.
+ */
+function hasDrawn(canvas) {
+  return (
+    canvas.clientWidth > 0 &&
+    canvas.width >= canvas.clientWidth &&
+    canvas.height >= canvas.clientHeight
+  );
+}
+
+/**
+ * Shows the canvas once GPUI has drawn into it, and not before.
+ *
+ * `run()` resolves long before there are pixels — it returns as soon as the
+ * platform has spawned its graphics init — so it is no signal that anything is
+ * on screen.
+ *
+ * The timeout is deliberate. If upstream ever stops sizing the canvas this
+ * way, a demo nobody can see is a worse failure than a moment of black.
+ */
+function revealWhenDrawn(story) {
+  const startedAt = performance.now();
+
+  const show = () => {
+    document.body.dataset.ready = '';
+    announce(story, 'ready');
+  };
+
+  const check = () => {
+    const canvas = document.querySelector('body > canvas');
+    if ((canvas && hasDrawn(canvas)) || performance.now() - startedAt > FIRST_FRAME_TIMEOUT_MS) {
+      show();
+      return;
+    }
+    window.requestAnimationFrame(check);
+  };
+
+  window.requestAnimationFrame(check);
+}
+
 async function initEmbed() {
   pinScaleFactor();
   const options = parseEmbedOptions(window.location.search);
   const theme = preferredTheme(options.theme);
   const themeChannel = watchTheme(theme);
 
+  // Either outcome is announced. A host that is only ever told about success
+  // leaves its window saying "Starting" over an example that has already
+  // given up and drawn the reason why.
   if (!navigator.gpu) {
     showFallback(new Error('This live example requires a browser with WebGPU support.'), true);
+    announce(options.story, 'failed');
     return;
   }
 
@@ -115,9 +177,12 @@ async function initEmbed() {
     await wasm.run(options.story, themeChannel.current(), assetEndpoint());
     themeChannel.connect(wasm);
     window.gpuiAi = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
-    document.getElementById('loading')?.remove();
+    // Not "ready" yet: `run` returns before the first frame. The host keeps
+    // saying "Starting" in the demo window's title bar until there are pixels.
+    revealWhenDrawn(options.story);
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));
+    announce(options.story, 'failed');
   }
 }
 

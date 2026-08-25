@@ -7,9 +7,17 @@
     <title>gpui-ai example</title>
   </head>
   <body data-page="embed" data-asset-base="./upstream">
-    <div class="loading" id="loading" role="status">
-      <div class="loading-card"><div class="pulse"></div><strong>Loading GPUI example</strong><p>Preparing the WebGPU canvas…</p></div>
-    </div>
+    <!--
+      No loading card. This document is almost always inside the site's demo
+      window, and a card of its own in the middle of that window is a second
+      piece of chrome saying what the window is already able to say. The host
+      is told when the gallery is running (see `readyMessage`) and shows it in
+      the window's own title bar; until then this page paints nothing at all,
+      so the window's surface is what a reader sees.
+
+      The fallback stays: an example that cannot run has something to say, and
+      the demo window keeps showing while it says it.
+    -->
     <div class="fallback" id="fallback" hidden>
       <div class="fallback-card"><strong>Live example unavailable</strong><p>The component remains available in native GPUI applications.</p><p data-error></p></div>
     </div>
