@@ -7055,6 +7055,56 @@ mod tests {
         assert_eq!(unique.len(), labels.len(), "stage names must be distinct");
     }
 
+    /// A theme that changes the base type size changes what a story measures.
+    ///
+    /// The measurement above takes its rem from the theme, which matters only
+    /// if the theme can move it — and with the default theme it cannot, because
+    /// 16px is also GPUI's own default. So the two calls that read the theme
+    /// could be deleted and every height test would still pass. This is the one
+    /// that would not: Graphite asks for 14px and Solstice for 17px, and a
+    /// story laid out at those sizes is a different height.
+    #[gpui::test]
+    fn a_story_measures_differently_under_a_theme_that_resizes_the_type(cx: &mut TestAppContext) {
+        cx.update(super::init);
+
+        // Chat, because it is mostly text: a story of chips and icons would
+        // barely move and would make a weak claim.
+        let measure = |cx: &mut TestAppContext, slug: &str| {
+            let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::Chat, cx));
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|window, cx| {
+                let preset = GalleryTheme::from_slug(slug).expect("bundled theme");
+                super::apply_gallery_theme(preset, Some(window), cx);
+            });
+            cx.update(|_, cx| {
+                gallery.update(cx, |gallery, cx| {
+                    gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+                })
+            });
+            cx.simulate_resize(size(px(900.), px(2400.)));
+            cx.update(|window, cx| {
+                window.set_rem_size(cx.theme().font_size);
+                window.draw(cx).clear(cx)
+            });
+            cx.debug_bounds("story-chat")
+                .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
+                .expect("the chat story renders a measurable frame")
+        };
+
+        let small = measure(cx, "graphite");
+        let base = measure(cx, "dark");
+        let large = measure(cx, "solstice");
+
+        assert!(
+            small < base,
+            "graphite asks for 14px type, so its chat must be shorter than {base}, not {small}"
+        );
+        assert!(
+            large > base,
+            "solstice asks for 17px type, so its chat must be taller than {base}, not {large}"
+        );
+    }
+
     /// The declared heights must be what the stories actually measure.
     ///
     /// The website centres each story in a frame sized from this number, so a

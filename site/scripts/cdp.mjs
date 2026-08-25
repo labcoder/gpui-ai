@@ -193,7 +193,13 @@ export class Cdp {
 
   async navigate(url, width, height, deviceScaleFactor = 1) {
     await this.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor, mobile: false });
+    // Listening before asking, because a page can finish loading before
+    // `Page.navigate` resolves. The catch is not optional: if the navigate
+    // rejects first, this promise has nobody waiting on it, and an unhandled
+    // rejection takes the whole test runner down with an error about a page
+    // rather than about the navigation that actually failed.
     const loaded = this.once("Page.loadEventFired");
+    loaded.catch(() => {});
     await this.send("Page.navigate", { url });
     await loaded;
   }

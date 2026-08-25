@@ -296,9 +296,16 @@ export async function captureSocialCards({
     for (const card of chosen) {
       // Written into the site so that the stylesheet, the faces and the poster
       // are all same-origin relative paths, exactly as a page would see them.
-      const scratch = path.join(siteDir, "og", "_card.html");
+      // Named for this process, because the release gate renders two cards
+      // into a site another run may be rendering all of at the same time, and
+      // one shared scratch file means one of them photographs the other's.
+      const scratch = path.join(siteDir, "og", `_card-${process.pid}.html`);
       await writeFile(scratch, cardHtml(stylesheet, card, base));
-      await cdp.navigate(`${serverHandle.origin}${base}/og/_card.html`, CARD.width, CARD.height);
+      await cdp.navigate(
+        `${serverHandle.origin}${base}/og/${path.basename(scratch)}`,
+        CARD.width,
+        CARD.height,
+      );
       await waitForValue(
         cdp,
         // `complete` alone is true for an image that 404d, which is exactly the
@@ -326,7 +333,7 @@ export async function captureSocialCards({
     await settleAll([
       () => closeBrowser(browserHandle),
       () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
-      () => rm(path.join(siteDir, "og", "_card.html"), { force: true }),
+      () => rm(path.join(siteDir, "og", `_card-${process.pid}.html`), { force: true }),
       () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
     ]);
   }
