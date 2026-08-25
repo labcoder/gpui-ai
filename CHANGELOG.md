@@ -34,6 +34,10 @@ revision.
 - A story now declares which way its content overflows instead of the exporter
   guessing from the story's measured height, which meant editing prose beneath a
   component could silently rewrite the published claim about it.
+- The API documentation no longer carries 82,920 "Read more" links that did
+  nothing. `cargo doc --no-deps` leaves rustdoc no page to point at for a trait
+  implemented from a dependency, so it emitted anchors with no `href`; the
+  publish step removes them and leaves the 1,533 that resolve.
 
 ### Known issues
 
