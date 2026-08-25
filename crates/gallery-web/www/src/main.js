@@ -1,4 +1,5 @@
 import './styles.css';
+import { hasDrawn } from './canvas.js';
 import { parseEmbedOptions, parseThemeEvent, statusMessage, themeMessage } from './query.js';
 import { pinScaleFactor } from './scale.js';
 
@@ -104,26 +105,6 @@ function announce(story, state) {
 
 /** Longest the canvas is kept hidden waiting for a frame that may never come. */
 const FIRST_FRAME_TIMEOUT_MS = 8000;
-
-/**
- * Whether GPUI has drawn a frame at this window's real size.
- *
- * `gpui_web` never touches the canvas's backing store outside `draw`, so a
- * canvas still carrying the 300×150 the HTML default gave it has never been
- * drawn into. It does not go straight from that to the right size either: the
- * surface is seeded at 0×0, clamped to 1×1, and only resized once the
- * `ResizeObserver` reports the real geometry. Stretching that one pixel across
- * the window is its own kind of flash, so the test is that the backing store
- * covers the box — which, with the device pixel ratio pinned to 1, means it
- * matches it.
- */
-function hasDrawn(canvas) {
-  return (
-    canvas.clientWidth > 0 &&
-    canvas.width >= canvas.clientWidth &&
-    canvas.height >= canvas.clientHeight
-  );
-}
 
 /**
  * Shows the canvas once GPUI has drawn into it, and not before.
