@@ -887,6 +887,51 @@ pre.code-plain {
   border: 0;
 }
 
+/* A still of the story, captured from the real gallery at build time. It fills
+   the window and everything else in it stacks on top.
+
+   `cover` from the top: the poster is exactly as wide as the width the story
+   heights were measured at, so a window at that width shows it one-to-one and
+   a narrower one trims the margins, where these stories carry nothing. */
+.demo-poster {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Whether a poster helps is a question about the window, not the viewport: the
+   same window is 900px wide beside a rail on a desktop and 340 on a phone, and
+   is 52px tall for a loading pip and 990 for a chat. Both dimensions are known
+   here — the width from the column, the height from the story's own measured
+   value — so the window is the container and the rules below read it. */
+.demo-body {
+  container-type: size;
+}
+
+/* Too narrow, and the margins the crop eats run out and it starts cutting
+   words in half. Below this the demo shows what it showed before posters
+   existed. */
+@container (max-width: 600px) {
+  .demo-poster {
+    display: none;
+  }
+}
+
+/* Too short, and the card explaining why there is no demo — which cannot be
+   made smaller and cannot be moved out of the window without resizing it —
+   would cover the picture it was captioning, in site-coloured text on a
+   surface nobody checked it against. The words matter more than the picture,
+   so the picture goes. */
+@container (max-height: 219px) {
+  .demo-body[data-poster-only] .demo-poster {
+    display: none;
+  }
+}
+
 /* The idle state. Static on purpose: a frame two viewports down is not
    loading, and a shimmer would say it was. */
 .demo-idle,
@@ -913,6 +958,30 @@ pre.code-plain {
 .demo-unavailable p {
   margin: 0;
   max-width: 34rem;
+}
+
+/* Over a poster the note stops being the card and becomes a strip along the
+   bottom, so the still frame is the thing a reader looks at rather than the
+   apology for it. Opaque, because this is site-coloured text and the picture
+   behind it is not a background it was ever checked against.
+
+   Still absolute, and the window is still exactly as tall as it was: the
+   answer to "does this browser have WebGPU" only arrives after the page has
+   mounted, so a card that changed the window's height would move everything
+   below it a beat after the page settled. Only where there is a poster to
+   annotate — under the width one is shown at, this is the centred card it has
+   always been. */
+@container (min-width: 601px) and (min-height: 220px) {
+  .demo-body[data-poster-only] .demo-unavailable {
+    top: auto;
+    max-height: 100%;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--ai-border);
+    background: var(--ai-background);
+    text-align: left;
+  }
 }
 
 .demo-toolbar {

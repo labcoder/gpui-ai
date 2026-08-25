@@ -9,6 +9,19 @@ revision.
 
 ## [Unreleased]
 
+### Added
+
+- Every story is rendered once at build time and kept as a still, so a reader
+  who cannot run the live one still sees the component. It is the only picture
+  a browser without WebGPU will ever get, and it now fills that window instead
+  of a paragraph explaining the absence. An idle frame under Light or Dark
+  shows one too — under the other 43 themes the window fills with the colour
+  the canvas is about to paint, which is closer to the truth than a still in
+  the wrong palette. The stills are captured by driving the real gallery
+  through the same browser harness the release gate uses, so one cannot drift
+  from what the component draws; they are rebuilt rather than checked in,
+  because a GPU-rendered frame is not byte-reproducible.
+
 ### Changed
 
 - The wheel scrolls the page over a demo. GPUI's web platform calls

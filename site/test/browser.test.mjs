@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../scripts/build.mjs";
+import { capturePosters, POSTER_WIDTH } from "../scripts/capture-posters.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 import snippetFile from "../generated/snippets.json" with { type: "json" };
@@ -34,6 +35,16 @@ const releaseIntegrationRequested = process.env.GPUI_AI_RELEASE_INTEGRATION === 
 const releaseGateIsMandatory = releaseIntegrationRequested && process.env.CI === "true";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const releaseGalleryDir = path.join(repositoryRoot, "crates/gallery-web/www/dist");
+// The two stories the release gate drives: one on its own page, one parked far
+// below the fold to prove a demo stays unloaded. Both get a poster captured for
+// them, because both are looked at in states where a poster is what shows.
+const POSTER_SPECIMEN = "loading";
+// A poster element exists as soon as React renders it; the bytes arrive later,
+// and `naturalWidth` reads 0 until they do — which is also what it reads for a
+// poster that 404s, so nothing may be asserted about one until it is complete.
+const POSTER_LOADED =
+  "(() => { const p = document.querySelector('[data-specimen-frame] img[data-demo-poster]'); return Boolean(p && p.complete); })()";
+const IDLE_SPECIMEN = "chat";
 
 async function createGalleryFixture(directory) {
   await mkdir(path.join(directory, "assets"), { recursive: true });
@@ -166,6 +177,13 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     ]);
   });
 
+  // The one story this gate drives, rendered into site/public/posters before
+  // Vite copies that directory. Not all seventy: the chain being proved here —
+  // capture, publish, serve, render into the fallback — is the same whichever
+  // story runs through it, and the full set is a build step (generate:posters),
+  // not a test.
+  await capturePosters({ only: [POSTER_SPECIMEN, IDLE_SPECIMEN] });
+
   await buildSite({ galleryDir: releaseGalleryDir, outDir });
   serverHandle = await serve(outDir);
   browserHandle = await launchBrowser(userDataDir);
@@ -280,7 +298,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // ratio as its scale factor without scaling the canvas surface, so an
   // unpinned ratio lays the story out at double size and it overflows a frame
   // sized from the catalog. Nothing else here would notice.
-  const specimen = components.find((component) => component.slug === "loading") ?? components[0];
+  const specimen = components.find((component) => component.slug === POSTER_SPECIMEN) ?? components[0];
   await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900, 2);
   await waitForValue(
     cdp,
@@ -336,8 +354,14 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // above the observer's margin. Without this, promoting every frame on
   // hydration would pass every check above — and every visitor reading prose
   // would pay for the shared binary.
-  const deep = components.find((component) => component.slug === "chat") ?? specimen;
-  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${deep.slug}/#limits`, 1280, 400);
+  const deep = components.find((component) => component.slug === IDLE_SPECIMEN) ?? specimen;
+  // Under Dark, one of the two themes a poster is captured in, so the idle
+  // frame shows its poster rather than the site's own words.
+  await cdp.navigate(
+    `${serverHandle.origin}/gpui-ai/components/${deep.slug}/?theme=dark#limits`,
+    1280,
+    400,
+  );
   await waitForValue(cdp, "Boolean(document.querySelector('[data-specimen-frame]'))", {
     label: `the ${deep.slug} page to render its frame`,
     describe: GALLERY_DIAGNOSIS,
@@ -356,9 +380,63 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "a demo far outside the viewport must not fetch the shared binary",
   );
 
+  // D-09. An idle frame under Light or Dark shows the still captured from the
+  // gallery, and `naturalWidth` is what proves the file was really served and
+  // decoded rather than 404ing into an empty box — the failure a markup
+  // assertion cannot tell apart from success.
+  await waitForValue(cdp, POSTER_LOADED, {
+    label: `the idle ${deep.slug} poster to load`,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const idlePoster = await cdp.evaluate(`(() => {
+    const poster = document.querySelector('[data-specimen-frame] img[data-demo-poster]');
+    if (!poster) return null;
+    return {
+      story: poster.dataset.demoPoster,
+      src: poster.getAttribute('src'),
+      width: Number(poster.getAttribute('width')),
+      height: Number(poster.getAttribute('height')),
+      naturalWidth: poster.naturalWidth,
+      alt: poster.getAttribute('alt'),
+    };
+  })()`);
+  assert.ok(idlePoster, `the idle ${deep.slug} frame shows no poster`);
+  assert.equal(idlePoster.story, deep.slug);
+  assert.equal(idlePoster.src, `/gpui-ai/posters/${deep.slug}-dark.webp`);
+  assert.equal(idlePoster.naturalWidth, POSTER_WIDTH, "the poster did not load");
+  // Both dimensions are declared, so the picture reserves exactly the space the
+  // demo will take and swapping one for the other moves nothing.
+  assert.equal(idlePoster.width, POSTER_WIDTH);
+  assert.equal(idlePoster.height, deep.height);
+  // Decoration: the live demo is about to replace it, and a screen reader
+  // describing a placeholder describes something already gone.
+  assert.equal(idlePoster.alt, "");
+  // Asking for a theme in the URL records it, the same as clicking for one, and
+  // every check below this expects a reader who has chosen nothing yet.
+  await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
+
   await cdp.evaluate("window.scrollTo(0, 0)");
   await waitForValue(cdp, "Boolean(document.querySelector('[data-specimen-frame] iframe'))", {
     label: "scrolling back to the demo to load it",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+
+  // And it is gone once the demo draws. A decoded poster is megabytes of RGBA,
+  // so one left behind per demo would cost more than the frames it spared.
+  await waitForValue(
+    cdp,
+    "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
+    {
+      label: `the ${deep.slug} demo to draw`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  await waitForValue(cdp, "!document.querySelector('[data-specimen-frame] img[data-demo-poster]')", {
+    label: "the poster to be dropped once the demo is running",
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
@@ -1328,6 +1406,41 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     { windowShown: true, titled: true, cardInsideWindow: true, starting: false },
     "a demo that cannot run must still be shown in its window, and must not claim to be starting",
   );
+
+  // D-09, the case a poster exists for. This reader will never see the
+  // component run, so the still is the only picture of it there will ever be —
+  // and it carries a description, because nothing is coming to replace it.
+  await waitForValue(cdp, POSTER_LOADED, {
+    label: `the ${specimen.slug} fallback poster to load`,
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const fallbackPoster = await cdp.evaluate(`(() => {
+    const poster = document.querySelector('[data-specimen-frame] img[data-demo-poster]');
+    const body = document.querySelector('[data-specimen-frame]');
+    return {
+      src: poster?.getAttribute('src') ?? null,
+      naturalWidth: poster?.naturalWidth ?? 0,
+      alt: poster?.getAttribute('alt') ?? null,
+      hidden: poster?.getAttribute('aria-hidden') ?? null,
+      frameHeight: body ? Math.round(body.getBoundingClientRect().height) : null,
+    };
+  })()`);
+  // Nord Frost is the site's default and a dark theme; the poster follows the
+  // mode rather than the theme, because there are 45 themes and two posters.
+  assert.equal(fallbackPoster.src, `/gpui-ai/posters/${specimen.slug}-dark.webp`);
+  assert.equal(fallbackPoster.naturalWidth, POSTER_WIDTH, "the fallback poster did not load");
+  assert.equal(fallbackPoster.alt, `${specimen.windowTitle}, rendered`);
+  assert.equal(fallbackPoster.hidden, null, "the only picture of the component must not be hidden");
+  // Whether this browser can draw is only known after the page has mounted, so
+  // the card arrives late. It must not resize the window when it does: the CLS
+  // check further down would catch it on one route, this catches it here.
+  assert.equal(
+    fallbackPoster.frameHeight,
+    specimen.height,
+    "the WebGPU card must not change the height of the window it appears in",
+  );
+
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
 
   // Without WebGPU the embed must say so rather than showing an empty frame.

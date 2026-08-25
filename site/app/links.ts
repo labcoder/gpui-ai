@@ -28,6 +28,22 @@ export function demoSrc(story: string, theme?: string): string {
 }
 
 /**
+ * The still frame captured from a story, for a reader who is not running it.
+ *
+ * By mode, not by theme. There are 45 themes and 35 stories; a poster each
+ * would be 1,575 files rendered on every build to make a placeholder slightly
+ * more accurate. `site/scripts/capture-posters.mjs` renders these two, and
+ * `Demo` only shows one where its colours cannot contradict what is about to
+ * be drawn over them.
+ */
+export function posterSrc(story: string, mode: string): string {
+  return href(`/posters/${story}-${mode}.webp`);
+}
+
+/** The width every poster is captured at, and the width they were measured at. */
+export const POSTER_WIDTH = 900;
+
+/**
  * The rustdoc page for a component's type.
  *
  * Rustdoc lays items out by module, and a component's module is the file the

@@ -73,7 +73,11 @@ export async function serve(directory) {
         ".css": "text/css",
         ".html": "text/html",
         ".js": "text/javascript",
+        ".json": "application/json",
+        ".svg": "image/svg+xml",
         ".wasm": "application/wasm",
+        ".webp": "image/webp",
+        ".woff2": "font/woff2",
       }[extension] ?? "application/octet-stream";
       response.setHeader("content-type", contentType);
       response.end(await readFile(file));

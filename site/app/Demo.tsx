@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { themeGroups, themes } from "./data";
-import { demoSrc } from "./links";
+import { demoSrc, posterSrc, POSTER_WIDTH } from "./links";
 import { tellFrame, useTheme } from "./theme";
 
 /** The override value meaning "whatever the page is showing". */
@@ -32,6 +32,19 @@ const FOLLOW = "follow";
  * animating it would be a prettier version of the same untruth. Starting is
  * different: something really is happening, and the dot says so.
  *
+ * Where there is no live render to contradict, a poster stands in — a still of
+ * this story captured from the real gallery. Without WebGPU it is the only
+ * thing that reader will ever see of the component, so it shows under every
+ * theme. Before a run it shows only under Light and Dark, the two themes a
+ * poster is captured in: a Nord Frost page would otherwise put up a
+ * neutral-grey still and swap it for a blue one a moment later, which reads as
+ * a glitch rather than a preview. Under the other 43 themes the window fills
+ * with `--demo-surface`, the exact colour the canvas is about to paint.
+ *
+ * It is unmounted the moment the demo draws. A decoded 900x990 bitmap is about
+ * three and a half megabytes of RGBA, and a page holding one per demo would
+ * cost more than the frames it was meant to spare.
+ *
  * There are no variant tabs here. The story draws its own switcher inside the
  * canvas, and a second one on the outside would need a variant parameter
  * plumbed through the embed and the Rust registry only to compete with the
@@ -61,6 +74,10 @@ export function Demo({
   const site = useTheme();
   const effective = override === FOLLOW ? site.applied : override;
   const painted = themes.find((candidate) => candidate.slug === effective);
+  // The two themes posters are captured in. Under anything else a poster is
+  // the right shape in the wrong colours, which is worse than no poster at all
+  // for the instant before the real thing draws.
+  const neutral = effective === "light" || effective === "dark";
 
   // Every frame the embed replaces starts over. Reload is the case that
   // matters: it swaps the iframe for a new one, and a window that kept saying
@@ -204,6 +221,7 @@ export function Demo({
           data-specimen-frame=""
           data-story={story}
           data-src={demoSrc(story)}
+          {...(webgpu === false ? { "data-poster-only": "" } : {})}
           ref={frame}
           style={{
             ["--demo-height" as string]: `${height}px`,
@@ -222,27 +240,47 @@ export function Demo({
           }}
         >
           {webgpu === false ? (
-            <div className="demo-unavailable" data-webgpu-fallback>
-              <strong>This demo needs WebGPU</strong>
-              <p>
-                Your browser cannot draw the component, so nothing has been downloaded. Everything
-                else on this page — the code, the events, the source — is the same either way.
-              </p>
-            </div>
+            <>
+              {painted ? (
+                <Poster
+                  story={story}
+                  mode={painted.mode}
+                  height={height}
+                  alt={`${title}, rendered`}
+                />
+              ) : null}
+              <div className="demo-unavailable" data-webgpu-fallback>
+                <strong>This demo needs WebGPU</strong>
+                <p>
+                  Your browser cannot draw the component, so nothing has been downloaded. Everything
+                  else on this page — the code, the events, the source — is the same either way.
+                </p>
+              </div>
+            </>
           ) : src ? (
-            // Told again on load, because a frame that has only just been
-            // created has no listener yet — which is exactly the state Reload
-            // leaves it in.
-            <iframe
-              key={reloads}
-              ref={iframe}
-              src={src}
-              title={title}
-              loading="lazy"
-              onLoad={tellThisFrame}
-            />
+            <>
+              {starting && neutral && painted ? (
+                <Poster story={story} mode={painted.mode} height={height} />
+              ) : null}
+              {/* Told again on load, because a frame that has only just been
+                  created has no listener yet — which is exactly the state
+                  Reload leaves it in. */}
+              <iframe
+                key={reloads}
+                ref={iframe}
+                src={src}
+                title={title}
+                loading="lazy"
+                onLoad={tellThisFrame}
+              />
+            </>
           ) : (
-            <p className="demo-idle">Starts when it scrolls into view</p>
+            <>
+              {neutral && painted ? (
+                <Poster story={story} mode={painted.mode} height={height} />
+              ) : null}
+              <p className="demo-idle">Starts when it scrolls into view</p>
+            </>
           )}
         </div>
         <div className="demo-toolbar">
@@ -286,6 +324,44 @@ export function Demo({
       <Readout theme={effective} following={override === FOLLOW} />
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>
+  );
+}
+
+/**
+ * A still of the story, captured from the gallery at build time.
+ *
+ * Sized from the same measured height the frame is, and at the width the
+ * capture ran at, so it reserves exactly the space the live demo will take and
+ * a reader never watches the page jump when one replaces the other.
+ *
+ * `alt` is given only where the poster is the component: without WebGPU there
+ * will never be a live render, so the picture carries the meaning. Standing in
+ * for a demo that is about to appear it is decoration, and a screen reader
+ * announcing "Chat, rendered" about a placeholder would be describing
+ * something that is already gone.
+ */
+function Poster({
+  story,
+  mode,
+  height,
+  alt,
+}: {
+  readonly story: string;
+  readonly mode: string;
+  readonly height: number;
+  readonly alt?: string;
+}) {
+  return (
+    <img
+      className="demo-poster"
+      data-demo-poster={story}
+      src={posterSrc(story, mode)}
+      alt={alt ?? ""}
+      width={POSTER_WIDTH}
+      height={height}
+      decoding="async"
+      {...(alt === undefined ? { "aria-hidden": true } : {})}
+    />
   );
 }
 
