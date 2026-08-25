@@ -11,6 +11,14 @@ revision.
 
 ### Changed
 
+- The wheel scrolls the page over a demo. GPUI's web platform calls
+  `preventDefault()` on every wheel event before looking at it, so a demo
+  swallowed the wheel whether or not its story had anything to scroll: with the
+  pointer over one, the page would not move in either direction, and a story
+  already scrolled to its end simply ate the gesture. A demo now takes the
+  wheel when the reader clicks into it, says so in its title bar, and gives it
+  back when the pointer leaves. The same applies to a finger on a touch screen,
+  where the canvas ships with `touch-action: none`.
 - A demo now appears in its window instead of flashing black first. The embed
   paints no background of its own and its canvas is held hidden until GPUI has
   drawn into it — an unpresented WebGPU surface composites as solid black,

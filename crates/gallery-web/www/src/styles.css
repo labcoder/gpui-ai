@@ -69,6 +69,16 @@ body[data-page='embed'] > canvas { position: fixed; inset: 0; width: 100%; heigh
    work exactly as they were, and only stops the black being shown. */
 body[data-page='embed'] > canvas { opacity: 0; }
 
+/* The touch half of the same problem the wheel has.
+   `gpui_web` creates the canvas with an inline `touch-action: none`, so a
+   finger dragged over a demo scrolls nothing at all — not the story, not the
+   page. Until the reader taps into the example, vertical panning belongs to
+   the page; afterwards the story gets the whole gesture. `!important` because
+   the value being overridden is inline. */
+body[data-page='embed']:not([data-captured]) > canvas {
+  touch-action: pan-y !important;
+}
+
 body[data-page='embed'][data-ready] > canvas {
   opacity: 1;
   transition: opacity 140ms ease-out;

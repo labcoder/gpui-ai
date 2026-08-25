@@ -50,6 +50,23 @@ export function statusMessage(story, state) {
   return { type: 'gpui-ai-status', story: story ?? '', state };
 }
 
+/**
+ * Told to the host when this example takes the wheel, or gives it back.
+ *
+ * The window says which of the two is happening, because a frame that quietly
+ * swallowed the wheel is the thing that made a reader feel stuck in the first
+ * place.
+ */
+export function wheelMessage(story, captured) {
+  return { type: 'gpui-ai-wheel', story: story ?? '', captured: Boolean(captured) };
+}
+
+export function parseWheelMessage(data) {
+  if (data?.type !== 'gpui-ai-wheel') return undefined;
+  if (typeof data.story !== 'string' || typeof data.captured !== 'boolean') return undefined;
+  return { story: data.story, captured: data.captured };
+}
+
 export function parseStatusMessage(data) {
   if (data?.type !== 'gpui-ai-status') return undefined;
   if (typeof data.story !== 'string' || !STATES.has(data.state)) return undefined;

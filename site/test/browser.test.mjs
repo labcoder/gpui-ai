@@ -589,6 +589,15 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "an example with no host must still decide for itself that it is drawing",
   );
 
+  // Popped out there is no page behind this to scroll, so the wheel is the
+  // example's from the start — waiting for a click would be waiting for a
+  // reason that does not exist here.
+  assert.equal(
+    await cdp.evaluate("'captured' in document.body.dataset"),
+    true,
+    "an example with no host must take the wheel without being asked",
+  );
+
   // Themes come from the generated registry, so check one of each group: a
   // basic preset, the review theme, one gpui-ai original, and one vendored
   // from upstream.
@@ -1304,6 +1313,69 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "the canvas was visible before anything had been drawn into it",
   );
   assert.equal(watched.sawStarting, true, "the window never said the demo was starting");
+
+  // Who the wheel belongs to. GPUI's web platform calls preventDefault on
+  // every wheel event before looking at it, so a canvas swallows the wheel
+  // whether or not the story has anything to scroll — which left a reader
+  // unable to move the page in either direction while the pointer was over a
+  // demo. The page has it by default now, and the demo takes it on a click.
+  const wheelAt = async (x, y, deltaY, times = 8) => {
+    for (let index = 0; index < times; index += 1) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        type: "mouseWheel", x, y, deltaX: 0, deltaY, pointerType: "mouse",
+      });
+    }
+    await delay(400);
+  };
+  const scrollY = () => cdp.evaluate("window.scrollY");
+  const saysItScrolls = () => cdp.evaluate("Boolean(document.querySelector('[data-demo-scrolls]'))");
+
+  await cdp.evaluate("document.querySelector('[data-specimen-frame]').scrollIntoView({ block: 'center' })");
+  await delay(400);
+  const overDemo = await cdp.evaluate(`(() => {
+    const rect = document.querySelector('[data-specimen-frame]').getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  })()`);
+
+  const parked = await scrollY();
+  assert.equal(await saysItScrolls(), false, "a demo nobody has touched must not claim the wheel");
+  await wheelAt(overDemo.x, overDemo.y, 400);
+  assert.notEqual(
+    await scrollY(),
+    parked,
+    "the page must scroll while the pointer is over a demo nobody has clicked into",
+  );
+
+  // Clicking in hands it over, and the window says so rather than swallowing
+  // the wheel silently — which is what made this feel like a trap.
+  await cdp.evaluate("document.querySelector('[data-specimen-frame]').scrollIntoView({ block: 'center' })");
+  await delay(400);
+  for (const type of ["mousePressed", "mouseReleased"]) {
+    await cdp.send("Input.dispatchMouseEvent", {
+      type, x: overDemo.x, y: overDemo.y, button: "left", clickCount: 1,
+    });
+  }
+  await waitForValue(cdp, "Boolean(document.querySelector('[data-demo-scrolls]'))", {
+    label: "the window to say the demo has the wheel",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const engagedAt = await scrollY();
+  await wheelAt(overDemo.x, overDemo.y, 400);
+  assert.equal(await scrollY(), engagedAt, "a demo that has been clicked into must keep the wheel");
+
+  // And moving away gives it straight back, so nothing is held that was not
+  // asked for.
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: overDemo.x, y: 60 });
+  await waitForValue(cdp, "!document.querySelector('[data-demo-scrolls]')", {
+    label: "the demo to give the wheel back when the pointer leaves",
+    describe: GALLERY_DIAGNOSIS,
+    errors,
+  });
+  const leftAt = await scrollY();
+  await wheelAt(overDemo.x, overDemo.y, 400);
+  assert.notEqual(await scrollY(), leftAt, "the page must have the wheel again once the pointer leaves");
+  await cdp.evaluate("window.scrollTo(0, 0)");
 
   const readout = () => cdp.evaluate("document.querySelector('.demo-readout').dataset.readout");
   assert.equal(

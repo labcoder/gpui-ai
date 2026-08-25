@@ -6,6 +6,7 @@ import {
   parseThemeEvent,
   statusMessage,
   themeMessage,
+  wheelMessage,
 } from './query.js';
 import { pinScaleFactor } from './scale.js';
 
@@ -173,9 +174,67 @@ function revealWhenDrawn(story) {
   window.requestAnimationFrame(check);
 }
 
+/**
+ * Decides who the wheel belongs to: this example, or the page around it.
+ *
+ * GPUI's web platform calls `preventDefault()` on every wheel event before it
+ * has looked at it, so a canvas swallows the wheel whether or not the story
+ * has anything to scroll. On a page where a demo fills most of the column that
+ * leaves a reader stuck: the page will not move in either direction while the
+ * pointer is over it, and a story already scrolled to its end simply eats the
+ * gesture.
+ *
+ * So the page gets the wheel by default, and this example takes it only once
+ * the reader has clicked into it — which is what someone about to scroll a
+ * transcript does anyway. Moving the pointer out gives it straight back, so
+ * nothing is held that was not asked for. The listener is on `window` in the
+ * capture phase, which is the one place upstream of the canvas: stopping
+ * propagation there means the platform's listener never runs, nothing calls
+ * `preventDefault`, and the browser scrolls the page as it would over any
+ * other frame.
+ *
+ * `touch-action` is the same story on a touch screen, and is handled in the
+ * stylesheet: the canvas is created with `touch-action: none`, which stops a
+ * finger scrolling the page at all.
+ */
+function shareTheWheel(story) {
+  // Popped out into a tab of its own there is no page behind this to scroll,
+  // and nothing to share the wheel with. Take it and say nothing.
+  if (window.parent === window) {
+    document.body.dataset.captured = '';
+    return;
+  }
+
+  const tell = (captured) => {
+    window.parent.postMessage(wheelMessage(story, captured), window.location.origin);
+  };
+
+  const set = (captured) => {
+    if (captured === ('captured' in document.body.dataset)) return;
+    if (captured) document.body.dataset.captured = '';
+    else delete document.body.dataset.captured;
+    tell(captured);
+  };
+
+  window.addEventListener(
+    'wheel',
+    (event) => {
+      if (!('captured' in document.body.dataset)) event.stopPropagation();
+    },
+    { capture: true, passive: false },
+  );
+
+  document.addEventListener('pointerdown', () => set(true));
+  // `pointerleave` on the document fires when the pointer leaves the frame.
+  document.addEventListener('pointerleave', () => set(false));
+  window.addEventListener('blur', () => set(false));
+  tell(false);
+}
+
 async function initEmbed() {
   pinScaleFactor();
   const options = parseEmbedOptions(window.location.search);
+  shareTheWheel(options.story);
   const theme = preferredTheme(options.theme);
   const themeChannel = watchTheme(theme);
 

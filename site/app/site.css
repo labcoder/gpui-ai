@@ -833,6 +833,17 @@ pre.code-plain {
   text-transform: uppercase;
 }
 
+/* Shown while the demo has the wheel, which it takes when the reader clicks
+   into it and gives back when they move away. A window that quietly swallowed
+   the wheel is what made a reader feel stuck; this is the window saying so. */
+.demo-scrolls {
+  margin-left: auto;
+  color: var(--ai-accent-text);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .demo-starting i {
   width: 0.4375rem;
   height: 0.4375rem;

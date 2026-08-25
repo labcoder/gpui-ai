@@ -53,6 +53,7 @@ export function Demo({
   const [src, setSrc] = useState<string>();
   const [reloads, setReloads] = useState(0);
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
+  const [scrolls, setScrolls] = useState(false);
   const [override, setOverride] = useState<string>(FOLLOW);
   const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const overrideId = useId();
@@ -64,7 +65,10 @@ export function Demo({
   // Every frame the embed replaces starts over. Reload is the case that
   // matters: it swaps the iframe for a new one, and a window that kept saying
   // "ready" would be describing a document that no longer exists.
-  useEffect(() => setStatus("starting"), [src, reloads]);
+  useEffect(() => {
+    setStatus("starting");
+    setScrolls(false);
+  }, [src, reloads]);
 
   useEffect(() => {
     if (!src) return;
@@ -73,8 +77,18 @@ export function Demo({
       // these at once on /themes/, and they must not answer for each other.
       if (event.origin !== window.location.origin) return;
       if (event.source !== iframe.current?.contentWindow) return;
-      const message = event.data as { type?: unknown; story?: unknown; state?: unknown } | null;
-      if (message?.type !== "gpui-ai-status" || message.story !== story) return;
+      const message = event.data as {
+        type?: unknown;
+        story?: unknown;
+        state?: unknown;
+        captured?: unknown;
+      } | null;
+      if (message?.story !== story) return;
+      if (message.type === "gpui-ai-wheel" && typeof message.captured === "boolean") {
+        setScrolls(message.captured);
+        return;
+      }
+      if (message.type !== "gpui-ai-status") return;
       if (message.state === "ready" || message.state === "failed") setStatus(message.state);
     };
     window.addEventListener("message", onMessage);
@@ -177,6 +191,11 @@ export function Demo({
             <span className="demo-starting" role="status" data-demo-starting>
               <i aria-hidden="true" />
               Starting
+            </span>
+          ) : null}
+          {!starting && scrolls ? (
+            <span className="demo-scrolls" role="status" data-demo-scrolls>
+              Scrolls here
             </span>
           ) : null}
         </div>

@@ -5,8 +5,10 @@ import {
   parseStatusMessage,
   parseThemeEvent,
   parseThemeMessage,
+  parseWheelMessage,
   statusMessage,
   themeMessage,
+  wheelMessage,
 } from './query.js';
 
 test('parses a story and explicit dark theme', () => {
@@ -82,6 +84,35 @@ test('an embed reports both outcomes, and says which story it is', () => {
     story: 'orbs',
     state: 'failed',
   });
+});
+
+test('an embed says when it takes the wheel and when it gives it back', () => {
+  assert.deepEqual(wheelMessage('chat', true), {
+    type: 'gpui-ai-wheel',
+    story: 'chat',
+    captured: true,
+  });
+  assert.deepEqual(parseWheelMessage(wheelMessage('chat', true)), { story: 'chat', captured: true });
+  assert.deepEqual(parseWheelMessage(wheelMessage('chat', false)), {
+    story: 'chat',
+    captured: false,
+  });
+});
+
+test('a wheel message that is not one is not mistaken for one', () => {
+  for (const data of [
+    undefined,
+    null,
+    {},
+    { type: 'gpui-ai-status', story: 'chat', state: 'ready' },
+    // `captured` decides who the wheel belongs to, so anything but a boolean
+    // is a question this cannot answer.
+    { type: 'gpui-ai-wheel', story: 'chat' },
+    { type: 'gpui-ai-wheel', story: 'chat', captured: 'yes' },
+    { type: 'gpui-ai-wheel', captured: true },
+  ]) {
+    assert.equal(parseWheelMessage(data), undefined, `${JSON.stringify(data)} must not parse`);
+  }
 });
 
 test('a status message that is not one is not mistaken for one', () => {
