@@ -1485,6 +1485,27 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     { frames: 0, requested: 0 },
     "a browser that cannot draw the demo must not be made to download it",
   );
+
+  // And the window is still there, with the card inside it. A machine that
+  // cannot draw the component should still see where it would have been, what
+  // it is called, and the controls that belong to it — not a gap in the page.
+  // Nothing is starting, so nothing may say it is.
+  assert.deepEqual(
+    await cdp.evaluate(`(() => {
+      const window_ = document.querySelector('.demo-window');
+      const bar = window_?.querySelector('.demo-titlebar');
+      const card = window_?.querySelector('[data-webgpu-fallback]');
+      const box = window_?.getBoundingClientRect();
+      return {
+        windowShown: Boolean(box && box.width > 0 && box.height > 0),
+        titled: bar?.querySelector('.demo-title')?.textContent?.length > 0,
+        cardInsideWindow: Boolean(card),
+        starting: Boolean(document.querySelector('[data-demo-starting]')),
+      };
+    })()`),
+    { windowShown: true, titled: true, cardInsideWindow: true, starting: false },
+    "a demo that cannot run must still be shown in its window, and must not claim to be starting",
+  );
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
 
   // Without WebGPU the embed must say so rather than showing an empty frame.
