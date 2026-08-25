@@ -23,6 +23,7 @@ use gpui_component::{
     v_flex,
 };
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 // Catalog keyboard actions: page and jump navigation for the story feed.
 actions!(
@@ -72,6 +73,49 @@ fn story_frame(story: StoryId, in_catalog: bool) -> Stateful<Div> {
     } else {
         frame.role(Role::Group)
     }
+}
+
+/// The height the story last laid out at, in logical pixels.
+///
+/// A story's height is a function of the width it is given, and not a step
+/// function: text rewraps a line at a time, so between 300 and 640 pixels
+/// every story that carries prose changes height continuously. Measuring at a
+/// few widths and publishing a table would be wrong nearly everywhere in that
+/// range, and the range is a phone, a tablet, and a half-width window.
+///
+/// So the story says what it measured, and the page around it listens. The
+/// catalog still carries measured numbers, but only as the height to reserve
+/// before a demo starts — they are a promise about the space, not about the
+/// story.
+///
+/// A plain static rather than a GPUI global: the wasm bridge reads it from a
+/// free function with no `App` in hand, and there is exactly one story in a
+/// window.
+static MEASURED_HEIGHT: AtomicU32 = AtomicU32::new(0);
+
+/// What the story in this window last laid out at, if it has laid out at all.
+pub fn measured_story_height() -> Option<u32> {
+    match MEASURED_HEIGHT.load(Ordering::Relaxed) {
+        0 => None,
+        height => Some(height),
+    }
+}
+
+/// An invisible element the size of the story, which records what that is.
+///
+/// Absolutely positioned over a relative wrapper whose only in-flow child is
+/// the frame, so its bounds are the frame's own — a canvas placed inside the
+/// frame would measure the padding box and report a height 32 pixels short.
+fn height_probe() -> impl IntoElement {
+    canvas(
+        move |bounds, _, _| {
+            let height = f32::from(bounds.size.height).ceil().max(0.) as u32;
+            MEASURED_HEIGHT.store(height, Ordering::Relaxed);
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
 }
 
 /// Ticks the height measurement runs a streaming story for.
@@ -3854,7 +3898,7 @@ impl Gallery {
             return div().hidden().into_any_element();
         }
 
-        story_frame(story, self.selected == StoryId::All)
+        let frame = story_frame(story, self.selected == StoryId::All)
             .debug_selector(move || format!("story-{}", story.slug()))
             .w_full()
             .max_w(px(640.))
@@ -3873,7 +3917,18 @@ impl Gallery {
                         .child(title),
                 )
             })
-            .child(content())
+            .child(content());
+
+        // Only the embed reports: in the full gallery the stories are stacked
+        // in one scrolling column and there is no host to tell.
+        if self.chrome != GalleryChrome::Embedded {
+            return frame.into_any_element();
+        }
+        div()
+            .relative()
+            .w_full()
+            .child(frame)
+            .child(height_probe())
             .into_any_element()
     }
 

@@ -89,6 +89,20 @@ pub fn gallery_theme() -> Option<String> {
     ACTIVE_THEME.with(|active| active.get().map(|theme| theme.slug().to_owned()))
 }
 
+/// What the running story last laid out at, in logical pixels.
+///
+/// The page around the embed sizes its frame from the numbers in the catalog,
+/// which were measured at one width. A story's height is a function of the
+/// width it is given and not a step function — prose rewraps a line at a time
+/// — so on a phone, a tablet, or a half-width window those numbers are wrong,
+/// and the story scrolls inside its own canvas rather than being shown.
+///
+/// `None` until the first frame has been laid out.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn story_height() -> Option<u32> {
+    gallery::measured_story_height()
+}
+
 /// Starts the gallery for an optional story slug.
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub fn run(

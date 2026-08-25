@@ -8,6 +8,16 @@ import { tellFrame, useTheme } from "./theme";
 const FOLLOW = "follow";
 
 /**
+ * The tallest a demo may report itself to be.
+ *
+ * The number arrives from another document and becomes a length on this page,
+ * so it is checked before it is used. The tallest story in the catalog is
+ * about a thousand pixels and the narrowest frame roughly doubles the worst of
+ * them; this is well clear of both and well short of a page nobody can scroll.
+ */
+const MAX_DEMO_HEIGHT = 6_000;
+
+/**
  * A story running in the shared WASM gallery, inside a window frame.
  *
  * The frame is sized from the height the story reports in `catalog.json`, which
@@ -54,6 +64,28 @@ const FOLLOW = "follow";
  * three and a half megabytes of RGBA, and a page holding one per demo would
  * cost more than the frames it was meant to spare.
  *
+ * The frame's height starts as the number the gallery measured and becomes the
+ * tallest the story reports. Those differ everywhere the frame is narrower
+ * than the width the catalog was measured at: a story's height is a function
+ * of its width and not a step function — prose rewraps a line at a time — so
+ * on a phone, a tablet, or a half-width window the reserved height is too
+ * short and the story used to scroll inside its own canvas instead of being
+ * shown.
+ *
+ * The tallest rather than the latest, because a story arrives: a task list
+ * grows a row at a time, a search shows three results where it showed none,
+ * and a frame that tracked the current height would rise and fall under the
+ * reader for as long as the demo ran. Growing once and staying is what the
+ * catalog's own numbers already promise — they are measured the same way.
+ *
+ * The measurement is thrown away when the frame changes width, because that is
+ * the one thing that makes a settled answer wrong, and kept across everything
+ * else.
+ *
+ * The reserved number is still what holds the space before anything runs,
+ * because it is the only height available then, and it is what a reader with
+ * no WebGPU keeps.
+ *
  * There are no variant tabs here. The story draws its own switcher inside the
  * canvas, and a second one on the outside would need a variant parameter
  * plumbed through the embed and the Rust registry only to compete with the
@@ -76,6 +108,7 @@ export function Demo({
   const [reloads, setReloads] = useState(0);
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [scrolls, setScrolls] = useState(false);
+  const [measured, setMeasured] = useState<number>();
   const [override, setOverride] = useState<string>(FOLLOW);
   const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const overrideId = useId();
@@ -99,6 +132,9 @@ export function Demo({
   useEffect(() => {
     setStatus("starting");
     setScrolls(false);
+    // A frame that has gone takes its measurement with it. Keeping the last
+    // one would size an empty window from a story that is no longer in it.
+    setMeasured(undefined);
   }, [src, reloads]);
 
   useEffect(() => {
@@ -113,10 +149,21 @@ export function Demo({
         story?: unknown;
         state?: unknown;
         captured?: unknown;
+        height?: unknown;
       } | null;
       if (message?.story !== story) return;
       if (message.type === "gpui-ai-wheel" && typeof message.captured === "boolean") {
         setScrolls(message.captured);
+        return;
+      }
+      if (message.type === "gpui-ai-size" && typeof message.height === "number") {
+        // Bounded, because this sets a length on the page: a frame told to be
+        // a hundred thousand pixels tall would push the rest of the site off
+        // the bottom of the document.
+        const reported = Math.round(message.height);
+        if (Number.isFinite(reported) && reported > 0 && reported <= MAX_DEMO_HEIGHT) {
+          setMeasured((tallest) => Math.max(tallest ?? 0, reported));
+        }
         return;
       }
       if (message.type !== "gpui-ai-status") return;
@@ -138,6 +185,26 @@ export function Demo({
 
     return () => window.removeEventListener("message", onMessage);
   }, [src, story, reloads]);
+
+  // A story laid out at one width has nothing to say about another, and the
+  // height it reported is the one thing here that a resize invalidates. Width
+  // only: the frame's own height is what this sets, and watching that would be
+  // a loop.
+  useEffect(() => {
+    const element = frame.current;
+    if (!element || typeof ResizeObserver !== "function") return;
+    let width = element.getBoundingClientRect().width;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const next = entry.contentRect.width;
+        if (Math.abs(next - width) < 1) continue;
+        width = next;
+        setMeasured(undefined);
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   // Asked after mount, never during render: `navigator` does not exist in the
   // pre-render, and the answer would differ between the two anyway.
@@ -254,7 +321,9 @@ export function Demo({
           {...(webgpu === false ? { "data-poster-only": "" } : {})}
           ref={frame}
           style={{
-            ["--demo-height" as string]: `${height}px`,
+            // What the story says it is, once it has said so. Until then, and
+            // for a reader who will never run it, the measured reservation.
+            ["--demo-height" as string]: `${measured ?? height}px`,
             // What the canvas is about to paint, taken from the same theme
             // JSON the gallery loads. The frame is transparent until it draws,
             // so this is what fills the window in the meantime — the demo's

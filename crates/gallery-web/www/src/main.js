@@ -4,6 +4,7 @@ import {
   parseEmbedOptions,
   parseStatusMessage,
   parseThemeEvent,
+  sizeMessage,
   statusMessage,
   themeMessage,
   wheelMessage,
@@ -175,6 +176,64 @@ function revealWhenDrawn(story) {
 }
 
 /**
+ * Tells the host what the story measures, and keeps telling it when it moves.
+ *
+ * The page reserves space for a demo from a number measured at one width. A
+ * story's height is a function of the width it is given and not a step
+ * function — prose rewraps a line at a time — so on a phone, a tablet, or a
+ * half-width window that number is wrong, and until now the story scrolled
+ * inside its own canvas instead of being shown.
+ *
+ * Polled on a frame rather than pushed from Rust: a story settles over a few
+ * seconds as its streams arrive, and a callback per layout would be a message
+ * per frame for a number that changes a handful of times. Reporting only on a
+ * change costs one comparison and sends nothing while nothing moves.
+ *
+ * It stops when the story has been still for a while, and starts again on a
+ * resize, which is the other thing that can change the answer.
+ */
+const SIZE_SETTLES_AFTER_MS = 12_000;
+
+function reportSize(story, wasm) {
+  if (window.parent === window) return;
+
+  let last = 0;
+  let quietSince = performance.now();
+  let watching = false;
+
+  const check = () => {
+    let height;
+    try {
+      height = wasm.story_height();
+    } catch {
+      // A module that has gone away has nothing more to say about its size.
+      watching = false;
+      return;
+    }
+    if (height && height !== last) {
+      last = height;
+      quietSince = performance.now();
+      window.parent.postMessage(sizeMessage(story, height), window.location.origin);
+    }
+    if (performance.now() - quietSince > SIZE_SETTLES_AFTER_MS) {
+      watching = false;
+      return;
+    }
+    window.requestAnimationFrame(check);
+  };
+
+  const watch = () => {
+    quietSince = performance.now();
+    if (watching) return;
+    watching = true;
+    window.requestAnimationFrame(check);
+  };
+
+  watch();
+  window.addEventListener('resize', watch);
+}
+
+/**
  * Decides who the wheel belongs to: this example, or the page around it.
  *
  * GPUI's web platform calls `preventDefault()` on every wheel event before it
@@ -253,10 +312,14 @@ async function initEmbed() {
     wasm.validate_story(options.story);
     await wasm.run(options.story, themeChannel.current(), assetEndpoint());
     themeChannel.connect(wasm);
-    window.gpuiAi = Object.freeze({ currentTheme: () => wasm.gallery_theme() });
+    window.gpuiAi = Object.freeze({
+      currentTheme: () => wasm.gallery_theme(),
+      storyHeight: () => wasm.story_height(),
+    });
     // Not "ready" yet: `run` returns before the first frame. The host keeps
     // saying "Starting" in the demo window's title bar until there are pixels.
     revealWhenDrawn(options.story);
+    reportSize(options.story, wasm);
   } catch (error) {
     showFallback(error, String(error).startsWith('unknown story:'));
     announce(options.story, 'failed');

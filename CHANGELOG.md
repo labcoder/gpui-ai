@@ -99,6 +99,14 @@ revision.
 
 ### Fixed
 
+- A demo is no longer clipped when the column is narrower than the width its
+  height was measured at. A story's height is a function of the width it is
+  given and not a step function — prose rewraps a line at a time — so on a
+  phone the reserved frame was hundreds of pixels too short and the story
+  scrolled inside its own canvas. The story now reports what it laid out at and
+  the frame grows to the tallest it reports. The measured numbers still reserve
+  the space before anything runs, and are still what a reader without WebGPU
+  keeps.
 - Choosing a theme that sets no type size, corner radius, or shadow no longer
   leaves the last theme's. Three of the forty-five bundled themes declare those
   metrics and the other forty-two do not, and only a declared value was ever

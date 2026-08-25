@@ -67,6 +67,27 @@ export function parseWheelMessage(data) {
   return { story: data.story, captured: data.captured };
 }
 
+/**
+ * What the story measured, for the page to size its frame from.
+ *
+ * The catalog's heights were measured at one width, and a story's height is a
+ * continuous function of the width it is given, so on anything narrower they
+ * are wrong and the story scrolls inside its own canvas. This is the story
+ * saying what it actually is.
+ */
+export function sizeMessage(story, height) {
+  return { type: 'gpui-ai-size', story: story ?? '', height: Math.round(height) };
+}
+
+export function parseSizeMessage(data) {
+  if (data?.type !== 'gpui-ai-size') return undefined;
+  if (typeof data.story !== 'string') return undefined;
+  // A height of zero is a story that has not laid out, and a wild one is a
+  // number this page should not be resizing anything from.
+  if (!Number.isFinite(data.height) || data.height <= 0 || data.height > 20_000) return undefined;
+  return { story: data.story, height: Math.round(data.height) };
+}
+
 export function parseStatusMessage(data) {
   if (data?.type !== 'gpui-ai-status') return undefined;
   if (typeof data.story !== 'string' || !STATES.has(data.state)) return undefined;

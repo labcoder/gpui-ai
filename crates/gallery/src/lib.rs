@@ -8,7 +8,8 @@ mod sim;
 mod story;
 
 pub use gallery::{
-    Gallery, GalleryChrome, GalleryTheme, apply_gallery_theme, init, open_gallery,
+    Gallery, GalleryChrome, GalleryTheme, apply_gallery_theme, init, measured_story_height,
+    open_gallery,
     open_gallery_with_theme,
 };
 pub use story::{

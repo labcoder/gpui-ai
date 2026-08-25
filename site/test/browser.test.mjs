@@ -47,6 +47,9 @@ const POSTER_SPECIMEN = "loading";
 const POSTER_LOADED =
   "(() => { const p = document.querySelector('[data-specimen-frame] img[data-demo-poster]'); return Boolean(p && p.complete); })()";
 const IDLE_SPECIMEN = "chat";
+// A story whose prose rewraps hard when the column narrows: 486px at the width
+// the catalog measured, over 750 on a phone.
+const REFLOWING_SPECIMEN = "attachments";
 
 async function createGalleryFixture(directory) {
   await mkdir(path.join(directory, "assets"), { recursive: true });
@@ -1476,6 +1479,73 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
 
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
+
+  // D-13. A demo on a phone is not the demo on a desktop: the story is given a
+  // third of the width and its prose rewraps, so the height the catalog
+  // measured is far too short. The story reports what it actually laid out at
+  // and the frame takes that number — without it the demo is clipped and has
+  // to be scrolled inside its own canvas, which is the one gesture this site
+  // has already had to fight for.
+  const reflows = components.find((component) => component.slug === REFLOWING_SPECIMEN);
+  assert.ok(reflows, `${REFLOWING_SPECIMEN} must be in the catalog`);
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${reflows.slug}/`, 390, 844);
+  await waitForValue(
+    cdp,
+    "(() => { const frame = document.querySelector('[data-specimen-frame] iframe'); return Boolean(frame?.contentDocument?.querySelector('canvas')); })()",
+    {
+      label: `the ${reflows.slug} demo to start on a phone-sized window`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  // Reserved first, so nothing on the page moves before the demo has an
+  // opinion. This is the number the catalog carries.
+  const narrow = await waitForValue(
+    cdp,
+    `Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height) > ${reflows.height + 50}`,
+    {
+      label: `the ${reflows.slug} frame to grow to what the story reports`,
+      describe: `(() => ({
+        declared: ${reflows.height},
+        frame: Math.round(document.querySelector('[data-specimen-frame]')?.getBoundingClientRect().height ?? 0),
+        reported: document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.storyHeight() ?? null,
+      }))()`,
+      errors,
+    },
+  ).then(() =>
+    cdp.evaluate(`(() => ({
+      frame: Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height),
+      reported: document.querySelector('[data-specimen-frame] iframe').contentWindow.gpuiAi.storyHeight(),
+    }))()`),
+  );
+  assert.ok(
+    narrow.frame >= narrow.reported,
+    `the frame (${narrow.frame}) must be at least the tallest the story reported (${narrow.reported})`,
+  );
+
+  // And on a wide window the reported height is the catalog's, so the number
+  // the page reserved was right and nothing moved.
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${reflows.slug}/`, 1280, 900);
+  await waitForValue(
+    cdp,
+    `Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height) === ${reflows.height}`,
+    {
+      // The story arrives over a few seconds and grows as it does, so this is
+      // the frame settling on the tallest state — which is how the catalog's
+      // own number was measured. The two agreeing is the claim: a story that
+      // changed shape would move this number and the catalog would be stale.
+      label: `the ${reflows.slug} frame to settle on the height the catalog declares`,
+      timeoutMs: 30_000,
+      fatal: GALLERY_GAVE_UP,
+      describe: `(() => ({
+        declared: ${reflows.height},
+        frame: Math.round(document.querySelector('[data-specimen-frame]')?.getBoundingClientRect().height ?? 0),
+        reported: document.querySelector('[data-specimen-frame] iframe')?.contentWindow?.gpuiAi?.storyHeight() ?? null,
+      }))()`,
+      errors,
+    },
+  );
 
   // S-12. The search is only worth having if it ranks, and only worth reaching
   // for if it is one key away. Both are browser facts: the ranking has unit
