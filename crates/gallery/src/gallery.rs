@@ -6887,6 +6887,12 @@ mod tests {
             });
             // Tall enough that nothing is clipped by the viewport itself.
             cx.simulate_resize(size(px(900.), px(2400.)));
+            // The real window wraps everything in gpui-component's Root, whose
+            // render sets the rem size from the theme. These tests build a
+            // window without it, so without this every story is measured at
+            // GPUI's default rem rather than the one it will be drawn at, and
+            // a theme that changes the base size could not move anything.
+            cx.update(|window, cx| window.set_rem_size(cx.theme().font_size));
             cx.update(|window, cx| window.draw(cx).clear(cx));
 
             let selector: &'static str =
@@ -6953,6 +6959,7 @@ mod tests {
         });
         // Tall enough that nothing is clipped by the viewport itself.
         cx.simulate_resize(size(px(900.), px(2400.)));
+        cx.update(|window, cx| window.set_rem_size(cx.theme().font_size));
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         let send = cx
