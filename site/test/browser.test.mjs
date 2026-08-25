@@ -160,7 +160,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   skip: !browserPath && !releaseGateIsMandatory
     ? "Set CHROME_PATH or install Chrome, Edge, or Chromium to run the browser gate"
     : releaseIntegrationRequested ? false : "Run npm run check:web:release for the built-artifact integration gate",
-  timeout: 60_000,
+  // Generous because this gate is one long story about one built artifact,
+  // and splitting it would mean building and booting that artifact several
+  // times to check things that are all true of the same run.
+  timeout: 150_000,
 }, async (context) => {
   assert.ok(
     browserPath,
@@ -1199,22 +1202,35 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "Pop out must open the demo as it is being shown, not as it started",
   );
 
-  // Reload replaces the frame rather than reaching into it, so the proof is a
-  // new document that boots again and comes back to the same theme.
+  // D-04. Reset reaches into the running demo instead of replacing it. The
+  // whole point is what does *not* happen: replacing the frame tears down a
+  // seventeen-megabyte WebAssembly instance and downloads nothing, to reach a
+  // state the story gets back to in one frame. A document that survived the
+  // press is the proof, and it is only visible from out here.
   const wasStartedAt = await cdp.evaluate(
     "document.querySelector('[data-specimen-frame] iframe').contentWindow.performance.timeOrigin",
   );
   await cdp.evaluate("document.querySelector('[data-specimen-reload]').click()");
-  await waitForValue(
-    cdp,
-    `(() => {
-      const frame = document.querySelector('[data-specimen-frame] iframe');
-      return Boolean(frame?.contentWindow) && frame.contentWindow.performance.timeOrigin !== ${wasStartedAt};
-    })()`,
-    { label: "Reload to replace the frame", describe: GALLERY_DIAGNOSIS, errors },
+  await delay(1_000);
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame] iframe').contentWindow.performance.timeOrigin",
+    ),
+    wasStartedAt,
+    "Reset must not throw the WebAssembly instance away to get back to the start",
+  );
+  // And the demo is still the demo: still drawing, still overridden. That the
+  // story itself went back to its opening state is a claim about the gallery,
+  // and is tested where the state lives.
+  assert.equal(
+    await cdp.evaluate(
+      "Boolean(document.querySelector('[data-specimen-frame] iframe').contentDocument.querySelector('canvas'))",
+    ),
+    true,
+    "the demo must still be running after a reset",
   );
   await waitForValue(cdp, frameTheme("ember-dusk"), {
-    label: "the reloaded demo to come back overridden",
+    label: "the reset demo to still be overridden",
     fatal: GALLERY_GAVE_UP,
     describe: GALLERY_DIAGNOSIS,
     errors,
@@ -1545,6 +1561,60 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       }))()`,
       errors,
     },
+  );
+
+  // D-04. The library's claim about reduced motion is that a run with it on
+  // lands on a useful static frame rather than an empty one, and until now
+  // nothing on the web could ask for it — GPUI reads the preference from the
+  // platform and the web platform has none. Two pictures a second apart is the
+  // only way to check "static" from out here, and it is a real check: the same
+  // story with motion on fails it.
+  // Orbs, because reduced motion stops animation and not the story: a
+  // streaming demo keeps changing either way, because its content is still
+  // arriving. This one is an ambient signal whose only movement is the
+  // breathing, so a still picture of it means exactly what it looks like.
+  const shimmering = "orbs";
+  const twoFrames = async (motion) => {
+    await cdp.navigate(
+      `${serverHandle.origin}/gpui-ai/gallery/embed.html?story=${shimmering}&theme=dark${motion}`,
+      900,
+      500,
+    );
+    await waitForValue(cdp, "'ready' in document.body.dataset", {
+      label: `the ${shimmering} embed to draw with motion${motion || " unpinned"}`,
+      fatal: GALLERY_GAVE_UP,
+      describe: GALLERY_DIAGNOSIS,
+    });
+    // Long enough to be past the opening reveal, which is a one-shot and
+    // settles at its end state under reduced motion.
+    await delay(3_000);
+    const shot = () =>
+      cdp
+        .send("Page.captureScreenshot", { format: "png" }, 30_000)
+        .then((result) => result.data);
+    const first = await shot();
+    await delay(1_000);
+    return [first, await shot()];
+  };
+
+  const [stillA, stillB] = await twoFrames("&motion=reduced");
+  assert.equal(
+    await cdp.evaluate("window.gpuiAi.reducedMotion()"),
+    true,
+    "motion=reduced must reach the gallery, not just the address bar",
+  );
+  assert.equal(
+    stillA,
+    stillB,
+    "with reduced motion asked for, a settled story must stop moving",
+  );
+
+  const [movingA, movingB] = await twoFrames("&motion=full");
+  assert.equal(await cdp.evaluate("window.gpuiAi.reducedMotion()"), false);
+  assert.notEqual(
+    movingA,
+    movingB,
+    "this check is worthless unless the same story does move with motion on",
   );
 
   // S-12. The search is only worth having if it ranks, and only worth reaching

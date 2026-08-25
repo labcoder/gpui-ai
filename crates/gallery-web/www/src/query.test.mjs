@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   parseEmbedOptions,
+  parseMotion,
   parseStatusMessage,
   parseThemeEvent,
   parseThemeMessage,
@@ -15,6 +16,7 @@ test('parses a story and explicit dark theme', () => {
   assert.deepEqual(parseEmbedOptions('?story=streaming-text&theme=dark'), {
     story: 'streaming-text',
     theme: 'dark',
+    motion: undefined,
   });
 });
 
@@ -22,6 +24,7 @@ test('parses explicit light theme', () => {
   assert.deepEqual(parseEmbedOptions('?story=thinking&theme=light'), {
     story: 'thinking',
     theme: 'light',
+    motion: undefined,
   });
 });
 
@@ -29,6 +32,7 @@ test('parses the explicit contrast review theme', () => {
   assert.deepEqual(parseEmbedOptions('?story=loading&theme=contrast'), {
     story: 'loading',
     theme: 'contrast',
+    motion: undefined,
   });
 });
 
@@ -36,6 +40,7 @@ test('omits empty story and lets system theme decide', () => {
   assert.deepEqual(parseEmbedOptions('?story=&theme=system'), {
     story: undefined,
     theme: undefined,
+    motion: undefined,
   });
 });
 
@@ -44,6 +49,7 @@ test('parses a bundled theme the host has no list for', () => {
   assert.deepEqual(parseEmbedOptions('?story=approval&theme=graphite'), {
     story: 'approval',
     theme: 'graphite',
+    motion: undefined,
   });
 });
 
@@ -130,4 +136,23 @@ test('a status message that is not one is not mistaken for one', () => {
   ]) {
     assert.equal(parseStatusMessage(data), undefined, `${JSON.stringify(data)} must not parse`);
   }
+});
+
+test('the address can pin the motion preference, or leave it to the machine', () => {
+  // Pinned either way, so a link can show a reader what reduced motion does
+  // without them having to change a system setting to find out.
+  assert.equal(parseMotion('reduced'), true);
+  assert.equal(parseMotion('full'), false);
+  // Anything else means "ask the machine", which is the default and the only
+  // answer that follows someone who changes their mind.
+  assert.equal(parseMotion(null), undefined);
+  assert.equal(parseMotion(''), undefined);
+  assert.equal(parseMotion('yes'), undefined);
+  assert.equal(parseMotion('REDUCED'), undefined);
+
+  assert.deepEqual(parseEmbedOptions('?story=orbs&motion=reduced'), {
+    story: 'orbs',
+    theme: undefined,
+    motion: true,
+  });
 });

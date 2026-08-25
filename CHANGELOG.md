@@ -22,12 +22,25 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- Demos follow the reader's motion preference. GPUI takes reduced motion from
+  the platform and the web platform has none, so every demo on the site
+  shimmered and breathed at someone who had asked their machine for stillness,
+  while the same components honoured it on a desktop. Adding `motion=reduced`
+  or `motion=full` to a demo's address pins it either way, so what the setting
+  does to a component can be seen without changing a system setting to find
+  out.
+
 - Five documentation pages, and an index over them: Getting started, Theming,
   Ownership and events, Accessibility and motion, and Browser demo limits. The
   prose is written; the numbers in it are read from the generated data, and
   every code sample is a real file highlighted by the same step the component
   snippets go through, so a page cannot claim there are thirty components when
   there are thirty-four or show code that was never anything but a string.
+
+- Reset on a demo restarts the story instead of replacing the frame. It was
+  tearing down a seventeen-megabyte WebAssembly instance and building another
+  one to reach a state the story gets back to in a frame; the theme override
+  and the reader's place on the page survive it now.
 
 - The catalog and the rail search a real index instead of matching substrings.
   Typing "approv" now finds the Approval card, which never contained the word;

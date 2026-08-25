@@ -274,7 +274,29 @@ export function Demo({
 
   useEffect(tellThisFrame, [tellThisFrame]);
 
-  const reload = useCallback(() => setReloads((count) => count + 1), []);
+  /**
+   * Puts the story back to where it opened.
+   *
+   * Asks the running demo first. Replacing the frame does the same thing by
+   * tearing down a seventeen-megabyte WebAssembly instance and building
+   * another one, to reach a state the story gets back to in a frame — so that
+   * is the fallback, for a demo that has not started or has failed.
+   */
+  const reload = useCallback(() => {
+    const running = iframe.current?.contentWindow as
+      | (Window & { gpuiAi?: { reset?: () => boolean } })
+      | null
+      | undefined;
+    try {
+      if (running?.gpuiAi?.reset?.()) {
+        setStatus("ready");
+        return;
+      }
+    } catch {
+      // Same-origin, so this only throws for a frame that is already gone.
+    }
+    setReloads((count) => count + 1);
+  }, []);
 
   const copyLink = useCallback(async () => {
     const url = new URL(window.location.href);
@@ -401,7 +423,7 @@ export function Demo({
             ))}
           </select>
           <button type="button" data-specimen-reload onClick={reload} disabled={!running}>
-            Reload
+            Reset
           </button>
           {/* Always the effective theme, not just an override. Popped out
               there is no page around the frame to follow, and an embed told

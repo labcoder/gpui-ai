@@ -10,11 +10,29 @@ function normalizeTheme(value) {
   return THEME_SLUG.test(value) ? value : undefined;
 }
 
+/**
+ * Whether the address asks for reduced motion, and what it asks for.
+ *
+ * `motion=reduced` forces it on and `motion=full` forces it off; anything else,
+ * including no parameter at all, means "ask the machine". A link can therefore
+ * pin either answer, which is what makes the reduced-motion promise something
+ * a reader can check rather than something they have to take on trust.
+ */
+export function parseMotion(value) {
+  if (value === 'reduced') return true;
+  if (value === 'full') return false;
+  return undefined;
+}
+
 export function parseEmbedOptions(search) {
   const params = new URLSearchParams(search);
   const story = params.get('story') || undefined;
 
-  return { story, theme: normalizeTheme(params.get('theme')) };
+  return {
+    story,
+    theme: normalizeTheme(params.get('theme')),
+    motion: parseMotion(params.get('motion')),
+  };
 }
 
 export function parseThemeMessage(data) {

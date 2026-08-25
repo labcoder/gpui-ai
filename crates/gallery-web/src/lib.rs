@@ -83,6 +83,69 @@ pub fn set_gallery_theme(theme: String) -> Result<bool, JsValue> {
     Ok(applied.get())
 }
 
+/// Turns reduced motion on or off in the running gallery.
+///
+/// The library's whole claim about motion is that a reduced-motion run lands on
+/// a useful static frame rather than an empty one — one-shot reveals settle at
+/// their end state and repeating effects render at rest. Nothing on the web
+/// could ask for that: GPUI reads the preference from the platform, and the
+/// web platform has none, so every demo shimmered at a reader who had asked
+/// their machine for stillness.
+///
+/// Returns whether a running gallery took it.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn set_reduced_motion(reduced: bool) -> bool {
+    let applied = Cell::new(false);
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| {
+                cx.set_reduce_motion(reduced);
+                cx.refresh_windows();
+                applied.set(true);
+            });
+        }
+    });
+    applied.get()
+}
+
+/// Whether the running gallery is drawing with reduced motion.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn reduced_motion() -> bool {
+    let reduced = Cell::new(false);
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| reduced.set(cx.reduce_motion()));
+        }
+    });
+    reduced.get()
+}
+
+/// Puts the running story back to the state it opened in.
+///
+/// The page's Reload button used to replace the whole frame, which tears down
+/// a seventeen-megabyte WebAssembly instance and builds another one to get
+/// back to a state the story can reach in a frame. This is that, without the
+/// download.
+///
+/// Returns whether a running gallery took it.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn reset_story() -> bool {
+    let reset = Cell::new(false);
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| {
+                let Some(gallery) = GALLERY.with(|gallery| gallery.borrow().clone()) else {
+                    return;
+                };
+                gallery.update(cx, |gallery, cx| gallery.reset_story(cx));
+                cx.refresh_windows();
+                reset.set(true);
+            });
+        }
+    });
+    reset.get()
+}
+
 /// Returns the theme preset most recently applied by the running Rust gallery.
 #[cfg_attr(target_family = "wasm", wasm_bindgen)]
 pub fn gallery_theme() -> Option<String> {

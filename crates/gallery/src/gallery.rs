@@ -5479,6 +5479,23 @@ impl Gallery {
         self.chrome = chrome;
         cx.notify();
     }
+
+    /// Puts every story back to the state it opened in.
+    ///
+    /// Rebuilt rather than reset field by field: this struct carries the state
+    /// of thirty-four stories — which tool calls are expanded, which gates were
+    /// decided, which artifact version is showing, how far each simulation has
+    /// run — and a reset that walked them one at a time would be a list nobody
+    /// remembers to add to.
+    ///
+    /// The selection, the theme, and the chrome survive, because those are the
+    /// page's decisions rather than the story's.
+    pub fn reset_story(&mut self, cx: &mut Context<Self>) {
+        let chrome = self.chrome;
+        *self = Self::new_with_theme(self.selected, Some(self.theme), cx);
+        self.chrome = chrome;
+        cx.notify();
+    }
 }
 
 /// Initializes the component and theme globals used by every gallery host.
@@ -5656,6 +5673,53 @@ mod tests {
             let contrast = GalleryTheme::from_slug("contrast").expect("contrast is bundled");
             super::apply_gallery_theme(contrast, None, cx);
             assert_eq!(cx.theme().dark_theme.name.as_ref(), "gpui-ai Contrast");
+        });
+    }
+
+    /// Reset puts the story back without touching the page's own decisions.
+    ///
+    /// The website's Reset button used to replace the whole frame, which tears
+    /// down a seventeen-megabyte WebAssembly instance to reach a state the
+    /// story gets back to in a frame. It now calls this instead, so this is
+    /// where "back to the start" has to be true: the browser can see that the
+    /// document survived, and nothing else.
+    #[gpui::test]
+    fn resetting_a_story_restores_it_and_keeps_the_page_decisions(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::ToolCalls, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let ember = GalleryTheme::from_slug("ember-dusk").expect("ember-dusk is bundled");
+        cx.update(|_, cx| {
+            gallery.update(cx, |gallery, cx| {
+                gallery.set_chrome(super::GalleryChrome::Embedded, cx);
+                gallery.set_theme_preset(ember, cx);
+                // Story state a reader could have produced: a collapsed trace,
+                // an expanded group, a decided gate.
+                gallery.trace_open = false;
+                gallery.tool_group_open = Some(true);
+                gallery
+                    .approval_decisions
+                    .insert("deploy".into(), super::ApprovalDecision::Approved);
+                gallery.last_approval_event = Some("decided".into());
+            })
+        });
+
+        cx.update(|_, cx| gallery.update(cx, |gallery, cx| gallery.reset_story(cx)));
+
+        gallery.read_with(cx, |gallery, _| {
+            assert!(gallery.trace_open, "reset must put the trace back as it opened");
+            assert_eq!(gallery.tool_group_open, None);
+            assert!(gallery.approval_decisions.is_empty());
+            assert_eq!(gallery.last_approval_event, None);
+
+            // The page chose these, not the story. Losing them would repaint a
+            // demo the reader had themed and re-draw furniture the page
+            // already provides.
+            assert_eq!(gallery.selected, StoryId::ToolCalls);
+            assert_eq!(gallery.theme, ember);
+            assert_eq!(gallery.chrome, super::GalleryChrome::Embedded);
         });
     }
 

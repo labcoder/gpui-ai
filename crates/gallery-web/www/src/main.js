@@ -176,6 +176,34 @@ function revealWhenDrawn(story) {
 }
 
 /**
+ * Keeps the running gallery in step with the reader's motion preference.
+ *
+ * GPUI takes reduced motion from the platform, and the web platform does not
+ * have one — so until now every demo shimmered and breathed at a reader who
+ * had asked their machine for stillness, while the same components on a
+ * desktop honoured it. The library's promise is that a reduced-motion run
+ * lands on a useful static frame rather than an empty one; this is what lets
+ * it keep that promise in a browser.
+ *
+ * `motion=reduced` or `motion=full` in the address pins the answer, so a link
+ * can show either. With no parameter the media query decides, and keeps
+ * deciding: someone who changes the setting while the page is open sees it
+ * take effect rather than having to reload.
+ */
+function followMotionPreference(pinned, wasm) {
+  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const apply = () => {
+    try {
+      wasm.set_reduced_motion(pinned ?? query.matches);
+    } catch {
+      // A module that has gone away has no motion to reduce.
+    }
+  };
+  apply();
+  if (pinned === undefined) query.addEventListener('change', apply);
+}
+
+/**
  * Tells the host what the story measures, and keeps telling it when it moves.
  *
  * The page reserves space for a demo from a number measured at one width. A
@@ -312,9 +340,15 @@ async function initEmbed() {
     wasm.validate_story(options.story);
     await wasm.run(options.story, themeChannel.current(), assetEndpoint());
     themeChannel.connect(wasm);
+    followMotionPreference(options.motion, wasm);
     window.gpuiAi = Object.freeze({
       currentTheme: () => wasm.gallery_theme(),
       storyHeight: () => wasm.story_height(),
+      reducedMotion: () => wasm.reduced_motion(),
+      // Cheaper than replacing the frame by the size of the binary: reloading
+      // tears down a seventeen-megabyte instance to reach a state the story
+      // gets back to in one frame.
+      reset: () => wasm.reset_story(),
     });
     // Not "ready" yet: `run` returns before the first frame. The host keeps
     // saying "Starting" in the demo window's title bar until there are pixels.

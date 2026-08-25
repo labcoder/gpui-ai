@@ -300,6 +300,11 @@ function Accessibility() {
           Nothing installs idle redraw on its own. A component animates because it was asked to,
           which is why a page of them does not keep a machine awake.
         </p>
+        <p>
+          The demos on this site honour the setting too, and any of them can be pinned either way
+          with <code>motion=reduced</code> or <code>motion=full</code> — see{" "}
+          <a href={href("/docs/browser-demos/")}>Browser demo limits</a>.
+        </p>
       </Section>
 
       <Section id="keyboard" title="Keyboard and focus">
@@ -357,6 +362,20 @@ function BrowserDemos() {
           There is no WebGL fallback. Without WebGPU the site shows a still frame captured from the
           real component and downloads nothing — a seventeen-megabyte binary that cannot be used is
           worse than an honest picture.
+        </p>
+      </Section>
+
+      <Section id="motion" title="They follow your motion preference">
+        <p>
+          A demo reads <code>prefers-reduced-motion</code> and tells the running gallery, so a
+          reader who has asked their machine for stillness gets the same answer here as in a native
+          build. GPUI takes that preference from the platform, and the web platform has none —
+          without this every demo on the site shimmered at them.
+        </p>
+        <p>
+          Adding <code>motion=reduced</code> or <code>motion=full</code> to a demo&rsquo;s address
+          pins it either way, which is how you can see what reduced motion does to a component
+          without changing a system setting to find out.
         </p>
       </Section>
 
