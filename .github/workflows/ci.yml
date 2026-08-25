@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+    # A tag is the one build nothing else follows, so it is the one that runs
+    # everything — see the capture steps in the WASM gallery job.
+    tags: ["v*"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -115,9 +118,33 @@ jobs:
         # check:site typechecks and build:site runs Vite, both from
         # site/node_modules. Without this a clean runner produces no site.
         run: npm ci --prefix site
-      - name: Test and build the shared gallery artifact
+      - name: Test the shared gallery artifact
         run: |
           npm run check:web
           npm run build:wasm
-          npm run build:web
-          npm run report:wasm
+
+      # Two ways to build the site, differing only in whether the seventy
+      # posters and forty-three social cards are rendered. They cost about
+      # seven minutes of a browser drawing every story twice, and they are
+      # ordered around the site build rather than appended to it — the posters
+      # have to exist before Vite copies `site/public`, and the cards are
+      # rendered out of the built site's own stylesheet — so this is two paths
+      # rather than one path and an extra step.
+      #
+      # Skipped on a push to main because the Pages workflow runs the same
+      # captures on the same commit minutes later, and on a pull request
+      # because nothing deploys from one. Neither is a gap: the release gate
+      # captures two posters and two cards on every run, which is what proves
+      # the machinery, and a story that stopped drawing fails that gate.
+      - name: Build the site
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          npm --prefix crates/gallery-web/www run build
+          npm run build:site
+
+      - name: Build the site, with every poster and social card
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run build:web
+
+      - name: Report the WASM size
+        run: npm run report:wasm
