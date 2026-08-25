@@ -173,7 +173,7 @@ export interface CodeSample {
 }
 
 // Same widening as `highlightedBySlug`, and for the same reason.
-const extras = highlightJson.extras as unknown as { readonly install: CodeSample };
+const extras = highlightJson.extras as unknown as Readonly<Record<string, CodeSample>>;
 
 /**
  * The dependency lines the home page shows.
@@ -182,7 +182,20 @@ const extras = highlightJson.extras as unknown as { readonly install: CodeSample
  * repository URLs come from the manifests rather than from a string in a
  * component, and the text the page prints is the text that was highlighted.
  */
-export const install: CodeSample = extras.install;
+export const install: CodeSample = extras.install as CodeSample;
+
+/**
+ * One of the documentation samples in `site/content/samples/`.
+ *
+ * Throws rather than rendering nothing: a page asking for a sample that is not
+ * there has lost a code block, and a silent gap in prose that reads "as in:"
+ * is worse than a build that stops.
+ */
+export function sample(name: string): CodeSample {
+  const found = extras[name];
+  if (!found) throw new Error(`site/content/samples has no ${name}`);
+  return found;
+}
 
 export function componentBySlug(slug: string): Component | undefined {
   return components.find((component) => component.slug === slug);

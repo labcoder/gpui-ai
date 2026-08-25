@@ -25,6 +25,15 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const { components } = catalog;
 const installSnippet = highlightFile.extras.install;
 const BASE = "/gpui-ai";
+// Written out rather than imported: routes.ts and docs.ts are TypeScript this
+// test cannot read, and stating the pages independently is the point.
+const docSlugs = [
+  "getting-started",
+  "theming",
+  "ownership-and-events",
+  "accessibility-and-motion",
+  "browser-demos",
+];
 const ROUTES = ["/", "/components/", "/themes/", `/components/${components[0].slug}/`];
 
 // The build is expensive, so every test reads one.
@@ -590,6 +599,8 @@ test("the sitemap lists every page and nothing else", async () => {
     "/",
     "/components/",
     "/themes/",
+    "/docs/",
+    ...docSlugs.map((slug) => `/docs/${slug}/`),
     ...components.map((component) => `/components/${component.slug}/`),
   ].map((route) => `${origin}${route}`);
 
@@ -626,4 +637,99 @@ test("the 404 page is the site's own, and tells crawlers to forget it", async ()
   // Not a destination, so nothing may point at it as one.
   assert.doesNotMatch(html, /rel="canonical"/);
   assert.doesNotMatch(html, /property="og:/);
+});
+
+test("every documentation page is reachable from the index and from its neighbours", async () => {
+  const index = await page("/docs/");
+  for (const slug of docSlugs) {
+    assert.match(index, new RegExp(`href="${BASE}/docs/${slug}/"`), `${slug} is not on the index`);
+  }
+
+  for (const [position, slug] of docSlugs.entries()) {
+    const html = await page(`/docs/${slug}/`);
+    const previous = docSlugs[position - 1];
+    const next = docSlugs[position + 1];
+
+    if (previous) {
+      assert.match(html, new RegExp(`href="${BASE}/docs/${previous}/" rel="prev"`));
+    } else {
+      assert.doesNotMatch(html, /rel="prev"/, "the first page has nothing before it");
+    }
+    if (next) {
+      assert.match(html, new RegExp(`href="${BASE}/docs/${next}/" rel="next"`));
+    } else {
+      assert.doesNotMatch(html, /rel="next"/, "the last page has nothing after it");
+    }
+  }
+});
+
+test("the documentation is pre-rendered prose, not an empty shell", async () => {
+  for (const slug of docSlugs) {
+    const html = await page(`/docs/${slug}/`);
+    const body = /<article class="doc">([\s\S]*?)<\/article>/.exec(html)?.[1] ?? "";
+    const words = body
+      .replace(/<[^>]+>/g, " ")
+      .split(/\s+/)
+      .filter(Boolean).length;
+
+    // A page that hydrates into its content is a page a crawler and a reader
+    // without JavaScript both get nothing from. These are pre-rendered like
+    // every other page, so the words are in the HTML.
+    assert.ok(words > 180, `/docs/${slug}/ pre-renders only ${words} words`);
+    assert.match(html, /<h2 id="/, `/docs/${slug}/ has no sections to link to`);
+  }
+});
+
+test("every documentation sample is real, highlighted code", async () => {
+  const shown = new Set();
+  for (const slug of docSlugs) {
+    const html = await page(`/docs/${slug}/`);
+    for (const match of html.matchAll(/<pre class="code">/g)) shown.add(`${slug}:${match.index}`);
+  }
+  assert.ok(shown.size >= 6, `only ${shown.size} code blocks across the documentation`);
+
+  // The samples are files, tokenised by the same step the component snippets
+  // go through — so a sample that stopped being highlighted, or that was
+  // pasted into a component as a string, shows up here.
+  const samples = Object.entries(highlightFile.extras).filter(([name]) => name !== "install");
+  assert.ok(samples.length >= 6, "site/content/samples has lost its samples");
+  for (const [name, sample] of samples) {
+    assert.ok(sample.code.length > 0, `${name} is empty`);
+    assert.ok(sample.lines.length > 3, `${name} is too short to be a sample`);
+    const recovered = sample.lines.map((line) => line.map(([text]) => text).join("")).join("\n");
+    assert.equal(recovered, sample.code, `${name} does not survive highlighting`);
+    // Coloured, not just tokenised: a sample where nothing was classified
+    // renders as plain text and the reader cannot tell it is code.
+    const classified = sample.lines.flat().filter((token) => token.length > 1).length;
+    assert.ok(classified > 0, `${name} came out with no highlighting at all`);
+  }
+});
+
+test("the documentation counts what the catalog actually holds", async () => {
+  // Prose that states a number goes stale the moment the number moves. These
+  // are read from the generated data at render time; this is the check that
+  // they stayed that way.
+  // `renderToString` puts an empty comment either side of an interpolated
+  // value, so the rendered text of "All {n} components" is not the string it
+  // reads as in the source.
+  const text = (html) => html.replaceAll("<!-- -->", "");
+
+  const gettingStarted = text(await page("/docs/getting-started/"));
+  assert.match(gettingStarted, new RegExp(`All ${components.length} components`));
+
+  const theming = text(await page("/docs/theming/"));
+  const themeCount = themeFile.groups.reduce((total, group) => total + group.themes.length, 0);
+  assert.match(theming, new RegExp(`${themeCount} bundled themes`));
+  assert.match(theming, new RegExp(`${themeCount} themes on the`));
+});
+
+test("the documentation is linked from the masthead of every page", async () => {
+  for (const route of ROUTES) {
+    const html = await page(route);
+    assert.match(
+      html,
+      new RegExp(`<a href="${BASE}/docs/">Docs</a>`),
+      `${route} does not link the documentation`,
+    );
+  }
 });

@@ -1,6 +1,7 @@
 import "./site.css";
 import { CatalogPage } from "./CatalogPage";
 import { ComponentPage } from "./ComponentPage";
+import { DocsIndex, DocsPage } from "./DocsPage";
 import { HomePage } from "./HomePage";
 import { MissingPage } from "./MissingPage";
 import { Shell } from "./Shell";
@@ -26,6 +27,10 @@ function Page({ route }: { readonly route: Route }) {
       return <ThemesPage />;
     case "component":
       return <ComponentPage slug={route.slug ?? ""} />;
+    case "docs":
+      return <DocsIndex />;
+    case "doc":
+      return <DocsPage slug={route.slug ?? ""} />;
     case "missing":
       return <MissingPage />;
   }

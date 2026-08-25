@@ -1242,6 +1242,89 @@ pre.code-plain {
   overflow-wrap: anywhere;
 }
 
+/* Documentation ----------------------------------------------------------- */
+
+/* Prose, so it is measured in characters rather than in the page's width: the
+   demos break out past this, the reading does not. */
+.doc {
+  max-width: var(--prose-width);
+}
+
+.doc section {
+  margin-top: var(--space-12);
+}
+
+.doc p {
+  margin: 0 0 var(--space-4);
+  color: var(--ai-muted-text);
+}
+
+.doc h2 {
+  margin-bottom: var(--space-4);
+}
+
+.doc code {
+  font-size: 0.9375em;
+  color: var(--ai-accent-text);
+}
+
+.doc .code-panel {
+  margin: var(--space-6) 0;
+}
+
+/* Where to go next, and where you were. Two cards rather than two links: at
+   the end of a page these are the only thing left to press. */
+.doc-neighbours {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-16);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--ai-border);
+}
+
+@media (min-width: 40rem) {
+  .doc-neighbours {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.doc-neighbours a,
+.doc-index a {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius-lg);
+  background: var(--ai-surface);
+  text-decoration: none;
+}
+
+.doc-neighbours a:hover,
+.doc-index a:hover {
+  border-color: var(--ai-primary);
+}
+
+.doc-neighbours span,
+.doc-index span {
+  color: var(--ai-muted-text);
+  font-size: 0.8125rem;
+}
+
+.doc-neighbours a[rel="next"] {
+  text-align: right;
+}
+
+.doc-index {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--prose-width);
+  margin-top: var(--space-8);
+}
+
+.doc-index strong {
+  font-size: 0.9375rem;
+}
+
 /* Not found --------------------------------------------------------------- */
 
 /* Three ways out, as cards rather than a list of links: this page exists to be

@@ -17,7 +17,7 @@
 // each category a sentinel value that means nothing on screen and everything
 // here: it is looked up in SENTINELS and becomes a class.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHighlighter } from "shiki";
@@ -172,13 +172,46 @@ for (const [slug, variants] of Object.entries(snippets)) {
   }
 }
 
-// Code the site shows that is not cut from a story. Only the home page's
-// dependency lines so far, and they are TOML rather than Rust.
+/**
+ * Code the site shows that is not cut from a story.
+ *
+ * The dependency lines, which are generated from the workspace manifests so
+ * they cannot name a version nobody ships, and the documentation samples in
+ * `site/content/samples/`. Those are hand-written because they show how to
+ * reach the library from outside it — installing it, opening a window,
+ * observing cues — which is code no story contains.
+ *
+ * Read from the directory rather than listed here: a sample added without
+ * being registered would highlight nowhere and fail silently, and a sample
+ * registered without existing would fail the build, which is the wrong way
+ * round.
+ */
+const LANGUAGES = { ".rs": "rust", ".toml": "toml", ".json": "json" };
+const SAMPLES = join(ROOT, "site", "content", "samples");
+
+function samples() {
+  const found = {};
+  for (const name of readdirSync(SAMPLES).sort()) {
+    const dot = name.lastIndexOf(".");
+    const lang = LANGUAGES[name.slice(dot)];
+    // The README beside them is documentation for whoever adds the next one.
+    if (!lang) continue;
+    const code = readFileSync(join(SAMPLES, name), "utf8").replace(/\r\n/g, "\n").trimEnd();
+    const id = name.slice(0, dot);
+    found[id] = { lang, code, lines: checked(code, lang, `samples/${id}`) };
+  }
+  if (Object.keys(found).length === 0) {
+    throw new Error(`no documentation samples found in ${SAMPLES}`);
+  }
+  return found;
+}
+
 const install = installSnippet();
 const extras = {
   install: { lang: "toml", code: install, lines: checked(install, "toml", "extras/install") },
+  ...samples(),
 };
-lines += extras.install.lines.length;
+for (const extra of Object.values(extras)) lines += extra.lines.length;
 
 mkdirSync(GENERATED, { recursive: true });
 writeFileSync(

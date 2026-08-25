@@ -1,4 +1,5 @@
 import { components } from "./data";
+import { docs } from "./docs";
 import { normalizeRoutePath } from "./route-path.mjs";
 
 /** One page the site emits as real HTML. */
@@ -10,8 +11,8 @@ export interface Route {
   /** What the page is, for metadata. */
   readonly description: string;
   /** Which page component renders it. */
-  readonly kind: "home" | "index" | "component" | "themes" | "missing";
-  /** Present for `kind: "component"`. */
+  readonly kind: "home" | "index" | "component" | "themes" | "docs" | "doc" | "missing";
+  /** Present for `kind: "component"` and `kind: "doc"`. */
   readonly slug?: string;
 }
 
@@ -42,6 +43,21 @@ export const routes: readonly Route[] = [
     description: "Every bundled theme, and the tokens each one sets.",
     kind: "themes",
   },
+  {
+    path: "/docs/",
+    title: "Documentation · gpui-ai",
+    description: "Installing gpui-ai, theming it, and who owns what between it and your application.",
+    kind: "docs",
+  },
+  ...docs.map(
+    (doc): Route => ({
+      path: `/docs/${doc.slug}/`,
+      title: `${doc.title} · gpui-ai`,
+      description: doc.summary,
+      kind: "doc",
+      slug: doc.slug,
+    }),
+  ),
   ...components.map(
     (component): Route => ({
       path: `/components/${component.slug}/`,

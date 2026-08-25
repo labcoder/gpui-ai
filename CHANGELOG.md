@@ -22,6 +22,13 @@ revision.
   from what the component draws; they are rebuilt rather than checked in,
   because a GPU-rendered frame is not byte-reproducible.
 
+- Five documentation pages, and an index over them: Getting started, Theming,
+  Ownership and events, Accessibility and motion, and Browser demo limits. The
+  prose is written; the numbers in it are read from the generated data, and
+  every code sample is a real file highlighted by the same step the component
+  snippets go through, so a page cannot claim there are thirty components when
+  there are thirty-four or show code that was never anything but a string.
+
 - The catalog and the rail search a real index instead of matching substrings.
   Typing "approv" now finds the Approval card, which never contained the word;
   an event name finds the component that emits it; and a second word narrows

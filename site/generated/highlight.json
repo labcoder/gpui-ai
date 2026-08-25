@@ -10786,6 +10786,1654 @@
           ]
         ]
       ]
+    },
+    "own-cues": {
+      "lang": "rust",
+      "code": "use gpui_ai::cues::{self, Cue};\n\n// One place to hang sound, haptics, or a notification. The library never plays\n// anything itself: it says what happened and leaves the decision here.\nlet _cues = cues::observe(cx, |cue, _cx| match cue {\n    Cue::ResponseSettled { succeeded: true, .. } => play(\"chime\"),\n    Cue::Copied => play(\"tick\"),\n    _ => {}\n});\n// Dropping the subscription stops the cues.",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_ai",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "cues",
+            "type"
+          ],
+          [
+            "::{"
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Cue",
+            "type"
+          ],
+          [
+            "};"
+          ]
+        ],
+        [],
+        [
+          [
+            "// One place to hang sound, haptics, or a notification. The library never plays",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// anything itself: it says what happened and leaves the decision here.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " _cues = "
+          ],
+          [
+            "cues",
+            "type"
+          ],
+          [
+            "::observe(cx, |cue, _cx| "
+          ],
+          [
+            "match",
+            "keyword"
+          ],
+          [
+            " cue {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Cue",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "ResponseSettled",
+            "type"
+          ],
+          [
+            " { succeeded: "
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ", .. } => play("
+          ],
+          [
+            "\"chime\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Cue",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Copied",
+            "type"
+          ],
+          [
+            " => play("
+          ],
+          [
+            "\"tick\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "    _ => {}"
+          ]
+        ],
+        [
+          [
+            "});"
+          ]
+        ],
+        [
+          [
+            "// Dropping the subscription stops the cues.",
+            "comment"
+          ]
+        ]
+      ]
+    },
+    "own-events": {
+      "lang": "rust",
+      "code": "use gpui_ai::prelude::*;\n\n// Every event carries the application's own identifier rather than a row\n// number. A list that reorders, filters, or loses a row while a decision is in\n// flight still resolves to the thing it was about.\nfn gate(&mut self, cx: &mut Context<Self>) -> impl IntoElement {\n    ApprovalCard::new(\"deploy-2f9c\", \"Deploy build 2f9c to production\")\n        .decision(self.decisions.get(\"deploy-2f9c\").copied().unwrap_or_default())\n        .on_event(cx.listener(|this, event: &ApprovalEvent, _, cx| {\n            let (id, decision) = match event {\n                ApprovalEvent::Approved { id } | ApprovalEvent::ApprovedAlways { id } => {\n                    (id.clone(), ApprovalDecision::Approved)\n                }\n                ApprovalEvent::Rejected { id } => (id.clone(), ApprovalDecision::Rejected),\n            };\n            this.decisions.insert(id, decision);\n            cx.notify();\n        }))\n}",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_ai",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "prelude",
+            "type"
+          ],
+          [
+            "::*;"
+          ]
+        ],
+        [],
+        [
+          [
+            "// Every event carries the application's own identifier rather than a row",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// number. A list that reorders, filters, or loses a row while a decision is in",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// flight still resolves to the thing it was about.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " gate(&"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Context",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "Self",
+            "keyword"
+          ],
+          [
+            ">) -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "ApprovalCard",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"deploy-2f9c\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Deploy build 2f9c to production\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "        .decision("
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ".decisions.get("
+          ],
+          [
+            "\"deploy-2f9c\"",
+            "string"
+          ],
+          [
+            ").copied().unwrap_or_default())"
+          ]
+        ],
+        [
+          [
+            "        .on_event(cx.listener(|this, event: &"
+          ],
+          [
+            "ApprovalEvent",
+            "type"
+          ],
+          [
+            ", _, cx| {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " (id, decision) = "
+          ],
+          [
+            "match",
+            "keyword"
+          ],
+          [
+            " event {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ApprovalEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Approved",
+            "type"
+          ],
+          [
+            " { id } | "
+          ],
+          [
+            "ApprovalEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "ApprovedAlways",
+            "type"
+          ],
+          [
+            " { id } => {"
+          ]
+        ],
+        [
+          [
+            "                    (id.clone(), "
+          ],
+          [
+            "ApprovalDecision",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Approved",
+            "type"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                }"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "ApprovalEvent",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Rejected",
+            "type"
+          ],
+          [
+            " { id } => (id.clone(), "
+          ],
+          [
+            "ApprovalDecision",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Rejected",
+            "type"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            };"
+          ]
+        ],
+        [
+          [
+            "            this.decisions.insert(id, decision);"
+          ]
+        ],
+        [
+          [
+            "            cx.notify();"
+          ]
+        ],
+        [
+          [
+            "        }))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
+    },
+    "own-progressive": {
+      "lang": "rust",
+      "code": "use gpui_ai::prelude::*;\n\n// The application owns the text and the lifecycle. It advances them from\n// whatever its model client hands back; the component renders the snapshot and\n// never asks for more.\nstruct Reply {\n    answer: StreamedContent,\n}\n\nimpl Reply {\n    fn started() -> Self {\n        Self { answer: StreamedContent::new() }\n    }\n\n    fn token(&mut self, chunk: &str) {\n        self.answer.append(chunk);\n    }\n\n    fn finished(&mut self) {\n        self.answer.finish();\n    }\n\n    fn refused(&mut self, why: &str) {\n        self.answer.fail(why);\n    }\n}",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_ai",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "prelude",
+            "type"
+          ],
+          [
+            "::*;"
+          ]
+        ],
+        [],
+        [
+          [
+            "// The application owns the text and the lifecycle. It advances them from",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// whatever its model client hands back; the component renders the snapshot and",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// never asks for more.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "struct",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Reply",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    answer: "
+          ],
+          [
+            "StreamedContent",
+            "type"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
+        [
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Reply",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " started() -> "
+          ],
+          [
+            "Self",
+            "keyword"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "Self",
+            "keyword"
+          ],
+          [
+            " { answer: "
+          ],
+          [
+            "StreamedContent",
+            "type"
+          ],
+          [
+            "::new() }"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " token(&"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ", chunk: &"
+          ],
+          [
+            "str",
+            "type"
+          ],
+          [
+            ") {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ".answer.append(chunk);"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " finished(&"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ") {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ".answer.finish();"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " refused(&"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ", why: &"
+          ],
+          [
+            "str",
+            "type"
+          ],
+          [
+            ") {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ".answer.fail(why);"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
+    },
+    "start-window": {
+      "lang": "rust",
+      "code": "use gpui::{App, Application, WindowOptions, prelude::*};\nuse gpui_ai::prelude::*;\nuse gpui_component::Root;\n\nstruct Agent;\n\nimpl Render for Agent {\n    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {\n        ToolChip::new(\"edit\", \"Edit main.rs\").status(ToolStatus::Running)\n    }\n}\n\nfn main() {\n    Application::new().run(|cx: &mut App| {\n        gpui_component::init(cx);\n        gpui_ai::init(cx);\n\n        cx.open_window(WindowOptions::default(), |window, cx| {\n            let agent = cx.new(|_| Agent);\n            // Root owns the theme, the rem size, and the layers dialogs and\n            // popovers are drawn into. Every gpui-component app has one.\n            cx.new(|cx| Root::new(agent.into(), window, cx))\n        })\n        .unwrap();\n    });\n}",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui",
+            "type"
+          ],
+          [
+            "::{"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Application",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "WindowOptions",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "prelude",
+            "type"
+          ],
+          [
+            "::*};"
+          ]
+        ],
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_ai",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "prelude",
+            "type"
+          ],
+          [
+            "::*;"
+          ]
+        ],
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_component",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Root",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [],
+        [
+          [
+            "struct",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Agent",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [],
+        [
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Render",
+            "type"
+          ],
+          [
+            " "
+          ],
+          [
+            "for",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Agent",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " render(&"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ", _: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Window",
+            "type"
+          ],
+          [
+            ", _: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Context",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "Self",
+            "keyword"
+          ],
+          [
+            ">) -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ToolChip",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"edit\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Edit main.rs\"",
+            "string"
+          ],
+          [
+            ").status("
+          ],
+          [
+            "ToolStatus",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Running",
+            "type"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ],
+        [],
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " main() {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Application",
+            "type"
+          ],
+          [
+            "::new().run(|cx: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            "| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "gpui_component",
+            "type"
+          ],
+          [
+            "::init(cx);"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "gpui_ai",
+            "type"
+          ],
+          [
+            "::init(cx);"
+          ]
+        ],
+        [],
+        [
+          [
+            "        cx.open_window("
+          ],
+          [
+            "WindowOptions",
+            "type"
+          ],
+          [
+            "::default(), |window, cx| {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " agent = cx.new(|_| "
+          ],
+          [
+            "Agent",
+            "type"
+          ],
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// Root owns the theme, the rem size, and the layers dialogs and",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// popovers are drawn into. Every gpui-component app has one.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            cx.new(|cx| "
+          ],
+          [
+            "Root",
+            "type"
+          ],
+          [
+            "::new(agent.into(), window, cx))"
+          ]
+        ],
+        [
+          [
+            "        })"
+          ]
+        ],
+        [
+          [
+            "        .unwrap();"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
+    },
+    "theme-custom": {
+      "lang": "rust",
+      "code": "use gpui::App;\nuse gpui_component::theme::{Theme, ThemeMode, ThemeRegistry};\n\n/// Registers a theme pack and switches to one of the themes in it.\n///\n/// A pack is the same JSON the bundled themes use: a name and a `themes`\n/// array, each entry declaring a mode, its colours, and optionally a radius,\n/// a shadow flag, and a base font size.\nfn install(pack: &str, name: &str, cx: &mut App) -> anyhow::Result<()> {\n    ThemeRegistry::global_mut(cx).load_themes_from_str(pack)?;\n\n    let config = ThemeRegistry::global(cx)\n        .themes()\n        .get(name)\n        .cloned()\n        .ok_or_else(|| anyhow::anyhow!(\"the pack declares no theme called {name}\"))?;\n\n    let mode = config.mode;\n    let theme = Theme::global_mut(cx);\n    match mode {\n        ThemeMode::Dark => theme.dark_theme = config,\n        _ => theme.light_theme = config,\n    }\n    Theme::change(mode, None, cx);\n    Ok(())\n}",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_component",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "theme",
+            "type"
+          ],
+          [
+            "::{"
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "ThemeMode",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "ThemeRegistry",
+            "type"
+          ],
+          [
+            "};"
+          ]
+        ],
+        [],
+        [
+          [
+            "/// Registers a theme pack and switches to one of the themes in it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "///",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// A pack is the same JSON the bundled themes use: a name and a `themes`",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// array, each entry declaring a mode, its colours, and optionally a radius,",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "/// a shadow flag, and a base font size.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " install(pack: &"
+          ],
+          [
+            "str",
+            "type"
+          ],
+          [
+            ", name: &"
+          ],
+          [
+            "str",
+            "type"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "anyhow",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Result",
+            "type"
+          ],
+          [
+            "<()> {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "ThemeRegistry",
+            "type"
+          ],
+          [
+            "::global_mut(cx).load_themes_from_str(pack)?;"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " config = "
+          ],
+          [
+            "ThemeRegistry",
+            "type"
+          ],
+          [
+            "::global(cx)"
+          ]
+        ],
+        [
+          [
+            "        .themes()"
+          ]
+        ],
+        [
+          [
+            "        .get(name)"
+          ]
+        ],
+        [
+          [
+            "        .cloned()"
+          ]
+        ],
+        [
+          [
+            "        .ok_or_else(|| "
+          ],
+          [
+            "anyhow",
+            "type"
+          ],
+          [
+            "::anyhow!("
+          ],
+          [
+            "\"the pack declares no theme called {name}\"",
+            "string"
+          ],
+          [
+            "))?;"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " mode = config.mode;"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " theme = "
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            "::global_mut(cx);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "match",
+            "keyword"
+          ],
+          [
+            " mode {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ThemeMode",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Dark",
+            "type"
+          ],
+          [
+            " => theme.dark_theme = config,"
+          ]
+        ],
+        [
+          [
+            "        _ => theme.light_theme = config,"
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Theme",
+            "type"
+          ],
+          [
+            "::change(mode, "
+          ],
+          [
+            "None",
+            "type"
+          ],
+          [
+            ", cx);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Ok",
+            "type"
+          ],
+          [
+            "(())"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
+    },
+    "theme-tokens": {
+      "lang": "rust",
+      "code": "use gpui::prelude::*;\nuse gpui_component::ActiveTheme as _;\n\nfn panel(cx: &App) -> impl IntoElement {\n    div()\n        // Every colour, radius and type style comes from the active theme.\n        // There is no gpui-ai styling layer to override and no colour of its\n        // own to disagree with yours.\n        .bg(cx.theme().secondary)\n        .border_1()\n        .border_color(cx.theme().border)\n        .rounded(cx.theme().radius)\n        .text_color(cx.theme().muted_foreground)\n        .child(\"Ran three tools\")\n}",
+      "lines": [
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "prelude",
+            "type"
+          ],
+          [
+            "::*;"
+          ]
+        ],
+        [
+          [
+            "use",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "gpui_component",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "ActiveTheme",
+            "type"
+          ],
+          [
+            " "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " _;"
+          ]
+        ],
+        [],
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " panel(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// Every colour, radius and type style comes from the active theme.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// There is no gpui-ai styling layer to override and no colour of its",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// own to disagree with yours.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        .bg(cx.theme().secondary)"
+          ]
+        ],
+        [
+          [
+            "        .border_1()"
+          ]
+        ],
+        [
+          [
+            "        .border_color(cx.theme().border)"
+          ]
+        ],
+        [
+          [
+            "        .rounded(cx.theme().radius)"
+          ]
+        ],
+        [
+          [
+            "        .text_color(cx.theme().muted_foreground)"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ],
+          [
+            "\"Ran three tools\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
     }
   }
 }
