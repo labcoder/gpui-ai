@@ -6028,9 +6028,6 @@ mod tests {
             GalleryTestRoot { gallery }
         });
         let cx: &mut VisualTestContext = cx;
-        // The story host is 400px tall; a 320px window guarantees the
-        // story end starts out of view so the scroll contract is actually
-        // exercised.
         cx.simulate_resize(size(px(700.), px(360.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
@@ -6040,6 +6037,16 @@ mod tests {
         let initial_end = cx
             .debug_bounds("comparison-story-end")
             .expect("the comparison story end should remain rendered");
+        // Unlike the other three tables, this story's content no longer
+        // fills the 400px surface, so there is nothing here to scroll to and
+        // the post-scroll assertion below cannot fail. Saying so out loud is
+        // what keeps that from going unnoticed: if the story grows again this
+        // fails, and the "starts below the viewport" assertion the records,
+        // diff, and filter tests carry should come back with it.
+        assert!(
+            initial_end.bottom() <= viewport.bottom(),
+            "the comparison story overflows its surface again; restore the scroll assertion: end={initial_end:?}, viewport={viewport:?}"
+        );
 
         let gallery = result
             .borrow_mut()
@@ -6058,10 +6065,6 @@ mod tests {
             end.bottom() <= viewport.bottom() && end.bottom() > viewport.top(),
             "{end:?} must fit in {viewport:?}"
         );
-        // Scrolling to the bottom must have moved the note (or it was already
-        // fully visible in a tall viewport); either way the end must be
-        // reachable and rendered.
-        let _ = initial_end;
     }
 
     #[test]
