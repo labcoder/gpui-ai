@@ -413,7 +413,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Render, TestAppContext, VisualTestContext};
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, WindowHandle, px, size};
     use std::cell::Cell;
     use std::rc::Rc;
 
@@ -462,6 +462,102 @@ mod tests {
             Duration::from_millis(1700)
         );
         assert_eq!(AmbientLoopSpec::ORB_LATTICE.period_millis(), 1700);
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum LoopLifecycle {
+        Active,
+        Inactive,
+        Complete,
+        Offscreen,
+        Dropped,
+    }
+
+    struct LoopLifecycleProbe {
+        lifecycle: LoopLifecycle,
+    }
+
+    impl Render for LoopLifecycleProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let animated = || {
+                div().with_animation(
+                    "lifecycle-loop",
+                    ProgressLoopSpec::SHIMMER.looping(),
+                    |element, _| element,
+                )
+            };
+            match self.lifecycle {
+                LoopLifecycle::Active => div().child(animated()),
+                // GPUI schedules an animation during layout, before clipping.
+                // Offscreen suspension therefore means the virtualized row or
+                // host does not build the animated element at all.
+                LoopLifecycle::Inactive
+                | LoopLifecycle::Complete
+                | LoopLifecycle::Offscreen
+                | LoopLifecycle::Dropped => div().child(div()),
+            }
+        }
+    }
+
+    fn next_frame(window: &WindowHandle<LoopLifecycleProbe>, cx: &mut TestAppContext) -> usize {
+        let callbacks = window
+            .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+            .expect("the motion audit window should remain open");
+        cx.run_until_parked();
+        callbacks
+    }
+
+    fn set_lifecycle(
+        lifecycle: LoopLifecycle,
+        window: &WindowHandle<LoopLifecycleProbe>,
+        cx: &mut TestAppContext,
+    ) {
+        window
+            .update(cx, |probe, _, cx| {
+                probe.lifecycle = lifecycle;
+                cx.notify();
+            })
+            .expect("the motion audit window should remain open");
+        cx.run_until_parked();
+        // A callback already queued by the previous active frame may fire once,
+        // but the new static tree must not replace it.
+        next_frame(window, cx);
+    }
+
+    #[gpui::test]
+    fn repeating_loops_request_frames_only_for_visible_active_work(cx: &mut TestAppContext) {
+        let window = cx.open_window(size(px(120.), px(80.)), |_, _| LoopLifecycleProbe {
+            lifecycle: LoopLifecycle::Active,
+        });
+        cx.run_until_parked();
+        assert_eq!(next_frame(&window, cx), 1, "active work must keep moving");
+
+        for lifecycle in [
+            LoopLifecycle::Inactive,
+            LoopLifecycle::Complete,
+            LoopLifecycle::Offscreen,
+            LoopLifecycle::Dropped,
+        ] {
+            set_lifecycle(lifecycle, &window, cx);
+            assert_eq!(
+                next_frame(&window, cx),
+                0,
+                "{lifecycle:?} content must settle without idle frame demand"
+            );
+        }
+
+        set_lifecycle(LoopLifecycle::Active, &window, cx);
+        assert_eq!(next_frame(&window, cx), 1);
+    }
+
+    #[gpui::test]
+    fn reduced_motion_holds_a_repeating_loop_on_its_static_frame(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let window = cx.open_window(size(px(120.), px(80.)), |_, _| LoopLifecycleProbe {
+            lifecycle: LoopLifecycle::Active,
+        });
+        cx.run_until_parked();
+        assert_eq!(next_frame(&window, cx), 0);
     }
 
     /// Runs one reveal per draw and remembers what it returned.
