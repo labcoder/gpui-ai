@@ -8,15 +8,17 @@ use crate::stream::ProgressState;
 use crate::surface::{eyebrow, meta};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, Role, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, Subscription, Window, div,
-    prelude::FluentBuilder as _,
+    AnyElement, App, AppContext as _, Bounds, Div, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
+    Render, Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Subscription,
+    Window, deferred, div, prelude::FluentBuilder as _,
 };
-use gpui_base::Button;
+use gpui_base::{Align, Button, POPUP_PRIORITY, Placement, Positioner};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, h_flex,
-    input::{Enter, Escape, InputEvent, MoveDown, MoveUp, Textarea, TextareaState},
+    ActiveTheme as _, ElementExt as _, Icon, IconName, Sizable as _, ThemeStyled as _, h_flex,
+    input::{
+        Enter, Escape, InputEvent, MoveDown, MoveEnd, MoveHome, MoveUp, Textarea, TextareaState,
+    },
     scroll::ScrollableElement as _,
     v_flex,
 };
@@ -456,6 +458,34 @@ fn model_groups(models: &[PromptModel]) -> Vec<(Option<SharedString>, Vec<&Promp
     groups
 }
 
+fn retain_active_model(
+    previous: Option<SharedString>,
+    selected: Option<&SharedString>,
+    models: &[PromptModel],
+) -> Option<SharedString> {
+    previous
+        .filter(|candidate| {
+            models
+                .iter()
+                .any(|model| &model.id == candidate && !model.disabled)
+        })
+        .or_else(|| {
+            selected
+                .filter(|selected| {
+                    models
+                        .iter()
+                        .any(|model| &model.id == *selected && !model.disabled)
+                })
+                .cloned()
+        })
+        .or_else(|| {
+            models
+                .iter()
+                .find(|model| !model.disabled)
+                .map(|model| model.id.clone())
+        })
+}
+
 fn prompt_control_with_tone(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -536,6 +566,9 @@ pub struct PromptBar {
     filtered: Vec<SuggestionKey>,
     active_suggestion: Option<SuggestionKey>,
     model_menu_open: bool,
+    active_model: Option<SharedString>,
+    model_trigger_bounds: Bounds<Pixels>,
+    model_trigger_rem_size: Pixels,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -581,6 +614,9 @@ impl PromptBar {
             filtered: Vec::new(),
             active_suggestion: None,
             model_menu_open: false,
+            active_model: None,
+            model_trigger_bounds: Bounds::default(),
+            model_trigger_rem_size: window.rem_size(),
             _subscriptions: vec![subscription, observation],
         }
     }
@@ -616,6 +652,11 @@ impl PromptBar {
                 .find(|model| !model.disabled)
                 .map(|model| model.id.clone());
         }
+        self.active_model = retain_active_model(
+            self.active_model.take(),
+            self.selected_model.as_ref(),
+            &self.models,
+        );
         cx.notify();
     }
 
@@ -634,6 +675,7 @@ impl PromptBar {
         {
             return;
         }
+        self.active_model = Some(model_id.clone());
         self.selected_model = Some(model_id);
         cx.notify();
     }
@@ -738,6 +780,85 @@ impl PromptBar {
         self.focus_handle(cx).focus(window, cx);
     }
 
+    fn toggle_model_menu(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        if self.models.is_empty() {
+            return;
+        }
+        self.model_menu_open = !self.model_menu_open;
+        if self.model_menu_open {
+            self.active_model = retain_active_model(
+                self.active_model.take(),
+                self.selected_model.as_ref(),
+                &self.models,
+            );
+        }
+        self.focus(window, cx);
+        cx.notify();
+    }
+
+    fn close_model_menu(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        if !self.model_menu_open {
+            return;
+        }
+        self.model_menu_open = false;
+        self.focus(window, cx);
+        cx.notify();
+    }
+
+    fn move_active_model(&mut self, direction: isize, cx: &mut gpui::Context<Self>) {
+        let enabled_models: Vec<_> = self.models.iter().filter(|model| !model.disabled).collect();
+        if enabled_models.is_empty() {
+            return;
+        }
+        let current_ix = self
+            .active_model
+            .as_ref()
+            .and_then(|active| enabled_models.iter().position(|model| &model.id == active))
+            .unwrap_or(0);
+        let next_ix = if direction < 0 {
+            current_ix
+                .checked_sub(1)
+                .unwrap_or(enabled_models.len() - 1)
+        } else {
+            (current_ix + 1) % enabled_models.len()
+        };
+        self.active_model = enabled_models.get(next_ix).map(|model| model.id.clone());
+        cx.notify();
+    }
+
+    fn move_active_model_to_edge(&mut self, end: bool, cx: &mut gpui::Context<Self>) {
+        self.active_model = if end {
+            self.models
+                .iter()
+                .rev()
+                .find(|model| !model.disabled)
+                .map(|model| model.id.clone())
+        } else {
+            self.models
+                .iter()
+                .find(|model| !model.disabled)
+                .map(|model| model.id.clone())
+        };
+        cx.notify();
+    }
+
+    fn confirm_active_model(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let Some(model_id) = self.active_model.clone().filter(|active| {
+            self.models
+                .iter()
+                .any(|model| &model.id == active && !model.disabled)
+        }) else {
+            return;
+        };
+        self.model_menu_open = false;
+        cx.emit(PromptBarEvent::ModelChanged {
+            id: self.id.clone(),
+            model_id,
+        });
+        self.focus(window, cx);
+        cx.notify();
+    }
+
     fn refresh_suggestions(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         let token = {
             let editor = self.editor.read(cx);
@@ -799,7 +920,9 @@ impl PromptBar {
                 }
             }
             InputEvent::PressEnter { shift: false, .. } => {
-                if self.token.is_some() && self.active_suggestion.is_some() {
+                if self.model_menu_open {
+                    self.confirm_active_model(window, cx);
+                } else if self.token.is_some() && self.active_suggestion.is_some() {
                     self.insert_active_suggestion(window, cx);
                 } else {
                     self.submit(window, cx);
@@ -852,14 +975,46 @@ impl PromptBar {
         cx.stop_propagation();
     }
 
+    fn capture_move_up(&mut self, _: &MoveUp, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if self.model_menu_open {
+            self.move_active_model(-1, cx);
+            cx.stop_propagation();
+        } else {
+            self.capture_suggestion_action(Some(-1), cx);
+        }
+    }
+
+    fn capture_move_down(&mut self, _: &MoveDown, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if self.model_menu_open {
+            self.move_active_model(1, cx);
+            cx.stop_propagation();
+        } else {
+            self.capture_suggestion_action(Some(1), cx);
+        }
+    }
+
+    fn capture_move_home(&mut self, _: &MoveHome, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if self.model_menu_open {
+            self.move_active_model_to_edge(false, cx);
+            cx.stop_propagation();
+        }
+    }
+
+    fn capture_move_end(&mut self, _: &MoveEnd, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if self.model_menu_open {
+            self.move_active_model_to_edge(true, cx);
+            cx.stop_propagation();
+        }
+    }
+
     fn capture_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut gpui::Context<Self>) {
-        let handled = if self.token.is_some() {
+        let handled = if self.model_menu_open {
+            self.model_menu_open = false;
+            true
+        } else if self.token.is_some() {
             self.token = None;
             self.filtered.clear();
             self.active_suggestion = None;
-            true
-        } else if self.model_menu_open {
-            self.model_menu_open = false;
             true
         } else {
             false
@@ -875,7 +1030,9 @@ impl PromptBar {
         if action.shift {
             return;
         }
-        if self.token.is_some() && self.active_suggestion.is_some() {
+        if self.model_menu_open {
+            self.confirm_active_model(window, cx);
+        } else if self.token.is_some() && self.active_suggestion.is_some() {
             self.insert_active_suggestion(window, cx);
         } else {
             self.submit(window, cx);
@@ -979,6 +1136,117 @@ impl PromptBar {
                 }),
         }
     }
+
+    fn render_model_picker(
+        &self,
+        root_id: &SharedString,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let tokens = cx.theme().semantic_tokens();
+        let mut model_options = Vec::new();
+        for (provider, members) in model_groups(&self.models) {
+            if let Some(provider) = provider {
+                model_options.push(
+                    eyebrow(provider.clone(), cx)
+                        .px(tokens.spacing.sm)
+                        .pt(tokens.spacing.xs)
+                        .into_any_element(),
+                );
+            }
+            for model in members {
+                let model_id = model.id.clone();
+                let model_selector = format!("prompt-bar-model-option-{}", model.id);
+                let selected = self.selected_model.as_ref() == Some(&model.id);
+                let active = self.active_model.as_ref() == Some(&model.id);
+                let content = h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .items_center()
+                    .gap(tokens.spacing.sm)
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .items_start()
+                            .child(div().child(model.label.clone()))
+                            .when_some(model.description.clone(), |this, description| {
+                                this.child(
+                                    div()
+                                        .w_full()
+                                        .truncate()
+                                        .text_token(tokens.typography.xs)
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                )
+                            }),
+                    )
+                    .when_some(model.context_window, |this, window_tokens| {
+                        this.child(
+                            meta(format!("{} ctx", format_tokens(window_tokens)), cx).flex_none(),
+                        )
+                    })
+                    .when(selected, |this| {
+                        this.child(
+                            Icon::new(IconName::Check)
+                                .xsmall()
+                                .text_color(cx.theme().primary),
+                        )
+                    });
+                model_options.push(
+                    prompt_option(
+                        (
+                            gpui::ElementId::from(root_id.clone()),
+                            format!("model-{}", model.id),
+                        ),
+                        model.label.clone(),
+                        content,
+                        cx,
+                    )
+                    .when_some(model.description.clone(), |button, description| {
+                        button.aria_description(description)
+                    })
+                    .debug_selector(move || model_selector.clone())
+                    .role(Role::ListBoxOption)
+                    .disabled(model.disabled)
+                    .selected(selected)
+                    .aria_selected(selected)
+                    .w_full()
+                    .when(active, |button| button.bg(cx.theme().accent))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.active_model = Some(model_id.clone());
+                        this.confirm_active_model(window, cx);
+                    }))
+                    .into_any_element(),
+                );
+            }
+        }
+
+        let surface = prompt_listbox(
+            (gpui::ElementId::from(root_id.clone()), "models").into(),
+            "Available models",
+        )
+        .debug_selector(|| "prompt-bar-model-picker".to_owned())
+        .occlude()
+        .w(tokens.spacing.xxl * 10.0)
+        .max_h(tokens.spacing.xxl * 7.0)
+        .overflow_y_scrollbar()
+        .p(tokens.spacing.xs)
+        .popover_style(cx)
+        .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+            this.close_model_menu(window, cx);
+        }))
+        .children(model_options);
+
+        deferred(
+            Positioner::side(self.model_trigger_bounds)
+                .placement(Placement::Bottom)
+                .align(Align::Start)
+                .offset(tokens.spacing.xs)
+                .child(surface),
+        )
+        .with_priority(POPUP_PRIORITY)
+        .into_any_element()
+    }
 }
 
 impl EventEmitter<PromptBarEvent> for PromptBar {}
@@ -1021,86 +1289,6 @@ impl Render for PromptBar {
                 )
             })
             .collect::<Vec<_>>();
-        let mut model_buttons: Vec<AnyElement> = Vec::new();
-        for (provider, members) in model_groups(&self.models) {
-            if let Some(provider) = provider {
-                model_buttons.push(
-                    eyebrow(provider.clone(), cx)
-                        .px(tokens.spacing.sm)
-                        .pt(tokens.spacing.xs)
-                        .into_any_element(),
-                );
-            }
-            for model in members {
-                let model_id = model.id.clone();
-                let model_selector = format!("prompt-bar-model-option-{}", model.id);
-                let selected = self.selected_model.as_ref() == Some(&model.id);
-                let content = h_flex()
-                    .w_full()
-                    .min_w_0()
-                    .items_center()
-                    .gap(tokens.spacing.sm)
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .items_start()
-                            .child(div().child(model.label.clone()))
-                            .when_some(model.description.clone(), |this, description| {
-                                this.child(
-                                    div()
-                                        .w_full()
-                                        .truncate()
-                                        .text_token(tokens.typography.xs)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(description),
-                                )
-                            }),
-                    )
-                    .when_some(model.context_window, |this, window_tokens| {
-                        this.child(
-                            meta(format!("{} ctx", format_tokens(window_tokens)), cx).flex_none(),
-                        )
-                    })
-                    .when(selected, |this| {
-                        this.child(
-                            Icon::new(IconName::Check)
-                                .xsmall()
-                                .text_color(cx.theme().primary),
-                        )
-                    });
-                model_buttons.push(
-                    prompt_option(
-                        (
-                            gpui::ElementId::from(root_id.clone()),
-                            format!("model-{}", model.id),
-                        ),
-                        model.label.clone(),
-                        content,
-                        cx,
-                    )
-                    .when_some(model.description.clone(), |button, description| {
-                        button.aria_description(description)
-                    })
-                    .debug_selector(move || model_selector.clone())
-                    .role(Role::ListBoxOption)
-                    .disabled(model.disabled)
-                    .selected(selected)
-                    .aria_selected(selected)
-                    .w_full()
-                    .when(selected, |button| button.bg(cx.theme().accent))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.model_menu_open = false;
-                        cx.emit(PromptBarEvent::ModelChanged {
-                            id: this.id.clone(),
-                            model_id: model_id.clone(),
-                        });
-                        cx.notify();
-                    }))
-                    .into_any_element(),
-                );
-            }
-        }
         let attachments = self.attachments.clone();
         let selected_model_label: SharedString = self
             .selected_model
@@ -1125,12 +1313,10 @@ impl Render for PromptBar {
             .rounded(tokens.radius.lg)
             .bg(tokens.colors.surface)
             .capture_action(cx.listener(Self::capture_enter))
-            .capture_action(cx.listener(|this, _: &MoveUp, _, cx| {
-                this.capture_suggestion_action(Some(-1), cx);
-            }))
-            .capture_action(cx.listener(|this, _: &MoveDown, _, cx| {
-                this.capture_suggestion_action(Some(1), cx);
-            }))
+            .capture_action(cx.listener(Self::capture_move_up))
+            .capture_action(cx.listener(Self::capture_move_down))
+            .capture_action(cx.listener(Self::capture_move_home))
+            .capture_action(cx.listener(Self::capture_move_end))
             .capture_action(cx.listener(Self::capture_escape))
             .when(!attachments.is_empty(), |this| {
                 this.child(
@@ -1199,20 +1385,43 @@ impl Render for PromptBar {
                                 .child(selected_model_label)
                                 .into_any_element()
                             } else {
-                                prompt_model_control(
-                                    (gpui::ElementId::from(root_id.clone()), "model"),
-                                    selected_model_label,
-                                    self.model_menu_open,
-                                    cx,
-                                )
-                                .debug_selector(|| "prompt-bar-model-trigger".to_owned())
-                                .border_color(cx.theme().border)
-                                .when(self.model_menu_open, |button| button.bg(cx.theme().accent))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.model_menu_open = !this.model_menu_open;
-                                    cx.notify();
-                                }))
-                                .into_any_element()
+                                let prompt = cx.entity();
+                                div()
+                                    .on_prepaint(move |bounds, window, cx| {
+                                        let rem_size = window.rem_size();
+                                        let changed = prompt.update(cx, |prompt, _| {
+                                            let changed = prompt.model_trigger_bounds != bounds
+                                                || prompt.model_trigger_rem_size != rem_size;
+                                            prompt.model_trigger_bounds = bounds;
+                                            prompt.model_trigger_rem_size = rem_size;
+                                            changed
+                                        });
+                                        if changed {
+                                            window.request_animation_frame();
+                                        }
+                                    })
+                                    .child(
+                                        prompt_model_control(
+                                            (gpui::ElementId::from(root_id.clone()), "model"),
+                                            selected_model_label,
+                                            self.model_menu_open,
+                                            cx,
+                                        )
+                                        .debug_selector(|| "prompt-bar-model-trigger".to_owned())
+                                        .border_color(cx.theme().border)
+                                        .when(self.model_menu_open, |button| {
+                                            button.bg(cx.theme().accent)
+                                        })
+                                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                            cx.stop_propagation();
+                                        })
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.toggle_model_menu(window, cx);
+                                            }),
+                                        ),
+                                    )
+                                    .into_any_element()
                             })
                             .child(
                                 prompt_control(
@@ -1275,16 +1484,8 @@ impl Render for PromptBar {
                         )),
                     ),
             )
-            .when(self.model_menu_open && !model_buttons.is_empty(), |this| {
-                this.child(
-                    prompt_listbox(
-                        (gpui::ElementId::from(root_id), "models").into(),
-                        "Available models",
-                    )
-                    .max_h(tokens.spacing.xxl * 7.0)
-                    .overflow_y_scrollbar()
-                    .children(model_buttons),
-                )
+            .when(self.model_menu_open, |this| {
+                this.child(self.render_model_picker(&root_id, cx))
             })
     }
 }
@@ -1309,9 +1510,9 @@ mod tests {
         prompt_status, retain_active_suggestion, stable_ids_are_unique,
     };
     use gpui::{
-        AppContext as _, Element as _, Focusable as _, IntoElement as _, Render, RenderOnce as _,
-        Role, SharedString, StatefulInteractiveElement as _, TestAppContext, Window, accesskit,
-        canvas, px, size,
+        AppContext as _, Element as _, Focusable as _, IntoElement as _, ParentElement as _,
+        Render, RenderOnce as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
+        TestAppContext, Window, accesskit, canvas, div, point, px, size,
     };
     use std::{
         cell::{Cell, RefCell},
@@ -1333,6 +1534,7 @@ mod tests {
 
     struct PromptHarness {
         prompt: gpui::Entity<PromptBar>,
+        bottom_aligned: bool,
         _subscription: gpui::Subscription,
     }
 
@@ -1359,6 +1561,47 @@ mod tests {
             });
             Self {
                 prompt,
+                bottom_aligned: false,
+                _subscription,
+            }
+        }
+
+        fn with_models(
+            events: Rc<RefCell<Vec<PromptBarEvent>>>,
+            bottom_aligned: bool,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Self {
+            let prompt = cx.new(|cx| {
+                let mut prompt = PromptBar::new("model-prompt", window, cx);
+                prompt.set_models(
+                    [
+                        PromptModel::new("fast", "Fast")
+                            .provider("Lab")
+                            .description("Fast responses")
+                            .context_window(64_000),
+                        PromptModel::new("disabled", "Disabled")
+                            .provider("Lab")
+                            .disabled(true),
+                        PromptModel::new("balanced", "Balanced")
+                            .provider("Cloud")
+                            .description("Everyday work")
+                            .context_window(128_000),
+                        PromptModel::new("precise", "Precise")
+                            .provider("Cloud")
+                            .description("Detailed reasoning")
+                            .context_window(200_000),
+                    ],
+                    cx,
+                );
+                prompt
+            });
+            let _subscription = cx.subscribe(&prompt, move |_, _, event, _| {
+                events.borrow_mut().push(event.clone());
+            });
+            Self {
+                prompt,
+                bottom_aligned,
                 _subscription,
             }
         }
@@ -1370,8 +1613,30 @@ mod tests {
             _: &mut Window,
             _: &mut gpui::Context<Self>,
         ) -> impl gpui::IntoElement {
-            self.prompt.clone()
+            if self.bottom_aligned {
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .justify_end()
+                    .child(self.prompt.clone())
+                    .into_any_element()
+            } else {
+                self.prompt.clone().into_any_element()
+            }
         }
+    }
+
+    fn draw(cx: &mut gpui::VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    fn open_model_picker(cx: &mut gpui::VisualTestContext) {
+        let trigger = cx
+            .debug_bounds("prompt-bar-model-trigger")
+            .expect("the model trigger should render");
+        cx.simulate_click(trigger.center(), Default::default());
+        draw(cx);
     }
 
     impl Render for ControlProbe {
@@ -1628,6 +1893,216 @@ mod tests {
 
         assert!(!prompt.read_with(cx, |prompt, _| prompt.model_menu_open));
         assert!(prompt.read_with(cx, |prompt, _| prompt.models.is_empty()));
+    }
+
+    #[gpui::test]
+    fn closed_model_picker_constructs_no_model_options(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, false, window, cx)
+        });
+        draw(cx);
+
+        assert!(cx.debug_bounds("prompt-bar-model-trigger").is_some());
+        assert!(cx.debug_bounds("prompt-bar-model-picker").is_none());
+        for selector in [
+            "prompt-bar-model-option-fast",
+            "prompt-bar-model-option-disabled",
+            "prompt-bar-model-option-balanced",
+            "prompt-bar-model-option-precise",
+        ] {
+            assert!(cx.debug_bounds(selector).is_none());
+        }
+        assert!(!harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).model_menu_open
+        }));
+    }
+
+    #[gpui::test]
+    fn opening_model_picker_keeps_composer_height_and_floats(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, false, window, cx)
+        });
+        draw(cx);
+        let attach_before = cx
+            .debug_bounds("prompt-bar-attach-control")
+            .expect("attach should render before opening");
+
+        open_model_picker(cx);
+
+        let attach_after = cx
+            .debug_bounds("prompt-bar-attach-control")
+            .expect("attach should remain rendered");
+        let trigger = cx
+            .debug_bounds("prompt-bar-model-trigger")
+            .expect("model trigger should remain rendered");
+        let picker = cx
+            .debug_bounds("prompt-bar-model-picker")
+            .expect("open picker should render");
+        assert_eq!(attach_after.origin.y, attach_before.origin.y);
+        assert!(
+            picker.top() >= trigger.bottom() || picker.bottom() <= trigger.top(),
+            "picker {picker:?} must float outside trigger {trigger:?}"
+        );
+    }
+
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
+    #[gpui::test]
+    fn model_picker_keys_move_by_stable_id_and_skip_disabled_models(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, false, window, cx)
+        });
+        draw(cx);
+        open_model_picker(cx);
+        let active = |cx: &mut gpui::VisualTestContext| {
+            harness.read_with(cx, |harness, cx| {
+                harness.prompt.read(cx).active_model.clone()
+            })
+        };
+
+        assert_eq!(active(cx), Some("fast".into()));
+        cx.simulate_keystrokes("down");
+        assert_eq!(active(cx), Some("balanced".into()));
+        cx.simulate_keystrokes("down up");
+        assert_eq!(active(cx), Some("balanced".into()));
+        cx.simulate_keystrokes("home");
+        assert_eq!(active(cx), Some("fast".into()));
+        cx.simulate_keystrokes("end");
+        assert_eq!(active(cx), Some("precise".into()));
+    }
+
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
+    #[gpui::test]
+    fn model_picker_enter_emits_the_active_id_once_and_closes(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured_events = events.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(captured_events, false, window, cx)
+        });
+        draw(cx);
+        open_model_picker(cx);
+        events.borrow_mut().clear();
+
+        cx.simulate_keystrokes("down enter");
+        draw(cx);
+
+        assert!(!harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).model_menu_open
+        }));
+        assert!(cx.debug_bounds("prompt-bar-model-picker").is_none());
+        assert_eq!(
+            events
+                .borrow()
+                .iter()
+                .filter(|event| matches!(
+                    event,
+                    PromptBarEvent::ModelChanged { model_id, .. } if model_id == "balanced"
+                ))
+                .count(),
+            1
+        );
+    }
+
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
+    #[gpui::test]
+    fn model_picker_escape_closes_without_emitting(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let captured_events = events.clone();
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(captured_events, false, window, cx)
+        });
+        draw(cx);
+        open_model_picker(cx);
+        events.borrow_mut().clear();
+
+        cx.simulate_keystrokes("escape");
+        draw(cx);
+
+        assert!(!harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).model_menu_open
+        }));
+        assert!(events.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn outside_click_dismisses_the_model_picker(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, false, window, cx)
+        });
+        cx.simulate_resize(size(px(800.), px(600.)));
+        draw(cx);
+        open_model_picker(cx);
+
+        cx.simulate_click(point(px(790.), px(590.)), Default::default());
+        draw(cx);
+
+        assert!(!harness.read_with(cx, |harness, cx| {
+            harness.prompt.read(cx).model_menu_open
+        }));
+        assert!(cx.debug_bounds("prompt-bar-model-picker").is_none());
+    }
+
+    #[cfg_attr(
+        target_os = "macos",
+        ignore = "pinned GPUI TestWindow has no native macOS handle for focused TextareaState"
+    )]
+    #[gpui::test]
+    fn closing_model_picker_restores_editor_for_immediate_typing(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (harness, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, false, window, cx)
+        });
+        draw(cx);
+        open_model_picker(cx);
+
+        cx.simulate_keystrokes("down enter x");
+
+        assert_eq!(
+            harness.read_with(cx, |harness, cx| harness.prompt.read(cx).draft(cx)),
+            "x"
+        );
+    }
+
+    #[gpui::test]
+    fn bottom_docked_model_picker_flips_above_its_trigger(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            PromptHarness::with_models(events, true, window, cx)
+        });
+        cx.simulate_resize(size(px(500.), px(320.)));
+        draw(cx);
+        open_model_picker(cx);
+
+        let trigger = cx
+            .debug_bounds("prompt-bar-model-trigger")
+            .expect("bottom trigger should render");
+        let picker = cx
+            .debug_bounds("prompt-bar-model-picker")
+            .expect("bottom picker should render");
+        assert!(
+            picker.bottom() <= trigger.top(),
+            "bottom picker {picker:?} should flip above trigger {trigger:?}"
+        );
     }
 
     #[cfg_attr(
