@@ -540,6 +540,223 @@ struct RowReorderMotion {
 /// the eye cannot see, fine enough that the final snap is invisible.
 const ROW_REORDER_SPRING_EPSILON: f32 = 0.5;
 
+#[cfg(test)]
+thread_local! {
+    /// Reorder-map writes performed while sampling on this thread.
+    ///
+    /// Thread-local for the reason the stable-ID counter is: the harness runs
+    /// each test on its own thread, and a shared counter would report another
+    /// test's frames.
+    static ROW_REORDER_SAMPLE_WRITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Records `written` inserts or removals performed by [`RowReorderState::sample`].
+///
+/// Sampling runs once per visible row per frame, so its map churn is the only
+/// reorder cost that scales with both the viewport and the frame rate; it is
+/// measured rather than asserted in prose. Nothing outside tests compiles the
+/// counter.
+#[inline]
+fn note_row_reorder_sample_writes(written: usize) {
+    #[cfg(test)]
+    ROW_REORDER_SAMPLE_WRITES.with(|writes| writes.set(writes.get().saturating_add(written)));
+    #[cfg(not(test))]
+    let _ = written;
+}
+
+/// Sampling writes since the last call, and resets the counter.
+#[cfg(test)]
+fn take_row_reorder_sample_writes() -> usize {
+    ROW_REORDER_SAMPLE_WRITES.with(|writes| writes.replace(0))
+}
+
+/// Every retained reorder spring for one records grid.
+///
+/// The delegate renders rows and the entity accepts snapshots; both defer the
+/// whole spring lifecycle here, so these constraints hold at one site rather
+/// than at four:
+///
+/// - **Rest is zero.** A row paints `sampled - target`, so a spring at rest
+///   paints exactly the layout slot the row currently owns. Every value in
+///   `offsets` is a sample relative to its own target, never a position.
+/// - **Seeding and retargeting share one render pass.** [`Self::sample`] is
+///   the only site that may clear `needs_adopt`, and it creates the channel at
+///   rest and retargets it before returning, so the first painted frame of a
+///   move already carries the full displacement instead of flashing at the
+///   destination for one frame.
+/// - **A live channel is retargeted, never restarted.** [`Self::project`]
+///   shifts an existing entry's `target` and keeps its `incarnation`, which is
+///   what carries position *and velocity* through a mid-flight reversal.
+/// - **A settled row owns nothing**, so `motion.len()` counts rows in motion
+///   and a quiet grid retains no state at all.
+/// - **An unsampled row owns nothing.** A row the rendered window drops can
+///   never settle itself, so the visibility owner prunes it through
+///   [`Self::retain_visible`].
+/// - **Reduced motion is the caller's gate.** It declines to project at all, so
+///   a reader who asked for less motion has no retained state rather than
+///   retained state suppressed at render.
+/// - **Disabling does not discard state.** `response: None` stops sampling and
+///   stops pruning; the next accepted snapshot projects nothing and clears it.
+#[derive(Clone, Default)]
+struct RowReorderState {
+    /// Spring response, and the gate: `None` disables reorder motion entirely.
+    response: Option<Duration>,
+    /// The rows currently under a spring, keyed by stable row ID.
+    motion: HashMap<SharedString, RowReorderMotion>,
+    /// The offset each moving row last painted, which is what a projection
+    /// continues from. Cleared with the snapshot that produced it.
+    offsets: HashMap<SharedString, Pixels>,
+    /// Names the next unseeded channel. Advanced once per accepted snapshot so
+    /// a row that settled and starts moving again cannot answer to the
+    /// retained sample of its previous journey.
+    generation: usize,
+}
+
+impl RowReorderState {
+    fn is_enabled(&self) -> bool {
+        self.response.is_some()
+    }
+
+    fn set_response(&mut self, response: Option<Duration>) {
+        self.response = response;
+    }
+
+    fn animating_len(&self) -> usize {
+        self.motion.len()
+    }
+
+    /// Samples `row_id`'s spring for this frame and returns the offset to paint.
+    ///
+    /// `None` means the row paints in its layout slot: it owns no motion, or
+    /// this sample settled it. Settlement prunes here because this is the only
+    /// site that can observe it.
+    ///
+    /// Call this while rendering the row, which is where GPUI keyed element
+    /// state is available.
+    fn sample(
+        &mut self,
+        component_id: &str,
+        row_id: &SharedString,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Pixels> {
+        let response = self.response?;
+        let motion = *self.motion.get(row_id)?;
+        let channel: SharedString = format!(
+            "{}:{}",
+            scoped_records_id("reorder", component_id, row_id),
+            motion.incarnation
+        )
+        .into();
+        let policy = Spring::new(response).with_epsilon(ROW_REORDER_SPRING_EPSILON);
+        if motion.needs_adopt {
+            // Create the channel at rest — zero is the animation's physical
+            // origin, not a spacing value — so the retarget below starts the
+            // travel with the full displacement already painted. Both calls
+            // land in this same render pass, which is what keeps the first
+            // frame of a move from flashing at the destination.
+            let _ = spring(
+                (channel.clone(), "position"),
+                gpui::px(0.),
+                policy,
+                window,
+                cx,
+            );
+            if let Some(entry) = self.motion.get_mut(row_id) {
+                entry.needs_adopt = false;
+                note_row_reorder_sample_writes(1);
+            }
+        }
+        let sampled = spring((channel, "position"), motion.target, policy, window, cx);
+        if sampled == motion.target {
+            // Settled: the spring snapped to its target and stopped requesting
+            // frames, so the row owns no motion state.
+            self.motion.remove(row_id);
+            self.offsets.remove(row_id);
+            note_row_reorder_sample_writes(2);
+            return None;
+        }
+        let offset = sampled - motion.target;
+        self.offsets.insert(row_id.clone(), offset);
+        note_row_reorder_sample_writes(1);
+        Some(offset)
+    }
+
+    /// Drops every row the rendered window no longer holds.
+    fn retain_visible(&mut self, visible: &HashSet<SharedString>) {
+        self.motion.retain(|row_id, _| visible.contains(row_id));
+        self.offsets.retain(|row_id, _| visible.contains(row_id));
+    }
+
+    /// Projects one signed pixel travel per candidate row onto the retained
+    /// springs, yielding the motion an accepted snapshot starts from.
+    ///
+    /// The caller decides which rows are candidates and how far each travels —
+    /// that is viewport geometry. What a spring does with a travel is this
+    /// type's decision, so a row already in flight keeps its channel and a row
+    /// at rest gets a fresh one.
+    fn project<'rows>(
+        &self,
+        travelled: impl Iterator<Item = (&'rows SharedString, Pixels)>,
+    ) -> HashMap<SharedString, RowReorderMotion> {
+        let fresh_incarnation = self.generation.wrapping_add(1);
+        travelled
+            .filter_map(|(row_id, displacement)| {
+                // Motion offsets default to rest; zero is animation geometry,
+                // not a spacing value.
+                let prior_offset = self
+                    .offsets
+                    .get(row_id)
+                    .copied()
+                    .unwrap_or_else(|| gpui::px(0.));
+                let motion = match self.motion.get(row_id) {
+                    // Mid-flight: keep the channel and shift only its target,
+                    // so the sample — position and velocity — carries straight
+                    // through the new projection.
+                    Some(prior) => RowReorderMotion {
+                        target: prior.target - displacement,
+                        incarnation: prior.incarnation,
+                        needs_adopt: prior.needs_adopt,
+                    },
+                    // Never rendered (or newly moving): there is no retained
+                    // sample to carry, so seed from rest with the full
+                    // displacement painted on the first frame.
+                    None => RowReorderMotion {
+                        target: gpui::px(0.) - displacement,
+                        incarnation: fresh_incarnation,
+                        needs_adopt: true,
+                    },
+                };
+                let projected_offset = if motion.needs_adopt {
+                    // No frame has sampled this channel yet. Its retained
+                    // target still describes every unpainted projection change
+                    // from the last visible frame, so two snapshots that cancel
+                    // before a draw correctly collapse to rest.
+                    gpui::px(0.) - motion.target
+                } else {
+                    displacement + prior_offset
+                };
+                if projected_offset == gpui::px(0.) {
+                    // At rest in its new slot: no entry, which is also how a
+                    // settled row's state gets pruned at the next snapshot even
+                    // when it was never rendered again.
+                    return None;
+                }
+                Some((row_id.clone(), motion))
+            })
+            .collect()
+    }
+
+    /// Adopts a projection as the accepted snapshot's motion.
+    fn accept(&mut self, motion: HashMap<SharedString, RowReorderMotion>) {
+        self.motion = motion;
+        // The retained samples describe the outgoing snapshot's slots and the
+        // projection above already folded them in, so they retire with it.
+        self.offsets.clear();
+        self.generation = self.generation.wrapping_add(1);
+    }
+}
+
 #[derive(Clone)]
 struct RecordsDelegate {
     owner: WeakEntity<RecordsTable>,
@@ -551,10 +768,10 @@ struct RecordsDelegate {
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
     activation_label: SharedString,
-    row_reorder_response: Option<Duration>,
-    row_reorder_motion: HashMap<SharedString, RowReorderMotion>,
-    row_reorder_current_offsets: HashMap<SharedString, Pixels>,
-    row_reorder_generation: usize,
+    row_reorder: RowReorderState,
+    /// The rows the last render actually painted. A ledger of the virtualized
+    /// window rather than motion state, which is why the reorder owner prunes
+    /// against it instead of holding it.
     visible_row_ids: HashSet<SharedString>,
     /// The rem the owning table last resolved, so a rem-scaled column width
     /// lands in the same type scale as the text inside it. Upstream caches
@@ -578,10 +795,7 @@ impl RecordsDelegate {
             sort_column_id: None,
             sort_direction: None,
             activation_label: "Open".into(),
-            row_reorder_response: None,
-            row_reorder_motion: HashMap::new(),
-            row_reorder_current_offsets: HashMap::new(),
-            row_reorder_generation: 0,
+            row_reorder: RowReorderState::default(),
             visible_row_ids: HashSet::new(),
             rem_size,
         }
@@ -629,7 +843,7 @@ impl TableDelegate for RecordsDelegate {
         window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
-        if self.row_reorder_response.is_none() {
+        if !self.row_reorder.is_enabled() {
             let Some(row) = self.row(row_ix) else {
                 return div().id(("records-placeholder-row", row_ix));
             };
@@ -657,50 +871,12 @@ impl TableDelegate for RecordsDelegate {
             &row,
             self.selected_row_id.as_ref() == Some(&row.id),
         );
-        let row_frame = if let (Some(response), Some(motion)) = (
-            self.row_reorder_response,
-            self.row_reorder_motion.get(&row.id).copied(),
-        ) {
-            let channel: SharedString = format!(
-                "{}:{}",
-                scoped_records_id("reorder", &self.component_id, &row.id),
-                motion.incarnation
-            )
-            .into();
-            let policy = Spring::new(response).with_epsilon(ROW_REORDER_SPRING_EPSILON);
-            if motion.needs_adopt {
-                // Create the channel at rest — zero is the animation's
-                // physical origin, not a spacing value — so the retarget
-                // below starts the travel with the full displacement already
-                // painted. Both calls land in this same render pass, which is
-                // what keeps the first frame of a move from flashing at the
-                // destination.
-                let _ = spring(
-                    (channel.clone(), "position"),
-                    gpui::px(0.),
-                    policy,
-                    window,
-                    cx,
-                );
-                if let Some(entry) = self.row_reorder_motion.get_mut(&row.id) {
-                    entry.needs_adopt = false;
-                }
-            }
-            let sampled = spring((channel, "position"), motion.target, policy, window, cx);
-            if sampled == motion.target {
-                // Settled: the spring snapped to its target and stopped
-                // requesting frames, so the row owns no motion state.
-                self.row_reorder_motion.remove(&row.id);
-                self.row_reorder_current_offsets.remove(&row.id);
-                row_frame
-            } else {
-                let offset = sampled - motion.target;
-                self.row_reorder_current_offsets
-                    .insert(row.id.clone(), offset);
-                row_frame.relative().top(offset)
-            }
-        } else {
-            row_frame
+        let row_frame = match self
+            .row_reorder
+            .sample(&self.component_id, &row.id, window, cx)
+        {
+            Some(offset) => row_frame.relative().top(offset),
+            None => row_frame,
         };
         row_frame.on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
             let _ = owner.update(cx, |table, _| {
@@ -919,7 +1095,7 @@ impl TableDelegate for RecordsDelegate {
         cx: &mut Context<TableState<Self>>,
     ) {
         let anchor = self.row(visible_range.start).map(|row| row.id.clone());
-        if self.row_reorder_response.is_some() {
+        if self.row_reorder.is_enabled() {
             let visible_row_ids: HashSet<_> = self
                 .records
                 .content()
@@ -929,13 +1105,10 @@ impl TableDelegate for RecordsDelegate {
                 .map(|row| row.id.clone())
                 .collect();
             // A virtualized row that leaves the rendered window will no
-            // longer be sampled, so it cannot settle itself in `render_tr`.
-            // Drop its delegate bookkeeping here, at the visibility owner,
-            // instead of retaining motion state until another snapshot.
-            self.row_reorder_motion
-                .retain(|row_id, _| visible_row_ids.contains(row_id));
-            self.row_reorder_current_offsets
-                .retain(|row_id, _| visible_row_ids.contains(row_id));
+            // longer be sampled, so it cannot settle itself. Prune here, at
+            // the visibility owner, instead of retaining motion state until
+            // another snapshot.
+            self.row_reorder.retain_visible(&visible_row_ids);
             self.visible_row_ids = visible_row_ids;
         }
         let _ = self.owner.update(cx, |table, _| {
@@ -1339,7 +1512,7 @@ impl RecordsTable {
     ) {
         self.row_reorder_response = response;
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().row_reorder_response = response;
+            table.delegate_mut().row_reorder.set_response(response);
             cx.notify();
         });
     }
@@ -1349,7 +1522,7 @@ impl RecordsTable {
     }
 
     pub(crate) fn animating_row_count(&self, cx: &App) -> usize {
-        self.table.read(cx).delegate().row_reorder_motion.len()
+        self.table.read(cx).delegate().row_reorder.animating_len()
     }
 
     /// Replaces the controlled column snapshot without rebuilding table state.
@@ -1480,10 +1653,6 @@ impl RecordsTable {
                     .min()
             });
         let reorder_motion = if self.row_reorder_response.is_some() && !cx.reduce_motion() {
-            let delegate = self.table.read(cx).delegate();
-            let current_offsets = delegate.row_reorder_current_offsets.clone();
-            let previous_motion = delegate.row_reorder_motion.clone();
-            let fresh_incarnation = delegate.row_reorder_generation.wrapping_add(1);
             let old_visible_start = old_visible_range.start;
             let visible_len = old_visible_range.len().max(visible_row_ids.len()).max(1);
             let new_visible_start = anchor_row_ix
@@ -1491,60 +1660,26 @@ impl RecordsTable {
             let new_visible_end = new_visible_start
                 .saturating_add(visible_len)
                 .min(records.content().len());
-            visible_row_ids
-                .iter()
-                .filter_map(|row_id| {
-                    let old_ix = self.rows_by_id.position(row_id)?;
-                    let new_ix = accepted_rows_by_id.position(row_id)?;
-                    if !(new_visible_start..new_visible_end).contains(&new_ix) {
-                        return None;
-                    }
-                    // Motion offsets default to rest; zero is animation
-                    // geometry, not a spacing value.
-                    let prior_offset = current_offsets
-                        .get(row_id)
-                        .copied()
-                        .unwrap_or_else(|| gpui::px(0.));
-                    let old_position = old_ix.saturating_sub(old_visible_start);
-                    let new_position = new_ix.saturating_sub(new_visible_start);
-                    let displacement = Size::Medium.table_row_height()
-                        * (old_position as f32 - new_position as f32);
-                    let motion = match previous_motion.get(row_id) {
-                        // Mid-flight: keep the channel and shift only its
-                        // target, so the sample — position and velocity —
-                        // carries straight through the new projection.
-                        Some(prior) => RowReorderMotion {
-                            target: prior.target - displacement,
-                            incarnation: prior.incarnation,
-                            needs_adopt: prior.needs_adopt,
-                        },
-                        // Never rendered (or newly moving): there is no
-                        // retained sample to carry, so seed from rest with
-                        // the full displacement painted on the first frame.
-                        _ => RowReorderMotion {
-                            target: gpui::px(0.) - displacement,
-                            incarnation: fresh_incarnation,
-                            needs_adopt: true,
-                        },
-                    };
-                    let projected_offset = if motion.needs_adopt {
-                        // No frame has sampled this channel yet. Its retained
-                        // target still describes every unpainted projection
-                        // change from the last visible frame, so two snapshots
-                        // that cancel before a draw correctly collapse to rest.
-                        gpui::px(0.) - motion.target
-                    } else {
-                        displacement + prior_offset
-                    };
-                    if projected_offset == gpui::px(0.) {
-                        // At rest in its new slot: no entry, which is also
-                        // how a settled row's state gets pruned at the next
-                        // snapshot even when it was never rendered again.
-                        return None;
-                    }
-                    Some((row_id.clone(), motion))
-                })
-                .collect::<HashMap<_, _>>()
+            // How far a row that stays on screen travels between the two
+            // snapshots is viewport geometry, and it is all the reorder owner
+            // needs: the spring decisions the travel implies are its own.
+            let travelled = visible_row_ids.iter().filter_map(|row_id| {
+                let old_ix = self.rows_by_id.position(row_id)?;
+                let new_ix = accepted_rows_by_id.position(row_id)?;
+                if !(new_visible_start..new_visible_end).contains(&new_ix) {
+                    return None;
+                }
+                let old_position = old_ix.saturating_sub(old_visible_start);
+                let new_position = new_ix.saturating_sub(new_visible_start);
+                let displacement =
+                    Size::Medium.table_row_height() * (old_position as f32 - new_position as f32);
+                Some((row_id, displacement))
+            });
+            self.table
+                .read(cx)
+                .delegate()
+                .row_reorder
+                .project(travelled)
         } else {
             HashMap::new()
         };
@@ -1572,9 +1707,7 @@ impl RecordsTable {
             delegate.records = records;
             delegate.cell_provider = cell_provider;
             delegate.selected_row_id = selected_row_id.clone();
-            delegate.row_reorder_motion = reorder_motion;
-            delegate.row_reorder_current_offsets.clear();
-            delegate.row_reorder_generation = delegate.row_reorder_generation.wrapping_add(1);
+            delegate.row_reorder.accept(reorder_motion);
             table.refresh(cx);
             if let Some(row_ix) = desired_row_ix {
                 table.set_selected_row(row_ix, cx);
@@ -2046,7 +2179,7 @@ mod tests {
             });
         });
         let offsets = records.read_with(cx, |records, cx| {
-            records.table.read(cx).delegate().row_reorder_motion.clone()
+            records.table.read(cx).delegate().row_reorder.motion.clone()
         });
         assert!(!offsets.is_empty());
         assert!(
@@ -2064,20 +2197,22 @@ mod tests {
             let delegate = records.table.read(cx).delegate();
             assert!(
                 delegate
-                    .row_reorder_motion
+                    .row_reorder
+                    .motion
                     .keys()
                     .all(|row_id| delegate.visible_row_ids.contains(row_id)),
                 "virtualized rows must not retain spring motion"
             );
             assert!(
                 delegate
-                    .row_reorder_current_offsets
+                    .row_reorder
+                    .offsets
                     .keys()
                     .all(|row_id| delegate.visible_row_ids.contains(row_id)),
                 "virtualized rows must not retain sampled offsets"
             );
-            assert!(!delegate.row_reorder_motion.contains_key("row-1"));
-            assert!(!delegate.row_reorder_motion.contains_key("row-2"));
+            assert!(!delegate.row_reorder.motion.contains_key("row-1"));
+            assert!(!delegate.row_reorder.motion.contains_key("row-2"));
         });
 
         cx.update(|window, cx| {
@@ -2100,7 +2235,7 @@ mod tests {
             });
         });
         let scrolled_offsets = records.read_with(cx, |records, cx| {
-            records.table.read(cx).delegate().row_reorder_motion.clone()
+            records.table.read(cx).delegate().row_reorder.motion.clone()
         });
         assert!(
             !scrolled_offsets.is_empty(),
@@ -2120,7 +2255,8 @@ mod tests {
                     .table
                     .read(cx)
                     .delegate()
-                    .row_reorder_motion
+                    .row_reorder
+                    .motion
                     .is_empty(),
                 "reduced motion should retain no animated offsets"
             );
@@ -2464,7 +2600,8 @@ mod tests {
                     .table
                     .read(cx)
                     .delegate()
-                    .row_reorder_current_offsets
+                    .row_reorder
+                    .offsets
                     .get(id)
                     .copied()
             })
@@ -2475,7 +2612,8 @@ mod tests {
                     .table
                     .read(cx)
                     .delegate()
-                    .row_reorder_motion
+                    .row_reorder
+                    .motion
                     .get(id)
                     .map(|motion| motion.incarnation)
             })
@@ -2538,14 +2676,118 @@ mod tests {
         records.read_with(cx, |records, cx| {
             let delegate = records.table.read(cx).delegate();
             assert!(
-                delegate.row_reorder_motion.is_empty(),
+                delegate.row_reorder.motion.is_empty(),
                 "settled rows must own no motion state"
             );
-            assert!(delegate.row_reorder_current_offsets.is_empty());
+            assert!(delegate.row_reorder.offsets.is_empty());
         });
         assert_eq!(
             records.read_with(cx, |records, cx| records.animating_row_count(cx)),
             0
+        );
+    }
+
+    /// Sampling is the only reorder cost that scales with the frame rate, so
+    /// its map churn is counted rather than argued about.
+    ///
+    /// The budget, exactly: a seeding frame retires the row's seed and stores
+    /// the offset it painted, a travelling frame stores only that offset, and
+    /// a settling frame drops both of the row's entries. A grid with nothing
+    /// in flight writes nothing at all, which is what keeps a quiet table off
+    /// these maps entirely.
+    #[gpui::test]
+    fn sampling_writes_once_per_travelling_row_each_frame(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("churn", "Churn", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let make_rows = |order: &[usize]| {
+            order
+                .iter()
+                .map(|row_ix| {
+                    RecordRow::new(format!("row-{row_ix}"), format!("Row {row_ix}"))
+                        .cells([RecordCell::new("name", format!("Row {row_ix}"))])
+                })
+                .collect::<Vec<_>>()
+        };
+        let forward: Vec<usize> = (0..12).collect();
+        let mut swapped = forward.clone();
+        swapped.swap(1, 2);
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
+                records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+                records.set_records(
+                    Progressive::complete(make_rows(&forward).into()),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        take_row_reorder_sample_writes();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            take_row_reorder_sample_writes(),
+            0,
+            "a grid with nothing in flight must not touch the reorder maps"
+        );
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_records(
+                    Progressive::complete(make_rows(&swapped).into()),
+                    window,
+                    cx,
+                );
+            });
+        });
+        // Accepting a projection paints the seeding frame, which is the only
+        // frame that both retires a seed and stores an offset.
+        let seeding = take_row_reorder_sample_writes();
+        let moving = records.read_with(cx, |records, cx| records.animating_row_count(cx));
+        assert_eq!(moving, 2, "one swap moves exactly two rows");
+        assert_eq!(
+            seeding,
+            moving.saturating_mul(2),
+            "a seeding frame retires one seed and stores one offset per moving row"
+        );
+
+        let mut frames = 0usize;
+        loop {
+            let moving = records.read_with(cx, |records, cx| records.animating_row_count(cx));
+            if moving == 0 {
+                break;
+            }
+            assert!(frames < 200, "the springs never settled");
+            take_row_reorder_sample_writes();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let written = take_row_reorder_sample_writes();
+            let travelling = records.read_with(cx, |records, cx| records.animating_row_count(cx));
+            let settled = moving.saturating_sub(travelling);
+            assert_eq!(
+                written,
+                travelling.saturating_add(settled.saturating_mul(2)),
+                "frame {frames}: one write per row still travelling, two per row that settled"
+            );
+            frames = frames.saturating_add(1);
+            cx.executor().advance_clock(Duration::from_millis(50));
+        }
+        assert!(
+            frames > 1,
+            "the reorder should have taken more than one frame"
+        );
+
+        take_row_reorder_sample_writes();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            take_row_reorder_sample_writes(),
+            0,
+            "settled rows must stop writing"
         );
     }
 
@@ -2602,8 +2844,8 @@ mod tests {
         });
         records.read_with(cx, |records, cx| {
             let delegate = records.table.read(cx).delegate();
-            assert!(delegate.row_reorder_motion.is_empty());
-            assert!(delegate.row_reorder_current_offsets.is_empty());
+            assert!(delegate.row_reorder.motion.is_empty());
+            assert!(delegate.row_reorder.offsets.is_empty());
             assert_eq!(records.animating_row_count(cx), 0);
         });
     }
