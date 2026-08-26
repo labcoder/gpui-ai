@@ -9,7 +9,7 @@
 //!
 //! Two constraints shape the rendering. Construction is bounded by the visible
 //! window: section headers and surviving threads are flattened into
-//! [`ThreadRow`]s once, in the setters that can change them, and `gpui::list`
+//! `ThreadRow`s once, in the setters that can change them, and `gpui::list`
 //! asks for rows by index — a ten-thousand-thread snapshot builds a screenful.
 //! And rows are uniform: Rename / Archive / Delete live in an upstream popup
 //! menu anchored to the row's ellipsis rather than in a toolbar revealed
