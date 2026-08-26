@@ -1,11 +1,11 @@
 import { CodePanel } from "./CodePanel";
+import { snippet } from "./code";
 import { Demo } from "./Demo";
 import {
   build,
   componentBySlug,
   nextComponent,
   previousComponent,
-  snippet,
   snippetSource,
   type Component,
 } from "./data";

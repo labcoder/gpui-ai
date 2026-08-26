@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { highlighted, snippet, type CodeToken } from "./data";
+import { highlighted, snippet } from "./code";
+import type { CodeToken } from "./data";
 
 /** How long the copy result stays on screen before the button is plain again. */
 const FEEDBACK_MS = 2_400;

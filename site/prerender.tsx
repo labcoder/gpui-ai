@@ -1,15 +1,23 @@
 import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import { App } from "./app/App";
+import { preloadCodeFor } from "./app/code";
 import { missingRoute, routes } from "./app/routes";
 import type { Route } from "./app/routes";
 
 export { routes };
 
-/** Renders one route to the markup the browser will hydrate. */
-export function render(path: string): string {
+/**
+ * Renders one route to the markup the browser will hydrate.
+ *
+ * Async only to await the route's code chunk: the render itself stays
+ * `renderToString`, and the awaited data is the same chunk the browser loads
+ * before hydrating, which is what keeps the two trees identical.
+ */
+export async function render(path: string): Promise<string> {
   const route = routes.find((candidate) => candidate.path === path);
   if (!route) throw new Error(`no route for ${path}`);
+  await preloadCodeFor(route);
   return draw(route);
 }
 

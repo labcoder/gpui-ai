@@ -6,8 +6,7 @@
 
 import buildJson from "../generated/build.json";
 import catalogJson from "../generated/catalog.json";
-import highlightJson from "../generated/highlight.json";
-import snippetsJson from "../generated/snippets.json";
+import installJson from "../generated/install.json";
 import themesJson from "../generated/themes.json";
 
 /** One state a story's switcher offers. */
@@ -125,15 +124,6 @@ export const themeGroups = themesJson.groups as readonly ThemeGroup[];
 /** Every theme across both groups, in picker order. */
 export const themes: readonly Theme[] = themeGroups.flatMap((group) => group.themes);
 
-const snippetsBySlug = snippetsJson.snippets as Readonly<
-  Record<string, Readonly<Record<string, string>>>
->;
-
-/** The copyable Rust for one story variant, cut from the gallery's source. */
-export function snippet(slug: string, variant = "default"): string | undefined {
-  return snippetsBySlug[slug]?.[variant];
-}
-
 /**
  * One piece of a highlighted line: its text, and what kind of thing it is.
  *
@@ -142,29 +132,6 @@ export function snippet(slug: string, variant = "default"): string | undefined {
  */
 export type CodeToken = readonly [text: string, category?: string];
 
-// Widened through `unknown` on purpose: TypeScript reads the generated JSON as
-// `string[][][]`, which cannot be narrowed to a tuple that requires its first
-// element. The generator emits the tuple shape and refuses to write a file
-// whose tokens do not reassemble into the snippet, so the shape is checked —
-// just not by the compiler.
-const highlightedBySlug = highlightJson.snippets as unknown as Readonly<
-  Record<string, Readonly<Record<string, readonly (readonly CodeToken[])[]>>>
->;
-
-/**
- * The same snippet, split into tokens.
- *
- * Highlighted at build time by `site/scripts/generate-highlight.mjs`, which
- * checks that reassembling the tokens gives back the snippet exactly. Copy
- * still reads `snippet()`, so what a visitor pastes never comes through here.
- */
-export function highlighted(
-  slug: string,
-  variant = "default",
-): readonly (readonly CodeToken[])[] | undefined {
-  return highlightedBySlug[slug]?.[variant];
-}
-
 /** Code the site shows that was not cut from a story. */
 export interface CodeSample {
   readonly lang: string;
@@ -172,30 +139,19 @@ export interface CodeSample {
   readonly lines: readonly (readonly CodeToken[])[];
 }
 
-// Same widening as `highlightedBySlug`, and for the same reason.
-const extras = highlightJson.extras as unknown as Readonly<Record<string, CodeSample>>;
-
 /**
  * The dependency lines the home page shows.
  *
  * Composed by the generate step from `build.json`, so the version and both
  * repository URLs come from the manifests rather than from a string in a
  * component, and the text the page prints is the text that was highlighted.
- */
-export const install: CodeSample = extras.install as CodeSample;
-
-/**
- * One of the documentation samples in `site/content/samples/`.
  *
- * Throws rather than rendering nothing: a page asking for a sample that is not
- * there has lost a code block, and a silent gap in prose that reads "as in:"
- * is worse than a build that stops.
+ * The one code payload that stays eagerly bundled: the home page paints it in
+ * its first screen. Every other snippet loads per route through
+ * `site/app/code.ts` — the corpus of 34 stories' code has no business in the
+ * bundle a themes visitor downloads.
  */
-export function sample(name: string): CodeSample {
-  const found = extras[name];
-  if (!found) throw new Error(`site/content/samples has no ${name}`);
-  return found;
-}
+export const install = installJson as unknown as CodeSample;
 
 export function componentBySlug(slug: string): Component | undefined {
   return components.find((component) => component.slug === slug);

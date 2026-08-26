@@ -733,3 +733,52 @@ test("the documentation is linked from the masthead of every page", async () => 
     );
   }
 });
+
+test("route code loads per page instead of riding in every page's bundle", async () => {
+  const { outDir } = await site();
+  const assets = path.join(outDir, "assets");
+  const names = await readdir(assets);
+  const entryName = names.find((name) => /^index-.*\.js$/.test(name));
+  assert.ok(entryName, "the build emits one entry chunk");
+  const entry = await readFile(path.join(assets, entryName), "utf8");
+
+  // A line of story code that exists only in the corpus: if it appears in the
+  // entry chunk, the per-route split has silently regressed to bundling every
+  // page's code into every page. Chosen from the data rather than written out
+  // so the probe cannot go stale, and required to be absent from the catalog,
+  // whose short `usage` lines legitimately ride in the entry.
+  const catalogText = JSON.stringify(catalog);
+  const probe = Object.values(snippetFile.snippets)
+    .flatMap((variants) => Object.values(variants))
+    .flatMap((code) => code.split("\n"))
+    .map((line) => line.trim())
+    .find((line) => line.length >= 24 && !catalogText.includes(line));
+  assert.ok(probe, "the corpus has no line distinctive enough to probe with");
+  assert.ok(!entry.includes(probe), `the entry chunk still carries story code: ${probe}`);
+
+  // Every component owns a chunk, and the documentation samples own one.
+  for (const component of components) {
+    assert.ok(
+      names.some((name) => name.startsWith(`${component.slug}-`) && name.endsWith(".js")),
+      `${component.slug} has no route chunk`,
+    );
+  }
+  assert.ok(
+    names.some((name) => name.startsWith("samples-") && name.endsWith(".js")),
+    "the documentation samples have no route chunk",
+  );
+
+  // The number the split exists for: the entry was 458 KB carrying the corpus
+  // and 324 KB without it. Generous headroom so ordinary growth does not trip
+  // this; carrying the corpus again (+130 KB) always will.
+  assert.ok(
+    entry.length <= 380_000,
+    `the entry chunk grew to ${entry.length} bytes — is per-route code riding along again?`,
+  );
+
+  // The source-level guard the split lives or dies on.
+  const dataSource = await readFile(path.join(repositoryRoot, "site", "app", "data.ts"), "utf8");
+  for (const banned of ["generated/highlight.json", "generated/snippets.json"]) {
+    assert.ok(!dataSource.includes(banned), `data.ts statically imports ${banned} again`);
+  }
+});

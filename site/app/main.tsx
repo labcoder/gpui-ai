@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { App } from "./App";
+import { preloadCodeFor } from "./code";
 import { missingRoute, routeFor } from "./routes";
 
 // The markup already exists: every route is pre-rendered at build time, so the
@@ -16,10 +17,16 @@ import { missingRoute, routeFor } from "./routes";
 const route = routeFor(window.location.pathname, import.meta.env.BASE_URL) ?? missingRoute;
 const root = document.getElementById("root");
 if (root && route) {
-  hydrateRoot(
-    root,
-    <StrictMode>
-      <App route={route} />
-    </StrictMode>,
-  );
+  // The page's code chunk arrives before React runs. The markup being
+  // hydrated already contains the code, so hydrating without the data would
+  // blank a rendered block and refill it — a flash where a small await is
+  // invisible.
+  void preloadCodeFor(route).then(() => {
+    hydrateRoot(
+      root,
+      <StrictMode>
+        <App route={route} />
+      </StrictMode>,
+    );
+  });
 }

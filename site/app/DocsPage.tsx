@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Code, CodeFrame } from "./CodePanel";
-import { build, components, install, sample, themes } from "./data";
+import { sample } from "./code";
+import { build, components, install, themes } from "./data";
 import { docBySlug, docs } from "./docs.mjs";
 import { href } from "./links";
 

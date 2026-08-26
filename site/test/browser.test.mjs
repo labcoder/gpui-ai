@@ -460,6 +460,19 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "the running embed's scheme must match its host's",
   );
 
+  // The page's code now arrives as a per-route chunk awaited before hydration.
+  // A demo that has started proves React ran, so if the block below does not
+  // reassemble the snippet, hydration blanked the pre-rendered code while the
+  // chunk was still loading — the regression the await exists to prevent.
+  const hydratedCode = await cdp.evaluate(
+    "document.querySelector('pre.code code')?.textContent ?? ''",
+  );
+  assert.equal(
+    hydratedCode.replace(/\n$/, ""),
+    snippetFile.snippets[specimen.slug].default,
+    "the hydrated page must still show the snippet its chunk carries",
+  );
+
   // The other half of lazy: a frame that is nowhere near the viewport must not
   // load. Arriving at a deep anchor on a short viewport puts the demo well
   // above the observer's margin. Without this, promoting every frame on

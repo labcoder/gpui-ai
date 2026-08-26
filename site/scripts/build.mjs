@@ -115,7 +115,7 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
 
   for (const route of routes) {
     const html = template
-      .replace(APP_MARKER, render(route.path))
+      .replace(APP_MARKER, await render(route.path))
       .replace("<title>gpui-ai</title>", `<title>${escapeHtml(route.title)}</title>`)
       .replace("</head>", `${head(route)}${preloads}  </head>`);
     const directory = path.join(stageDir, ...route.path.split("/").filter(Boolean));
