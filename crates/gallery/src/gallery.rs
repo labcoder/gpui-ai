@@ -33,8 +33,16 @@ actions!(
     [PageUp, PageDown, ScrollHome, ScrollEnd, CancelAutoscroll]
 );
 
-/// Distance scrolled by one Page Up/Down, as a fraction of one story row.
-const PAGE_FRACTION: f32 = 3.0;
+/// Distance scrolled by one Page Up/Down, as a fraction of the catalog
+/// viewport. Short of a full page so the row that was at the edge stays on
+/// screen and the reader keeps their place.
+const PAGE_FRACTION: f32 = 0.9;
+
+/// Pacing requested between autoscroll frames, near a 60Hz frame.
+///
+/// The timer only *asks* for this cadence; each tick scrolls by the time that
+/// actually elapsed, so a late frame still travels the right distance.
+const AUTOSCROLL_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 /// One preset in the generated theme table.
@@ -3444,7 +3452,6 @@ impl Render for ComparisonTableStory {
     }
 }
 
-/// Stateful component gallery shared by native and web launchers.
 /// How much of the gallery's own furniture to draw around a story.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GalleryChrome {
@@ -3457,6 +3464,36 @@ pub enum GalleryChrome {
     Embedded,
 }
 
+/// The window-resolved inputs the catalog's measured row heights depend on.
+///
+/// The library keeps the same key for its own components, private to that
+/// crate: a value key is four lines, and duplicating it costs less than a
+/// public item that exists only because a consumer needed one. What must not
+/// be shared is the policy — each surface re-anchors the way its own content
+/// reads.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct ResolvedLayoutKey {
+    rem_size: Option<Pixels>,
+}
+
+impl ResolvedLayoutKey {
+    /// Whether `rem_size` is already the recorded value; mutates nothing, so a
+    /// render may ask.
+    fn matches(&self, rem_size: Pixels) -> bool {
+        self.rem_size == Some(rem_size)
+    }
+
+    /// Records `rem_size` and reports whether it replaced a *different* one.
+    /// The first observation invalidates nothing: no rows were measured under
+    /// an earlier value.
+    fn observe(&mut self, rem_size: Pixels) -> bool {
+        self.rem_size
+            .replace(rem_size)
+            .is_some_and(|previous| previous != rem_size)
+    }
+}
+
+/// Stateful component gallery shared by native and web launchers.
 pub struct Gallery {
     selected: StoryId,
     chrome: GalleryChrome,
@@ -3469,6 +3506,8 @@ pub struct Gallery {
     /// sorted. Changing the key is what actually asks for a new one.
     generation: usize,
     catalog_list: ListState,
+    /// Rem size the catalog's retained row heights were measured against.
+    resolved_layout: ResolvedLayoutKey,
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
     selection_actions_scroll: ScrollHandle,
@@ -3511,14 +3550,17 @@ pub struct Gallery {
     theme: GalleryTheme,
     /// Active middle-click autoscroll session (catalog view only).
     autoscroll: Option<Autoscroll>,
+    /// Frame driver for the active autoscroll session.
+    ///
+    /// Owned rather than detached so that exactly one driver can run: starting
+    /// replaces it, cancelling drops it, and dropping the gallery ends it.
+    autoscroll_task: Option<Task<()>>,
     /// Wheel acceleration state for the catalog feed.
     wheel: WheelAccelerator,
-    /// Frame driver for an active autoscroll session.
     #[cfg(any(test, feature = "performance"))]
     scan_simulation_suspended: bool,
 }
 
-/// One middle-click autoscroll gesture anchored to a window position.
 impl Gallery {
     /// Creates the gallery for one selected story or the complete catalog.
     pub fn new(selected: StoryId, cx: &mut Context<Self>) -> Self {
@@ -3551,6 +3593,7 @@ impl Gallery {
         Self {
             selected,
             catalog_list,
+            resolved_layout: ResolvedLayoutKey::default(),
             insight_scroll: ScrollHandle::new(),
             prompt_bar_scroll: ScrollHandle::new(),
             selection_actions_scroll: ScrollHandle::new(),
@@ -3603,6 +3646,7 @@ impl Gallery {
             chrome: GalleryChrome::Full,
             generation: 0,
             autoscroll: None,
+            autoscroll_task: None,
             wheel: WheelAccelerator::new(),
             #[cfg(any(test, feature = "performance"))]
             scan_simulation_suspended: false,
@@ -3674,6 +3718,38 @@ impl Gallery {
                 self.catalog_list.remeasure_items(index..index + 1);
             }
         }
+    }
+
+    /// Re-measures the catalog after the window's rem size changed.
+    ///
+    /// Story rows cache text laid out at the previous rem, and the simulation
+    /// only invalidates rows whose *content* moved, so nothing else notices a
+    /// zoom. The catalog re-anchors on the story that was first on screen and
+    /// its offset within that row.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        // Not gated on the catalog being the visible surface: the list is
+        // retained across story selection, so heights measured while a single
+        // story was open would still be stale on the way back.
+        let offset = self.catalog_list.logical_scroll_top();
+        let anchor = StoryId::ALL
+            .get(offset.item_ix)
+            .map(|story| (*story, offset.offset_in_item));
+
+        self.catalog_list.remeasure();
+        if let Some((story, offset_in_item)) = anchor
+            && let Some(item_ix) = StoryId::ALL
+                .iter()
+                .position(|candidate| *candidate == story)
+        {
+            self.catalog_list.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item,
+            });
+        }
+        cx.notify();
     }
 
     /// Updates the displayed preset after a gallery host changes the theme.
@@ -3761,12 +3837,19 @@ impl Gallery {
     }
 
     /// Scrolls the catalog by one page in `direction` (keyboard paging).
+    ///
+    /// A page is a fraction of the viewport the list last measured, not of a
+    /// fixed row: story rows differ in height and the same row is taller at a
+    /// larger type scale, so a constant would page a different amount of what
+    /// the reader can actually see at every window size. Before the first
+    /// layout there is no measured viewport and paging does nothing.
     pub fn scroll_catalog_page(&mut self, direction: f32, cx: &mut Context<Self>) {
         if self.selected != StoryId::All {
             return;
         }
+        let viewport = self.catalog_list.viewport_bounds().size.height;
         self.catalog_list
-            .scroll_by(px(direction * PAGE_FRACTION * 320.));
+            .scroll_by(viewport * direction * PAGE_FRACTION);
         let first = self.catalog_list.logical_scroll_top().item_ix;
         self.update_visible_range(first..(first + 3).min(StoryId::ALL.len()), cx);
         cx.notify();
@@ -3814,32 +3897,40 @@ impl Gallery {
 
     /// Begins a middle-click autoscroll session at the pointer anchor.
     ///
-    /// Spawns a frame-paced task that scrolls toward the latest pointer
-    /// position until the session is cancelled.
+    /// The frame driver is stored, so starting again replaces the running one
+    /// rather than adding a second: dropping the old task cancels it, and the
+    /// gallery's own drop ends the last one. Motion is not decorative here —
+    /// it is the gesture the reader is holding — so reduced motion narrows no
+    /// distance; it is the animated stories that answer to it.
     pub fn start_autoscroll(&mut self, anchor: Point<Pixels>, cx: &mut Context<Self>) {
         if self.selected != StoryId::All {
             return;
         }
-        if self.autoscroll.replace(Autoscroll::start(anchor)).is_none() {
-            cx.spawn(async move |this, cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(16))
-                        .await;
-                    let alive = this.update(cx, |gallery, cx| {
-                        if gallery.autoscroll.is_none() {
-                            return false;
-                        }
-                        gallery.tick_autoscroll(0.016, cx);
-                        gallery.autoscroll.is_some()
-                    });
-                    if alive.is_err() || !alive.unwrap_or(false) {
-                        break;
+        self.autoscroll = Some(Autoscroll::start(anchor));
+        self.autoscroll_task = Some(cx.spawn(async move |this, cx| {
+            // Elapsed time, not the requested interval: a tick delayed behind
+            // a long frame must still cover the distance it stands for. The
+            // executor's clock is the wasm-safe one and the one tests drive.
+            let mut previous = cx.background_executor().now();
+            loop {
+                cx.background_executor()
+                    .timer(AUTOSCROLL_FRAME_INTERVAL)
+                    .await;
+                let now = cx.background_executor().now();
+                let elapsed = now.saturating_duration_since(previous);
+                previous = now;
+                let alive = this.update(cx, |gallery, cx| {
+                    if gallery.autoscroll.is_none() {
+                        return false;
                     }
+                    gallery.tick_autoscroll(elapsed.as_secs_f32(), cx);
+                    gallery.autoscroll.is_some()
+                });
+                if !alive.unwrap_or(false) {
+                    break;
                 }
-            })
-            .detach();
-        }
+            }
+        }));
         cx.notify();
     }
 
@@ -3851,7 +3942,11 @@ impl Gallery {
     }
 
     /// Ends any active autoscroll session (middle click again, Escape, click).
+    ///
+    /// Dropping the driver is what stops the frames; the session flag alone
+    /// would leave a task waking every 16ms to find nothing to do.
     pub fn cancel_autoscroll(&mut self, cx: &mut Context<Self>) {
+        self.autoscroll_task = None;
         if self.autoscroll.take().is_some() {
             cx.notify();
         }
@@ -5424,6 +5519,16 @@ impl Gallery {
 
 impl Render for Gallery {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The rem is a resolved-layout input, so a change to it invalidates
+        // every measured story height. Reading it here mutates nothing; the
+        // reaction is deferred so that render never notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |gallery, _, cx| {
+                gallery.resolve_layout(rem_size, cx);
+            });
+        }
+
         let content = if self.selected == StoryId::All {
             div()
                 .id("gallery-scroll")
@@ -5637,8 +5742,8 @@ fn open_gallery_window(
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatStory, Gallery, GalleryTheme, GuidedDemoStory, GuidedStage, filter_story_project_rows,
-        filter_story_rows, reduce_filter_story_projection,
+        AUTOSCROLL_FRAME_INTERVAL, ChatStory, Gallery, GalleryTheme, GuidedDemoStory, GuidedStage,
+        Theme, filter_story_project_rows, filter_story_rows, reduce_filter_story_projection,
     };
     use crate::StoryId;
     use gpui::{
@@ -5647,7 +5752,10 @@ mod tests {
         accesskit, point, px, size,
     };
     use gpui_ai::{
-        prelude::{FilterRow, FilterSortDirection, FilterTableEvent},
+        prelude::{
+            AUTOSCROLL_FULL_SPEED_DISTANCE_PX, FilterRow, FilterSortDirection, FilterTableEvent,
+            MAX_AUTOSCROLL_SPEED_PX_PER_SEC,
+        },
         stream::StreamedContent,
     };
     use gpui_component::ActiveTheme as _;
@@ -5976,54 +6084,306 @@ mod tests {
         );
     }
 
+    /// Zooms the way the shell does: the theme carries the base type size and
+    /// `Root` hands it to the window every frame.
+    ///
+    /// Two draws, because the surface notices the new rem while rendering and
+    /// reacts afterwards — the first draw is where it sees the change, the
+    /// second lays out what it re-measured. Nothing here asks a list to
+    /// remeasure; that the surface does it unprompted is the property under
+    /// test.
+    fn zoom_to(cx: &mut VisualTestContext, font_size: f32) {
+        cx.update(|window, cx| {
+            Theme::global_mut(cx).font_size = px(font_size);
+            window.set_rem_size(cx.theme().font_size);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    fn story_selector(story: StoryId) -> &'static str {
+        Box::leak(format!("story-{}", story.slug()).into_boxed_str())
+    }
+
+    fn top_story(gallery: &Entity<Gallery>, cx: &mut VisualTestContext) -> Option<StoryId> {
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            StoryId::ALL
+                .get(gallery.catalog_list.logical_scroll_top().item_ix)
+                .copied()
+        })
+    }
+
+    /// Absolute scroll offset in pixels, positive downward.
+    fn catalog_offset(gallery: &Entity<Gallery>, cx: &mut VisualTestContext) -> f32 {
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            -gallery
+                .catalog_list
+                .scroll_px_offset_for_scrollbar()
+                .y
+                .as_f32()
+        })
+    }
+
     #[gpui::test]
     fn catalog_row_estimates_invalidate_when_rem_size_changes(cx: &mut TestAppContext) {
         // The design guides require anything cached from resolved layout to
-        // key on rem size: the catalog's uniform story-row estimate must be
-        // re-derived, not stale, after a base-font (zoom) change.
+        // key on rem size: the catalog's measured story heights must be
+        // re-derived, not stale, after a base-font (zoom) change. The test
+        // moves the rem and draws — it never calls `remeasure`, because
+        // invalidating at runtime without being told is the whole finding.
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        zoom_to(cx, 16.);
+
+        // Scroll into the feed so measured rows exist to go stale.
+        gallery.update(cx, |gallery, cx| gallery.scroll_catalog_page(2., cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let anchor = top_story(&gallery, cx).expect("the feed should rest on a story");
+
+        zoom_to(cx, 32.);
+
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            assert!(
+                gallery.resolved_layout.matches(px(32.)),
+                "the catalog must notice the new rem from its own render"
+            );
+        });
+        assert_eq!(
+            top_story(&gallery, cx),
+            Some(anchor),
+            "the story that was first on screen stays first across a zoom"
+        );
+        assert!(
+            cx.debug_bounds(story_selector(anchor)).is_some(),
+            "the anchored story is still drawn at 200% type"
+        );
+
+        zoom_to(cx, 16.);
+
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            assert!(
+                gallery.resolved_layout.matches(px(16.)),
+                "restoring the base font is another change to react to"
+            );
+        });
+        assert_eq!(
+            top_story(&gallery, cx),
+            Some(anchor),
+            "restoring the base font restores the reader's place"
+        );
+    }
+
+    #[gpui::test]
+    fn catalog_stories_stay_reachable_at_every_zoom(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        let first = *StoryId::ALL.first().expect("the catalog has stories");
+        let last = *StoryId::ALL.last().expect("the catalog has stories");
+
+        // 100%, 150%, 200% of the 16px base.
+        for font_size in [16., 24., 32.] {
+            zoom_to(cx, font_size);
+
+            gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(true, cx));
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert!(
+                cx.debug_bounds(story_selector(last)).is_some(),
+                "End must reach {} at {font_size}px type",
+                last.slug()
+            );
+
+            gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(false, cx));
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert!(
+                cx.debug_bounds(story_selector(first)).is_some(),
+                "Home must reach {} at {font_size}px type",
+                first.slug()
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn catalog_paging_tracks_the_measured_viewport(cx: &mut TestAppContext) {
         cx.update(super::init);
         let (gallery, cx) = all_stories(cx);
 
-        let scroll_top_at = |cx: &mut VisualTestContext, rem: f32| -> f32 {
-            let window = cx
-                .windows()
-                .first()
-                .copied()
-                .expect("test window should exist");
-            cx.update_window(window, |_, window, _| window.set_rem_size(px(rem)))
-                .expect("window update should succeed");
-            gallery.update(cx, |gallery, cx| {
-                gallery.catalog_list.remeasure();
-                cx.notify();
-            });
+        let page_distance = |cx: &mut VisualTestContext, height: f32| -> f32 {
+            cx.simulate_resize(size(px(900.), px(height)));
             cx.run_until_parked();
             cx.update(|window, cx| window.draw(cx).clear(cx));
-            let top = gallery.read_with(cx, |gallery: &Gallery, _| {
-                gallery.catalog_list.logical_scroll_top()
-            });
-            top.item_ix as f32 * 320. + top.offset_in_item.as_f32()
+            gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(false, cx));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            let before = catalog_offset(&gallery, cx);
+            gallery.update(cx, |gallery, cx| gallery.scroll_catalog_page(1., cx));
+            catalog_offset(&gallery, cx) - before
         };
 
-        let before = scroll_top_at(cx, 16.);
-        // Scroll into the feed so measured rows exist.
-        gallery.update(cx, |gallery, cx| {
-            gallery.scroll_catalog_page(2., cx);
-        });
-        cx.run_until_parked();
+        let short = page_distance(cx, 420.);
+        let tall = page_distance(cx, 900.);
 
-        let default_scale = scroll_top_at(cx, 16.);
-        let zoomed = scroll_top_at(cx, 20.);
-        let back = scroll_top_at(cx, 16.);
-
-        // The list stays navigable across zoom changes and returns to its
-        // prior position when the base font is restored — proof that
-        // measurement was refreshed rather than cached against one rem size.
-        assert!(default_scale.is_finite() && zoomed.is_finite() && back.is_finite());
+        assert!(short > 0., "a page must move the feed, got {short}");
         assert!(
-            (back - default_scale).abs() < 1_000.,
-            "restoring the base font should restore the scroll geometry"
+            tall > short + 100.,
+            "a page is a fraction of what the reader can see, so a taller \
+             viewport must page farther: {short} vs {tall}"
         );
-        let _ = before;
+    }
+
+    /// Runs `frames` autoscroll ticks and reports how far the feed travelled.
+    fn autoscroll_frames(
+        gallery: &Entity<Gallery>,
+        cx: &mut VisualTestContext,
+        frames: usize,
+    ) -> f32 {
+        let before = catalog_offset(gallery, cx);
+        for _ in 0..frames {
+            cx.executor().advance_clock(AUTOSCROLL_FRAME_INTERVAL);
+            cx.run_until_parked();
+        }
+        catalog_offset(gallery, cx) - before
+    }
+
+    #[gpui::test]
+    fn starting_autoscroll_again_replaces_the_driver_instead_of_adding_one(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        let anchor = point(px(100.), px(100.));
+        let pointer = point(px(100.), px(260.));
+
+        let travel = |cx: &mut VisualTestContext, starts: usize| -> f32 {
+            gallery.update(cx, |gallery, cx| {
+                gallery.scroll_catalog_edge(false, cx);
+                for _ in 0..starts {
+                    gallery.start_autoscroll(anchor, cx);
+                }
+                gallery.track_autoscroll_pointer(pointer, cx);
+            });
+            let travelled = autoscroll_frames(&gallery, cx, 10);
+            gallery.update(cx, |gallery, cx| gallery.cancel_autoscroll(cx));
+            travelled
+        };
+
+        let one_start = travel(cx, 1);
+        assert!(
+            one_start > 0.,
+            "the stored driver should be scrolling the feed, moved {one_start}"
+        );
+
+        let two_starts = travel(cx, 2);
+        assert!(
+            (two_starts - one_start).abs() < 1.,
+            "a second start must replace the driver, not add one that doubles \
+             every frame: {one_start} then {two_starts}"
+        );
+    }
+
+    #[gpui::test]
+    fn cancelling_autoscroll_drops_the_driver_and_stops_the_frames(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.start_autoscroll(point(px(100.), px(100.)), cx);
+            gallery.track_autoscroll_pointer(point(px(100.), px(260.)), cx);
+        });
+        assert!(autoscroll_frames(&gallery, cx, 5) > 0.);
+
+        gallery.update(cx, |gallery, cx| gallery.cancel_autoscroll(cx));
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            assert!(!gallery.autoscroll_active());
+            assert!(
+                gallery.autoscroll_task.is_none(),
+                "cancelling must drop the driver, not leave it waking every frame"
+            );
+        });
+
+        assert_eq!(
+            autoscroll_frames(&gallery, cx, 30),
+            0.,
+            "no frame may scroll the feed after the session is cancelled"
+        );
+    }
+
+    #[gpui::test]
+    fn autoscroll_at_the_anchor_stays_idle_until_the_pointer_moves(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        let anchor = point(px(100.), px(200.));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.start_autoscroll(anchor, cx);
+            gallery.track_autoscroll_pointer(anchor, cx);
+        });
+
+        assert_eq!(
+            autoscroll_frames(&gallery, cx, 20),
+            0.,
+            "a pointer resting on the anchor asks for no distance, so its \
+             frames must move nothing"
+        );
+        gallery.read_with(cx, |gallery: &Gallery, _| {
+            assert!(
+                gallery.autoscroll_active() && gallery.autoscroll_task.is_some(),
+                "idle is not over: the session is still held and still driven"
+            );
+        });
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.track_autoscroll_pointer(point(px(100.), px(360.)), cx);
+        });
+        assert!(
+            autoscroll_frames(&gallery, cx, 5) > 0.,
+            "the same driver must move the feed once the pointer leaves the anchor"
+        );
+    }
+
+    /// The feed travels at the library's speed *per second*, not per frame.
+    ///
+    /// A driver that assumes its requested interval is the elapsed time reads
+    /// correctly only while the two agree — it drifts under any real frame
+    /// jitter, and it silently halves the speed the day the interval changes.
+    /// Here distance is checked against the clock, so the two cannot come
+    /// apart.
+    #[gpui::test]
+    fn autoscroll_travels_at_the_library_speed_for_the_time_that_elapsed(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = all_stories(cx);
+        let anchor = point(px(100.), px(100.));
+        // Beyond the library's full-speed distance, so the expected rate is
+        // exactly its maximum and needs no curve arithmetic here.
+        let pointer = point(px(100.), px(100. + AUTOSCROLL_FULL_SPEED_DISTANCE_PX + 20.));
+
+        gallery.update(cx, |gallery, cx| {
+            gallery.start_autoscroll(anchor, cx);
+            gallery.track_autoscroll_pointer(pointer, cx);
+        });
+        // One frame first: the driver takes its clock baseline on its first
+        // tick, so measuring from there compares like with like.
+        autoscroll_frames(&gallery, cx, 1);
+
+        let started = cx.executor().now();
+        let travelled = autoscroll_frames(&gallery, cx, 12);
+        let elapsed = cx
+            .executor()
+            .now()
+            .saturating_duration_since(started)
+            .as_secs_f32();
+        gallery.update(cx, |gallery, cx| gallery.cancel_autoscroll(cx));
+
+        let expected = MAX_AUTOSCROLL_SPEED_PX_PER_SEC * elapsed;
+        assert!(elapsed > 0., "the frames should have consumed clock time");
+        assert!(
+            (travelled - expected).abs() < 1.,
+            "{elapsed}s at {MAX_AUTOSCROLL_SPEED_PX_PER_SEC}px/s is {expected}px, \
+             but the feed moved {travelled}px"
+        );
     }
 
     #[gpui::test]
