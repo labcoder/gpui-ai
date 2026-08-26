@@ -18,7 +18,25 @@ use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, hover_card::HoverCard,
     scroll::ScrollableMask, text::TextView, v_flex,
 };
-use std::rc::Rc;
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
+
+/// The glyph that marks the tail of text that is still arriving.
+const STREAMING_CURSOR: &str = "▌";
+
+#[cfg(test)]
+thread_local! {
+    /// Counts `transform_citations` calls on the calling thread. Cache tests
+    /// assert on work performed rather than elapsed time; each test owns its
+    /// thread, so counts never cross tests.
+    static TRANSFORM_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+
+    /// The Markdown source handed to the text view by the most recent render.
+    static RENDERED_SOURCE: std::cell::RefCell<Option<SharedString>> =
+        const { std::cell::RefCell::new(None) };
+}
 
 /// A source backing a streamed answer, shown as a chip under the text.
 ///
@@ -252,13 +270,34 @@ struct CitationTransform {
     referenced: Vec<CitationRef>,
 }
 
+/// Marker id to citation. `or_insert` keeps the first declaration of a repeated
+/// id, which is what a linear search over `citations` resolved to.
+fn citation_index(citations: &[CitationRef]) -> HashMap<&str, &CitationRef> {
+    let mut index = HashMap::with_capacity(citations.len());
+    for citation in citations {
+        index.entry(citation.id.as_str()).or_insert(citation);
+    }
+    index
+}
+
 fn transform_citations(
     source: &str,
     citations: &[CitationRef],
     interactive: bool,
 ) -> CitationTransform {
+    #[cfg(test)]
+    TRANSFORM_CALLS.with(|calls| calls.set(calls.get() + 1));
+
+    // One index for the whole pass keeps marker resolution O(1), so the
+    // transform stays linear in source length plus citation count however many
+    // markers the answer carries. It is built on the first marker that needs
+    // resolving, so an answer that declares citations it has not reached yet —
+    // the ordinary early-stream shape — pays nothing for them.
+    let mut by_id: Option<HashMap<&str, &CitationRef>> = None;
+
     let mut transformed = String::with_capacity(source.len());
     let mut referenced = Vec::new();
+    let mut referenced_ids: HashSet<&str> = HashSet::new();
     let mut fence: Option<OpenFence> = None;
     let mut inline_ticks: Option<usize> = None;
 
@@ -312,11 +351,9 @@ fn transform_citations(
                 && let Some(end) = marker.find("]]")
             {
                 let id = &marker[..end];
-                if let Some(citation) = citations.iter().find(|citation| citation.id == id) {
-                    if !referenced
-                        .iter()
-                        .any(|referenced: &CitationRef| referenced.id == citation.id)
-                    {
+                let index = by_id.get_or_insert_with(|| citation_index(citations));
+                if let Some(citation) = index.get(id).copied() {
+                    if referenced_ids.insert(citation.id.as_str()) {
                         referenced.push(citation.clone());
                     }
                     let label = escape_markdown_label(&citation.label);
@@ -350,6 +387,90 @@ fn transform_citations(
     CitationTransform {
         markdown: transformed,
         referenced,
+    }
+}
+
+fn decorated_source(markdown: &SharedString, streaming: bool) -> SharedString {
+    if !streaming {
+        return markdown.clone();
+    }
+    let mut source = String::with_capacity(markdown.len() + STREAMING_CURSOR.len());
+    source.push_str(markdown);
+    source.push_str(STREAMING_CURSOR);
+    SharedString::from(source)
+}
+
+/// Everything a cached citation transform depends on, plus the revision of the
+/// [`StreamedContent`] it came from.
+///
+/// Revision is compared first because it is the only field that costs nothing
+/// to compare, but it cannot decide reuse alone: two separately constructed
+/// [`Progressive`](crate::stream::Progressive) values both report revision `0`,
+/// so equal revisions can still carry different text. The text, citation set,
+/// interactivity, and streaming flag are the authority.
+#[derive(PartialEq, Eq)]
+struct CitationKey {
+    revision: u64,
+    interactive: bool,
+    streaming: bool,
+    citations: Vec<CitationRef>,
+    text: SharedString,
+}
+
+impl CitationKey {
+    /// Whether the transform's own inputs are unchanged. Revision and the
+    /// streaming flag are not transform inputs, so a change confined to them
+    /// invalidates the cursor-decorated source and nothing else.
+    fn transforms_alike(&self, other: &Self) -> bool {
+        self.interactive == other.interactive
+            && self.text == other.text
+            && self.citations == other.citations
+    }
+}
+
+/// Citation transform output retained across frames for one component id.
+///
+/// [`StreamingText`] is `RenderOnce` and is rebuilt every frame, so the
+/// retained copy lives in keyed window state. Refreshing memoises a pure
+/// function and never notifies, so it cannot schedule a frame from `render`.
+struct CitationCache {
+    key: Option<CitationKey>,
+    markdown: SharedString,
+    source: SharedString,
+    referenced: Vec<CitationRef>,
+}
+
+impl CitationCache {
+    fn new() -> Self {
+        Self {
+            key: None,
+            markdown: SharedString::default(),
+            source: SharedString::default(),
+            referenced: Vec::new(),
+        }
+    }
+
+    fn refresh(&mut self, key: CitationKey) {
+        if self.key.as_ref().is_some_and(|cached| *cached == key) {
+            return;
+        }
+        let transform_stale = self
+            .key
+            .as_ref()
+            .is_none_or(|cached| !cached.transforms_alike(&key));
+        if transform_stale {
+            let transformed = transform_citations(&key.text, &key.citations, key.interactive);
+            self.markdown = SharedString::from(transformed.markdown);
+            self.referenced = transformed.referenced;
+        }
+        let cursor_stale = self
+            .key
+            .as_ref()
+            .is_none_or(|cached| cached.streaming != key.streaming);
+        if transform_stale || cursor_stale {
+            self.source = decorated_source(&self.markdown, key.streaming);
+        }
+        self.key = Some(key);
     }
 }
 
@@ -616,6 +737,9 @@ pub struct StreamingText {
     style: StyleRefinement,
     text: SharedString,
     state: ProgressState,
+    /// The snapshot's revision, carried privately so the citation transform can
+    /// be reused across frames. Not part of any public signature.
+    revision: u64,
     sources: Vec<SourceRef>,
     citations: Vec<CitationRef>,
     follow_ups: Vec<FollowUp>,
@@ -630,6 +754,7 @@ impl StreamingText {
             style: StyleRefinement::default(),
             text: SharedString::from(content.text().to_string()),
             state: content.state().clone(),
+            revision: content.revision(),
             sources: Vec::new(),
             citations: Vec::new(),
             follow_ups: Vec::new(),
@@ -690,14 +815,22 @@ impl RenderOnce for StreamingText {
         let streaming = self.state == ProgressState::Running;
         let settled = self.state == ProgressState::Complete;
         let interactive_citations = self.on_event.is_some();
-        let transformed = transform_citations(&self.text, &self.citations, interactive_citations);
-        let source = if streaming {
-            format!("{}▌", transformed.markdown)
-        } else {
-            transformed.markdown
-        };
-        let referenced_citations = transformed.referenced;
         let root_id = self.id.clone();
+        let cache = window.use_keyed_state((root_id.clone(), "citation-cache"), cx, |_, _| {
+            CitationCache::new()
+        });
+        let (source, referenced_citations) = cache.update(cx, |cache, _| {
+            cache.refresh(CitationKey {
+                revision: self.revision,
+                interactive: interactive_citations,
+                streaming,
+                citations: self.citations.clone(),
+                text: self.text.clone(),
+            });
+            (cache.source.clone(), cache.referenced.clone())
+        });
+        #[cfg(test)]
+        RENDERED_SOURCE.with(|rendered| *rendered.borrow_mut() = Some(source.clone()));
         let on_event = self.on_event.clone();
         let failure = match &self.state {
             ProgressState::Failed(reason) => Some(reason.clone()),
@@ -867,8 +1000,114 @@ impl RenderOnce for StreamingText {
 mod tests {
     use super::*;
     use crate::stream::Progressive;
-    use gpui::{Element as _, accesskit, canvas};
-    use std::sync::{Arc, Mutex};
+    use gpui::{Element as _, Entity, TestAppContext, VisualTestContext, accesskit, canvas};
+    use std::{
+        sync::{Arc, Mutex},
+        time::Instant,
+    };
+
+    /// The pre-cache transform, kept verbatim so the indexed rewrite can be
+    /// proven byte-identical rather than merely plausible.
+    fn transform_citations_by_linear_scan(
+        source: &str,
+        citations: &[CitationRef],
+        interactive: bool,
+    ) -> CitationTransform {
+        let mut transformed = String::with_capacity(source.len());
+        let mut referenced = Vec::new();
+        let mut fence: Option<OpenFence> = None;
+        let mut inline_ticks: Option<usize> = None;
+
+        for line in source.split_inclusive('\n') {
+            let (quote_depth, quote_content) = block_quote_content(line);
+            let candidate = fence_candidate(quote_content);
+
+            if let Some(open) = fence {
+                if quote_depth >= open.quote_depth {
+                    transformed.push_str(line);
+                    if quote_depth == open.quote_depth
+                        && candidate.is_some_and(|candidate| closes_fence(candidate, open))
+                    {
+                        fence = None;
+                    }
+                    continue;
+                }
+                fence = None;
+            }
+
+            if inline_ticks.is_none()
+                && let Some(candidate) = candidate
+                && opens_fence(candidate)
+            {
+                fence = Some(OpenFence {
+                    marker: candidate.marker,
+                    length: candidate.length,
+                    quote_depth,
+                });
+                transformed.push_str(line);
+                continue;
+            }
+
+            let mut offset = 0;
+            while offset < line.len() {
+                let remainder = &line[offset..];
+                if remainder.starts_with('`') {
+                    let run = remainder.bytes().take_while(|byte| *byte == b'`').count();
+                    transformed.push_str(&remainder[..run]);
+                    match inline_ticks {
+                        Some(open) if open == run => inline_ticks = None,
+                        None => inline_ticks = Some(run),
+                        _ => {}
+                    }
+                    offset += run;
+                    continue;
+                }
+
+                if inline_ticks.is_none()
+                    && let Some(marker) = remainder.strip_prefix("[[cite:")
+                    && let Some(end) = marker.find("]]")
+                {
+                    let id = &marker[..end];
+                    if let Some(citation) = citations.iter().find(|citation| citation.id == id) {
+                        if !referenced
+                            .iter()
+                            .any(|referenced: &CitationRef| referenced.id == citation.id)
+                        {
+                            referenced.push(citation.clone());
+                        }
+                        let label = escape_markdown_label(&citation.label);
+                        if interactive {
+                            transformed.push('[');
+                            transformed.push_str(&label);
+                            transformed.push_str("](");
+                            transformed.push_str(&citation.internal_url());
+                            transformed.push_str(" \"");
+                            transformed.push_str(&escape_markdown_title(&citation.title));
+                            transformed.push_str("\")");
+                        } else {
+                            transformed.push_str("\\[");
+                            transformed.push_str(&label);
+                            transformed.push_str("\\]");
+                        }
+                        offset += "[[cite:".len() + end + "]]".len();
+                        continue;
+                    }
+                }
+
+                if let Some(character) = remainder.chars().next() {
+                    transformed.push(character);
+                    offset += character.len_utf8();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        CitationTransform {
+            markdown: transformed,
+            referenced,
+        }
+    }
 
     fn citations() -> [CitationRef; 2] {
         [
@@ -1054,6 +1293,303 @@ mod tests {
 
         assert_eq!(transformed.referenced.len(), 1);
         assert_eq!(transformed.referenced[0].id(), "pricing");
+    }
+
+    fn numbered_citations(count: usize) -> Vec<CitationRef> {
+        (0..count)
+            .map(|index| {
+                CitationRef::new(
+                    format!("source-{index}"),
+                    format!("Source [{index}]"),
+                    format!("Open \"source {index}\""),
+                    format!("app://sources/{index}?section=notes"),
+                )
+            })
+            .collect()
+    }
+
+    /// Prose of at least `bytes` length carrying one marker per sentence,
+    /// cycling through `citations` so a long answer references many of them.
+    fn answer_of(bytes: usize, citations: &[CitationRef]) -> String {
+        const SENTENCE: &str = "Wholesale prices moved again this quarter, and the report explains the shift in detail. ";
+        let mut source = String::with_capacity(bytes + SENTENCE.len() + 64);
+        let mut sentence = 0usize;
+        while source.len() < bytes {
+            source.push_str(SENTENCE);
+            if let Some(citation) = citations.get(sentence % citations.len().max(1)) {
+                source.push_str("[[cite:");
+                source.push_str(citation.id());
+                source.push_str("]] ");
+            }
+            sentence += 1;
+            if sentence.is_multiple_of(4) {
+                source.push_str("\n\n");
+            }
+        }
+        source
+    }
+
+    #[test]
+    fn the_indexed_transform_matches_the_linear_scan_byte_for_byte() {
+        let dense = numbered_citations(100);
+        let duplicate_ids = [
+            CitationRef::new("pricing", "First", "Open first", "app://first"),
+            CitationRef::new("pricing", "Second", "Open second", "app://second"),
+        ];
+        let edge_cases = concat!(
+            "Outside [[cite:pricing]] and `inline [[cite:pricing]]`.\n\n",
+            "```text\n[[cite:pricing]]\n```\n",
+            "~~~\n[[cite:supplier notes]]\n~~~\n",
+            "> ```rust\n> [[cite:pricing]]\n> ````\n",
+            "Unknown [[cite:missing]], partial [[cite:pricing, repeat [[cite:pricing]].\n",
+            "Escaped [[cite:supplier notes]] twice [[cite:supplier notes]].\n"
+        );
+        let cases: [(&str, &[CitationRef]); 5] = [
+            (edge_cases, &citations()),
+            (edge_cases, &duplicate_ids),
+            (&answer_of(4 * 1024, &dense), &dense),
+            (&answer_of(4 * 1024, &citations()), &citations()),
+            (&answer_of(1024, &[]), &[]),
+        ];
+
+        for (source, refs) in cases {
+            for interactive in [true, false] {
+                let indexed = transform_citations(source, refs, interactive);
+                let scanned = transform_citations_by_linear_scan(source, refs, interactive);
+                assert_eq!(indexed.markdown, scanned.markdown);
+                assert_eq!(indexed.referenced, scanned.referenced);
+            }
+        }
+    }
+
+    /// Fastest of `rounds` timed runs, after one untimed warm-up, in
+    /// microseconds per pass. The minimum is the least noisy estimator here:
+    /// this measures a pure function against an unloaded allocator.
+    fn microseconds_per_pass(rounds: usize, passes: usize, mut pass: impl FnMut() -> usize) -> f64 {
+        let mut observed = 0usize;
+        let mut best = f64::MAX;
+        for round in 0..=rounds {
+            let started = Instant::now();
+            for _ in 0..passes {
+                observed = observed.wrapping_add(pass());
+            }
+            let elapsed = started.elapsed().as_secs_f64() * 1e6 / passes as f64;
+            if round > 0 {
+                best = best.min(elapsed);
+            }
+        }
+        assert!(observed > 0, "the timed transform must produce output");
+        best
+    }
+
+    #[test]
+    fn citation_transform_timings_are_informational() {
+        println!("citation transform, microseconds per pass (best of 3)");
+        println!(
+            "{:>10} {:>10} {:>10} {:>12} {:>14}",
+            "bytes", "citations", "markers", "indexed", "linear scan"
+        );
+        for bytes in [1024, 32 * 1024, 256 * 1024] {
+            for count in [0, 10, 100] {
+                let refs = numbered_citations(count);
+                // An answer that declares citations it has not reached yet is
+                // the ordinary early-stream shape, so it gets its own row.
+                for cited in [true, false] {
+                    if count == 0 && !cited {
+                        continue;
+                    }
+                    let source = answer_of(bytes, if cited { refs.as_slice() } else { &[] });
+                    let markers = source.matches("[[cite:").count();
+                    let passes = (1 << 20usize) / bytes;
+                    let indexed = microseconds_per_pass(3, passes, || {
+                        transform_citations(&source, &refs, true).markdown.len()
+                    });
+                    let scanned = microseconds_per_pass(3, passes, || {
+                        transform_citations_by_linear_scan(&source, &refs, true)
+                            .markdown
+                            .len()
+                    });
+                    println!(
+                        "{bytes:>10} {count:>10} {markers:>10} {indexed:>12.1} {scanned:>14.1}"
+                    );
+                }
+            }
+        }
+    }
+
+    struct CacheProbe {
+        content: StreamedContent,
+        citations: Vec<CitationRef>,
+        interactive: bool,
+    }
+
+    impl gpui::Render for CacheProbe {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            StreamingText::new("cache-probe", &self.content)
+                .citations(self.citations.clone())
+                .when(self.interactive, |this| this.on_event(|_, _, _| {}))
+        }
+    }
+
+    fn transform_calls() -> usize {
+        TRANSFORM_CALLS.with(std::cell::Cell::get)
+    }
+
+    fn rendered_source() -> SharedString {
+        RENDERED_SOURCE.with(|rendered| {
+            rendered
+                .borrow()
+                .clone()
+                .expect("a frame should have rendered the answer")
+        })
+    }
+
+    fn cache_probe(
+        cx: &mut TestAppContext,
+        content: StreamedContent,
+    ) -> (Entity<CacheProbe>, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(move |_, _| CacheProbe {
+            content,
+            citations: citations().to_vec(),
+            interactive: true,
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (probe, cx)
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    fn cited_answer() -> String {
+        "Prices rose; see [[cite:pricing]] and [[cite:supplier notes]].".to_owned()
+    }
+
+    #[gpui::test]
+    fn an_unrelated_re_render_reuses_the_cached_citation_transform(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(cx, Progressive::running(cited_answer()));
+        let transformed_once = transform_calls();
+        assert!(transformed_once > 0, "the first frame must transform");
+        let first_source = rendered_source();
+
+        // Nothing about the answer changed; only the parent asked for a frame.
+        probe.update(cx, |_, cx| cx.notify());
+        draw(cx);
+        draw(cx);
+
+        assert_eq!(transform_calls(), transformed_once);
+        assert_eq!(rendered_source(), first_source);
+    }
+
+    #[gpui::test]
+    fn appending_streamed_text_invalidates_the_cached_transform(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(cx, Progressive::running(cited_answer()));
+        let before = transform_calls();
+
+        probe.update(cx, |probe, cx| {
+            probe.content.append(" Also [[cite:pricing]] again.");
+            cx.notify();
+        });
+        draw(cx);
+
+        assert_eq!(transform_calls(), before + 1);
+        assert!(rendered_source().contains("again"));
+    }
+
+    #[gpui::test]
+    fn replacing_text_at_the_same_revision_invalidates_the_cache(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(
+            cx,
+            Progressive::complete("First [[cite:pricing]] answer.".to_owned()),
+        );
+        let before = transform_calls();
+        assert!(rendered_source().contains("First"));
+
+        // A freshly constructed snapshot reports revision zero exactly like the
+        // one it replaces, so revision alone would report a false cache hit.
+        probe.update(cx, |probe, cx| {
+            probe.content = Progressive::complete("Second [[cite:pricing]] answer.".to_owned());
+            assert_eq!(probe.content.revision(), 0);
+            cx.notify();
+        });
+        draw(cx);
+
+        assert_eq!(transform_calls(), before + 1);
+        assert!(rendered_source().contains("Second"));
+    }
+
+    #[gpui::test]
+    fn changing_the_citation_set_invalidates_the_cache(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(cx, Progressive::complete(cited_answer()));
+        let before = transform_calls();
+        assert!(rendered_source().contains("Supplier"));
+
+        probe.update(cx, |probe, cx| {
+            probe.citations = vec![citations()[0].clone()];
+            cx.notify();
+        });
+        draw(cx);
+
+        assert_eq!(transform_calls(), before + 1);
+        let source = rendered_source();
+        assert!(source.contains("Pricing"));
+        assert!(source.contains("[[cite:supplier notes]]"));
+    }
+
+    #[gpui::test]
+    fn changing_interactivity_invalidates_the_cache(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(cx, Progressive::complete(cited_answer()));
+        let before = transform_calls();
+        assert!(rendered_source().contains("gpui-ai-citation://pricing"));
+
+        probe.update(cx, |probe, cx| {
+            probe.interactive = false;
+            cx.notify();
+        });
+        draw(cx);
+
+        assert_eq!(transform_calls(), before + 1);
+        let source = rendered_source();
+        assert!(!source.contains("gpui-ai-citation://"));
+        assert!(source.contains("\\[Pricing\\]"));
+    }
+
+    #[gpui::test]
+    fn a_lifecycle_move_rebuilds_only_the_cursor(cx: &mut TestAppContext) {
+        let (probe, cx) = cache_probe(cx, Progressive::running(cited_answer()));
+        let before = transform_calls();
+        let streaming_source = rendered_source();
+        assert!(streaming_source.ends_with(STREAMING_CURSOR));
+
+        probe.update(cx, |probe, cx| {
+            probe.content.finish();
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            probe.read_with(cx, |probe, _| probe.content.revision()) > 0,
+            "finishing must advance the revision"
+        );
+
+        // The cursor is decoration over the transform, not an input to it.
+        assert_eq!(transform_calls(), before);
+        let settled_source = rendered_source();
+        assert_ne!(settled_source, streaming_source);
+        assert_eq!(
+            Some(settled_source.as_str()),
+            streaming_source.strip_suffix(STREAMING_CURSOR)
+        );
+
+        // A second lifecycle move that leaves the cursor off keeps both parts.
+        probe.update(cx, |probe, cx| {
+            probe.content.fail("offline");
+            cx.notify();
+        });
+        draw(cx);
+        assert_eq!(transform_calls(), before);
+        assert_eq!(rendered_source(), settled_source);
     }
 
     struct CapturedCitationA11y {
