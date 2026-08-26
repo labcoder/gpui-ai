@@ -11,6 +11,7 @@ import {
   wheelMessage,
 } from './query.js';
 import { pinScaleFactor } from './scale.js';
+import { schemeFor } from './scheme.js';
 
 /**
  * Whether the page this example is embedded in is showing a dark theme.
@@ -51,10 +52,6 @@ function showFallback(error, expected = false) {
   }
 }
 
-// Only the basic presets have a mode this document knows by name. Every other
-// theme's mode lives in the registry, which the host can see and this cannot.
-const HOST_MODES = Object.freeze({ light: false, dark: true, contrast: true });
-
 /**
  * Which mode to put this document's own chrome in.
  *
@@ -66,16 +63,13 @@ const HOST_MODES = Object.freeze({ light: false, dark: true, contrast: true });
  * the whole load. Matching the host keeps the frame transparent, which is what
  * lets the window behind it show through until there are pixels.
  *
- * The theme's own name is consulted first because it is the more specific
- * answer, and last comes the viewer's preference, for a document with no host
- * to ask — popped out into a tab of its own.
+ * The precedence lives in `scheme.js`, which is also the answer the inline
+ * pin in `embed.html`'s head is parity-tested against — the two must agree or
+ * the first paint and every later one composite differently.
  */
 function hostPrefersDark(theme) {
-  const known = HOST_MODES[theme];
-  if (known !== undefined) return known;
-  const host = hostIsDark();
-  if (host !== undefined) return host;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return schemeFor(theme, hostIsDark(), window.matchMedia('(prefers-color-scheme: dark)').matches)
+    .dark;
 }
 
 function watchTheme(initialTheme) {
