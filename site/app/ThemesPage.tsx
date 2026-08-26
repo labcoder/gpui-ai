@@ -35,18 +35,17 @@ export function ThemesPage() {
       <section aria-labelledby="trio">
         <h2 id="trio">The same three, in whatever you pick</h2>
         <div className="theme-trio">
-          {TRIO.map((slug) => {
-            const component = componentBySlug(slug);
-            if (!component) return null;
-            return (
-              <Demo
-                key={component.slug}
-                story={component.slug}
-                title={component.windowTitle}
-                height={component.height}
-              />
-            );
-          })}
+          {/* One composed story rather than three: the page compares themes,
+              and each separate demo cost a whole WebAssembly runtime and a
+              WebGPU context for pixels the composition shows in one. The
+              reservation sums the standalone heights plus the composition's
+              two gaps; the demo's own measured report refines it after the
+              first frame. */}
+          <Demo
+            story="themes-trio"
+            title="Themes trio — gpui-ai"
+            height={TRIO.reduce((total, slug) => total + (componentBySlug(slug)?.height ?? 0), 48)}
+          />
         </div>
       </section>
 

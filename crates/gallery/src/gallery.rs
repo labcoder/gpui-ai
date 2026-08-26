@@ -298,6 +298,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::CodeBlock => delta.code_content_changed() || delta.code_phase_changed(),
         StoryId::All
         | StoryId::GuidedDemo
+        | StoryId::ThemesTrio
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::Artifact
@@ -4149,6 +4150,45 @@ impl Gallery {
                     window.use_keyed_state(("guided-demo-story-state", self.generation), cx, GuidedDemoStory::new);
                 self.section(story, "Guided demo", || guided, cx)
             }
+            StoryId::ThemesTrio => self.section(
+                story,
+                "Themes trio",
+                || {
+                    // The themes page's one-runtime specimen: the same three
+                    // components its three separate demos used to boot, in one
+                    // view. Content mirrors the standalone stories closely
+                    // enough to compare themes by, without their snippet
+                    // markers — this composition exports nothing.
+                    v_flex()
+                        .gap_6()
+                        .child(LoadingState::new().label("Reasoning about supplier pricing"))
+                        .child(
+                            h_flex()
+                                .flex_wrap()
+                                .gap_2()
+                                .child(
+                                    ToolChip::new("trio-chip-read", "read pricing.md")
+                                        .status(ToolStatus::Success),
+                                )
+                                .child(
+                                    ToolChip::new("trio-chip-edit", "edit suppliers.rs")
+                                        .status(ToolStatus::Running),
+                                )
+                                .child(
+                                    ToolChip::new("trio-chip-fetch", "fetch supplier quotas")
+                                        .status(ToolStatus::Failed),
+                                ),
+                        )
+                        .child(
+                            ContextCard::new("trio-ctx-pricing", "pricing.md")
+                                .snippet(
+                                    "Enterprise volume pricing is renegotiated quarterly;                                      the March sheet supersedes all prior quotes.",
+                                )
+                                .relevance(0.92),
+                        )
+                },
+                cx,
+            ),
             StoryId::Loading => self.section(
                 story,
                 "Loading state",

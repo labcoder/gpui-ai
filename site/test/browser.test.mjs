@@ -1414,11 +1414,13 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   await openPage("/themes/", 1280, 900);
   await waitForValue(
     cdp,
-    // Three, exactly. "At least two" lets one of them fail to promote while
-    // every `.every()` below still passes, because those only visit the frames
+    // One, exactly: the trio is one composed story in one runtime now — three
+    // separate demos cost a WebAssembly instance and a WebGPU context each
+    // for pixels the composition shows together. "At least" would let a
+    // failed promotion pass, because the `.every()` below only visits frames
     // that exist.
-    "document.querySelectorAll('[data-specimen-frame] iframe').length === 3",
-    { label: "all three demos on the themes page to promote", describe: GALLERY_DIAGNOSIS, errors },
+    "document.querySelectorAll('[data-specimen-frame] iframe').length === 1",
+    { label: "the composed trio demo on the themes page to promote", describe: GALLERY_DIAGNOSIS, errors },
   );
   await waitForValue(
     cdp,

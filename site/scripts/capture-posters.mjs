@@ -61,8 +61,18 @@ export const POSTER_MODES = ["light", "dark"];
  * in the component catalog.
  */
 export function posterStories() {
+  const trio = ["loading", "tool-chips", "context"];
   return [
     { slug: catalog.hero.slug, height: catalog.hero.height },
+    // The themes page's composed specimen: site-only like the hero, so its
+    // height is the sum of the three standalone stories it stacks plus the
+    // composition's two gaps.
+    {
+      slug: "themes-trio",
+      height: catalog.components
+        .filter(({ slug }) => trio.includes(slug))
+        .reduce((total, { height }) => total + height, 48),
+    },
     ...catalog.components.map(({ slug, height }) => ({ slug, height })),
   ];
 }

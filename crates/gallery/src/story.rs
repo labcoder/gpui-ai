@@ -81,6 +81,14 @@ pub enum StoryId {
     /// [`StoryId::ALL`]: it is one composition made for the home page, not a
     /// component the catalog documents.
     GuidedDemo,
+    /// The themes page's comparison specimen.
+    ///
+    /// Same contract as [`StoryId::GuidedDemo`]: addressable, absent from the
+    /// catalog. It stacks the loading, tool-chip, and context specimens in one
+    /// view so the themes page boots one WebAssembly runtime instead of three
+    /// — the page compares themes, and the comparison needs the same pixels
+    /// re-skinned, not three separate instances.
+    ThemesTrio,
 }
 
 /// Variants the Chat story switches between.
@@ -231,6 +239,7 @@ impl StoryId {
             Self::Queue => "queue",
             Self::SelectionActions => "selection-actions",
             Self::GuidedDemo => "guided-demo",
+            Self::ThemesTrio => "themes-trio",
         }
     }
 
@@ -273,6 +282,7 @@ impl StoryId {
             Self::Queue => "Message queue",
             Self::SelectionActions => "Selection actions",
             Self::GuidedDemo => "Guided demo",
+            Self::ThemesTrio => "Themes trio",
         }
     }
 
@@ -282,8 +292,9 @@ impl StoryId {
     /// it has no entry.
     pub const fn meta(self) -> Option<StoryMeta> {
         Some(match self {
-            // Neither the catalog view nor the site hero is a component.
-            Self::All | Self::GuidedDemo => return None,
+            // Neither the catalog view, the site hero, nor the themes-page
+            // specimen is a component.
+            Self::All | Self::GuidedDemo | Self::ThemesTrio => return None,
             Self::Loading => StoryMeta {
                 category: "Progress",
                 summary: "A token-driven pixel field for work whose duration is not yet known.",
@@ -614,9 +625,12 @@ impl FromStr for StoryId {
         if slug == Self::All.slug() {
             return Ok(Self::All);
         }
-        // Addressable, but not a catalog component, so not in ALL.
+        // Addressable, but not catalog components, so not in ALL.
         if slug == Self::GuidedDemo.slug() {
             return Ok(Self::GuidedDemo);
+        }
+        if slug == Self::ThemesTrio.slug() {
+            return Ok(Self::ThemesTrio);
         }
 
         Self::ALL
