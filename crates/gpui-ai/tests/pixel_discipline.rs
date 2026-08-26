@@ -375,7 +375,11 @@ impl Widget {
 }
 ";
     let found = raw_pixel_uses("fixture.rs", source);
-    assert_eq!(found.len(), 1, "production code after the gate must be read");
+    assert_eq!(
+        found.len(),
+        1,
+        "production code after the gate must be read"
+    );
     assert_eq!(found[0].expression, "px(12.)");
     assert_eq!(found[0].line, 8);
 }
@@ -459,7 +463,12 @@ impl Exception {
         };
         format!(
             "  {} {} context {:?} [{}]{}\n    claimed: {}\n",
-            self.file, self.expression, self.context, self.category.name(), count, self.rationale
+            self.file,
+            self.expression,
+            self.context,
+            self.category.name(),
+            count,
+            self.rationale
         )
     }
 }
@@ -487,7 +496,12 @@ impl std::fmt::Display for HowTo {
              Sanctioned categories:\n",
         )?;
         for category in Category::ALL {
-            writeln!(formatter, "    {:<32} {}", category.name(), category.meaning())?;
+            writeln!(
+                formatter,
+                "    {:<32} {}",
+                category.name(),
+                category.meaning()
+            )?;
         }
         formatter.write_str(
             "\nRemoving a call site means removing its entry: an entry that matches \
@@ -578,7 +592,11 @@ fn raw_pixel_uses(file: &str, source: &str) -> Vec<RawPixelUse> {
 
         uses.push(RawPixelUse {
             file: file.to_owned(),
-            line: source[..start].bytes().filter(|byte| *byte == b'\n').count() + 1,
+            line: source[..start]
+                .bytes()
+                .filter(|byte| *byte == b'\n')
+                .count()
+                + 1,
             expression: normalize(&readable[start..call_end]),
             statement: normalize(&readable[head..tail]),
         });
@@ -686,7 +704,9 @@ fn blanked(source: &str, blank_literals: bool) -> String {
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'/') {
-            let end = source[index..].find('\n').map_or(bytes.len(), |at| index + at);
+            let end = source[index..]
+                .find('\n')
+                .map_or(bytes.len(), |at| index + at);
             blank(&mut mask, index, end);
             index = end;
             continue;
@@ -794,7 +814,10 @@ fn raw_string_end(bytes: &[u8], from: usize, hashes: usize) -> usize {
 
 /// Length of the run of `#` starting at `from`, which delimits a raw string.
 fn hash_run(bytes: &[u8], from: usize) -> usize {
-    bytes[from..].iter().take_while(|byte| **byte == b'#').count()
+    bytes[from..]
+        .iter()
+        .take_while(|byte| **byte == b'#')
+        .count()
 }
 
 fn character_end(bytes: &[u8], quote: usize) -> Option<usize> {

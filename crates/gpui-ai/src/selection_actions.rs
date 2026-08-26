@@ -424,12 +424,7 @@ impl SelectionActions {
             }),
         );
 
-        selection_toolbar_positioner(
-            self.toolbar_anchor(window),
-            Placement::Bottom,
-            toolbar,
-            cx,
-        )
+        selection_toolbar_positioner(self.toolbar_anchor(window), Placement::Bottom, toolbar, cx)
     }
 
     fn toolbar_anchor(&self, window: &Window) -> Point<Pixels> {
@@ -503,28 +498,25 @@ impl Render for SelectionActions {
                     this.clear_selection(cx);
                 }
             }))
-            .on_key_down(cx.listener(
-                |this, event: &KeyDownEvent, window, cx| {
-                    let toolbar_visible = !this.drag_active
-                        && !this.selected_text.is_empty()
-                        && !this.actions.is_empty();
-                    match event.keystroke.key.as_str() {
-                        "escape" if toolbar_visible => {
-                            this.clear_selection(cx);
-                            cx.stop_propagation();
-                        }
-                        "tab"
-                            if toolbar_visible
-                                && !event.keystroke.modifiers.shift
-                                && this.text_focus_scope.contains_focused(window, cx) =>
-                        {
-                            this.toolbar_action_focus.focus(window, cx);
-                            cx.stop_propagation();
-                        }
-                        _ => {}
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let toolbar_visible =
+                    !this.drag_active && !this.selected_text.is_empty() && !this.actions.is_empty();
+                match event.keystroke.key.as_str() {
+                    "escape" if toolbar_visible => {
+                        this.clear_selection(cx);
+                        cx.stop_propagation();
                     }
-                },
-            ))
+                    "tab"
+                        if toolbar_visible
+                            && !event.keystroke.modifiers.shift
+                            && this.text_focus_scope.contains_focused(window, cx) =>
+                    {
+                        this.toolbar_action_focus.focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    _ => {}
+                }
+            }))
             .child(
                 div()
                     .id((ElementId::from(self.id.clone()), "content-scroll"))
@@ -605,24 +597,25 @@ mod tests {
             cx: &mut gpui::Context<Self>,
         ) -> impl IntoElement {
             let viewport = window.viewport_size();
-            div().relative().size_full().children(self.cases.iter().map(|case| {
-                let selector = case.selector;
-                let anchor = point(
-                    viewport.width * case.anchor.0,
-                    viewport.height * case.anchor.1,
-                );
-                let popup = div().debug_selector(move || selector.to_owned());
-                let popup = match case.popup_size {
-                    ProbePopupSize::Pixels(width, height) => popup.w(px(width)).h(px(height)),
-                    ProbePopupSize::Viewport(width, height) => {
-                        popup.w(viewport.width * width).h(viewport.height * height)
-                    }
-                    ProbePopupSize::Rems(width, height) => {
-                        popup.w(rems(width)).h(rems(height))
-                    }
-                };
-                selection_toolbar_positioner(anchor, case.placement, popup, cx)
-            }))
+            div()
+                .relative()
+                .size_full()
+                .children(self.cases.iter().map(|case| {
+                    let selector = case.selector;
+                    let anchor = point(
+                        viewport.width * case.anchor.0,
+                        viewport.height * case.anchor.1,
+                    );
+                    let popup = div().debug_selector(move || selector.to_owned());
+                    let popup = match case.popup_size {
+                        ProbePopupSize::Pixels(width, height) => popup.w(px(width)).h(px(height)),
+                        ProbePopupSize::Viewport(width, height) => {
+                            popup.w(viewport.width * width).h(viewport.height * height)
+                        }
+                        ProbePopupSize::Rems(width, height) => popup.w(rems(width)).h(rems(height)),
+                    };
+                    selection_toolbar_positioner(anchor, case.placement, popup, cx)
+                }))
         }
     }
 
@@ -883,12 +876,7 @@ mod tests {
                             div()
                                 .w(px(184.))
                                 .h(px(620.))
-                                .child(
-                                    div()
-                                        .w(px(184.))
-                                        .h(px(144.))
-                                        .child(self.selection.clone()),
-                                ),
+                                .child(div().w(px(184.)).h(px(144.)).child(self.selection.clone())),
                         ),
                 )
                 .child(
@@ -985,9 +973,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn selection_tab_preserves_selection_and_escape_restores_text_focus(
-        cx: &mut TestAppContext,
-    ) {
+    fn selection_tab_preserves_selection_and_escape_restores_text_focus(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(SelectionProbe::new);
         cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1014,27 +1000,26 @@ mod tests {
         cx.simulate_keystrokes("tab");
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
-        assert!(selection.read_with(cx, |selection, _| {
-            !selection.selected_text().is_empty()
+        assert!(selection.read_with(cx, |selection, _| { !selection.selected_text().is_empty() }));
+        assert!(cx.update(|window, cx| selection.read(cx).toolbar_action_focus.is_focused(window)));
+        assert!(cx.update(|window, cx| {
+            selection
+                .read(cx)
+                .toolbar_focus
+                .contains_focused(window, cx)
         }));
-        assert!(cx.update(|window, cx| selection
-            .read(cx)
-            .toolbar_action_focus
-            .is_focused(window)));
-        assert!(cx.update(|window, cx| selection
-            .read(cx)
-            .toolbar_focus
-            .contains_focused(window, cx)));
 
         cx.simulate_keystrokes("escape");
         cx.run_until_parked();
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
         assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
-        assert!(cx.update(|window, cx| selection
-            .read(cx)
-            .text_focus_scope
-            .contains_focused(window, cx)));
+        assert!(cx.update(|window, cx| {
+            selection
+                .read(cx)
+                .text_focus_scope
+                .contains_focused(window, cx)
+        }));
     }
 
     #[gpui::test]
@@ -1067,9 +1052,7 @@ mod tests {
         selection.update(cx, SelectionActions::clear_selection);
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        assert!(selection.read_with(cx, |selection, _| {
-            selection.selected_text().is_empty()
-        }));
+        assert!(selection.read_with(cx, |selection, _| { selection.selected_text().is_empty() }));
         assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
     }
 
