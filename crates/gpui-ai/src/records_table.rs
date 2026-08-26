@@ -549,7 +549,6 @@ pub struct RecordsTable {
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
     activation_label: SharedString,
-    row_reorder_response: Option<Duration>,
     pending_suppressed_selection_events: usize,
     pending_pointer_row_id: Option<SharedString>,
     viewport_row_anchor_id: Option<SharedString>,
@@ -603,7 +602,6 @@ impl RecordsTable {
             sort_column_id: None,
             sort_direction: None,
             activation_label: "Open".into(),
-            row_reorder_response: None,
             pending_suppressed_selection_events: 0,
             pending_pointer_row_id: None,
             viewport_row_anchor_id: None,
@@ -638,7 +636,6 @@ impl RecordsTable {
         response: Option<Duration>,
         cx: &mut Context<Self>,
     ) {
-        self.row_reorder_response = response;
         self.table.update(cx, |table, cx| {
             table.delegate_mut().row_reorder.set_response(response);
             cx.notify();
@@ -646,7 +643,7 @@ impl RecordsTable {
     }
 
     pub(crate) fn visible_row_count(&self, cx: &App) -> usize {
-        self.table.read(cx).delegate().visible_row_ids.len()
+        self.table.read(cx).delegate().row_reorder.visible_len()
     }
 
     pub(crate) fn animating_row_count(&self, cx: &App) -> usize {
@@ -751,8 +748,15 @@ impl RecordsTable {
                 .map(|row| row.id.clone())
         });
         let old_visible_range = self.table.read(cx).visible_range().rows().clone();
-        let visible_row_ids = if self.row_reorder_response.is_some() {
-            let rendered = self.table.read(cx).delegate().visible_row_ids.clone();
+        let row_reorder_enabled = self.table.read(cx).delegate().row_reorder.is_enabled();
+        let visible_row_ids = if row_reorder_enabled {
+            let rendered = self
+                .table
+                .read(cx)
+                .delegate()
+                .row_reorder
+                .visible_ids()
+                .clone();
             if rendered.is_empty() {
                 self.records
                     .content()
@@ -780,7 +784,7 @@ impl RecordsTable {
                     .filter_map(|row_id| accepted_rows_by_id.position(row_id))
                     .min()
             });
-        let reorder_motion = if self.row_reorder_response.is_some() && !cx.reduce_motion() {
+        let reorder_motion = if row_reorder_enabled && !cx.reduce_motion() {
             let old_visible_start = old_visible_range.start;
             let visible_len = old_visible_range.len().max(visible_row_ids.len()).max(1);
             let new_visible_start = anchor_row_ix

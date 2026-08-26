@@ -90,23 +90,25 @@ pub(super) fn take_row_reorder_sample_writes() -> usize {
 ///   what carries position *and velocity* through a mid-flight reversal.
 /// - **A settled row owns nothing**, so `motion.len()` counts rows in motion
 ///   and a quiet grid retains no state at all.
-/// - **An unsampled row owns nothing.** A row the rendered window drops can
-///   never settle itself, so the visibility owner prunes it through
-///   [`Self::retain_visible`].
+/// - **An unsampled row owns nothing.** This state owns the rendered window as
+///   stable IDs and prunes motion as that membership changes.
 /// - **Reduced motion is the caller's gate.** It declines to project at all, so
 ///   a reader who asked for less motion has no retained state rather than
 ///   retained state suppressed at render.
-/// - **Disabling does not discard state.** `response: None` stops sampling and
-///   stops pruning; the next accepted snapshot projects nothing and clears it.
+/// - **Disabling settles immediately.** `response: None` clears every retained
+///   channel and sample because no future frame would be allowed to settle it.
 #[derive(Clone, Default)]
 pub(super) struct RowReorderState {
     /// Spring response, and the gate: `None` disables reorder motion entirely.
     response: Option<Duration>,
     /// The rows currently under a spring, keyed by stable row ID.
-    pub(super) motion: HashMap<SharedString, RowReorderMotion>,
+    motion: HashMap<SharedString, RowReorderMotion>,
     /// The offset each moving row last painted, which is what a projection
     /// continues from. Cleared with the snapshot that produced it.
-    pub(super) offsets: HashMap<SharedString, Pixels>,
+    offsets: HashMap<SharedString, Pixels>,
+    /// The stable rows in the virtualized window most recently reported by
+    /// upstream, including grids with reorder motion disabled.
+    visible: HashSet<SharedString>,
     /// Names the next unseeded channel. Advanced once per accepted snapshot so
     /// a row that settled and starts moving again cannot answer to the
     /// retained sample of its previous journey.
@@ -120,10 +122,27 @@ impl RowReorderState {
 
     pub(super) fn set_response(&mut self, response: Option<Duration>) {
         self.response = response;
+        if response.is_none() {
+            self.motion.clear();
+            self.offsets.clear();
+        }
     }
 
     pub(super) fn animating_len(&self) -> usize {
         self.motion.len()
+    }
+
+    pub(super) fn visible_len(&self) -> usize {
+        self.visible.len()
+    }
+
+    pub(super) fn visible_ids(&self) -> &HashSet<SharedString> {
+        &self.visible
+    }
+
+    /// Notes a row constructed before upstream reports the complete window.
+    pub(super) fn note_visible(&mut self, row_id: SharedString) {
+        self.visible.insert(row_id);
     }
 
     /// Samples `row_id`'s spring for this frame and returns the offset to paint.
@@ -183,10 +202,11 @@ impl RowReorderState {
         Some(offset)
     }
 
-    /// Drops every row the rendered window no longer holds.
-    pub(super) fn retain_visible(&mut self, visible: &HashSet<SharedString>) {
+    /// Replaces the rendered membership and drops motion outside that window.
+    pub(super) fn set_visible(&mut self, visible: HashSet<SharedString>) {
         self.motion.retain(|row_id, _| visible.contains(row_id));
         self.offsets.retain(|row_id, _| visible.contains(row_id));
+        self.visible = visible;
     }
 
     /// Projects one signed pixel travel per candidate row onto the retained
@@ -255,5 +275,33 @@ impl RowReorderState {
         // projection above already folded them in, so they retire with it.
         self.offsets.clear();
         self.generation = self.generation.wrapping_add(1);
+    }
+
+    #[cfg(test)]
+    pub(super) fn contains_motion(&self, row_id: &str) -> bool {
+        self.motion.contains_key(row_id)
+    }
+
+    #[cfg(test)]
+    pub(super) fn sampled_offset(&self, row_id: &str) -> Option<Pixels> {
+        self.offsets.get(row_id).copied()
+    }
+
+    #[cfg(test)]
+    pub(super) fn incarnation(&self, row_id: &str) -> Option<usize> {
+        self.motion.get(row_id).map(|motion| motion.incarnation)
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_empty(&self) -> bool {
+        self.motion.is_empty() && self.offsets.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(super) fn retains_only_visible(&self) -> bool {
+        self.motion
+            .keys()
+            .chain(self.offsets.keys())
+            .all(|row_id| self.visible.contains(row_id))
     }
 }

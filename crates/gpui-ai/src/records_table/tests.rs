@@ -109,15 +109,35 @@ fn visible_row_reorder_state_is_bounded_and_reduced_motion_snaps(cx: &mut TestAp
             records.set_records(Progressive::complete(reordered.into()), window, cx);
         });
     });
-    let offsets = records.read_with(cx, |records, cx| {
-        records.table.read(cx).delegate().row_reorder.motion.clone()
+    let moving = records.read_with(cx, |records, cx| {
+        records
+            .table
+            .read(cx)
+            .delegate()
+            .row_reorder
+            .animating_len()
     });
-    assert!(!offsets.is_empty());
+    assert!(moving > 0);
     assert!(
-        offsets.len() < 64,
+        moving < 64,
         "only visible stable rows should retain motion state, got {}",
-        offsets.len()
+        moving
     );
+    cx.update(|_, cx| {
+        records.update(cx, |records, cx| {
+            records.set_row_reorder_response(None, cx);
+        });
+    });
+    assert_eq!(
+        records.read_with(cx, |records, cx| records.animating_row_count(cx)),
+        0,
+        "disabling reorder must retire channels that can no longer settle"
+    );
+    cx.update(|_, cx| {
+        records.update(cx, |records, cx| {
+            records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
+        });
+    });
 
     cx.update(|window, cx| {
         records.update(cx, |records, cx| records.scroll_to_row("row-990", cx));
@@ -127,23 +147,11 @@ fn visible_row_reorder_state_is_bounded_and_reduced_motion_snaps(cx: &mut TestAp
     records.read_with(cx, |records, cx| {
         let delegate = records.table.read(cx).delegate();
         assert!(
-            delegate
-                .row_reorder
-                .motion
-                .keys()
-                .all(|row_id| delegate.visible_row_ids.contains(row_id)),
-            "virtualized rows must not retain spring motion"
+            delegate.row_reorder.retains_only_visible(),
+            "virtualized rows must not retain spring motion or sampled offsets"
         );
-        assert!(
-            delegate
-                .row_reorder
-                .offsets
-                .keys()
-                .all(|row_id| delegate.visible_row_ids.contains(row_id)),
-            "virtualized rows must not retain sampled offsets"
-        );
-        assert!(!delegate.row_reorder.motion.contains_key("row-1"));
-        assert!(!delegate.row_reorder.motion.contains_key("row-2"));
+        assert!(!delegate.row_reorder.contains_motion("row-1"));
+        assert!(!delegate.row_reorder.contains_motion("row-2"));
     });
 
     cx.update(|window, cx| {
@@ -166,13 +174,18 @@ fn visible_row_reorder_state_is_bounded_and_reduced_motion_snaps(cx: &mut TestAp
         });
     });
     let scrolled_offsets = records.read_with(cx, |records, cx| {
-        records.table.read(cx).delegate().row_reorder.motion.clone()
+        records
+            .table
+            .read(cx)
+            .delegate()
+            .row_reorder
+            .animating_len()
     });
     assert!(
-        !scrolled_offsets.is_empty(),
+        scrolled_offsets > 0,
         "a filtered snapshot should animate retained rows in the post-filter anchored viewport"
     );
-    assert!(scrolled_offsets.len() < 64);
+    assert!(scrolled_offsets < 64);
 
     cx.update(|_, cx| cx.set_reduce_motion(true));
     cx.update(|window, cx| {
@@ -182,16 +195,42 @@ fn visible_row_reorder_state_is_bounded_and_reduced_motion_snaps(cx: &mut TestAp
     });
     records.read_with(cx, |records, cx| {
         assert!(
-            records
-                .table
-                .read(cx)
-                .delegate()
-                .row_reorder
-                .motion
-                .is_empty(),
+            records.table.read(cx).delegate().row_reorder.is_empty(),
             "reduced motion should retain no animated offsets"
         );
     });
+}
+
+#[gpui::test]
+fn visible_membership_is_reported_when_reorder_motion_is_disabled(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("visible", "Visible", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(640.), px(300.)));
+    let rows = (0..100)
+        .map(|index| {
+            RecordRow::new(format!("row-{index}"), format!("Row {index}"))
+                .cells([RecordCell::new("name", format!("Row {index}"))])
+        })
+        .collect::<Vec<_>>();
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+            records.set_records(Progressive::complete(rows.into()), window, cx);
+        });
+        window.draw(cx).clear(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let visible = records.read_with(cx, |records, cx| records.visible_row_count(cx));
+    assert!(visible > 0, "the painted window should report visible rows");
+    assert!(visible < 100, "visibility must remain a virtualized window");
+    assert_eq!(
+        records.read_with(cx, |records, cx| records.animating_row_count(cx)),
+        0
+    );
 }
 
 /// A hundred thousand rows is the size the plan asks the index to survive.
@@ -530,9 +569,7 @@ fn reorder_reversal_carries_the_row_instead_of_restarting_it(cx: &mut TestAppCon
                 .read(cx)
                 .delegate()
                 .row_reorder
-                .offsets
-                .get(id)
-                .copied()
+                .sampled_offset(id)
         })
     };
     let incarnation_of = |cx: &mut VisualTestContext, id: &str| {
@@ -542,9 +579,7 @@ fn reorder_reversal_carries_the_row_instead_of_restarting_it(cx: &mut TestAppCon
                 .read(cx)
                 .delegate()
                 .row_reorder
-                .motion
-                .get(id)
-                .map(|motion| motion.incarnation)
+                .incarnation(id)
         })
     };
 
@@ -605,10 +640,9 @@ fn reorder_reversal_carries_the_row_instead_of_restarting_it(cx: &mut TestAppCon
     records.read_with(cx, |records, cx| {
         let delegate = records.table.read(cx).delegate();
         assert!(
-            delegate.row_reorder.motion.is_empty(),
-            "settled rows must own no motion state"
+            delegate.row_reorder.is_empty(),
+            "settled rows must own no motion state or sampled offsets"
         );
-        assert!(delegate.row_reorder.offsets.is_empty());
     });
     assert_eq!(
         records.read_with(cx, |records, cx| records.animating_row_count(cx)),
@@ -773,8 +807,7 @@ fn unpainted_projection_changes_do_not_create_phantom_motion(cx: &mut TestAppCon
     });
     records.read_with(cx, |records, cx| {
         let delegate = records.table.read(cx).delegate();
-        assert!(delegate.row_reorder.motion.is_empty());
-        assert!(delegate.row_reorder.offsets.is_empty());
+        assert!(delegate.row_reorder.is_empty());
         assert_eq!(records.animating_row_count(cx), 0);
     });
 }

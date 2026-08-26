@@ -44,10 +44,6 @@ pub(super) struct RecordsDelegate {
     pub(super) sort_direction: Option<RecordSortDirection>,
     pub(super) activation_label: SharedString,
     pub(super) row_reorder: RowReorderState,
-    /// The rows the last render actually painted. A ledger of the virtualized
-    /// window rather than motion state, which is why the reorder owner prunes
-    /// against it instead of holding it.
-    pub(super) visible_row_ids: HashSet<SharedString>,
     /// The rem the owning table last resolved, so a rem-scaled column width
     /// lands in the same type scale as the text inside it. Upstream caches
     /// column widths in pixels, so this only reaches layout through a refresh.
@@ -71,7 +67,6 @@ impl RecordsDelegate {
             sort_direction: None,
             activation_label: "Open".into(),
             row_reorder: RowReorderState::default(),
-            visible_row_ids: HashSet::new(),
             rem_size,
         }
     }
@@ -118,6 +113,9 @@ impl TableDelegate for RecordsDelegate {
         window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
+        if let Some(row) = self.row(row_ix) {
+            self.row_reorder.note_visible(row.id.clone());
+        }
         if !self.row_reorder.is_enabled() {
             let Some(row) = self.row(row_ix) else {
                 return div().id(("records-placeholder-row", row_ix));
@@ -138,7 +136,6 @@ impl TableDelegate for RecordsDelegate {
         let Some(row) = self.row(row_ix).cloned() else {
             return div().id(("records-placeholder-row", row_ix));
         };
-        self.visible_row_ids.insert(row.id.clone());
         let owner = self.owner.clone();
         let pointer_row_id = row.id.clone();
         let row_frame = record_row_frame(
@@ -370,22 +367,18 @@ impl TableDelegate for RecordsDelegate {
         cx: &mut Context<TableState<Self>>,
     ) {
         let anchor = self.row(visible_range.start).map(|row| row.id.clone());
-        if self.row_reorder.is_enabled() {
-            let visible_row_ids: HashSet<_> = self
-                .records
-                .content()
-                .get(visible_range)
-                .unwrap_or_default()
-                .iter()
-                .map(|row| row.id.clone())
-                .collect();
-            // A virtualized row that leaves the rendered window will no
-            // longer be sampled, so it cannot settle itself. Prune here, at
-            // the visibility owner, instead of retaining motion state until
-            // another snapshot.
-            self.row_reorder.retain_visible(&visible_row_ids);
-            self.visible_row_ids = visible_row_ids;
-        }
+        let visible_row_ids: HashSet<_> = self
+            .records
+            .content()
+            .get(visible_range)
+            .unwrap_or_default()
+            .iter()
+            .map(|row| row.id.clone())
+            .collect();
+        // A virtualized row that leaves the rendered window will no longer be
+        // sampled, so it cannot settle itself. The reorder lifecycle owns the
+        // same membership whether animation is enabled or not.
+        self.row_reorder.set_visible(visible_row_ids);
         let _ = self.owner.update(cx, |table, _| {
             table.viewport_row_anchor_id = anchor;
         });
