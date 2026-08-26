@@ -101,6 +101,13 @@ async function generateInto(stageDir, galleryDir) {
 async function generateWithSsr(stageDir, galleryDir, ssrDir) {
   await viteBuild(["--outDir", stageDir, "--emptyOutDir"]);
   await viteBuild(["--ssr", "prerender.tsx", "--outDir", ssrDir, "--emptyOutDir"]);
+  // Route code is static data rather than a table of generated JavaScript
+  // import functions. Keeping it outside the entry bundle means catalog and
+  // theme visitors pay for none of it, while component pages still fetch one
+  // predictable same-origin file before hydration.
+  await cp(path.join(siteRoot, "generated", "code"), path.join(stageDir, "code"), {
+    recursive: true,
+  });
 
   const template = await readFile(path.join(stageDir, "index.html"), "utf8");
   if (!template.includes(APP_MARKER)) {

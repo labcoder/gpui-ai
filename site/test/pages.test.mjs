@@ -738,6 +738,7 @@ test("route code loads per page instead of riding in every page's bundle", async
   const { outDir } = await site();
   const assets = path.join(outDir, "assets");
   const names = await readdir(assets);
+  const codeNames = await readdir(path.join(outDir, "code"));
   const entryName = names.find((name) => /^index-.*\.js$/.test(name));
   assert.ok(entryName, "the build emits one entry chunk");
   const entry = await readFile(path.join(assets, entryName), "utf8");
@@ -756,24 +757,26 @@ test("route code loads per page instead of riding in every page's bundle", async
   assert.ok(probe, "the corpus has no line distinctive enough to probe with");
   assert.ok(!entry.includes(probe), `the entry chunk still carries story code: ${probe}`);
 
-  // Every component owns a chunk, and the documentation samples own one.
+  // Every component owns a stable route payload, and the documentation
+  // samples own one. Stable JSON paths avoid bundling a generated import table
+  // into routes that never ask for code.
   for (const component of components) {
     assert.ok(
-      names.some((name) => name.startsWith(`${component.slug}-`) && name.endsWith(".js")),
-      `${component.slug} has no route chunk`,
+      codeNames.includes(`${component.slug}.json`),
+      `${component.slug} has no route payload`,
     );
   }
   assert.ok(
-    names.some((name) => name.startsWith("samples-") && name.endsWith(".js")),
-    "the documentation samples have no route chunk",
+    codeNames.includes("samples.json"),
+    "the documentation samples have no route payload",
   );
 
-  // The number the split exists for: the entry was 458 KB carrying the corpus
-  // and 324 KB without it. Generous headroom so ordinary growth does not trip
-  // this; carrying the corpus again (+130 KB) always will.
+  // The number the split exists for: the 0.2.0 entry was 458,525 bytes.
+  // A-14 promises at least a 30% reduction, so encode that release contract
+  // instead of a loose threshold that the first implementation did not meet.
   assert.ok(
-    entry.length <= 380_000,
-    `the entry chunk grew to ${entry.length} bytes — is per-route code riding along again?`,
+    entry.length <= 320_967,
+    `the entry chunk is ${entry.length} bytes; A-14 allows at most 320,967`,
   );
 
   // The source-level guard the split lives or dies on.

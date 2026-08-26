@@ -24,17 +24,32 @@ interface CodeChunk {
   readonly samples?: Readonly<Record<string, CodeSample>>;
 }
 
-const chunks = import.meta.glob("../generated/code/*.json");
 const loaded = new Map<string, CodeChunk>();
 
 async function load(name: string): Promise<void> {
   if (loaded.has(name)) return;
-  const loader = chunks[`../generated/code/${name}.json`];
+  if (!/^[a-z0-9-]+$/.test(name)) return;
   // An unknown slug has no chunk and renders no code, which the panel already
   // treats as "nothing to show" — the same answer the old lookup gave.
-  if (!loader) return;
-  const module = (await loader()) as { default: CodeChunk };
-  loaded.set(name, module.default);
+  let chunk: CodeChunk | undefined;
+  if (import.meta.env.SSR) {
+    const { readFile } = await import("node:fs/promises");
+    try {
+      chunk = JSON.parse(
+        await readFile(new URL(`../generated/code/${name}.json`, import.meta.url), "utf8"),
+      ) as CodeChunk;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  } else {
+    const response = await fetch(`${import.meta.env.BASE_URL}code/${name}.json`);
+    if (response.status === 404) return;
+    if (!response.ok) {
+      throw new Error(`could not load code for ${name}: HTTP ${response.status}`);
+    }
+    chunk = (await response.json()) as CodeChunk;
+  }
+  if (chunk) loaded.set(name, chunk);
 }
 
 /** Loads the code the given route renders; resolves immediately for the rest. */
