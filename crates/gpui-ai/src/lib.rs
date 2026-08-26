@@ -48,6 +48,7 @@ pub mod prompt_bar;
 pub mod queue;
 pub mod recommendation;
 pub mod records_table;
+mod resolved_layout;
 pub mod scrolling;
 pub mod search_results;
 pub mod selection_actions;

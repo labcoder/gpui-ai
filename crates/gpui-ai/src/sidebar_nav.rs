@@ -4,7 +4,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, EventEmitter,
-    Focusable as _, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    Focusable as _, InteractiveElement as _, IntoElement, ListAlignment, ListOffset, ListState,
     ParentElement as _, Pixels, Render, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, div, list,
     percentage, prelude::FluentBuilder as _,
@@ -18,7 +18,9 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::{scrolling::list_scroll_mask, theme::SemanticStyledExt as _};
+use crate::{
+    resolved_layout::ResolvedLayoutKey, scrolling::list_scroll_mask, theme::SemanticStyledExt as _,
+};
 
 /// One application-owned recursive sidebar item.
 ///
@@ -406,6 +408,7 @@ mod tests {
         Element as _, ListAlignment, ListState, RenderOnce as _, ScrollDelta, ScrollWheelEvent,
         TestAppContext, VisualTestContext, accesskit, canvas, list, px,
     };
+    use gpui_component::theme::Theme;
     use std::sync::{Arc, Mutex};
 
     type CapturedSemanticNodes = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;
@@ -444,6 +447,42 @@ mod tests {
                 nav,
                 catalog: ListState::new(8, ListAlignment::Top, px(0.)),
             }
+        }
+    }
+
+    /// A nav in a box too short for its sections, so the section list scrolls.
+    struct ShortSidebarProbe {
+        nav: Entity<SidebarNav>,
+    }
+
+    impl ShortSidebarProbe {
+        fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+            let nav = cx.new(|cx| {
+                let mut nav = SidebarNav::new("zoom-nav", window, cx);
+                nav.set_sections(
+                    (0..4).map(|section| {
+                        SidebarSection::new(
+                            format!("section-{section}"),
+                            format!("Section {section}"),
+                        )
+                        .items((0..8).map(|item| {
+                            SidebarNavItem::new(
+                                format!("s{section}-item-{item}"),
+                                format!("Destination {section}.{item}"),
+                            )
+                        }))
+                    }),
+                    cx,
+                );
+                nav
+            });
+            Self { nav }
+        }
+    }
+
+    impl Render for ShortSidebarProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(320.)).h(px(240.)).child(self.nav.clone())
         }
     }
 
@@ -673,6 +712,72 @@ mod tests {
         assert_eq!(parent.is_selected(), Some(true));
         assert_eq!(parent.description(), Some("Contains selected item"));
         assert_eq!(parent.is_expanded(), Some(false));
+    }
+
+    /// Zooms the way the shell does: the theme carries the base type size and
+    /// `Root` hands it to the window every frame.
+    ///
+    /// Two draws, because the nav notices the new rem while rendering and
+    /// reacts afterwards. Nothing here calls `remeasure`; that the nav does it
+    /// unprompted is the property under test.
+    fn zoom_to(cx: &mut VisualTestContext, font_size: f32) {
+        cx.update(|window, cx| {
+            Theme::global_mut(cx).font_size = px(font_size);
+            window.set_rem_size(Theme::global(cx).font_size);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    fn top_section(nav: &SidebarNav) -> Option<SharedString> {
+        let offset = nav.section_list.logical_scroll_top();
+        filtered_sections(&nav.sections, &nav.query)
+            .get(offset.item_ix)
+            .map(|section| section.id.clone())
+    }
+
+    #[gpui::test]
+    fn zooming_re_measures_sections_and_keeps_the_first_visible_row(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(ShortSidebarProbe::new);
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+
+        // Rest on a row other than the first, so preserving the anchor is a
+        // claim about the row and not about the top of the list.
+        nav.read_with(cx, |nav, _| {
+            nav.section_list.scroll_to(ListOffset {
+                item_ix: 1,
+                offset_in_item: px(0.),
+            })
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let anchor = nav.read_with(cx, |nav, _| top_section(nav));
+        assert_eq!(anchor.as_deref(), Some("section-1"));
+
+        // 100%, 150%, 200% of the 16px base.
+        for font_size in [16., 24., 32.] {
+            zoom_to(cx, font_size);
+
+            nav.read_with(cx, |nav, _| {
+                assert!(
+                    nav.resolved_layout.matches(px(font_size)),
+                    "the nav must notice {font_size}px type from its own render"
+                );
+                assert_eq!(
+                    top_section(nav),
+                    anchor,
+                    "the section that was first on screen stays first at {font_size}px type"
+                );
+            });
+            assert!(
+                cx.debug_bounds("sidebar-nav-item-s1-item-0").is_some(),
+                "the anchored section's items stay reachable at {font_size}px type"
+            );
+        }
     }
 
     #[gpui::test]
@@ -1026,6 +1131,8 @@ pub struct SidebarNav {
     expanded: HashSet<SharedString>,
     /// Virtualized section list and the nav body's sole scroll owner.
     section_list: ListState,
+    /// Rem size the retained section heights were measured against.
+    resolved_layout: ResolvedLayoutKey,
     _input_subscription: Subscription,
 }
 
@@ -1049,6 +1156,7 @@ impl SidebarNav {
             input,
             expanded: HashSet::new(),
             section_list: ListState::new(0, ListAlignment::Top, Pixels::ZERO),
+            resolved_layout: ResolvedLayoutKey::default(),
             _input_subscription: subscription,
         }
     }
@@ -1167,6 +1275,33 @@ impl SidebarNav {
         cx.notify();
     }
 
+    /// Re-measures the section list after the window's rem size changed.
+    ///
+    /// Section heights cache text laid out at the previous rem, and neither a
+    /// snapshot nor a collapse reports a zoom change. The row that was first
+    /// on screen stays first.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        let sections = filtered_sections(&self.sections, &self.query);
+        let offset = self.section_list.logical_scroll_top();
+        let anchor = sections
+            .get(offset.item_ix)
+            .map(|section| (section.id.clone(), offset.offset_in_item));
+
+        self.section_list.remeasure();
+        if let Some((section_id, offset_in_item)) = anchor
+            && let Some(item_ix) = sections.iter().position(|section| section.id == section_id)
+        {
+            self.section_list.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item,
+            });
+        }
+        cx.notify();
+    }
+
     fn emit_query_changed(&self, query: SharedString, cx: &mut Context<Self>) {
         cx.emit(SidebarNavEvent::QueryChanged {
             id: self.id.clone(),
@@ -1210,7 +1345,17 @@ fn find_item<'a>(item: &'a SidebarNavItem, id: &SharedString) -> Option<&'a Side
 impl EventEmitter<SidebarNavEvent> for SidebarNav {}
 
 impl Render for SidebarNav {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Measured section heights are only valid for the rem they were laid
+        // out at. Reading it here mutates nothing; the reaction is deferred so
+        // that render never notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |nav, _, cx| {
+                nav.resolve_layout(rem_size, cx);
+            });
+        }
+
         let tokens = cx.theme().semantic_tokens();
         let sections = filtered_sections(&self.sections, &self.query);
         let owner = cx.weak_entity();

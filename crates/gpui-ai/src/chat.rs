@@ -7,6 +7,7 @@ use crate::{
     motion::reveal,
     orbs::Orbs,
     prompt_bar::{PromptBar, PromptBarEvent},
+    resolved_layout::ResolvedLayoutKey,
     scrolling::list_scroll_mask,
     stream::{ProgressState, StreamedContent},
     streaming_text::{CitationRef, FollowUp, StreamingText, StreamingTextEvent},
@@ -17,8 +18,8 @@ use crate::{
 use gpui::{
     AnyElement, App, AppContext as _, ClipboardItem, Context, ElementId, Entity, EventEmitter,
     FocusHandle, Focusable as _, FollowMode, FontWeight, InteractiveElement as _, IntoElement as _,
-    ListAlignment, ListOffset, ListState, ParentElement as _, Render, Role, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div, list,
+    ListAlignment, ListOffset, ListState, ParentElement as _, Pixels, Render, Role, SharedString,
+    Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div, list,
     prelude::FluentBuilder as _, px, relative,
 };
 use gpui_base::Button;
@@ -635,6 +636,8 @@ pub struct Chat {
     messages: Arc<[ChatMessage]>,
     message_focus_handles: HashMap<SharedString, FocusHandle>,
     list_state: ListState,
+    /// Rem size the retained row heights were measured against.
+    resolved_layout: ResolvedLayoutKey,
     visible_range: Range<usize>,
     pinned_to_bottom: bool,
     unread_message_ids: HashSet<SharedString>,
@@ -686,6 +689,7 @@ impl Chat {
             messages: Arc::from([]),
             message_focus_handles: HashMap::new(),
             list_state,
+            resolved_layout: ResolvedLayoutKey::default(),
             visible_range: 0..0,
             pinned_to_bottom: true,
             unread_message_ids: HashSet::new(),
@@ -932,6 +936,43 @@ impl Chat {
         self.pinned_to_bottom = true;
         self.unread_message_ids.clear();
         cx.emit(ChatEvent::JumpedToLatest);
+        cx.notify();
+    }
+
+    /// Re-measures the transcript after the window's rem size changed.
+    ///
+    /// Row heights cache wrapped text laid out at the previous rem, and no
+    /// message snapshot reports a zoom change, so nothing else invalidates
+    /// them. The anchor policy is Chat's own: a transcript already following
+    /// the tail keeps following it, and otherwise the message that was first
+    /// on screen stays first.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        let was_following = self.is_pinned_to_bottom();
+        let offset = self.list_state.logical_scroll_top();
+        let anchor = self
+            .messages
+            .get(offset.item_ix)
+            .map(|message| (message.id.clone(), offset.offset_in_item));
+
+        self.list_state.remeasure();
+        if was_following {
+            self.list_state.set_follow_mode(FollowMode::Tail);
+            self.list_state.scroll_to_end();
+            self.pinned_to_bottom = true;
+        } else if let Some((anchor_id, offset_in_item)) = anchor
+            && let Some(item_ix) = self
+                .messages
+                .iter()
+                .position(|message| message.id == anchor_id)
+        {
+            self.list_state.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item,
+            });
+        }
         cx.notify();
     }
 
@@ -1634,7 +1675,18 @@ impl Chat {
 impl EventEmitter<ChatEvent> for Chat {}
 
 impl Render for Chat {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        // The rem is a resolved-layout input, so a change to it invalidates
+        // every measured row height. Reading it here costs nothing; the
+        // reaction is deferred so that render itself neither mutates nor
+        // notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |chat, _, cx| {
+                chat.resolve_layout(rem_size, cx);
+            });
+        }
+
         let tokens = cx.theme().semantic_tokens();
         let transcript_id = ElementId::from((ElementId::from(self.id.clone()), "transcript"));
         let composer_id = ElementId::from((ElementId::from(self.id.clone()), "composer"));
@@ -1698,6 +1750,7 @@ mod tests {
         Render, RenderOnce as _, Role, SharedString, Subscription, TestAppContext,
         VisualTestContext, Window, accesskit, canvas, px, size,
     };
+    use gpui_component::theme::Theme;
     use std::{
         cell::RefCell,
         rc::Rc,
@@ -1785,6 +1838,23 @@ mod tests {
         chat.messages
             .get(offset.item_ix)
             .map(|message| (message.id.clone(), offset.offset_in_item))
+    }
+
+    /// Zooms the way the shell does: the theme carries the base type size and
+    /// `Root` hands it to the window every frame.
+    ///
+    /// Two draws, because Chat notices the new rem while rendering and reacts
+    /// afterwards — the first draw is where it sees the change, the second
+    /// lays out what it re-measured. Nothing here calls `remeasure`; that Chat
+    /// does it unprompted is the property under test.
+    fn zoom_to(cx: &mut VisualTestContext, font_size: f32) {
+        cx.update(|window, cx| {
+            Theme::global_mut(cx).font_size = px(font_size);
+            window.set_rem_size(Theme::global(cx).font_size);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
     }
 
     #[derive(Clone, Copy)]
@@ -1939,6 +2009,76 @@ mod tests {
             0,
             "older prepended history is not unread"
         );
+    }
+
+    #[gpui::test]
+    fn zooming_re_measures_the_transcript_and_keeps_following_the_tail(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..60), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+
+        // 100%, 150%, 200% of the 16px base.
+        for font_size in [16., 24., 32.] {
+            zoom_to(cx, font_size);
+
+            chat.read_with(cx, |chat, _| {
+                assert!(
+                    chat.resolved_layout.matches(px(font_size)),
+                    "Chat must notice {font_size}px type from its own render"
+                );
+                assert!(
+                    chat.is_pinned_to_bottom(),
+                    "a transcript already following the tail keeps following it at \
+                     {font_size}px type"
+                );
+            });
+            assert!(
+                cx.debug_bounds("chat-message-m0059").is_some(),
+                "the latest message stays reachable at {font_size}px type"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn zooming_preserves_the_first_visible_message_when_not_following(cx: &mut TestAppContext) {
+        let (harness, cx) = harness(cx);
+        set_messages(&harness, messages(0..60), cx);
+        let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+        chat.update(cx, |chat, cx| {
+            chat.list_state.scroll_to(ListOffset {
+                item_ix: 12,
+                offset_in_item: px(0.),
+            });
+            chat.pinned_to_bottom = false;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let anchor = chat
+            .read_with(cx, |chat, _| top_anchor(chat))
+            .expect("the transcript should rest on a message")
+            .0;
+
+        for font_size in [16., 24., 32.] {
+            zoom_to(cx, font_size);
+
+            chat.read_with(cx, |chat, _| {
+                assert!(chat.resolved_layout.matches(px(font_size)));
+                assert_eq!(
+                    top_anchor(chat).map(|(id, _)| id),
+                    Some(anchor.clone()),
+                    "the message that was first on screen stays first at {font_size}px type"
+                );
+                assert!(
+                    !chat.is_pinned_to_bottom(),
+                    "zooming must not jump a reader who had scrolled back to the tail"
+                );
+            });
+            assert!(
+                cx.debug_bounds("chat-message-m0012").is_some(),
+                "the anchored message is still drawn at {font_size}px type"
+            );
+        }
     }
 
     #[gpui::test]
