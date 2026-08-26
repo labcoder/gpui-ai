@@ -442,6 +442,24 @@ fn prompt_option(
         .child(content)
 }
 
+fn apply_model_option_state(
+    button: Button,
+    selected: bool,
+    active: bool,
+    position: usize,
+    set_size: usize,
+    cx: &App,
+) -> Button {
+    button
+        .selected(selected)
+        .aria_selected(selected)
+        .aria_position_in_set(position)
+        .aria_size_of_set(set_size)
+        .when(active, |button| {
+            button.bg(cx.theme().accent).aria_active_descendant()
+        })
+}
+
 /// Models grouped by provider in first-appearance order; ungrouped models
 /// keep their place under a `None` heading.
 fn model_groups(models: &[PromptModel]) -> Vec<(Option<SharedString>, Vec<&PromptModel>)> {
@@ -1195,35 +1213,29 @@ impl PromptBar {
                                 .text_color(cx.theme().primary),
                         )
                     });
+                let option = prompt_option(
+                    (
+                        gpui::ElementId::from(root_id.clone()),
+                        format!("model-{}", model.id),
+                    ),
+                    model.label.clone(),
+                    content,
+                    cx,
+                )
+                .when_some(model.description.clone(), |button, description| {
+                    button.aria_description(description)
+                })
+                .debug_selector(move || model_selector.clone())
+                .role(Role::ListBoxOption)
+                .disabled(model.disabled);
                 model_options.push(
-                    prompt_option(
-                        (
-                            gpui::ElementId::from(root_id.clone()),
-                            format!("model-{}", model.id),
-                        ),
-                        model.label.clone(),
-                        content,
-                        cx,
-                    )
-                    .when_some(model.description.clone(), |button, description| {
-                        button.aria_description(description)
-                    })
-                    .debug_selector(move || model_selector.clone())
-                    .role(Role::ListBoxOption)
-                    .disabled(model.disabled)
-                    .selected(selected)
-                    .aria_selected(selected)
-                    .aria_position_in_set(model_ix)
-                    .aria_size_of_set(model_count)
-                    .w_full()
-                    .when(active, |button| {
-                        button.bg(cx.theme().accent).aria_active_descendant()
-                    })
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.active_model = Some(model_id.clone());
-                        this.confirm_active_model(window, cx);
-                    }))
-                    .into_any_element(),
+                    apply_model_option_state(option, selected, active, model_ix, model_count, cx)
+                        .w_full()
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.active_model = Some(model_id.clone());
+                            this.confirm_active_model(window, cx);
+                        }))
+                        .into_any_element(),
                 );
             }
         }
@@ -1512,9 +1524,10 @@ fn stable_ids_are_unique<'a>(mut ids: impl Iterator<Item = &'a SharedString>) ->
 mod tests {
     use super::{
         ProgressState, PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention,
-        PromptModel, PromptTokenKind, SuggestionKey, active_prompt_token, build_submission,
-        model_groups, prompt_control, prompt_frame, prompt_listbox, prompt_model_control,
-        prompt_status, retain_active_suggestion, stable_ids_are_unique,
+        PromptModel, PromptTokenKind, SuggestionKey, active_prompt_token, apply_model_option_state,
+        build_submission, model_groups, prompt_control, prompt_frame, prompt_listbox,
+        prompt_model_control, prompt_option, prompt_status, retain_active_suggestion,
+        stable_ids_are_unique,
     };
     use gpui::{
         AppContext as _, Element as _, Focusable as _, IntoElement as _, ParentElement as _,
@@ -1536,6 +1549,10 @@ mod tests {
     }
 
     struct ModelControlProbe {
+        captured: CapturedControl,
+    }
+
+    struct ModelOptionProbe {
         captured: CapturedControl,
     }
 
@@ -1689,6 +1706,37 @@ mod tests {
                     let control = prompt_model_control("prompt-model", "Model: Balanced", true, cx)
                         .on_click(|_, _, _| {});
                     let element = control.render(window, cx).into_element();
+                    let role = element.a11y_role();
+                    let mut node = accesskit::Node::new(role.unwrap_or(Role::Unknown));
+                    element.write_a11y_info(&mut node);
+                    *captured.lock().expect("capture mutex should be available") =
+                        Some((role, node));
+                },
+                |_, _, _, _| {},
+            )
+        }
+    }
+
+    impl Render for ModelOptionProbe {
+        fn render(
+            &mut self,
+            _: &mut Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl gpui::IntoElement {
+            let captured = self.captured.clone();
+            canvas(
+                move |_, window, cx| {
+                    let option = prompt_option(
+                        "prompt-model-option",
+                        "Balanced",
+                        div().child("Balanced"),
+                        cx,
+                    )
+                    .role(Role::ListBoxOption)
+                    .on_click(|_, _, _| {});
+                    let element = apply_model_option_state(option, true, true, 2, 4, cx)
+                        .render(window, cx)
+                        .into_element();
                     let role = element.a11y_role();
                     let mut node = accesskit::Node::new(role.unwrap_or(Role::Unknown));
                     element.write_a11y_info(&mut node);
@@ -2408,6 +2456,27 @@ mod tests {
         assert_eq!(role, Some(Role::Button));
         assert_eq!(node.label(), Some("Model: Balanced"));
         assert_eq!(node.is_expanded(), Some(true));
+        assert!(node.supports_action(accesskit::Action::Click));
+    }
+
+    #[gpui::test]
+    fn model_options_expose_selection_position_and_set_size(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let captured = Arc::new(Mutex::new(None));
+        let result = captured.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ModelOptionProbe { captured });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let (role, node) = result
+            .lock()
+            .expect("capture mutex should be available")
+            .take()
+            .expect("model option semantics should be captured");
+        assert_eq!(role, Some(Role::ListBoxOption));
+        assert_eq!(node.label(), Some("Balanced"));
+        assert_eq!(node.is_selected(), Some(true));
+        assert_eq!(node.position_in_set(), Some(2));
+        assert_eq!(node.size_of_set(), Some(4));
         assert!(node.supports_action(accesskit::Action::Click));
     }
 
