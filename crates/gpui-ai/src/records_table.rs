@@ -530,7 +530,13 @@ impl TableDelegate for RecordsDelegate {
                 // painted. Both calls land in this same render pass, which is
                 // what keeps the first frame of a move from flashing at the
                 // destination.
-                let _ = spring((channel.clone(), "position"), gpui::px(0.), policy, window, cx);
+                let _ = spring(
+                    (channel.clone(), "position"),
+                    gpui::px(0.),
+                    policy,
+                    window,
+                    cx,
+                );
                 if let Some(entry) = self.row_reorder_motion.get_mut(&row.id) {
                     entry.needs_adopt = false;
                 }
@@ -1819,12 +1825,7 @@ mod tests {
             });
         });
         let offsets = records.read_with(cx, |records, cx| {
-            records
-                .table
-                .read(cx)
-                .delegate()
-                .row_reorder_motion
-                .clone()
+            records.table.read(cx).delegate().row_reorder_motion.clone()
         });
         assert!(!offsets.is_empty());
         assert!(
@@ -1853,12 +1854,7 @@ mod tests {
             });
         });
         let scrolled_offsets = records.read_with(cx, |records, cx| {
-            records
-                .table
-                .read(cx)
-                .delegate()
-                .row_reorder_motion
-                .clone()
+            records.table.read(cx).delegate().row_reorder_motion.clone()
         });
         assert!(
             !scrolled_offsets.is_empty(),
@@ -1908,7 +1904,11 @@ mod tests {
             records.update(cx, |records, cx| {
                 records.set_row_reorder_duration(Some(Duration::from_millis(180)), cx);
                 records.set_columns([RecordColumn::new("name", "Name")], window, cx);
-                records.set_records(Progressive::complete(make_rows(&forward).into()), window, cx);
+                records.set_records(
+                    Progressive::complete(make_rows(&forward).into()),
+                    window,
+                    cx,
+                );
             });
             window.draw(cx).clear(cx);
         });
@@ -1940,7 +1940,11 @@ mod tests {
 
         cx.update(|window, cx| {
             records.update(cx, |records, cx| {
-                records.set_records(Progressive::complete(make_rows(&swapped).into()), window, cx);
+                records.set_records(
+                    Progressive::complete(make_rows(&swapped).into()),
+                    window,
+                    cx,
+                );
             });
             window.draw(cx).clear(cx);
         });
@@ -1964,7 +1968,11 @@ mod tests {
 
         cx.update(|window, cx| {
             records.update(cx, |records, cx| {
-                records.set_records(Progressive::complete(make_rows(&forward).into()), window, cx);
+                records.set_records(
+                    Progressive::complete(make_rows(&forward).into()),
+                    window,
+                    cx,
+                );
             });
             window.draw(cx).clear(cx);
         });

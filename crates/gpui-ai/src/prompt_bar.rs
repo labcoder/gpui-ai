@@ -2029,10 +2029,7 @@ mod tests {
         };
         let one = measure(cx, "first".into());
         let three = measure(cx, "first\nsecond\nthird".into());
-        let five = measure(
-            cx,
-            ["l1", "l2", "l3", "l4", "l5"].join("\n"),
-        );
+        let five = measure(cx, ["l1", "l2", "l3", "l4", "l5"].join("\n"));
         let nine = measure(
             cx,
             (1..=9)
