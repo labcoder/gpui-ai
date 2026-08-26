@@ -1483,12 +1483,17 @@ fn public_sidebar_nav_scrolls_the_final_stable_item_into_the_constrained_viewpor
         .expect("constrained sidebar host should render");
     assert!(cx.debug_bounds("sidebar-nav-item-overflow-39").is_none());
 
+    // A frame per wheel event, because the nav now virtualizes rows rather
+    // than whole sections: each frame measures the window it drew, so the
+    // reachable end of a forty-section list is discovered as the reader
+    // scrolls toward it rather than known from the first frame.
     for _ in 0..36 {
         cx.simulate_event(ScrollWheelEvent {
             position: host.center(),
             delta: ScrollDelta::Pixels(point(px(0.), px(-180.))),
             ..Default::default()
         });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
     }
     cx.run_until_parked();
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -1500,6 +1505,257 @@ fn public_sidebar_nav_scrolls_the_final_stable_item_into_the_constrained_viewpor
     assert!(
         final_item.bottom() <= host.bottom(),
         "{final_item:?} vs {host:?}"
+    );
+}
+
+#[gpui::test]
+fn public_sidebar_nav_tree_keyboard_walks_rows_honors_bounds_and_skips_unavailable(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    // Pointer activation is what puts a reader inside the tree: it moves the
+    // roving row onto what it activated and focuses the tree itself, so the
+    // arrow keys start from a row rather than from wherever the list rests.
+    let overview = cx
+        .debug_bounds("sidebar-nav-item-overview")
+        .expect("a root item should render");
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-exports").is_some(),
+        "the unavailable row is rendered, so skipping it is a navigation claim"
+    );
+    cx.simulate_click(overview.center(), Modifiers::default());
+
+    // End reaches the last visible row; Home reaches the section header, which
+    // names its items and carries no application intent of its own.
+    activate_key(cx, "end");
+    activate_key(cx, "enter");
+    activate_key(cx, "home");
+    activate_key(cx, "enter");
+    activate_key(cx, "down");
+    activate_key(cx, "space");
+
+    // Down to the last enabled descendant, then past the unavailable row into
+    // the next section.
+    for _ in 0..5 {
+        activate_key(cx, "down");
+    }
+    activate_key(cx, "down");
+    activate_key(cx, "down");
+    activate_key(cx, "enter");
+
+    // Up steps over the same unavailable row on the way back.
+    activate_key(cx, "up");
+    activate_key(cx, "up");
+    activate_key(cx, "enter");
+
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "overview".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "archive-report".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "overview".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "live-report".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "supplier-score".into(),
+            },
+        ]
+    );
+}
+
+#[gpui::test]
+fn public_sidebar_nav_tree_keyboard_expands_collapses_and_walks_parents(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let overview = cx
+        .debug_bounds("sidebar-nav-item-overview")
+        .expect("a root item should render");
+    cx.simulate_click(overview.center(), Modifiers::default());
+    activate_key(cx, "down");
+
+    activate_key(cx, "left");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-history").is_none(),
+        "Left collapses the expanded parent the reader is standing on"
+    );
+
+    activate_key(cx, "right");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-history").is_some(),
+        "Right expands the collapsed parent the reader is standing on"
+    );
+
+    // A second Right enters the first child; Left from a leaf walks back out
+    // to the parent that owns it.
+    activate_key(cx, "right");
+    activate_key(cx, "enter");
+    activate_key(cx, "left");
+    activate_key(cx, "enter");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-history").is_none(),
+        "activating the parent toggled it the way a click does"
+    );
+
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "overview".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "history".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "orders".into(),
+            },
+        ]
+    );
+}
+
+#[gpui::test]
+fn public_sidebar_nav_filter_reveals_matched_ancestry_and_restores_expansion(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let suppliers = cx
+        .debug_bounds("sidebar-nav-item-suppliers")
+        .expect("the nested parent should render");
+    cx.simulate_click(suppliers.center(), Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(cx.debug_bounds("sidebar-nav-item-supplier-risk").is_none());
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("risk", window, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-supplier-risk").is_some(),
+        "a query exposes the ancestry it matched inside a collapsed parent"
+    );
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_none());
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("", window, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(
+        cx.debug_bounds("sidebar-nav-item-supplier-risk").is_none(),
+        "clearing the query restores the expansion the reader chose, not the one it revealed"
+    );
+    assert!(cx.debug_bounds("sidebar-nav-item-history").is_some());
+}
+
+#[gpui::test]
+fn public_sidebar_nav_keyboard_focus_survives_a_filter_round_trip(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let history = cx
+        .debug_bounds("sidebar-nav-item-history")
+        .expect("the nested leaf should render");
+    cx.simulate_click(history.center(), Modifiers::default());
+
+    // Filtering rebuilds the rows around a smaller projection; the focused row
+    // is named, not numbered, so it comes through both directions intact.
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("history", window, cx));
+        window.draw(cx).clear(cx);
+    });
+    activate_key(cx, "enter");
+
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_query("", window, cx));
+        window.draw(cx).clear(cx);
+    });
+    activate_key(cx, "enter");
+
+    let selections = probe.read_with(cx, |probe, _| {
+        probe
+            .events
+            .borrow()
+            .iter()
+            .filter_map(|event| match event {
+                SidebarNavEvent::Selected { item_id, .. } => Some(item_id.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(selections, ["history", "history", "history"]);
+}
+
+#[gpui::test]
+fn public_sidebar_nav_keyboard_focus_survives_a_controlled_reorder(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let history = cx
+        .debug_bounds("sidebar-nav-item-history")
+        .expect("the nested leaf should render");
+    cx.simulate_click(history.center(), Modifiers::default());
+
+    // The same rows in a different order: focus is retained by stable ID, so
+    // it stays on the row it was on rather than on the position it occupied.
+    let mut reordered = sidebar_sections();
+    reordered.reverse();
+    cx.update(|window, cx| {
+        nav.update(cx, |nav, cx| nav.set_sections(reordered, cx));
+        window.draw(cx).clear(cx);
+    });
+    assert!(
+        cx.debug_bounds("sidebar-nav-active-archive-report")
+            .is_some(),
+        "the controlled active marker survives the reorder too"
+    );
+
+    activate_key(cx, "enter");
+    assert_eq!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().clone()),
+        [
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "history".into(),
+            },
+            SidebarNavEvent::Selected {
+                id: "public-sidebar".into(),
+                item_id: "history".into(),
+            },
+        ]
     );
 }
 
