@@ -7,12 +7,12 @@
 //! pulse — so an application can pick the one that matches its voice.
 //! Under reduced motion every variant resolves to a useful static frame.
 
+use crate::motion::AmbientLoopSpec;
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, div, px,
+    AnimationExt as _, App, ElementId, IntoElement, ParentElement as _, Pixels, RenderOnce,
+    StyleRefinement, Styled, Window, div, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _};
-use std::time::Duration;
 
 /// Lattice is N×N dots. Dot positions derive from the cluster diameter and
 /// dot size; no separate pitch constant is needed.
@@ -25,8 +25,10 @@ const STAGE: f32 = 28.0;
 const PITCH_STAGE: f32 = 6.5;
 
 /// One cycle of any variant, in milliseconds. Phase offsets are fractions of
-/// this duration.
-const CYCLE_MS: u64 = 1700;
+/// this duration. Derived from the ambient-loop role, not owned here: the
+/// choreography below phases in integer beats and needs the cycle as a
+/// number, not a `Duration`.
+const CYCLE_MS: u64 = AmbientLoopSpec::ORB_LATTICE.period_millis();
 
 /// A choreography for the lattice's per-dot animation delays and motion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -243,7 +245,17 @@ impl RenderOnce for Orbs {
                                 format!("lattice-dot-{x}-{y}").into(),
                                 variant_index,
                             ),
-                            Animation::new(Duration::from_millis(CYCLE_MS)).repeat(),
+                            // Frame demand: intentionally ambient. Orbs are
+                            // the "the model is alive" glyph, so every dot
+                            // animates for as long as the cluster is on
+                            // screen; there is no settled state to reach and
+                            // treating one as a bug would delete the
+                            // component's reason to exist. The caller decides
+                            // when the cluster is mounted. Reduced motion
+                            // holds delta at 0, leaving each dot at its
+                            // seeded phase — a still choreographed frame, not
+                            // nine identical dots.
+                            AmbientLoopSpec::ORB_LATTICE.looping(),
                             move |this, delta| {
                                 let phase = (delta + seeded_phase) % 1.0;
                                 // Eased triangle: 0→1→0 across the cycle so

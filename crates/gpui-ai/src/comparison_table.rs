@@ -1,11 +1,11 @@
 //! Bounded, feature-oriented comparison table values and presentation.
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Axis, Context, ElementId, EventEmitter,
-    FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, ListAlignment, ListOffset,
-    ListState, ParentElement as _, Pixels, Render, Role, ScrollHandle, SharedString,
+    AnimationExt as _, AnyElement, App, Axis, Context, ElementId, EventEmitter, FocusHandle,
+    Focusable, Hsla, InteractiveElement as _, IntoElement, ListAlignment, ListOffset, ListState,
+    ParentElement as _, Pixels, Render, Role, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
@@ -16,6 +16,7 @@ use gpui_component::{
 
 use crate::{
     control::outlined_control_with_label,
+    motion::ProgressLoopSpec,
     records_table::escape_markdown_text,
     resolved_layout::ResolvedLayoutKey,
     scrolling::list_scroll_mask,
@@ -1014,10 +1015,13 @@ impl Render for ComparisonTable {
                                                         .text_color(color)
                                                         .with_animation(
                                                             "comparison-status-spinner",
-                                                            Animation::new(Duration::from_millis(
-                                                                900,
-                                                            ))
-                                                            .repeat(),
+                                                            // Frame demand: active only for a
+                                                            // ProgressIndicator status. Settled
+                                                            // statuses take the branch below and
+                                                            // render a still icon. Reduced motion
+                                                            // holds delta at 0 — an unrotated icon.
+                                                            ProgressLoopSpec::STATUS_SPINNER
+                                                                .looping(),
                                                             |this, delta| {
                                                                 this.rotate(gpui::percentage(delta))
                                                             },
@@ -1218,7 +1222,7 @@ mod tests {
     };
     use std::{
         sync::{Arc, Mutex},
-        time::Instant,
+        time::{Duration, Instant},
     };
 
     type CapturedNodes = Arc<Mutex<Option<[(Option<Role>, accesskit::Node); 9]>>>;

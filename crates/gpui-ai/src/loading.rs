@@ -1,10 +1,11 @@
 //! An animated pixel-grid loading state with optional elapsed time.
 
+use crate::motion::ProgressLoopSpec;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
 use std::panic::Location;
@@ -13,8 +14,6 @@ use std::time::Duration;
 /// Grid dimensions of the loader.
 const ROWS: usize = 3;
 const COLS: usize = 3;
-/// One full shimmer sweep across the grid.
-const SWEEP: Duration = Duration::from_millis(1400);
 
 /// A pixel-grid loader for "the agent is working" moments.
 ///
@@ -98,7 +97,13 @@ impl RenderOnce for LoadingState {
                             .bg(color)
                             .with_animation(
                                 ("loading-cell", (row * COLS + col) as u64),
-                                Animation::new(SWEEP).repeat(),
+                                // Frame demand: active while the caller keeps
+                                // the loader mounted — the loader *is* the
+                                // "work is running" state and owns no clock,
+                                // so it settles by being unmounted. Reduced
+                                // motion holds delta at 0, leaving a static
+                                // diagonal gradient across the grid.
+                                ProgressLoopSpec::GRID_SWEEP.looping(),
                                 move |this, delta| {
                                     let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
                                     this.opacity(0.15 + 0.85 * wave)

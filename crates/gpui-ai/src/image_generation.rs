@@ -1,16 +1,13 @@
 //! Progressive reveal for image generation.
 
+use crate::motion::ProgressLoopSpec;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
+    AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{ActiveTheme as _, Icon, IconName, StyledExt as _, h_flex, v_flex};
-use std::time::Duration;
-
-/// One shimmer pulse while the placeholder is showing.
-const PULSE: Duration = Duration::from_millis(1600);
 
 /// An image-generation frame: shimmer while working, top-down reveal as
 /// progress advances, the finished image when done.
@@ -131,7 +128,13 @@ impl RenderOnce for ImageGeneration {
                                 )
                                 .with_animation(
                                     "image-pulse",
-                                    Animation::new(PULSE).repeat(),
+                                    // Frame demand: active only on this
+                                    // placeholder branch. Once the caller
+                                    // supplies an image the animated element
+                                    // is not built at all, so a finished
+                                    // frame demands nothing. Reduced motion
+                                    // holds delta at 0 — a fully opaque icon.
+                                    ProgressLoopSpec::IMAGE_PULSE.looping(),
                                     |this, delta| {
                                         let wave = (delta * 2.0 - 1.0).abs();
                                         this.opacity(0.35 + 0.65 * wave)
