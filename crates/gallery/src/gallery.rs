@@ -4079,6 +4079,13 @@ impl Gallery {
             .debug_selector(move || format!("story-{}", story.slug()))
             .w_full()
             .max_w(px(640.))
+            // Ordinary specimens mirror the website's demo column. The dock
+            // composition is an internal application-layout diagnostic: if it
+            // inherits that narrow cap, its chat and artifact panes collapse
+            // while most of a desktop viewport sits unused.
+            .when(story == StoryId::DockComposition, |frame| {
+                frame.max_w(px(1200.))
+            })
             .px_6()
             .py_4()
             .gap_3()
@@ -6074,6 +6081,34 @@ mod tests {
         let (_, cx) = all_stories(cx);
 
         assert!(cx.debug_bounds("scrollbar-overlay").is_some());
+    }
+
+    #[gpui::test]
+    fn dock_composition_uses_the_desktop_width_its_panels_need(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::DockComposition, cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_resize(size(px(1200.), px(800.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let story = cx
+            .debug_bounds("story-dock-composition")
+            .expect("the dock composition story should draw");
+        let host = cx
+            .debug_bounds("dock-composition-host")
+            .expect("the dock composition host should draw");
+
+        assert!(
+            story.size.width > px(1000.),
+            "the diagnostic should use a desktop frame, got {:?}",
+            story.size.width
+        );
+        assert!(
+            host.size.width > px(900.),
+            "the four docked panels should receive the wide frame, got {:?}",
+            host.size.width
+        );
     }
 
     #[gpui::test]
