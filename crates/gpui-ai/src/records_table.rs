@@ -8,9 +8,9 @@ use std::{
 
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement as _, IntoElement as _, KeyBinding, ParentElement as _, Pixels, Render,
-    Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Subscription,
-    WeakEntity, Window, div, prelude::FluentBuilder as _,
+    InteractiveElement as _, IntoElement as _, KeyBinding, ParentElement as _, Pixels, Rems,
+    Render, Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
+    Subscription, WeakEntity, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_base::motion::{Spring, spring};
 use gpui_component::{
@@ -23,6 +23,7 @@ use gpui_component::{
 use crate::{
     control::{composed_button, outlined_control_with_label},
     motion::Shimmer,
+    resolved_layout::ResolvedLayoutKey,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -119,6 +120,35 @@ pub enum RecordsTableEvent {
     },
 }
 
+/// How wide a column asked to be, in whichever unit its caller chose.
+///
+/// Pixels stay pixels: a caller who measured something owns that number. A rem
+/// width is a multiple of the reader's base type size and becomes pixels only
+/// at layout, so a column sized for its text keeps that proportion when the
+/// reader zooms. Private because the choice is the column's own business —
+/// what a table consumes is the resolved width.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+enum RecordColumnWidth {
+    /// No configured width; the table's own default applies.
+    #[default]
+    Unset,
+    /// A device-independent width that does not follow the type scale.
+    Pixels(Pixels),
+    /// A width in multiples of the window's rem.
+    Rems(Rems),
+}
+
+impl RecordColumnWidth {
+    /// The pixel width for `rem_size`, or `None` to leave the choice upstream.
+    fn resolve(self, rem_size: Pixels) -> Option<Pixels> {
+        match self {
+            Self::Unset => None,
+            Self::Pixels(width) => Some(width),
+            Self::Rems(width) => Some(width.to_pixels(rem_size)),
+        }
+    }
+}
+
 /// One stable column in a [`RecordsTable`].
 ///
 /// Visible labels need not be unique. Events and row lookup always use the
@@ -128,7 +158,7 @@ pub struct RecordColumn {
     id: SharedString,
     label: SharedString,
     sortable: bool,
-    width: Option<Pixels>,
+    width: RecordColumnWidth,
     alignment: RecordColumnAlignment,
     fixed: bool,
     description: Option<SharedString>,
@@ -141,7 +171,7 @@ impl RecordColumn {
             id: id.into(),
             label: label.into(),
             sortable: false,
-            width: None,
+            width: RecordColumnWidth::Unset,
             alignment: RecordColumnAlignment::Left,
             fixed: false,
             description: None,
@@ -156,7 +186,18 @@ impl RecordColumn {
 
     /// Sets the logical column width.
     pub fn width(mut self, width: Pixels) -> Self {
-        self.width = Some(width);
+        self.width = RecordColumnWidth::Pixels(width);
+        self
+    }
+
+    /// Sets the column width in multiples of the reader's base type size.
+    ///
+    /// The width resolves against the window's rem at layout time and is
+    /// resolved again when the reader zooms, so a column sized for its text
+    /// keeps that proportion; a width set with [`RecordColumn::width`] does
+    /// not. Columns of one table may mix the two, and the later call wins.
+    pub fn width_in_rems(mut self, width: f32) -> Self {
+        self.width = RecordColumnWidth::Rems(rems(width));
         self
     }
 
@@ -194,8 +235,14 @@ impl RecordColumn {
     }
 
     /// Returns the explicitly configured logical column width, if any.
+    ///
+    /// A width set with [`RecordColumn::width_in_rems`] has no pixel value
+    /// until a window resolves it, so it reads as `None` here.
     pub fn configured_width(&self) -> Option<Pixels> {
-        self.width
+        match self.width {
+            RecordColumnWidth::Pixels(width) => Some(width),
+            RecordColumnWidth::Unset | RecordColumnWidth::Rems(_) => None,
+        }
     }
 
     /// Returns the horizontal content alignment.
@@ -378,6 +425,95 @@ pub(crate) trait RecordCellProvider: Send + Sync {
     fn cell(&self, row_ix: usize, column_id: &str) -> Option<RecordCell>;
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Stable-ID comparisons performed on this thread.
+    ///
+    /// Thread-local rather than global: the test harness runs each test on its
+    /// own thread, and a shared counter would report another test's lookups.
+    static STABLE_ID_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Records `visited` stable-ID comparisons.
+///
+/// Lookup cost is the whole point of the index below, so it is measured rather
+/// than asserted in prose. Nothing outside tests compiles the counter.
+#[inline]
+fn note_stable_id_visits(visited: usize) {
+    #[cfg(test)]
+    STABLE_ID_VISITS.with(|visits| visits.set(visits.get().saturating_add(visited)));
+    #[cfg(not(test))]
+    let _ = visited;
+}
+
+/// Stable-ID comparisons since the last call, and resets the counter.
+#[cfg(test)]
+fn take_stable_id_visits() -> usize {
+    STABLE_ID_VISITS.with(|visits| visits.replace(0))
+}
+
+/// Where each stable ID sits in one accepted snapshot.
+///
+/// Anchor recovery, selection validation, scrolling, and reorder displacement
+/// all ask the same question — "where is this ID now?" — and a snapshot answers
+/// it once here instead of once per asker. Positions are only ever read
+/// alongside the snapshot they were built from: `records` and `columns` each
+/// have a single assignment site, and each rebuilds its index there.
+///
+/// Retained rather than built per acceptance because selection, activation,
+/// and scroll commands arrive between snapshots, where a temporary map has
+/// already been dropped.
+#[derive(Debug, Default)]
+struct StableIdIndex {
+    positions: HashMap<SharedString, usize>,
+}
+
+impl StableIdIndex {
+    /// The position `id` holds in the indexed snapshot, if it holds one.
+    ///
+    /// Snapshots carrying duplicate IDs are rejected before they reach an
+    /// index, so one ID answers with one position.
+    fn position(&self, id: &str) -> Option<usize> {
+        note_stable_id_visits(1);
+        self.positions.get(id).copied()
+    }
+}
+
+/// Indexes a candidate record snapshot, or reports it malformed.
+///
+/// Accepting a snapshot already hashes every row and cell ID to prove the
+/// identities are unique, so the index falls out of that same pass rather than
+/// costing a second one. A malformed snapshot yields no index and no state
+/// change, which is what makes rejection atomic.
+fn index_valid_rows(rows: &[RecordRow]) -> Option<StableIdIndex> {
+    note_stable_id_visits(rows.len());
+    let mut positions = HashMap::with_capacity(rows.len());
+    for (row_ix, row) in rows.iter().enumerate() {
+        let mut cell_ids = HashSet::with_capacity(row.cells.len());
+        if !row
+            .cells
+            .iter()
+            .all(|cell| cell_ids.insert(cell.column_id()))
+            || positions.insert(row.id.clone(), row_ix).is_some()
+        {
+            return None;
+        }
+    }
+    Some(StableIdIndex { positions })
+}
+
+/// Indexes a candidate column snapshot, or reports it malformed.
+fn index_valid_columns(columns: &[RecordColumn]) -> Option<StableIdIndex> {
+    note_stable_id_visits(columns.len());
+    let mut positions = HashMap::with_capacity(columns.len());
+    for (col_ix, column) in columns.iter().enumerate() {
+        if positions.insert(column.id.clone(), col_ix).is_some() {
+            return None;
+        }
+    }
+    Some(StableIdIndex { positions })
+}
+
 /// One row's retained reorder spring.
 ///
 /// The spring's sampled value never renders directly: the row paints at
@@ -420,10 +556,18 @@ struct RecordsDelegate {
     row_reorder_current_offsets: HashMap<SharedString, Pixels>,
     row_reorder_generation: usize,
     visible_row_ids: HashSet<SharedString>,
+    /// The rem the owning table last resolved, so a rem-scaled column width
+    /// lands in the same type scale as the text inside it. Upstream caches
+    /// column widths in pixels, so this only reaches layout through a refresh.
+    rem_size: Pixels,
 }
 
 impl RecordsDelegate {
-    fn empty(owner: WeakEntity<RecordsTable>, component_id: SharedString) -> Self {
+    fn empty(
+        owner: WeakEntity<RecordsTable>,
+        component_id: SharedString,
+        rem_size: Pixels,
+    ) -> Self {
         Self {
             owner,
             component_id,
@@ -439,6 +583,7 @@ impl RecordsDelegate {
             row_reorder_current_offsets: HashMap::new(),
             row_reorder_generation: 0,
             visible_row_ids: HashSet::new(),
+            rem_size,
         }
     }
 
@@ -465,7 +610,7 @@ impl TableDelegate for RecordsDelegate {
             .map(|column| {
                 let alignment = column.alignment;
                 let fixed = column.fixed;
-                let width = column.width;
+                let width = column.width.resolve(self.rem_size);
                 let column = Column::new(column.id.clone(), column.label.clone());
                 let column = column.when_some(width, |column, width| column.width(width));
                 let column = if fixed { column.fixed_left() } else { column };
@@ -1095,6 +1240,10 @@ pub struct RecordsTable {
     label: SharedString,
     columns: Arc<[RecordColumn]>,
     records: Progressive<Arc<[RecordRow]>>,
+    /// Rebuilt with `records`; never read against any other snapshot.
+    rows_by_id: StableIdIndex,
+    /// Rebuilt with `columns`; never read against any other snapshot.
+    columns_by_id: StableIdIndex,
     selected_row_id: Option<SharedString>,
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
@@ -1104,6 +1253,7 @@ pub struct RecordsTable {
     pending_pointer_row_id: Option<SharedString>,
     viewport_row_anchor_id: Option<SharedString>,
     viewport_column_anchor_id: Option<SharedString>,
+    resolved_layout: ResolvedLayoutKey,
     table: gpui::Entity<TableState<RecordsDelegate>>,
     _table_subscription: Subscription,
 }
@@ -1119,23 +1269,35 @@ impl RecordsTable {
         let id = id.into();
         let owner = cx.weak_entity();
         let delegate_id = id.clone();
+        // The first frame already has a rem to resolve against, so a column
+        // width given in rems is right on the frame it first appears rather
+        // than being corrected after one.
+        let rem_size = window.rem_size();
         let table = cx.new(|cx| {
-            TableState::new(RecordsDelegate::empty(owner, delegate_id), window, cx)
-                .loop_selection(false)
-                .col_selectable(false)
-                .col_movable(false)
-                .row_selectable(true)
-                .sortable(false)
+            TableState::new(
+                RecordsDelegate::empty(owner, delegate_id, rem_size),
+                window,
+                cx,
+            )
+            .loop_selection(false)
+            .col_selectable(false)
+            .col_movable(false)
+            .row_selectable(true)
+            .sortable(false)
         });
         let table_subscription = cx.subscribe(&table, |this, _, event, cx| {
             this.handle_table_event(event, cx);
         });
+        let mut resolved_layout = ResolvedLayoutKey::default();
+        resolved_layout.observe(rem_size);
 
         Self {
             id,
             label: label.into(),
             columns: Arc::from([]),
             records: Progressive::pending(Arc::from([])),
+            rows_by_id: StableIdIndex::default(),
+            columns_by_id: StableIdIndex::default(),
             selected_row_id: None,
             sort_column_id: None,
             sort_direction: None,
@@ -1145,12 +1307,18 @@ impl RecordsTable {
             pending_pointer_row_id: None,
             viewport_row_anchor_id: None,
             viewport_column_anchor_id: None,
+            resolved_layout,
             table,
             _table_subscription: table_subscription,
         }
     }
 
     /// Replaces the visible and accessible verb used by row activation controls.
+    ///
+    /// The verb reaches the screen through the delegate, and this entity's own
+    /// `render` never reads it, so only the table is notified: the window is
+    /// invalidated either way, and a second notification would wake
+    /// application observers of a value they already own.
     pub fn set_activation_label(
         &mut self,
         activation_label: impl Into<SharedString>,
@@ -1162,7 +1330,6 @@ impl RecordsTable {
             table.delegate_mut().activation_label = activation_label;
             cx.notify();
         });
-        cx.notify();
     }
 
     pub(crate) fn set_row_reorder_response(
@@ -1175,7 +1342,6 @@ impl RecordsTable {
             table.delegate_mut().row_reorder_response = response;
             cx.notify();
         });
-        cx.notify();
     }
 
     pub(crate) fn visible_row_count(&self, cx: &App) -> usize {
@@ -1189,6 +1355,7 @@ impl RecordsTable {
     /// Replaces the controlled column snapshot without rebuilding table state.
     ///
     /// A snapshot containing duplicate stable column IDs is ignored atomically.
+    /// Columns are drawn entirely by the table, so only the table is notified.
     pub fn set_columns(
         &mut self,
         columns: impl IntoIterator<Item = RecordColumn>,
@@ -1196,9 +1363,9 @@ impl RecordsTable {
         cx: &mut Context<Self>,
     ) {
         let columns = columns.into_iter().collect::<Vec<_>>();
-        if !record_columns_have_unique_ids(&columns) {
+        let Some(columns_by_id) = index_valid_columns(&columns) else {
             return;
-        }
+        };
         let anchor_column_id = self.viewport_column_anchor_id.clone().or_else(|| {
             let fixed_columns = self.columns.iter().filter(|column| column.fixed).count();
             self.columns
@@ -1213,11 +1380,12 @@ impl RecordsTable {
                 .map(|column| column.id.clone())
         });
         self.columns = columns.into();
+        self.columns_by_id = columns_by_id;
         if self.sort_column_id.as_ref().is_some_and(|sort_column_id| {
             !self
-                .columns
-                .iter()
-                .any(|column| column.id == *sort_column_id && column.sortable)
+                .columns_by_id
+                .position(sort_column_id)
+                .is_some_and(|col_ix| self.columns[col_ix].sortable)
         }) {
             self.sort_column_id = None;
             self.sort_direction = None;
@@ -1227,7 +1395,7 @@ impl RecordsTable {
         let sort_direction = self.sort_direction;
         let anchor_column_ix = anchor_column_id
             .as_ref()
-            .and_then(|anchor| self.columns.iter().position(|column| column.id == *anchor));
+            .and_then(|anchor| self.columns_by_id.position(anchor));
         self.table.update(cx, |table, cx| {
             table.delegate_mut().columns = columns;
             table.delegate_mut().sort_column_id = sort_column_id;
@@ -1238,7 +1406,6 @@ impl RecordsTable {
             }
             cx.notify();
         });
-        cx.notify();
     }
 
     /// Replaces the controlled progressive record snapshot.
@@ -1268,9 +1435,14 @@ impl RecordsTable {
         cell_provider: Option<Arc<dyn RecordCellProvider>>,
         cx: &mut Context<Self>,
     ) -> bool {
-        if !record_rows_have_unique_ids(records.content()) {
+        // The validating pass answers every "where is this ID now?" below:
+        // anchor recovery, the reorder window, selection, and the scroll
+        // restore. The retained index still describes the outgoing snapshot
+        // until this one replaces it, which is what makes the displacement
+        // math a pair of lookups instead of a pair of scans.
+        let Some(accepted_rows_by_id) = index_valid_rows(records.content()) else {
             return false;
-        }
+        };
         let anchor_row_id = self.viewport_row_anchor_id.clone().or_else(|| {
             self.records
                 .content()
@@ -1294,13 +1466,17 @@ impl RecordsTable {
         } else {
             Vec::new()
         };
-        let post_snapshot_anchor_ix = anchor_row_id
+        // Where the viewport lands in the accepted snapshot: the anchor row if
+        // it survived, else the earliest surviving row that was on screen. The
+        // reorder window below and the scroll restore afterwards are the same
+        // recovery, so they share one answer rather than repeating it.
+        let anchor_row_ix = anchor_row_id
             .as_ref()
-            .and_then(|anchor| records.content().iter().position(|row| row.id == *anchor))
+            .and_then(|anchor| accepted_rows_by_id.position(anchor))
             .or_else(|| {
                 visible_row_ids
                     .iter()
-                    .filter_map(|row_id| records.content().iter().position(|row| row.id == *row_id))
+                    .filter_map(|row_id| accepted_rows_by_id.position(row_id))
                     .min()
             });
         let reorder_motion = if self.row_reorder_response.is_some() && !cx.reduce_motion() {
@@ -1310,7 +1486,7 @@ impl RecordsTable {
             let fresh_incarnation = delegate.row_reorder_generation.wrapping_add(1);
             let old_visible_start = old_visible_range.start;
             let visible_len = old_visible_range.len().max(visible_row_ids.len()).max(1);
-            let new_visible_start = post_snapshot_anchor_ix
+            let new_visible_start = anchor_row_ix
                 .unwrap_or(old_visible_start.min(records.content().len().saturating_sub(1)));
             let new_visible_end = new_visible_start
                 .saturating_add(visible_len)
@@ -1318,12 +1494,8 @@ impl RecordsTable {
             visible_row_ids
                 .iter()
                 .filter_map(|row_id| {
-                    let old_ix = self
-                        .records
-                        .content()
-                        .iter()
-                        .position(|row| row.id == *row_id)?;
-                    let new_ix = records.content().iter().position(|row| row.id == *row_id)?;
+                    let old_ix = self.rows_by_id.position(row_id)?;
+                    let new_ix = accepted_rows_by_id.position(row_id)?;
                     if !(new_visible_start..new_visible_end).contains(&new_ix) {
                         return None;
                     }
@@ -1377,33 +1549,20 @@ impl RecordsTable {
             HashMap::new()
         };
         self.records = records;
-        if self.selected_row_id.as_ref().is_some_and(|selected| {
-            !self
-                .records
-                .content()
-                .iter()
-                .any(|row| row.id == *selected && !row.disabled)
-        }) {
+        self.rows_by_id = accepted_rows_by_id;
+        // A selected row that the snapshot dropped, or now disables, is no
+        // longer selectable, so the controlled value clears with it.
+        let desired_row_ix = self
+            .selected_row_id
+            .as_ref()
+            .and_then(|selected| self.rows_by_id.position(selected))
+            .filter(|row_ix| !self.records.content()[*row_ix].disabled);
+        if self.selected_row_id.is_some() && desired_row_ix.is_none() {
             self.selected_row_id = None;
         }
 
         let records = self.records.clone();
         let selected_row_id = self.selected_row_id.clone();
-        let desired_row_ix = selected_row_id.as_ref().and_then(|selected| {
-            self.records
-                .content()
-                .iter()
-                .position(|row| row.id == *selected)
-        });
-        let anchor_row_ix = anchor_row_id
-            .as_ref()
-            .and_then(|anchor| {
-                self.records
-                    .content()
-                    .iter()
-                    .position(|row| row.id == *anchor)
-            })
-            .or(post_snapshot_anchor_ix);
         if desired_row_ix.is_some() {
             self.pending_suppressed_selection_events =
                 self.pending_suppressed_selection_events.saturating_add(1);
@@ -1427,11 +1586,17 @@ impl RecordsTable {
             }
             cx.notify();
         });
+        // Both entities really do change here: the table draws the rows, and
+        // this entity draws the progress and failure banner beside them from
+        // the same snapshot's lifecycle state.
         cx.notify();
         true
     }
 
     /// Replaces the controlled selected row when the ID exists.
+    ///
+    /// The selection is drawn by the table's own rows, so only the table is
+    /// notified; the reader for the controlled value is a plain accessor.
     pub fn set_selected_row(
         &mut self,
         row_id: impl Into<SharedString>,
@@ -1440,10 +1605,9 @@ impl RecordsTable {
     ) {
         let row_id = row_id.into();
         let Some(row_ix) = self
-            .records
-            .content()
-            .iter()
-            .position(|row| row.id == row_id && !row.disabled)
+            .rows_by_id
+            .position(&row_id)
+            .filter(|row_ix| !self.records.content()[*row_ix].disabled)
         else {
             return;
         };
@@ -1456,7 +1620,6 @@ impl RecordsTable {
             table.delegate_mut().selected_row_id = selected_row_id;
             table.set_selected_row(row_ix, cx);
         });
-        cx.notify();
     }
 
     /// Clears the controlled selected-row snapshot.
@@ -1466,7 +1629,6 @@ impl RecordsTable {
             table.delegate_mut().selected_row_id = None;
             table.clear_selection(cx);
         });
-        cx.notify();
     }
 
     /// Returns the controlled selected row ID.
@@ -1478,6 +1640,8 @@ impl RecordsTable {
     ///
     /// Passing `None` clears sorting. A non-sortable or unknown column ID is
     /// ignored so stale application snapshots cannot corrupt table state.
+    /// The sort marker lives in the table's own header, so only the table is
+    /// notified.
     pub fn set_sort(
         &mut self,
         column_id: impl Into<SharedString>,
@@ -1488,9 +1652,9 @@ impl RecordsTable {
         let column_id = column_id.into();
         if direction.is_some()
             && !self
-                .columns
-                .iter()
-                .any(|column| column.id == column_id && column.sortable)
+                .columns_by_id
+                .position(&column_id)
+                .is_some_and(|col_ix| self.columns[col_ix].sortable)
         {
             return;
         }
@@ -1503,7 +1667,6 @@ impl RecordsTable {
             table.delegate_mut().sort_direction = direction;
             cx.notify();
         });
-        cx.notify();
     }
 
     /// Returns the controlled sort column ID and direction.
@@ -1513,12 +1676,7 @@ impl RecordsTable {
 
     /// Scrolls the identified record into view when it exists.
     pub fn scroll_to_row(&mut self, row_id: &str, cx: &mut Context<Self>) {
-        let Some(row_ix) = self
-            .records
-            .content()
-            .iter()
-            .position(|row| row.id() == row_id)
-        else {
+        let Some(row_ix) = self.rows_by_id.position(row_id) else {
             return;
         };
         self.table
@@ -1528,11 +1686,7 @@ impl RecordsTable {
 
     /// Scrolls the identified column into view when it exists.
     pub fn scroll_to_column(&mut self, column_id: &str, cx: &mut Context<Self>) {
-        let Some(col_ix) = self
-            .columns
-            .iter()
-            .position(|column| column.id() == column_id)
-        else {
+        let Some(col_ix) = self.columns_by_id.position(column_id) else {
             return;
         };
         self.table
@@ -1543,6 +1697,32 @@ impl RecordsTable {
     /// Moves keyboard focus to the records grid.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.table.focus_handle(cx).focus(window, cx);
+    }
+
+    /// Re-resolves rem-scaled column widths after the window's rem changed.
+    ///
+    /// Upstream caches each column's width in pixels when the table refreshes,
+    /// and no record snapshot reports a zoom, so without this a table sized in
+    /// rems keeps the widths it resolved at the reader's previous type scale.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        // Refreshing rebuilds every column's cached width, so a table whose
+        // columns are all in pixels keeps whatever widths it has — including
+        // any the reader dragged — while still carrying the new rem forward
+        // for a column snapshot that arrives later.
+        let widths_follow_the_rem = self
+            .columns
+            .iter()
+            .any(|column| matches!(column.width, RecordColumnWidth::Rems(_)));
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().rem_size = rem_size;
+            if widths_follow_the_rem {
+                table.refresh(cx);
+                cx.notify();
+            }
+        });
     }
 
     fn handle_table_event(&mut self, event: &TableEvent, cx: &mut Context<Self>) {
@@ -1595,12 +1775,10 @@ impl RecordsTable {
     }
 
     fn sync_controlled_selection(&mut self, cx: &mut Context<Self>) {
-        let desired_row_ix = self.selected_row_id.as_ref().and_then(|selected| {
-            self.records
-                .content()
-                .iter()
-                .position(|row| row.id == *selected)
-        });
+        let desired_row_ix = self
+            .selected_row_id
+            .as_ref()
+            .and_then(|selected| self.rows_by_id.position(selected));
         let current_row_ix = self.table.read(cx).selected_row();
         if desired_row_ix == current_row_ix {
             return;
@@ -1640,10 +1818,9 @@ impl RecordsTable {
     fn request_activation(&mut self, row_id: SharedString, cx: &mut Context<Self>) {
         self.pending_pointer_row_id = None;
         if self
-            .records
-            .content()
-            .iter()
-            .any(|row| row.id == row_id && !row.disabled)
+            .rows_by_id
+            .position(&row_id)
+            .is_some_and(|row_ix| !self.records.content()[row_ix].disabled)
         {
             cx.emit(RecordsTableEvent::ActivationRequested {
                 id: self.id.clone(),
@@ -1658,11 +1835,9 @@ impl RecordsTable {
             return;
         };
         if self
-            .records
-            .content()
-            .iter()
-            .find(|row| row.id == row_id)
-            .is_none_or(|row| row.disabled)
+            .rows_by_id
+            .position(&row_id)
+            .is_none_or(|row_ix| self.records.content()[row_ix].disabled)
         {
             cx.propagate();
             return;
@@ -1675,12 +1850,10 @@ impl RecordsTable {
     }
 
     fn request_enabled_beyond(&self, disabled_index: usize, cx: &mut Context<Self>) {
-        let current = self.selected_row_id.as_ref().and_then(|selected| {
-            self.records
-                .content()
-                .iter()
-                .position(|row| row.id == *selected)
-        });
+        let current = self
+            .selected_row_id
+            .as_ref()
+            .and_then(|selected| self.rows_by_id.position(selected));
         let forward = current.is_none_or(|current| disabled_index > current);
         let next = if forward {
             self.records
@@ -1718,7 +1891,17 @@ impl Focusable for RecordsTable {
 }
 
 impl Render for RecordsTable {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        // A column width given in rems is only as current as the rem it was
+        // resolved against. Reading it here mutates nothing; the reaction is
+        // deferred so that render itself neither refreshes nor notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |table, _, cx| {
+                table.resolve_layout(rem_size, cx);
+            });
+        }
+
         let inline_status = (!self.records.content().is_empty())
             .then(|| match self.records.state() {
                 ProgressState::Pending | ProgressState::Running => {
@@ -1767,7 +1950,28 @@ mod tests {
         Element as _, RenderOnce as _, TestAppContext, VisualTestContext, accesskit, canvas, px,
         size,
     };
-    use std::sync::{Arc, Mutex};
+    use gpui_component::Theme;
+    use std::{
+        cell::Cell,
+        rc::Rc,
+        sync::{Arc, Mutex},
+    };
+
+    /// Zooms the way the shell does: the theme carries the base type size and
+    /// `Root` hands it to the window every frame.
+    ///
+    /// Two draws, because the table notices the new rem while rendering and
+    /// reacts afterwards — the first draw is where it sees the change, the
+    /// second lays out the widths it resolved.
+    fn zoom_to(cx: &mut VisualTestContext, font_size: f32) {
+        cx.update(|window, cx| {
+            Theme::global_mut(cx).font_size = px(font_size);
+            window.set_rem_size(Theme::global(cx).font_size);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
 
     #[test]
     fn table_row_and_cell_builders_expose_direct_accesskit_contracts() {
@@ -1921,6 +2125,303 @@ mod tests {
                 "reduced motion should retain no animated offsets"
             );
         });
+    }
+
+    /// A hundred thousand rows is the size the plan asks the index to survive.
+    ///
+    /// The viewport sits deep in the snapshot on purpose: a scan for a row that
+    /// happens to be near the top is cheap, and measuring there would flatter
+    /// the scan rather than describe what a reader who scrolled actually pays.
+    ///
+    /// Both phases are measured, because they answer different questions. The
+    /// snapshot phase says whether acceptance walks the snapshot once per
+    /// visible row on top of the pass that validates it. The command phase says
+    /// whether a lookup arriving between snapshots — the case an
+    /// acceptance-scoped temporary map cannot serve — still walks every row.
+    #[gpui::test]
+    fn stable_id_lookups_do_not_scale_with_a_hundred_thousand_records(cx: &mut TestAppContext) {
+        const ROWS: usize = 100_000;
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("scale", "Scale", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let rows = (0..ROWS)
+            .map(|index| {
+                RecordRow::new(format!("row-{index}"), format!("Row {index}"))
+                    .cells([RecordCell::new("name", format!("Row {index}"))])
+            })
+            .collect::<Vec<_>>();
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
+                records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+                records.set_records(Progressive::complete(rows.clone().into()), window, cx);
+                records.scroll_to_row("row-90000", cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let mut reordered = rows.clone();
+        reordered.swap(90_001, 90_002);
+        take_stable_id_visits();
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_records(Progressive::complete(reordered.into()), window, cx);
+            });
+        });
+        let snapshot_visits = take_stable_id_visits();
+        assert!(
+            snapshot_visits <= ROWS.saturating_add(1_000),
+            "accepting a snapshot should index it once, not once per lookup: {snapshot_visits}"
+        );
+
+        take_stable_id_visits();
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.scroll_to_row("row-99999", cx);
+                records.set_selected_row("row-99999", window, cx);
+                records.scroll_to_column("name", cx);
+            });
+        });
+        let command_visits = take_stable_id_visits();
+        assert!(
+            command_visits <= 32,
+            "a command outside acceptance should look its ID up, not scan: {command_visits}"
+        );
+    }
+
+    /// The notification decision, setter by setter.
+    ///
+    /// A value only the table draws is notified once, to the table: this
+    /// entity renders that table, so the window is invalidated either way, and
+    /// a second notification would wake application observers about a value
+    /// the application already owns. The record snapshot is the exception —
+    /// this entity draws the progress and failure banner from it — so it stays
+    /// paired, which the banner assertion below holds in place.
+    #[gpui::test]
+    fn setters_notify_this_entity_only_when_its_own_render_reads_the_value(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("notify", "Notify", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let table = records.read_with(cx, |records, _| records.table.clone());
+        let rows: Arc<[RecordRow]> = Arc::from([
+            RecordRow::new("first", "First").cells([RecordCell::new("name", "First")]),
+            RecordRow::new("second", "Second").cells([RecordCell::new("name", "Second")]),
+        ]);
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns(
+                    [RecordColumn::new("name", "Name").sortable(true)],
+                    window,
+                    cx,
+                );
+                records.set_records(Progressive::complete(rows.clone()), window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+
+        let owner_notifications = Rc::new(Cell::new(0usize));
+        let table_notifications = Rc::new(Cell::new(0usize));
+        let _owner_observation = {
+            let counted = owner_notifications.clone();
+            cx.update(|_, cx| cx.observe(&records, move |_, _| counted.set(counted.get() + 1)))
+        };
+        let _table_observation = {
+            let counted = table_notifications.clone();
+            cx.update(|_, cx| cx.observe(&table, move |_, _| counted.set(counted.get() + 1)))
+        };
+        let mut observed: Vec<(&str, usize, bool)> = Vec::new();
+        let mut note = |cx: &mut VisualTestContext, setter: &'static str| {
+            cx.run_until_parked();
+            observed.push((
+                setter,
+                owner_notifications.replace(0),
+                table_notifications.replace(0) > 0,
+            ));
+        };
+
+        cx.update(|_, cx| {
+            records.update(cx, |records, cx| records.set_activation_label("Review", cx));
+        });
+        note(cx, "set_activation_label");
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns(
+                    [
+                        RecordColumn::new("name", "Name").sortable(true),
+                        RecordColumn::new("status", "Status"),
+                    ],
+                    window,
+                    cx,
+                );
+            });
+        });
+        note(cx, "set_columns");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            cx.debug_bounds("records-column-6:notifystatus").is_some(),
+            "the table's own notification must be enough to draw a column this entity never renders"
+        );
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_sort("name", Some(RecordSortDirection::Descending), window, cx);
+            });
+        });
+        note(cx, "set_sort");
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_selected_row("second", window, cx);
+            });
+        });
+        note(cx, "set_selected_row");
+        assert_eq!(
+            records.read_with(cx, |records, cx| records.table.read(cx).selected_row()),
+            Some(1),
+            "the selection reached the table without notifying this entity"
+        );
+
+        cx.update(|_, cx| {
+            records.update(cx, |records, cx| records.clear_selected_row(cx));
+        });
+        note(cx, "clear_selected_row");
+
+        cx.update(|_, cx| {
+            records.update(cx, |records, cx| {
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
+            });
+        });
+        note(cx, "set_row_reorder_response");
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_records(Progressive::running(rows.clone()), window, cx);
+            });
+        });
+        note(cx, "set_records");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            cx.debug_bounds("records-state-6:notifyrecords-loading")
+                .is_some(),
+            "this entity draws the progress banner, so a snapshot must notify it too"
+        );
+
+        assert_eq!(
+            observed,
+            vec![
+                ("set_activation_label", 0, true),
+                ("set_columns", 0, true),
+                ("set_sort", 0, true),
+                ("set_selected_row", 0, true),
+                ("clear_selected_row", 0, true),
+                ("set_row_reorder_response", 0, true),
+                ("set_records", 1, true),
+            ],
+            "setter, notifications of this entity, and whether the table was notified"
+        );
+    }
+
+    #[test]
+    fn column_width_builders_carry_their_own_unit() {
+        let pixels = RecordColumn::new("pixel", "Pixel").width(px(220.));
+        let scaled = RecordColumn::new("scaled", "Scaled").width_in_rems(12.);
+
+        assert_eq!(pixels.configured_width(), Some(px(220.)));
+        assert_eq!(
+            scaled.configured_width(),
+            None,
+            "a rem width has no pixel value until a window resolves it"
+        );
+        assert_eq!(
+            RecordColumn::new("scaled", "Scaled")
+                .width_in_rems(12.)
+                .width(px(220.))
+                .configured_width(),
+            Some(px(220.)),
+            "the later width call wins"
+        );
+    }
+
+    /// A rem-scaled width follows the reader's type scale and a pixel width
+    /// does not, in one table, through the widths the grid actually consumes
+    /// and the header it actually paints.
+    #[gpui::test]
+    fn rem_column_widths_resolve_against_the_readers_type_size(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("widths", "Widths", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(300.)));
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_columns(
+                    [
+                        RecordColumn::new("pixel", "Pixel").width(px(220.)),
+                        RecordColumn::new("scaled", "Scaled").width_in_rems(12.),
+                    ],
+                    window,
+                    cx,
+                );
+                records.set_records(
+                    Progressive::complete(Arc::from([RecordRow::new("only", "Only").cells([
+                        RecordCell::new("pixel", "Pixel"),
+                        RecordCell::new("scaled", "Scaled"),
+                    ])])),
+                    window,
+                    cx,
+                );
+            });
+        });
+        let resolved_widths = |cx: &mut VisualTestContext| {
+            records.read_with(cx, |records, cx| {
+                let delegate = records.table.read(cx).delegate();
+                (delegate.column(0, cx).width, delegate.column(1, cx).width)
+            })
+        };
+        let painted_width = |cx: &mut VisualTestContext, selector: &'static str| {
+            cx.debug_bounds(selector)
+                .expect("a configured column should paint a header")
+                .size
+                .width
+        };
+
+        zoom_to(cx, 16.);
+        assert_eq!(resolved_widths(cx), (px(220.), px(192.)));
+        let pixel_at_base = painted_width(cx, "records-column-6:widthspixel");
+        let scaled_at_base = painted_width(cx, "records-column-6:widthsscaled");
+
+        zoom_to(cx, 24.);
+        assert_eq!(
+            resolved_widths(cx),
+            (px(220.), px(288.)),
+            "a rem width follows the reader's type size; a pixel width stays put"
+        );
+        assert_eq!(
+            painted_width(cx, "records-column-6:widthspixel"),
+            pixel_at_base,
+            "the pixel column must not move when the reader zooms"
+        );
+        assert!(
+            painted_width(cx, "records-column-6:widthsscaled") > scaled_at_base,
+            "the zoom must reach the painted header, not just the resolved value"
+        );
+
+        zoom_to(cx, 16.);
+        assert_eq!(
+            resolved_widths(cx),
+            (px(220.), px(192.)),
+            "zooming back resolves back"
+        );
     }
 
     #[gpui::test]
