@@ -1143,6 +1143,8 @@ impl PromptBar {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
+        let model_count = self.models.len();
+        let mut model_ix = 0;
         let mut model_options = Vec::new();
         for (provider, members) in model_groups(&self.models) {
             if let Some(provider) = provider {
@@ -1154,6 +1156,7 @@ impl PromptBar {
                 );
             }
             for model in members {
+                model_ix += 1;
                 let model_id = model.id.clone();
                 let model_selector = format!("prompt-bar-model-option-{}", model.id);
                 let selected = self.selected_model.as_ref() == Some(&model.id);
@@ -1210,8 +1213,12 @@ impl PromptBar {
                     .disabled(model.disabled)
                     .selected(selected)
                     .aria_selected(selected)
+                    .aria_position_in_set(model_ix)
+                    .aria_size_of_set(model_count)
                     .w_full()
-                    .when(active, |button| button.bg(cx.theme().accent))
+                    .when(active, |button| {
+                        button.bg(cx.theme().accent).aria_active_descendant()
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.active_model = Some(model_id.clone());
                         this.confirm_active_model(window, cx);
