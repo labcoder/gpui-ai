@@ -22,6 +22,11 @@
 //! parsing rather than by line prefix or by truncating at the first
 //! `#[cfg(test)]`: that marker also appears on inner items mid-file, and
 //! truncating there blinds the audit to every production line below it.
+//!
+//! A file that opens with the inner form — `#![cfg(test)]` before any item —
+//! is test code in its entirety. That is how a split-out `tests.rs` under a
+//! module directory gates itself, and the gate must be legible from the file
+//! alone because the audit never sees the parent's `mod` declaration.
 
 use std::path::{Path, PathBuf};
 
@@ -384,6 +389,46 @@ impl Widget {
     assert_eq!(found[0].line, 8);
 }
 
+/// A split-out `tests.rs` gates itself with a leading `#![cfg(test)]`; the
+/// audit must read that as "this whole file is test code" without seeing the
+/// parent's `mod` declaration.
+#[test]
+fn a_file_opening_with_an_inner_test_gate_is_test_code_in_its_entirety() {
+    let source = "\
+//! Tests split out of their component module.
+
+#![cfg(test)]
+
+fn fixture() -> Pixels {
+    px(7.)
+}
+";
+    assert!(
+        raw_pixel_uses("widget/tests.rs", source).is_empty(),
+        "a leading inner gate must cover the whole file"
+    );
+}
+
+/// The inner form deeper in the file belongs to some block, not the file, so
+/// it must not blank the production code around it.
+#[test]
+fn an_inner_test_gate_after_an_item_does_not_hide_the_file() {
+    let source = "\
+fn real() -> Pixels {
+    px(8.)
+}
+
+mod grouped {
+    #![cfg(test)]
+}
+";
+    let expressions: Vec<String> = raw_pixel_uses("fixture.rs", source)
+        .into_iter()
+        .map(|found| found.expression)
+        .collect();
+    assert_eq!(expressions, ["px(8.)"]);
+}
+
 #[test]
 fn test_gated_items_comments_and_literals_are_excluded() {
     let source = "\
@@ -611,6 +656,16 @@ fn raw_pixel_uses(file: &str, source: &str) -> Vec<RawPixelUse> {
 /// end of file.
 fn test_gated_spans(source: &str, code: &str) -> Vec<(usize, usize)> {
     let bytes = code.as_bytes();
+    // A leading inner gate compiles the whole file for tests only. Leading
+    // means before any item: an inner attribute deeper in the file belongs to
+    // some block, and guessing which one would over-blank production code.
+    if let Some(start) = code.find("#![")
+        && code[..start].trim().is_empty()
+        && balanced_end(bytes, start + 2, b'[', b']')
+            .is_some_and(|end| is_test_gate(&source[start..end]))
+    {
+        return vec![(0, code.len())];
+    }
     let mut spans = Vec::new();
     let mut cursor = 0;
     while let Some(offset) = code[cursor..].find("#[") {
@@ -634,7 +689,7 @@ fn test_gated_spans(source: &str, code: &str) -> Vec<(usize, usize)> {
 /// production code from the audit.
 fn is_test_gate(attribute: &str) -> bool {
     let normalized = normalize(attribute);
-    normalized.starts_with("#[cfg(")
+    (normalized.starts_with("#[cfg(") || normalized.starts_with("#![cfg("))
         && !normalized.contains("not(")
         && contains_word(&normalized, "test")
 }
