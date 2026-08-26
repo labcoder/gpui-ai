@@ -56,8 +56,8 @@ struct FilterProjection {
 
 /// Records `item` and its retained descendants, reporting whether it survives.
 ///
-/// A matching item keeps its whole subtree â€” someone who searched for a branch
-/// expects to see what is inside it â€” which `inherited` carries downward. Every
+/// A matching item keeps its whole subtree — someone who searched for a branch
+/// expects to see what is inside it — which `inherited` carries downward. Every
 /// child is visited regardless of the running result, because retention is
 /// being recorded, not merely answered.
 fn retain_item(

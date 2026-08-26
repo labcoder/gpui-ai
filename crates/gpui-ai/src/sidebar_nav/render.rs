@@ -149,8 +149,8 @@ pub(super) fn sidebar_item_control(
 
 /// The accessible control for one section header row.
 ///
-/// A section is a real parent in a flattened tree â€” its items are levels below
-/// it â€” so it is a tree node rather than loose text. It carries no application
+/// A section is a real parent in a flattened tree — its items are levels below
+/// it — so it is a tree node rather than loose text. It carries no application
 /// intent, so activating it does nothing; the reader's arrow keys still walk
 /// through it into the items it names.
 pub(super) fn sidebar_section_control(
