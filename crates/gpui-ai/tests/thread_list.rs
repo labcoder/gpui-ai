@@ -132,15 +132,15 @@ fn selecting_and_row_actions_report_stable_ids(cx: &mut TestAppContext) {
     click(cx, "thread-cold-chain");
     // Row actions live in a popup menu, so nothing of them exists until the
     // row's ellipsis opens it.
-    assert!(cx.debug_bounds("thread-rename-supplier").is_none());
+    assert!(cx.debug_bounds("thread-actions-menu").is_none());
     click(cx, "thread-more-supplier");
-    assert!(cx.debug_bounds("thread-rename-supplier").is_some());
-    click(cx, "thread-rename-supplier");
+    assert!(cx.debug_bounds("thread-actions-menu").is_some());
+    press(cx, "down enter");
     // Choosing an action dismisses the menu, so a stale target cannot linger.
-    assert!(cx.debug_bounds("thread-rename-supplier").is_none());
+    assert!(cx.debug_bounds("thread-actions-menu").is_none());
 
     click(cx, "thread-more-supplier");
-    click(cx, "thread-delete-supplier");
+    press(cx, "down down down enter");
     assert_eq!(
         events.borrow().as_slice(),
         &[
@@ -155,7 +155,7 @@ fn selecting_and_row_actions_report_stable_ids(cx: &mut TestAppContext) {
             },
         ]
     );
-    assert!(cx.debug_bounds("thread-delete-supplier").is_none());
+    assert!(cx.debug_bounds("thread-actions-menu").is_none());
     click(cx, "thread-list-new");
     assert_eq!(events.borrow().last(), Some(&ThreadListEvent::NewRequested));
 }
@@ -167,7 +167,7 @@ fn archived_threads_hide_until_requested_and_can_be_restored(cx: &mut TestAppCon
     click(cx, "thread-list-archived-toggle");
     assert!(cx.debug_bounds("thread-packaging").is_some());
     click(cx, "thread-more-packaging");
-    click(cx, "thread-archive-packaging");
+    press(cx, "down down enter");
     assert_eq!(
         events.borrow().as_slice(),
         &[ThreadListEvent::UnarchiveRequested {
@@ -384,10 +384,10 @@ fn escape_closes_the_menu_and_returns_focus_to_the_list(cx: &mut TestAppContext)
     take_events(&events);
 
     click(cx, "thread-more-supplier");
-    assert!(cx.debug_bounds("thread-delete-supplier").is_some());
+    assert!(cx.debug_bounds("thread-actions-menu").is_some());
     press(cx, "escape");
     assert!(
-        cx.debug_bounds("thread-delete-supplier").is_none(),
+        cx.debug_bounds("thread-actions-menu").is_none(),
         "Escape closes the menu"
     );
 
@@ -407,9 +407,9 @@ fn escape_closes_the_menu_and_returns_focus_to_the_list(cx: &mut TestAppContext)
 fn an_outside_press_dismisses_the_menu(cx: &mut TestAppContext) {
     let (_, events, cx) = harness(cx, 600.);
     click(cx, "thread-more-supplier");
-    assert!(cx.debug_bounds("thread-delete-supplier").is_some());
+    assert!(cx.debug_bounds("thread-actions-menu").is_some());
     click(cx, "thread-list-search");
-    assert!(cx.debug_bounds("thread-delete-supplier").is_none());
+    assert!(cx.debug_bounds("thread-actions-menu").is_none());
     assert_eq!(
         take_events(&events),
         vec![],

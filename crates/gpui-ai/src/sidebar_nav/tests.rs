@@ -693,7 +693,7 @@ impl HostedNavProbe {
         cx: &mut Context<Self>,
     ) -> Self {
         let nav = cx.new(|cx| {
-            let mut nav = SidebarNav::new("hosted-nav", window, cx).presentation(presentation);
+            let mut nav = SidebarNav::new("hosted-nav", window, cx).with_presentation(presentation);
             nav.set_sections(probe_sections(), cx);
             nav
         });

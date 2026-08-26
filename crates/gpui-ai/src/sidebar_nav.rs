@@ -307,10 +307,10 @@ impl SidebarNav {
     /// ```ignore
     /// let nav = cx.new(|cx| {
     ///     SidebarNav::new("docked-nav", window, cx)
-    ///         .presentation(SidebarNavPresentation::Embedded)
+    ///         .with_presentation(SidebarNavPresentation::Embedded)
     /// });
     /// ```
-    pub fn presentation(mut self, presentation: SidebarNavPresentation) -> Self {
+    pub fn with_presentation(mut self, presentation: SidebarNavPresentation) -> Self {
         self.presentation = presentation;
         self
     }
@@ -400,7 +400,7 @@ impl SidebarNav {
     }
 
     /// Return how the shell is drawn.
-    pub fn nav_presentation(&self) -> SidebarNavPresentation {
+    pub fn presentation(&self) -> SidebarNavPresentation {
         self.presentation
     }
 

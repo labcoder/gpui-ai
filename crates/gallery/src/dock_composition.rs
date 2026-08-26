@@ -15,24 +15,28 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    AnyView, App, Context, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Pixels,
-    Render, Role, SharedString, Stateful, Subscription, Window, div, px,
+    AnyView, App, Context, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable, Render,
+    Role, SharedString, Stateful, Subscription, Window, div, rems,
 };
 use gpui_ai::prelude::*;
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::dock::{
     BasePanel, DockArea, DockLayout, DockPlacement, DockSkin, Panel, PanelEvent, panel_handle,
 };
-use gpui_component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_component::{ActiveTheme as _, Selectable as _, h_flex, v_flex};
 
 /// Width of the sidebar's dock along a vertical edge.
-const SIDE_DOCK_SIZE: Pixels = px(228.);
+const SIDE_DOCK_SIZE_IN_REMS: f32 = 14.25;
 /// Height of the sidebar's dock along the bottom edge.
 ///
-/// Shorter than [`SIDE_DOCK_SIZE`] and far wider: a bottom dock is the case
+/// Shorter than [`SIDE_DOCK_SIZE_IN_REMS`] and far wider: a bottom dock is the case
 /// that fails when a navigation keeps a rail's width, which is the whole
 /// reason this story can move the sidebar.
-const BOTTOM_DOCK_SIZE: Pixels = px(150.);
+const BOTTOM_DOCK_SIZE_IN_REMS: f32 = 9.375;
+/// Initial width of the thread-list pane in the center split.
+const THREAD_PANE_SIZE_IN_REMS: f32 = 14.5;
+/// Initial height of the artifact pane in the nested vertical split.
+const ARTIFACT_PANE_SIZE_IN_REMS: f32 = 11.25;
 
 /// A gallery-only [`Panel`] wrapping one embedded [`SidebarNav`].
 ///
@@ -61,7 +65,7 @@ impl DockNavPanel {
         cx: &mut Context<Self>,
     ) -> Self {
         debug_assert_eq!(
-            nav.read(cx).nav_presentation(),
+            nav.read(cx).presentation(),
             SidebarNavPresentation::Embedded,
             "a docked navigation must be embedded so the dock owns its size",
         );
@@ -225,7 +229,7 @@ impl DockCompositionStory {
             // The one line that makes this composition possible: the dock owns
             // placement and size, so the navigation contributes neither.
             let mut nav = SidebarNav::new("dock-nav", window, cx)
-                .presentation(SidebarNavPresentation::Embedded);
+                .with_presentation(SidebarNavPresentation::Embedded);
             nav.set_sections(crate::gallery::creamery_sidebar_sections(), cx);
             nav.set_active_item("all-orders", cx);
             nav
@@ -299,13 +303,14 @@ impl DockCompositionStory {
     /// place: upstream reconciles the tree by value, so re-describing an
     /// unchanged center costs a comparison, not a rebuild of its panels.
     fn apply_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let rem_size = window.rem_size();
         // Nested on purpose. A horizontal split holds the conversation list
         // beside a vertical split, so the answer and the artifact it produced
         // share one column: two axes, three panes, one region.
         let center = DockLayout::h_split()
             .child(
                 DockLayout::tabs().panel_view(panel_handle(self.threads_panel.clone()), cx),
-                Some(px(232.)),
+                Some(rem_size * THREAD_PANE_SIZE_IN_REMS),
             )
             .child(
                 DockLayout::v_split()
@@ -316,16 +321,16 @@ impl DockCompositionStory {
                     .child(
                         DockLayout::tabs()
                             .panel_view(panel_handle(self.artifact_panel.clone()), cx),
-                        Some(px(180.)),
+                        Some(rem_size * ARTIFACT_PANE_SIZE_IN_REMS),
                     ),
                 None,
             );
         let sidebar = DockLayout::tabs().panel_view(panel_handle(self.nav_panel.clone()), cx);
         let placement = self.placement;
         let size = if placement == DockPlacement::Bottom {
-            BOTTOM_DOCK_SIZE
+            rem_size * BOTTOM_DOCK_SIZE_IN_REMS
         } else {
-            SIDE_DOCK_SIZE
+            rem_size * SIDE_DOCK_SIZE_IN_REMS
         };
 
         self.dock.update(cx, |area, cx| {
@@ -421,6 +426,7 @@ impl Render for DockCompositionStory {
                     .children(Self::PLACEMENTS.map(|edge| {
                         let label = placement_label(edge);
                         Button::new(format!("dock-place-{label}"))
+                            .selected(edge == placement)
                             .when(edge == placement, |button| button.primary())
                             .when(edge != placement, |button| button.outline())
                             .label(label)
@@ -436,7 +442,7 @@ impl Render for DockCompositionStory {
                     .id("dock-composition-host")
                     .debug_selector(|| "dock-composition-host".into())
                     .w_full()
-                    .h(px(420.))
+                    .h(rems(26.25))
                     .flex_none()
                     .min_w_0()
                     .overflow_hidden()
@@ -590,7 +596,7 @@ mod tests {
             // The seam is what makes the rest of this work, so the story is
             // pinned to it rather than to whatever the default happens to be.
             assert_eq!(
-                story.nav(cx).read(cx).nav_presentation(),
+                story.nav(cx).read(cx).presentation(),
                 SidebarNavPresentation::Embedded,
             );
         });
@@ -808,8 +814,11 @@ mod tests {
         let trigger = bounds(cx, "thread-more-supplier-pricing").center();
         cx.simulate_click(trigger, Modifiers::default());
         settle(cx, &story);
-        let last_item = bounds(cx, "thread-delete-supplier-pricing");
-        assert_within(last_item, panel, "a menu opened with room below it");
+        let menu = bounds(cx, "thread-actions-menu");
+        assert!(
+            menu.origin.y >= panel.origin.y && menu.origin.y + menu.size.height <= panel_bottom,
+            "a menu opened with room below it should fit vertically: menu {menu:?} against panel {panel:?}",
+        );
         cx.simulate_keystrokes("escape");
         settle(cx, &story);
 
@@ -817,10 +826,10 @@ mod tests {
         let trigger = bounds(cx, "thread-more-margins").center();
         cx.simulate_click(trigger, Modifiers::default());
         settle(cx, &story);
-        let last_item = bounds(cx, "thread-delete-margins");
+        let menu = bounds(cx, "thread-actions-menu");
         assert!(
-            last_item.origin.y > panel_bottom,
-            "the row menu is expected to overhang the panel today: item {last_item:?}              against a panel ending at {panel_bottom:?}",
+            menu.origin.y + menu.size.height > panel_bottom,
+            "the row menu is expected to overhang the panel today: menu {menu:?} against a panel ending at {panel_bottom:?}",
         );
     }
 }

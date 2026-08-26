@@ -24,7 +24,7 @@ use crate::{
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    Anchor, AnyElement, App, AppContext as _, Context, DismissEvent, ElementId, Entity,
+    Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, DismissEvent, ElementId, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent,
     ListAlignment, ListOffset, ListState, ParentElement as _, Pixels, Render, RenderOnce, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window,
@@ -444,8 +444,6 @@ impl RowRenderer {
         let archived = item.archived;
         // The menu is rebuilt on each open, so the builder clones rather than
         // moves: it must be able to run again.
-        let debug_id = item.id.to_string();
-
         ThreadActionsMenu {
             id: ElementId::from((item_id.clone(), "more-menu")),
             trigger: icon_button(
@@ -457,8 +455,6 @@ impl RowRenderer {
             .debug_selector(move || format!("thread-more-{more_debug_id}"))
             .rounded(tokens.radius.sm),
             build: Rc::new(move |menu, _, _| {
-                let (rename_debug, archive_debug, delete_debug) =
-                    (debug_id.clone(), debug_id.clone(), debug_id.clone());
                 let rename_id = action_id.clone();
                 let archive_id = action_id.clone();
                 let delete_id = action_id.clone();
@@ -466,58 +462,36 @@ impl RowRenderer {
                 let archive_owner = owner.clone();
                 let delete_owner = owner.clone();
                 menu.action_context(list_focus.clone())
-                    .item(
-                        PopupMenuItem::element(move |_, _| {
-                            let debug = rename_debug.clone();
-                            div()
-                                .debug_selector(move || format!("thread-rename-{debug}"))
-                                .child("Rename")
-                        })
-                        .on_click(move |_, _, cx| {
-                            let _ = rename_owner.update(cx, |_, cx| {
-                                cx.emit(ThreadListEvent::RenameRequested {
-                                    id: rename_id.clone(),
-                                });
+                    .item(PopupMenuItem::new("Rename").on_click(move |_, _, cx| {
+                        let _ = rename_owner.update(cx, |_, cx| {
+                            cx.emit(ThreadListEvent::RenameRequested {
+                                id: rename_id.clone(),
                             });
-                        }),
-                    )
+                        });
+                    }))
                     .item(
-                        PopupMenuItem::element(move |_, _| {
-                            let debug = archive_debug.clone();
-                            div()
-                                .debug_selector(move || format!("thread-archive-{debug}"))
-                                .child(if archived { "Unarchive" } else { "Archive" })
-                        })
-                        .on_click(move |_, _, cx| {
-                            let _ = archive_owner.update(cx, |_, cx| {
-                                cx.emit(if archived {
-                                    ThreadListEvent::UnarchiveRequested {
-                                        id: archive_id.clone(),
-                                    }
-                                } else {
-                                    ThreadListEvent::ArchiveRequested {
-                                        id: archive_id.clone(),
-                                    }
+                        PopupMenuItem::new(if archived { "Unarchive" } else { "Archive" })
+                            .on_click(move |_, _, cx| {
+                                let _ = archive_owner.update(cx, |_, cx| {
+                                    cx.emit(if archived {
+                                        ThreadListEvent::UnarchiveRequested {
+                                            id: archive_id.clone(),
+                                        }
+                                    } else {
+                                        ThreadListEvent::ArchiveRequested {
+                                            id: archive_id.clone(),
+                                        }
+                                    });
                                 });
-                            });
-                        }),
+                            }),
                     )
-                    .item(
-                        PopupMenuItem::element(move |_, cx| {
-                            let debug = delete_debug.clone();
-                            div()
-                                .debug_selector(move || format!("thread-delete-{debug}"))
-                                .text_color(cx.theme().danger)
-                                .child("Delete")
-                        })
-                        .on_click(move |_, _, cx| {
-                            let _ = delete_owner.update(cx, |_, cx| {
-                                cx.emit(ThreadListEvent::DeleteRequested {
-                                    id: delete_id.clone(),
-                                });
+                    .item(PopupMenuItem::new("Delete").on_click(move |_, _, cx| {
+                        let _ = delete_owner.update(cx, |_, cx| {
+                            cx.emit(ThreadListEvent::DeleteRequested {
+                                id: delete_id.clone(),
                             });
-                        }),
-                    )
+                        });
+                    }))
             }),
         }
     }
@@ -527,6 +501,7 @@ impl RowRenderer {
 /// that dismisses it.
 #[derive(Default)]
 struct ThreadActionsMenuState {
+    open: bool,
     menu: Option<Entity<PopupMenu>>,
 }
 
@@ -558,6 +533,20 @@ impl RenderOnce for ThreadActionsMenu {
         let state = window.use_keyed_state((self.id.clone(), "menu"), cx, |_, _| {
             ThreadActionsMenuState::default()
         });
+        let open = state.read(cx).open;
+        let trigger_state = state.clone();
+        let trigger = self.trigger.on_click(move |event, _, cx| {
+            if matches!(event, ClickEvent::Keyboard(_)) {
+                trigger_state.update(cx, |state, cx| {
+                    state.open = !state.open;
+                    if !state.open {
+                        state.menu = None;
+                    }
+                    cx.notify();
+                });
+            }
+        });
+        let open_state = state.clone();
 
         Popover::new(self.id)
             // The menu paints its own surface, and dismisses its own outside
@@ -567,10 +556,22 @@ impl RenderOnce for ThreadActionsMenu {
             // The menu's top-right corner meets the trigger's, so it drops
             // downward flush with the row's trailing edge.
             .anchor(Anchor::TopRight)
-            .trigger(self.trigger)
+            .open(open)
+            .on_open_change(move |open, _, cx| {
+                open_state.update(cx, |state, cx| {
+                    state.open = *open;
+                    if !open {
+                        state.menu = None;
+                    }
+                    cx.notify();
+                });
+            })
+            .trigger(trigger)
             .content(move |_, window, cx| {
                 if let Some(menu) = state.read(cx).menu.clone() {
-                    return menu;
+                    return div()
+                        .debug_selector(|| "thread-actions-menu".into())
+                        .child(menu);
                 }
                 let build = build.clone();
                 let menu =
@@ -578,17 +579,21 @@ impl RenderOnce for ThreadActionsMenu {
                 state.update(cx, |this, _| this.menu = Some(menu.clone()));
                 menu.focus_handle(cx).focus(window, cx);
 
-                let popover = cx.entity();
                 window
                     .subscribe(&menu, cx, {
                         let state = state.clone();
-                        move |_, _: &DismissEvent, window, cx| {
-                            popover.update(cx, |popover, cx| popover.dismiss(window, cx));
-                            state.update(cx, |this, _| this.menu = None);
+                        move |_, _: &DismissEvent, _, cx| {
+                            state.update(cx, |state, cx| {
+                                state.open = false;
+                                state.menu = None;
+                                cx.notify();
+                            });
                         }
                     })
                     .detach();
-                menu
+                div()
+                    .debug_selector(|| "thread-actions-menu".into())
+                    .child(menu)
             })
     }
 }
@@ -1079,7 +1084,39 @@ impl Render for ThreadList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Bounds, Modifiers, Pixels, TestAppContext, VisualTestContext, px, size};
+    use gpui::{
+        Bounds, KeyUpEvent, Keystroke, Modifiers, Pixels, TestAppContext, VisualTestContext, px,
+        size,
+    };
+    use std::cell::Cell;
+
+    struct ThreadActionsMenuProbe {
+        activations: Rc<Cell<usize>>,
+        trigger_focus: FocusHandle,
+    }
+
+    impl Render for ThreadActionsMenuProbe {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let activations = self.activations.clone();
+            div().tab_group().child(ThreadActionsMenu {
+                id: "keyboard-actions".into(),
+                trigger: icon_button(
+                    "keyboard-actions-trigger",
+                    IconName::Ellipsis,
+                    "More actions",
+                    cx,
+                )
+                .track_focus(&self.trigger_focus)
+                .debug_selector(|| "keyboard-actions-trigger".into()),
+                build: Rc::new(move |menu, _, _| {
+                    let activations = activations.clone();
+                    menu.item(PopupMenuItem::new("Rename").on_click(move |_, _, _| {
+                        activations.set(activations.get() + 1);
+                    }))
+                }),
+            })
+        }
+    }
 
     #[test]
     fn matching_is_case_insensitive_over_title_and_subtitle() {
@@ -1105,6 +1142,44 @@ mod tests {
             ThreadSection::new("b", "B").items([ThreadItem::new("t-2", "Two")]),
         ];
         assert!(sections_are_well_formed(&fine));
+    }
+
+    #[gpui::test]
+    fn row_action_menu_opens_and_activates_from_the_keyboard(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let activations = Rc::new(Cell::new(0));
+        let (view, cx) = cx.add_window_view({
+            let activations = activations.clone();
+            move |_, cx| ThreadActionsMenuProbe {
+                activations,
+                trigger_focus: cx.focus_handle(),
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| {
+            let trigger_focus = view.read(cx).trigger_focus.clone();
+            trigger_focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+
+        let enter = Keystroke::parse("enter").expect("Enter is a valid keystroke");
+        cx.simulate_event(KeyDownEvent {
+            keystroke: enter.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke: enter });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            cx.debug_bounds("thread-actions-menu").is_some(),
+            "Enter on the named ellipsis button must open the popup"
+        );
+
+        cx.simulate_keystrokes("down enter");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(activations.get(), 1);
+        assert!(cx.debug_bounds("thread-actions-menu").is_none());
     }
 
     /// Rows tall enough that a 480pt viewport holds a couple of dozen, so the
