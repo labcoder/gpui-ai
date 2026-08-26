@@ -9,6 +9,70 @@ revision.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-26
+
+### Added
+
+- `SidebarNav` has an embedded presentation for application-owned shells and
+  dock regions. The gallery now exercises it inside one `DockArea` with a
+  virtualized thread list, chat, and artifact panel across left, right, and
+  bottom docking, independent scrolling, focus transfer, rem zoom, and
+  constrained layouts.
+- `RecordColumn::width_in_rems` lets application-configured table widths follow
+  the window's base-font scale while the existing pixel builder remains
+  compatible.
+- `ThreadList` row menus open and activate from the keyboard, carry named menu
+  items, dismiss on Escape or an outside press, and restore focus to the
+  listbox. `SidebarNav` now implements the complete tree keyboard model,
+  including parent/child traversal and Home/End bounds.
+
+### Changed
+
+- `ThreadList`, `SidebarNav`, and `ComparisonTable` construct only their visible
+  windows. Records tables index stable row and column IDs once, prune reorder
+  state to visible ownership, and skip notifications that no rendered value
+  observes. Ten-thousand-row navigation stories and the bounded 12-by-128
+  comparison grid are covered directly.
+- Streaming citations cache their transform by content identity, Thinking
+  follows new reasoning only while the reader remains at the tail, and every
+  repeating effect resolves its duration and reduced-motion behavior through
+  one private motion policy.
+- Selection actions use the upstream positioner for automatic flipping and
+  window clamping. The prompt model picker is a floating, keyboard-complete
+  popup that can flip above a bottom-docked composer without changing its
+  layout height.
+- The site loads highlighted source per route instead of putting the complete
+  code corpus in the entry bundle. The themes page renders its three comparison
+  specimens in one shared WASM runtime rather than booting three copies.
+- Chat transcript rendering, PromptBar suggestions and model picking,
+  SidebarNav projection and rendering, RecordsTable indexing and reorder
+  behavior, and accessibility tests are split along their existing ownership
+  seams without changing their public modules.
+- The optimized release candidate records a 4.174 ms steady-draw p99, a
+  5.614 ms driven table-transition p99, a 20.2 ms catalog
+  invalidation-to-draw p99, 104 MB peak working set, and zero parked idle
+  draws on the Windows release host. The supported upstream pair remains
+  gpui-component `d5821f27` and Zed/GPUI `8b1497db`.
+
+### Fixed
+
+- Dropping a cue subscription cannot retire an observer belonging to another
+  `App`, including when multiple applications share a thread and reuse small
+  local IDs.
+- Retained chat, sidebar, and gallery layout estimates now invalidate when the
+  window rem changes while preserving stable scroll anchors. The pixel audit
+  checks production expressions after inline test modules and scopes raw-pixel
+  exceptions to individual justified calls.
+- Gallery autoscroll owns and replaces its driver task, so restarting or
+  cancelling cannot leave two loops advancing the same state. Page movement is
+  based on the measured viewport rather than a fixed estimate.
+- Prompt model options expose selected, position, and set-size semantics; the
+  embed's pre-paint color-scheme pin and runtime theme selection share one
+  precedence table.
+- The internal docking specimen uses the desktop width its four panels need
+  instead of crushing chat and artifact content inside the ordinary component
+  demo cap.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
@@ -292,6 +356,7 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/labcoder/gpui-ai/releases/tag/v0.1.0
