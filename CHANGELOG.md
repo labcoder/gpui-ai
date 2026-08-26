@@ -9,6 +9,8 @@ revision.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-25
+
 ### Added
 
 - Every story is rendered once at build time and kept as a still, so a reader
@@ -290,5 +292,6 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/labcoder/gpui-ai/releases/tag/v0.1.0

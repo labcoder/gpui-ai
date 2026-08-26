@@ -25,7 +25,7 @@ Install gpui-ai from Git. Its current GPUI dependencies are not all available on
 
 ```toml
 [dependencies]
-gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v0.1.0" }
+gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v0.2.0" }
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }

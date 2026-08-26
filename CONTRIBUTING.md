@@ -132,8 +132,8 @@ version and give it a date — `node script/release-notes.mjs <version>` warns
 while a section is still marked `unreleased`.
 
 ```sh
-node script/release-notes.mjs 0.1.0                  # the changelog section
-node script/release-notes.mjs 0.1.0 --release-body   # the full release body
+node script/release-notes.mjs 0.2.0                  # the changelog section
+node script/release-notes.mjs 0.2.0 --release-body   # the full release body
 ```
 
 The `--release-body` form fills `.github/release-template.md`, including the
