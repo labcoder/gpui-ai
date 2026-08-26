@@ -1956,13 +1956,16 @@ fn public_selection_actions_keep_long_final_action_reachable_in_a_narrow_root(
     let toolbar = cx
         .debug_bounds("selection-actions-toolbar")
         .expect("toolbar should render after selection");
+    // The toolbar is placed by the upstream positioner, whose containment
+    // boundary is the viewport rather than the narrow root the selection
+    // lives in: a toolbar wider than its host clamps on-screen instead of
+    // clipping inside it. Reachability is asserted against the window and,
+    // below, against the toolbar's own scrollable frame.
+    let viewport = cx.update(|window, _| window.viewport_size());
+    assert!(toolbar.left() >= px(0.), "{toolbar:?}");
     assert!(
-        toolbar.left() >= surface.left(),
-        "{toolbar:?} vs {surface:?}"
-    );
-    assert!(
-        toolbar.right() <= surface.right(),
-        "{toolbar:?} vs {surface:?}"
+        toolbar.right() <= viewport.width,
+        "{toolbar:?} vs {viewport:?}"
     );
 
     for _ in 0..12 {
@@ -1982,8 +1985,8 @@ fn public_selection_actions_keep_long_final_action_reachable_in_a_narrow_root(
         "{final_action:?} vs {toolbar:?}"
     );
     assert!(
-        final_action.left() >= surface.left() && final_action.right() <= surface.right(),
-        "{final_action:?} vs {surface:?}"
+        final_action.left() >= px(0.) && final_action.right() <= viewport.width,
+        "{final_action:?} vs {viewport:?}"
     );
 }
 

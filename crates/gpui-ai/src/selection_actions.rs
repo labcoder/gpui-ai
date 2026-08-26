@@ -3,13 +3,15 @@
 use crate::control::composed_button;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, AppContext as _, Axis, Bounds, ElementId, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
-    Render, Role, ScrollHandle, SharedString, Size, Stateful, StatefulInteractiveElement as _,
-    Styled, Subscription, Window, div, point, prelude::FluentBuilder as _,
+    App, AppContext as _, Axis, Bounds, ElementId, Entity, EventEmitter, FocusHandle,
+    InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
+    ParentElement as _, Pixels, Point, Render, Role, ScrollHandle, SharedString, Size, Stateful,
+    StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
+    prelude::FluentBuilder as _,
 };
+use gpui_base::{Align, Placement, Positioner};
 use gpui_component::{
-    ActiveTheme as _, ElementExt as _,
+    ActiveTheme as _,
     scroll::ScrollableMask,
     text::{TextView, TextViewState},
 };
@@ -72,48 +74,6 @@ fn settled_selection(text: &str) -> Option<&str> {
     (!selected.is_empty()).then_some(selected)
 }
 
-fn clamp_pixels(value: Pixels, minimum: Pixels, maximum: Pixels) -> Pixels {
-    if value < minimum {
-        minimum
-    } else if value > maximum {
-        maximum
-    } else {
-        value
-    }
-}
-
-fn clamp_anchor(
-    pointer: Point<Pixels>,
-    root: Bounds<Pixels>,
-    overlay: Size<Pixels>,
-    inset: Pixels,
-) -> Point<Pixels> {
-    let local = point(pointer.x - root.origin.x, pointer.y - root.origin.y);
-    let max_x = (root.size.width - overlay.width - inset).max(inset);
-    let max_y = (root.size.height - overlay.height - inset).max(inset);
-    point(
-        clamp_pixels(local.x, inset, max_x),
-        clamp_pixels(local.y, inset, max_y),
-    )
-}
-
-fn available_overlay_size(
-    root: Bounds<Pixels>,
-    preferred: Size<Pixels>,
-    inset: Pixels,
-) -> Size<Pixels> {
-    let horizontal_insets = inset + inset;
-    let vertical_insets = inset + inset;
-    Size::new(
-        preferred
-            .width
-            .min((root.size.width - horizontal_insets).max(Pixels::default())),
-        preferred
-            .height
-            .min((root.size.height - vertical_insets).max(Pixels::default())),
-    )
-}
-
 fn selection_control(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
@@ -141,8 +101,8 @@ fn selection_control(
 
 fn selection_toolbar_frame(
     id: SharedString,
-    anchor: Point<Pixels>,
     maximum_size: Size<Pixels>,
+    focus_handle: &FocusHandle,
     scroll_handle: &ScrollHandle,
     buttons: Vec<gpui_base::Button>,
     cx: &mut App,
@@ -155,10 +115,8 @@ fn selection_toolbar_frame(
         .role(Role::Toolbar)
         .aria_label("Selection actions")
         .tab_group()
-        .absolute()
+        .track_focus(focus_handle)
         .occlude()
-        .left(anchor.x)
-        .top(anchor.y)
         .max_w(maximum_size.width)
         .max_h(maximum_size.height)
         .p(tokens.spacing.xs)
@@ -184,6 +142,21 @@ fn selection_toolbar_frame(
             ScrollableMask::new(Axis::Horizontal, scroll_handle)
                 .id((ElementId::from(scroll_id), "toolbar-scroll-mask")),
         )
+}
+
+fn selection_toolbar_positioner(
+    anchor: Point<Pixels>,
+    placement: Placement,
+    toolbar: impl IntoElement,
+    cx: &App,
+) -> Positioner {
+    let spacing = cx.theme().semantic_tokens().spacing;
+    Positioner::side(Bounds::new(anchor, Size::default()))
+        .placement(placement)
+        .align(Align::Center)
+        .offset(spacing.sm)
+        .margin(spacing.sm)
+        .child(toolbar)
 }
 
 fn defer_selection_settle(
@@ -224,7 +197,11 @@ pub struct SelectionActions {
     selected_text: SharedString,
     drag_active: bool,
     pointer_anchor: Option<Point<Pixels>>,
-    root_bounds: Option<Bounds<Pixels>>,
+    last_text_pointer: Option<Point<Pixels>>,
+    text_focus_scope: FocusHandle,
+    toolbar_focus: FocusHandle,
+    toolbar_action_focus: FocusHandle,
+    selection_focus: Option<FocusHandle>,
     toolbar_scroll: ScrollHandle,
     content_scroll: ScrollHandle,
     toolbar_pointer_active: bool,
@@ -271,7 +248,11 @@ impl SelectionActions {
             selected_text: SharedString::default(),
             drag_active: false,
             pointer_anchor: None,
-            root_bounds: None,
+            last_text_pointer: None,
+            text_focus_scope: cx.focus_handle(),
+            toolbar_focus: cx.focus_handle(),
+            toolbar_action_focus: cx.focus_handle(),
+            selection_focus: None,
             toolbar_scroll: ScrollHandle::new(),
             content_scroll: ScrollHandle::new(),
             toolbar_pointer_active: false,
@@ -289,11 +270,13 @@ impl SelectionActions {
         if self.markdown == markdown {
             return;
         }
+        self.restore_text_focus(cx);
         self.markdown = markdown.clone();
         self.text
             .update(cx, |text, cx| text.set_text(markdown.as_ref(), cx));
         self.selected_text = SharedString::default();
         self.pointer_anchor = None;
+        self.last_text_pointer = None;
         self.drag_active = false;
         self.toolbar_pointer_active = false;
         cx.notify();
@@ -316,6 +299,7 @@ impl SelectionActions {
 
     /// Clears native and composite selection state.
     pub fn clear_selection(&mut self, cx: &mut gpui::Context<Self>) {
+        self.restore_text_focus(cx);
         self.text.update(cx, TextViewState::clear_selection);
         self.selected_text = SharedString::default();
         self.pointer_anchor = None;
@@ -330,15 +314,29 @@ impl SelectionActions {
         self.apply_selection(&raw, pointer, cx);
     }
 
-    fn clear_cached_selection(&mut self, cx: &mut gpui::Context<Self>) {
-        let changed = !self.selected_text.is_empty() || self.pointer_anchor.is_some();
-        self.selected_text = SharedString::default();
-        self.pointer_anchor = None;
-        self.drag_active = false;
-        self.toolbar_pointer_active = false;
-        if changed {
-            cx.notify();
-        }
+    fn capture_text_focus(&self, cx: &mut gpui::Context<Self>) -> Option<FocusHandle> {
+        let entity_id = cx.entity_id();
+        let text_focus_scope = self.text_focus_scope.clone();
+        cx.with_window(entity_id, move |window, cx| {
+            text_focus_scope
+                .contains_focused(window, cx)
+                .then(|| window.focused(cx))
+                .flatten()
+        })
+        .flatten()
+    }
+
+    fn restore_text_focus(&self, cx: &mut gpui::Context<Self>) {
+        let Some(selection_focus) = self.selection_focus.clone() else {
+            return;
+        };
+        let entity_id = cx.entity_id();
+        let toolbar_focus = self.toolbar_focus.clone();
+        let _ = cx.with_window(entity_id, move |window, cx| {
+            if toolbar_focus.contains_focused(window, cx) {
+                selection_focus.focus(window, cx);
+            }
+        });
     }
 
     fn apply_selection(
@@ -349,35 +347,38 @@ impl SelectionActions {
     ) {
         let selected = settled_selection(raw).unwrap_or_default();
         let next: SharedString = selected.to_owned().into();
+        let next_focus = (!next.is_empty())
+            .then(|| self.capture_text_focus(cx))
+            .flatten();
+        if next.is_empty() {
+            self.restore_text_focus(cx);
+        }
         let changed = self.selected_text != next;
         self.selected_text = next;
+        if let Some(next_focus) = next_focus {
+            self.selection_focus = Some(next_focus);
+        }
         if self.selected_text.is_empty() {
             self.pointer_anchor = None;
         } else if let Some(pointer) = pointer {
             self.pointer_anchor = Some(pointer);
-        } else if self.pointer_anchor.is_none() {
-            self.pointer_anchor = self.root_bounds.map(|bounds| bounds.center());
         }
         if changed || !self.selected_text.is_empty() {
             cx.notify();
         }
     }
 
-    fn toolbar(&self, cx: &mut gpui::Context<Self>) -> Stateful<gpui::Div> {
+    fn toolbar(&self, window: &mut Window, cx: &mut gpui::Context<Self>) -> Positioner {
         let root_id = self.id.clone();
         let selected_text = self.selected_text.clone();
         let actions = self.actions.clone();
         let tokens = cx.theme().semantic_tokens();
-        let preferred_size = Size::new(tokens.spacing.xxl * 9., tokens.spacing.xxl * 2.);
-        let inset = tokens.spacing.sm;
-        let maximum_size = self
-            .root_bounds
-            .map(|bounds| available_overlay_size(bounds, preferred_size, inset))
-            .unwrap_or(preferred_size);
+        let maximum_size = Size::new(tokens.spacing.xxl * 9., tokens.spacing.xxl * 2.);
         let maximum_control_width = (maximum_size.width - tokens.spacing.md).max(Pixels::default());
         let buttons = actions
             .into_iter()
-            .map(|action| {
+            .enumerate()
+            .map(|(action_ix, action)| {
                 let event = invocation_event(root_id.clone(), &action, selected_text.clone());
                 let action_id = action.id.clone();
                 let label = action.label.clone();
@@ -386,6 +387,9 @@ impl SelectionActions {
                     label.clone(),
                     cx,
                 )
+                .when(action_ix == 0, |button| {
+                    button.track_focus(&self.toolbar_action_focus)
+                })
                 .max_w(maximum_control_width)
                 .overflow_hidden()
                 .debug_selector(move || format!("selection-action-{action_id}"))
@@ -405,10 +409,10 @@ impl SelectionActions {
             })
             .collect::<Vec<_>>();
 
-        selection_toolbar_frame(
+        let toolbar = selection_toolbar_frame(
             self.id.clone(),
-            self.toolbar_anchor(maximum_size, inset),
             maximum_size,
+            &self.toolbar_focus,
             &self.toolbar_scroll,
             buttons,
             cx,
@@ -418,33 +422,39 @@ impl SelectionActions {
             cx.listener(|this, _, _, _| {
                 this.toolbar_pointer_active = false;
             }),
+        );
+
+        selection_toolbar_positioner(
+            self.toolbar_anchor(window),
+            Placement::Bottom,
+            toolbar,
+            cx,
         )
     }
 
-    fn toolbar_anchor(&self, overlay_size: Size<Pixels>, inset: Pixels) -> Point<Pixels> {
-        match (self.pointer_anchor, self.root_bounds) {
-            (Some(pointer), Some(bounds)) => {
-                let below_selection = point(pointer.x, pointer.y + inset + inset);
-                clamp_anchor(below_selection, bounds, overlay_size, inset)
-            }
-            _ => point(inset, inset),
-        }
+    fn toolbar_anchor(&self, window: &Window) -> Point<Pixels> {
+        self.pointer_anchor
+            .or(self.last_text_pointer)
+            .unwrap_or_else(|| {
+                let viewport = window.viewport_size();
+                point(viewport.width / 2., viewport.height / 2.)
+            })
     }
 }
 
 impl EventEmitter<SelectionActionsEvent> for SelectionActions {}
 
 impl Render for SelectionActions {
-    fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let root_id = self.id.clone();
-        let entity_for_layout = cx.entity().clone();
         let text_surface = div()
             .id((ElementId::from(root_id.clone()), "text"))
             .size_full()
+            .track_focus(&self.text_focus_scope)
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
+                cx.listener(|this, event: &MouseDownEvent, _, cx| {
                     if this.toolbar_pointer_active {
                         return;
                     }
@@ -452,6 +462,7 @@ impl Render for SelectionActions {
                     this.toolbar_pointer_active = false;
                     this.selected_text = SharedString::default();
                     this.pointer_anchor = None;
+                    this.last_text_pointer = Some(event.position);
                     cx.notify();
                 }),
             )
@@ -483,24 +494,37 @@ impl Render for SelectionActions {
             .relative()
             .size_full()
             .min_h(tokens.spacing.xxl * 3.)
-            .overflow_hidden()
             .border_1()
             .border_color(tokens.colors.border)
             .rounded(tokens.radius.lg)
             .bg(tokens.colors.background)
             .on_mouse_down_out(cx.listener(|this, event: &MouseDownEvent, _, cx| {
                 if event.button == MouseButton::Left {
-                    this.clear_cached_selection(cx);
+                    this.clear_selection(cx);
                 }
             }))
-            .on_prepaint(move |bounds, _, cx| {
-                entity_for_layout.update(cx, |this, cx| {
-                    if this.root_bounds != Some(bounds) {
-                        this.root_bounds = Some(bounds);
-                        cx.notify();
+            .on_key_down(cx.listener(
+                |this, event: &KeyDownEvent, window, cx| {
+                    let toolbar_visible = !this.drag_active
+                        && !this.selected_text.is_empty()
+                        && !this.actions.is_empty();
+                    match event.keystroke.key.as_str() {
+                        "escape" if toolbar_visible => {
+                            this.clear_selection(cx);
+                            cx.stop_propagation();
+                        }
+                        "tab"
+                            if toolbar_visible
+                                && !event.keystroke.modifiers.shift
+                                && this.text_focus_scope.contains_focused(window, cx) =>
+                        {
+                            this.toolbar_action_focus.focus(window, cx);
+                            cx.stop_propagation();
+                        }
+                        _ => {}
                     }
-                });
-            })
+                },
+            ))
             .child(
                 div()
                     .id((ElementId::from(self.id.clone()), "content-scroll"))
@@ -516,7 +540,7 @@ impl Render for SelectionActions {
             )
             .when(
                 !self.drag_active && !self.selected_text.is_empty() && !self.actions.is_empty(),
-                |surface| surface.child(self.toolbar(cx)),
+                |surface| surface.child(self.toolbar(window, cx)),
             )
     }
 }
@@ -525,8 +549,8 @@ impl Render for SelectionActions {
 mod tests {
     use super::*;
     use gpui::{
-        Bounds, Element as _, RenderOnce as _, Size, TestAppContext, accesskit, canvas, point, px,
-        size,
+        Bounds, Element as _, Modifiers, RenderOnce as _, ScrollDelta, ScrollWheelEvent, Size,
+        TestAppContext, VisualTestContext, accesskit, canvas, point, px, rems, size,
     };
     use std::sync::{Arc, Mutex};
 
@@ -555,19 +579,498 @@ mod tests {
         assert_eq!(settled_selection("  useful words  "), Some("useful words"));
     }
 
-    #[test]
-    fn root_relative_anchor_is_clamped_inside_the_surface() {
-        let root = Bounds::new(point(px(100.), px(40.)), size(px(240.), px(120.)));
-        let overlay: Size<_> = size(px(90.), px(32.));
+    #[derive(Clone, Copy)]
+    enum ProbePopupSize {
+        Pixels(f32, f32),
+        Viewport(f32, f32),
+        Rems(f32, f32),
+    }
+
+    #[derive(Clone, Copy)]
+    struct PositionCase {
+        selector: &'static str,
+        anchor: (f32, f32),
+        placement: gpui_base::Placement,
+        popup_size: ProbePopupSize,
+    }
+
+    struct PositionerProbe {
+        cases: Vec<PositionCase>,
+    }
+
+    impl Render for PositionerProbe {
+        fn render(
+            &mut self,
+            window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            let viewport = window.viewport_size();
+            div().relative().size_full().children(self.cases.iter().map(|case| {
+                let selector = case.selector;
+                let anchor = point(
+                    viewport.width * case.anchor.0,
+                    viewport.height * case.anchor.1,
+                );
+                let popup = div().debug_selector(move || selector.to_owned());
+                let popup = match case.popup_size {
+                    ProbePopupSize::Pixels(width, height) => popup.w(px(width)).h(px(height)),
+                    ProbePopupSize::Viewport(width, height) => {
+                        popup.w(viewport.width * width).h(viewport.height * height)
+                    }
+                    ProbePopupSize::Rems(width, height) => {
+                        popup.w(rems(width)).h(rems(height))
+                    }
+                };
+                selection_toolbar_positioner(anchor, case.placement, popup, cx)
+            }))
+        }
+    }
+
+    fn assert_on_screen(bounds: Bounds<Pixels>, viewport: Size<Pixels>) {
+        assert!(
+            bounds.left() >= Pixels::default(),
+            "{bounds:?} vs {viewport:?}"
+        );
+        assert!(
+            bounds.top() >= Pixels::default(),
+            "{bounds:?} vs {viewport:?}"
+        );
+        assert!(
+            bounds.right() <= viewport.width,
+            "{bounds:?} vs {viewport:?}"
+        );
+        assert!(
+            bounds.bottom() <= viewport.height,
+            "{bounds:?} vs {viewport:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn selection_positioner_resolves_all_window_corners_with_expected_vertical_flip(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let cases = vec![
+            PositionCase {
+                selector: "selection-position-top-left",
+                anchor: (0.02, 0.02),
+                placement: gpui_base::Placement::Bottom,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-top-right",
+                anchor: (0.98, 0.02),
+                placement: gpui_base::Placement::Bottom,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-bottom-left",
+                anchor: (0.02, 0.98),
+                placement: gpui_base::Placement::Bottom,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-bottom-right",
+                anchor: (0.98, 0.98),
+                placement: gpui_base::Placement::Bottom,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+        ];
+        let (_, cx) = cx.add_window_view(move |_, _| PositionerProbe { cases });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let viewport = cx.update(|window, _| window.viewport_size());
+
+        for selector in [
+            "selection-position-top-left",
+            "selection-position-top-right",
+            "selection-position-bottom-left",
+            "selection-position-bottom-right",
+        ] {
+            assert_on_screen(
+                cx.debug_bounds(selector)
+                    .expect("positioned selection toolbar should render"),
+                viewport,
+            );
+        }
+
+        let top_anchor = viewport.height * 0.02;
+        let bottom_anchor = viewport.height * 0.98;
+        assert!(
+            cx.debug_bounds("selection-position-top-left")
+                .expect("top-left toolbar should render")
+                .top()
+                >= top_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-top-right")
+                .expect("top-right toolbar should render")
+                .top()
+                >= top_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-bottom-left")
+                .expect("bottom-left toolbar should render")
+                .bottom()
+                <= bottom_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-bottom-right")
+                .expect("bottom-right toolbar should render")
+                .bottom()
+                <= bottom_anchor
+        );
+    }
+
+    #[gpui::test]
+    fn selection_positioner_flips_each_preferred_side_when_space_is_insufficient(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let cases = vec![
+            PositionCase {
+                selector: "selection-position-flip-top",
+                anchor: (0.5, 0.02),
+                placement: gpui_base::Placement::Top,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-flip-bottom",
+                anchor: (0.5, 0.98),
+                placement: gpui_base::Placement::Bottom,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-flip-left",
+                anchor: (0.02, 0.5),
+                placement: gpui_base::Placement::Left,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+            PositionCase {
+                selector: "selection-position-flip-right",
+                anchor: (0.98, 0.5),
+                placement: gpui_base::Placement::Right,
+                popup_size: ProbePopupSize::Pixels(120., 48.),
+            },
+        ];
+        let (_, cx) = cx.add_window_view(move |_, _| PositionerProbe { cases });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let viewport = cx.update(|window, _| window.viewport_size());
+
+        let top_anchor = viewport.height * 0.02;
+        let bottom_anchor = viewport.height * 0.98;
+        let left_anchor = viewport.width * 0.02;
+        let right_anchor = viewport.width * 0.98;
+        assert!(
+            cx.debug_bounds("selection-position-flip-top")
+                .expect("top toolbar should render")
+                .top()
+                >= top_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-flip-bottom")
+                .expect("bottom toolbar should render")
+                .bottom()
+                <= bottom_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-flip-left")
+                .expect("left toolbar should render")
+                .left()
+                >= left_anchor
+        );
+        assert!(
+            cx.debug_bounds("selection-position-flip-right")
+                .expect("right toolbar should render")
+                .right()
+                <= right_anchor
+        );
+    }
+
+    #[gpui::test]
+    fn selection_positioner_uses_the_larger_side_and_clamps_an_oversized_side(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let cases = vec![PositionCase {
+            selector: "selection-position-larger-side",
+            anchor: (0.5, 0.4),
+            placement: gpui_base::Placement::Bottom,
+            popup_size: ProbePopupSize::Viewport(0.3, 0.7),
+        }];
+        let (_, cx) = cx.add_window_view(move |_, _| PositionerProbe { cases });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let viewport = cx.update(|window, _| window.viewport_size());
+        let bounds = cx
+            .debug_bounds("selection-position-larger-side")
+            .expect("oversized-side toolbar should render");
+
+        assert_on_screen(bounds, viewport);
+        assert!(bounds.top() > Pixels::default(), "{bounds:?}");
+        assert!(bounds.bottom() > viewport.height * 0.95, "{bounds:?}");
+    }
+
+    #[gpui::test]
+    fn selection_positioner_keeps_a_rem_scaled_toolbar_reachable_at_two_hundred_percent(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let cases = vec![PositionCase {
+            selector: "selection-position-double-rem",
+            anchor: (0.98, 0.98),
+            placement: gpui_base::Placement::Bottom,
+            popup_size: ProbePopupSize::Rems(18., 4.),
+        }];
+        let (_, cx) = cx.add_window_view(move |window, _| {
+            window.set_rem_size(px(32.));
+            PositionerProbe { cases }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let viewport = cx.update(|window, _| window.viewport_size());
+        let bounds = cx
+            .debug_bounds("selection-position-double-rem")
+            .expect("double-rem toolbar should render");
+
+        assert_on_screen(bounds, viewport);
+        assert_eq!(bounds.size, size(px(576.), px(128.)));
+    }
+
+    struct SelectionProbe {
+        selection: Entity<SelectionActions>,
+        host_scroll: ScrollHandle,
+    }
+
+    impl SelectionProbe {
+        fn new(window: &mut Window, cx: &mut gpui::Context<Self>) -> Self {
+            let markdown = (0..24)
+                .map(|ix| format!("Selectable line {ix} for scrolling and dismissal tests."))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let selection =
+                cx.new(|cx| SelectionActions::new("selection-probe", markdown, window, cx));
+            selection.update(cx, |selection, cx| {
+                selection.set_actions(
+                    [
+                        SelectionAction::new("ask", "Ask about this selection"),
+                        SelectionAction::new("explain", "Explain this selected passage"),
+                        SelectionAction::new("rewrite", "Rewrite this selected passage clearly"),
+                        SelectionAction::new("compare", "Compare this passage with the source"),
+                        SelectionAction::new("final", "Open the final long selection action"),
+                    ],
+                    cx,
+                );
+            });
+            Self {
+                selection,
+                host_scroll: ScrollHandle::new(),
+            }
+        }
+    }
+
+    impl Render for SelectionProbe {
+        fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .id("selection-probe-scroll")
+                        .w(px(184.))
+                        .h(px(144.))
+                        .overflow_y_scroll()
+                        .track_scroll(&self.host_scroll)
+                        .child(
+                            div()
+                                .w(px(184.))
+                                .h(px(620.))
+                                .child(
+                                    div()
+                                        .w(px(184.))
+                                        .h(px(144.))
+                                        .child(self.selection.clone()),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .debug_selector(|| "selection-probe-outside".to_owned())
+                        .flex_1(),
+                )
+        }
+    }
+
+    fn select_all_probe_text(probe: &Entity<SelectionProbe>, cx: &mut VisualTestContext) {
+        let text = probe.read_with(cx, |probe, cx| probe.selection.read(cx).text.clone());
+        text.update(cx, |text, cx| text.select_all(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn selection_toolbar_stays_attached_when_content_scrolls(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        select_all_probe_text(&probe, cx);
+        let surface = cx
+            .debug_bounds("selection-actions-surface")
+            .expect("selection surface should render");
+        let selection = probe.read_with(cx, |probe, _| probe.selection.clone());
+        selection.update(cx, |selection, cx| {
+            selection.pointer_anchor = Some(surface.center());
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let before = cx
+            .debug_bounds("selection-actions-toolbar")
+            .expect("toolbar should render before scrolling");
+
+        probe.update(cx, |probe, cx| {
+            probe
+                .host_scroll
+                .set_offset(point(Pixels::default(), px(-48.)));
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let after = cx
+            .debug_bounds("selection-actions-toolbar")
+            .expect("toolbar should remain after scrolling");
 
         assert_eq!(
-            clamp_anchor(point(px(334.), px(156.)), root, overlay, px(8.)),
-            point(px(142.), px(80.))
+            probe.read_with(cx, |probe, _| probe.host_scroll.offset().y),
+            px(-48.)
         );
-        assert_eq!(
-            clamp_anchor(point(px(80.), px(20.)), root, overlay, px(8.)),
-            point(px(8.), px(8.))
+        assert_eq!(before, after);
+    }
+
+    #[gpui::test]
+    fn selection_horizontal_overflow_keeps_the_final_action_reachable_in_the_window(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        select_all_probe_text(&probe, cx);
+        let surface = cx
+            .debug_bounds("selection-actions-surface")
+            .expect("selection surface should render");
+        let selection = probe.read_with(cx, |probe, _| probe.selection.clone());
+        selection.update(cx, |selection, cx| {
+            selection.pointer_anchor = Some(surface.center());
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let toolbar = cx
+            .debug_bounds("selection-actions-toolbar")
+            .expect("toolbar should render after selection");
+
+        for _ in 0..12 {
+            cx.simulate_event(ScrollWheelEvent {
+                position: toolbar.center(),
+                delta: ScrollDelta::Pixels(point(px(-120.), Pixels::default())),
+                ..Default::default()
+            });
+        }
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let final_action = cx
+            .debug_bounds("selection-action-final")
+            .expect("final action should remain rendered after horizontal scrolling");
+        let viewport = cx.update(|window, _| window.viewport_size());
+        assert!(
+            final_action.left() >= toolbar.left() && final_action.right() <= toolbar.right(),
+            "{final_action:?} vs {toolbar:?}"
         );
+        assert_on_screen(final_action, viewport);
+    }
+
+    #[gpui::test]
+    fn selection_tab_preserves_selection_and_escape_restores_text_focus(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let surface = cx
+            .debug_bounds("selection-actions-surface")
+            .expect("selection surface should render");
+        cx.simulate_click(
+            point(surface.left() + px(24.), surface.top() + px(24.)),
+            Modifiers::default(),
+        );
+        select_all_probe_text(&probe, cx);
+        let selection = probe.read_with(cx, |probe, _| probe.selection.clone());
+
+        let (text_focused, toolbar_focused) = cx.update(|window, cx| {
+            let selection = selection.read(cx);
+            (
+                selection.text_focus_scope.contains_focused(window, cx),
+                selection.toolbar_focus.contains_focused(window, cx),
+            )
+        });
+        assert!(text_focused);
+        assert!(!toolbar_focused);
+
+        cx.simulate_keystrokes("tab");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+        assert!(selection.read_with(cx, |selection, _| {
+            !selection.selected_text().is_empty()
+        }));
+        assert!(cx.update(|window, cx| selection
+            .read(cx)
+            .toolbar_action_focus
+            .is_focused(window)));
+        assert!(cx.update(|window, cx| selection
+            .read(cx)
+            .toolbar_focus
+            .contains_focused(window, cx)));
+
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
+        assert!(cx.update(|window, cx| selection
+            .read(cx)
+            .text_focus_scope
+            .contains_focused(window, cx)));
+    }
+
+    #[gpui::test]
+    fn selection_outside_pointer_down_dismisses_toolbar(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        select_all_probe_text(&probe, cx);
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+
+        let outside = cx
+            .debug_bounds("selection-probe-outside")
+            .expect("outside target should render");
+        cx.simulate_mouse_down(outside.center(), MouseButton::Left, Modifiers::default());
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
+    }
+
+    #[gpui::test]
+    fn selection_clear_removes_toolbar_immediately(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        select_all_probe_text(&probe, cx);
+        let selection = probe.read_with(cx, |probe, _| probe.selection.clone());
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_some());
+
+        selection.update(cx, SelectionActions::clear_selection);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        assert!(selection.read_with(cx, |selection, _| {
+            selection.selected_text().is_empty()
+        }));
+        assert!(cx.debug_bounds("selection-actions-toolbar").is_none());
     }
 
     struct ControlProbe {
@@ -588,10 +1091,11 @@ mod tests {
                         .into_element()
                         .write_a11y_info(&mut node);
                     *captured.lock().expect("capture mutex should be available") = Some(node);
+                    let toolbar_focus = cx.focus_handle();
                     let toolbar_element = selection_toolbar_frame(
                         "probe".into(),
-                        point(px(0.), px(0.)),
                         size(px(240.), px(64.)),
+                        &toolbar_focus,
                         &ScrollHandle::new(),
                         Vec::new(),
                         cx,
