@@ -18,7 +18,7 @@
     "generate:themes": "node script/generate-themes.mjs",
     "check": "npm run check:format && npm run check:clippy && npm run check:scripts && npm run test && npm run check:docs",
     "check:format": "cargo fmt --all -- --check",
-    "check:clippy": "cargo clippy --workspace -- --deny warnings",
+    "check:clippy": "cargo clippy --workspace --all-targets -- --deny warnings",
     "check:docs": "cargo rustdoc -p gpui-ai --lib -- -D warnings",
     "check:native": "cargo check --workspace",
     "check:scripts": "node script/test-run-bash.mjs && node script/test-release-notes.mjs && node script/test-docs-cleanup.mjs",

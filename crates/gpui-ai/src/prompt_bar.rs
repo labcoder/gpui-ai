@@ -2016,7 +2016,7 @@ mod tests {
         let captured_events = events.clone();
         let (harness, cx) =
             cx.add_window_view(move |window, cx| PromptHarness::new(captured_events, window, cx));
-        let mut measure = |cx: &mut gpui::VisualTestContext, draft: String| {
+        let measure = |cx: &mut gpui::VisualTestContext, draft: String| {
             cx.update(|window, cx| {
                 let prompt = harness.read(cx).prompt.clone();
                 prompt.update(cx, |prompt, cx| prompt.set_draft(draft, window, cx));
