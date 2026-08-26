@@ -398,21 +398,39 @@ fn maximum_feature_snapshot_keeps_the_final_stable_feature_vertically_reachable(
     let viewport = cx
         .debug_bounds("comparison-table-root:tall-plans")
         .expect("the tall comparison viewport should render");
-    let final_row = cx
-        .debug_bounds("comparison-feature:tall-plans:feature-127")
-        .expect("the final bounded feature should be constructed");
-    assert!(final_row.top() >= viewport.bottom());
+    // Reachability, not mounting: feature rows are virtualized, so a feature
+    // 127 rows below the fold must cost nothing until the reader goes there.
+    assert!(
+        cx.debug_bounds("comparison-feature:tall-plans:feature-127")
+            .is_none(),
+        "a feature far below the viewport must not be constructed"
+    );
+    let first_row = cx
+        .debug_bounds("comparison-feature:tall-plans:feature-0")
+        .expect("the first feature should be on screen");
+    assert!(
+        first_row.top() < viewport.bottom() && first_row.bottom() > viewport.top(),
+        "first_row={first_row:?}, viewport={viewport:?}"
+    );
 
+    // The wrapping label is the row-measurement stressor: it is taller than
+    // its neighbours, so a list that measured rows uniformly would place it
+    // wrong.
     table.update(cx, |table, cx| {
         table.scroll_to_feature("feature-64", cx);
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let intermediate = cx
         .debug_bounds("comparison-feature:tall-plans:feature-64")
-        .expect("the intermediate described feature should remain mounted");
+        .expect("the intermediate described feature should be constructed on demand");
     assert!(
         intermediate.center().y >= viewport.top() && intermediate.center().y <= viewport.bottom(),
         "intermediate={intermediate:?}, viewport={viewport:?}"
+    );
+    assert!(
+        intermediate.size.height > first_row.size.height,
+        "the wrapping label must measure taller than a plain row: \
+         intermediate={intermediate:?}, first_row={first_row:?}"
     );
 
     table.update(cx, |table, cx| {
@@ -422,10 +440,19 @@ fn maximum_feature_snapshot_keeps_the_final_stable_feature_vertically_reachable(
 
     let final_row = cx
         .debug_bounds("comparison-feature:tall-plans:feature-127")
-        .expect("the final feature should remain mounted after scrolling");
+        .expect("the final feature should be constructed once it is revealed");
     assert!(
-        final_row.bottom() <= viewport.bottom() + px(1.) && final_row.bottom() > viewport.top(),
+        final_row.top() >= viewport.top() - px(1.)
+            && final_row.top() < viewport.bottom()
+            && final_row.bottom() > viewport.top(),
         "final_row={final_row:?}, viewport={viewport:?}"
+    );
+    // Revealing the end of a long comparison must not drag the whole
+    // snapshot back into the frame.
+    assert!(
+        cx.debug_bounds("comparison-feature:tall-plans:feature-0")
+            .is_none(),
+        "the first feature must fall out of the window once the last is revealed"
     );
 }
 

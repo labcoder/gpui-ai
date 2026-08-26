@@ -3,10 +3,10 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, App, Axis, Context, ElementId, EventEmitter, FocusHandle,
-    Focusable, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
-    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
-    prelude::FluentBuilder as _,
+    Animation, AnimationExt as _, AnyElement, App, Axis, Context, ElementId, EventEmitter,
+    FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, ListAlignment, ListOffset,
+    ListState, ParentElement as _, Pixels, Render, Role, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
@@ -17,6 +17,8 @@ use gpui_component::{
 use crate::{
     control::outlined_control_with_label,
     records_table::escape_markdown_text,
+    resolved_layout::ResolvedLayoutKey,
+    scrolling::list_scroll_mask,
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -26,6 +28,14 @@ pub const MAX_COMPARISON_ITEMS: usize = 12;
 
 /// Maximum number of feature rows accepted by a comparison snapshot.
 pub const MAX_COMPARISON_FEATURES: usize = 128;
+
+/// Distance past the viewport, in rem, where feature rows stay measured.
+///
+/// Rem rather than pixels: a row's height is wrapped text laid out against
+/// the window's type scale, so the overdraw that buys one row of slack at a
+/// small rem buys none at a large one. Sixteen rem is the transcript's
+/// overdraw at a default type scale.
+const FEATURE_OVERDRAW_REM: f32 = 16.;
 
 /// Presentation state attached to one comparison item.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -307,11 +317,53 @@ impl ComparisonSnapshot {
     }
 }
 
+/// Element construction counts for one draw of the virtualized render.
+///
+/// This surface is bounded at [`MAX_COMPARISON_FEATURES`] rows by
+/// [`MAX_COMPARISON_ITEMS`] columns, but the feature list is virtualized: a
+/// draw constructs only the rows the viewport shows, so the counts must track
+/// that window — never the whole bound, and never a running total across
+/// redraws. The eager render this replaced built all 1,536 cells of the
+/// maximum shape every draw. Counting is test-only: production builds carry
+/// neither the field nor the branch.
+#[cfg(test)]
+#[derive(Default)]
+struct ComparisonConstructionCounts {
+    feature_rows: std::cell::Cell<usize>,
+    cells: std::cell::Cell<usize>,
+}
+
+#[cfg(test)]
+impl ComparisonConstructionCounts {
+    /// Opens a draw. Counts describe one draw, never a running total.
+    fn start_draw(&self) {
+        self.feature_rows.set(0);
+        self.cells.set(0);
+    }
+
+    fn count_feature_row(&self) {
+        self.feature_rows.set(self.feature_rows.get() + 1);
+    }
+
+    fn count_cell(&self) {
+        self.cells.set(self.cells.get() + 1);
+    }
+}
+
 /// A controlled, intentionally bounded feature-comparison surface.
 ///
 /// The application owns snapshot progress, highlighted/disabled item state,
-/// and selected item identity. The entity retains only focus and overflow
-/// presentation state.
+/// and selected item identity. The entity retains only focus, measured row
+/// heights, and overflow presentation state.
+///
+/// Feature rows are virtualized through `gpui::ListState`: the bound is 128
+/// rows by 12 columns, and rendering all of it eagerly cost far more than a
+/// frame budget because every mounted row is laid out whether or not it is on
+/// screen. `ListState` rather than `gpui_base::v_virtual_list` because rows
+/// wrap to variable heights and the latter needs exact heights up front.
+/// Column headers sit outside the list, so they no longer scroll away
+/// vertically; both they and the rows stay on one horizontally scrolled
+/// canvas, which is what keeps a column aligned with its cells.
 pub struct ComparisonTable {
     id: SharedString,
     label: SharedString,
@@ -321,8 +373,12 @@ pub struct ComparisonTable {
     focus_handle: FocusHandle,
     focus_engaged: bool,
     horizontal_scroll: ScrollHandle,
-    feature_scroll: ScrollHandle,
+    feature_list: ListState,
+    /// Rem size the cached row heights were measured against.
+    resolved_layout: ResolvedLayoutKey,
     _focus_subscriptions: Vec<gpui::Subscription>,
+    #[cfg(test)]
+    construction: ComparisonConstructionCounts,
 }
 
 impl ComparisonTable {
@@ -356,9 +412,25 @@ impl ComparisonTable {
             focus_handle,
             focus_engaged: false,
             horizontal_scroll: ScrollHandle::new(),
-            feature_scroll: ScrollHandle::new(),
+            feature_list: ListState::new(
+                0,
+                ListAlignment::Top,
+                window.rem_size() * FEATURE_OVERDRAW_REM,
+            ),
+            resolved_layout: ResolvedLayoutKey::default(),
             _focus_subscriptions: focus_subscriptions,
+            #[cfg(test)]
+            construction: ComparisonConstructionCounts::default(),
         }
+    }
+
+    /// Returns the `(feature rows, value cells)` the most recent draw built.
+    #[cfg(test)]
+    fn construction_counts(&self) -> (usize, usize) {
+        (
+            self.construction.feature_rows.get(),
+            self.construction.cells.get(),
+        )
     }
 
     /// Replaces the controlled progressive comparison snapshot.
@@ -368,7 +440,15 @@ impl ComparisonTable {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let previous_feature_ids = self
+            .snapshot
+            .content()
+            .features
+            .iter()
+            .map(|feature| feature.id.clone())
+            .collect::<Vec<_>>();
         self.snapshot = snapshot;
+        self.reconcile_feature_list(&previous_feature_ids);
         if self.selected_item_id.as_ref().is_some_and(|selected| {
             !self
                 .snapshot
@@ -397,6 +477,64 @@ impl ComparisonTable {
         }
         if self.focus_engaged {
             self.reveal_focused_item(cx);
+        }
+        cx.notify();
+    }
+
+    /// Points the virtual list at the new feature sequence.
+    ///
+    /// A snapshot whose feature identities are unchanged is a content update —
+    /// a streaming comparison filling in values — so it keeps the reader's
+    /// scroll position and only invalidates the heights it may have changed.
+    /// Any other snapshot is a different document, and starts at the top.
+    fn reconcile_feature_list(&mut self, previous_feature_ids: &[SharedString]) {
+        let features = &self.snapshot.content().features;
+        let same_sequence = previous_feature_ids.len() == features.len()
+            && previous_feature_ids
+                .iter()
+                .zip(features.iter())
+                .all(|(previous, feature)| *previous == feature.id);
+        if same_sequence {
+            if !features.is_empty() {
+                self.feature_list.remeasure_items(0..features.len());
+            }
+        } else {
+            self.feature_list.reset(features.len());
+        }
+    }
+
+    /// Re-measures feature rows after the window's rem size changed.
+    ///
+    /// Row heights cache wrapped text laid out at the previous rem, and no
+    /// snapshot reports a zoom, so nothing else invalidates them. The anchor
+    /// policy is this surface's own: the feature that was first on screen
+    /// stays first, because a comparison is read from wherever the reader
+    /// left it rather than from either end.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        let offset = self.feature_list.logical_scroll_top();
+        let anchor = self
+            .snapshot
+            .content()
+            .features
+            .get(offset.item_ix)
+            .map(|feature| (feature.id.clone(), offset.offset_in_item));
+
+        self.feature_list.remeasure();
+        if let Some((anchor_id, offset_in_item)) = anchor
+            && let Some(item_ix) = self
+                .snapshot
+                .content()
+                .features
+                .iter()
+                .position(|feature| feature.id == anchor_id)
+        {
+            self.feature_list.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item,
+            });
         }
         cx.notify();
     }
@@ -538,8 +676,28 @@ impl ComparisonTable {
         else {
             return;
         };
-        // gpui-component's scrollbar layer and the comparison header precede feature rows.
-        self.feature_scroll.scroll_to_item(index.saturating_add(2));
+        // The list indexes features directly: column headers are no longer
+        // items in the scrolled sequence, so nothing is added to the index.
+        //
+        // A row already whole on screen must not move — revealing a feature
+        // the reader is looking at should be a no-op. Anywhere else the row
+        // is anchored to the top of the viewport, which is exact whether or
+        // not the rows in between have ever been measured. Reaching for a
+        // pixel goal instead (`scroll_to_reveal_item`) reads heights the
+        // virtual list has not measured yet and lands short of a distant row.
+        // An unmeasured row reports no bounds, and that is a scroll.
+        let viewport = self.feature_list.viewport_bounds();
+        if self
+            .feature_list
+            .bounds_for_item(index)
+            .is_some_and(|row| row.top() >= viewport.top() && row.bottom() <= viewport.bottom())
+        {
+            return;
+        }
+        self.feature_list.scroll_to(ListOffset {
+            item_ix: index,
+            offset_in_item: Pixels::ZERO,
+        });
         cx.notify();
     }
 }
@@ -688,8 +846,105 @@ fn comparison_cell_frame(
         .aria_value(display)
 }
 
+impl ComparisonTable {
+    /// Builds one feature row on demand for the virtual list.
+    ///
+    /// Only rows inside the viewport and its overdraw reach this, which is
+    /// what keeps a frame's cost proportional to what is on screen rather
+    /// than to the whole bounded snapshot. Every cell still carries the same
+    /// selectable Markdown and the same semantics an eagerly built row did.
+    fn render_feature_row(
+        &mut self,
+        index: usize,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let snapshot = self.snapshot.content();
+        let (Some(feature), items) = (
+            snapshot.features.get(index).cloned(),
+            snapshot.items.clone(),
+        ) else {
+            return div().hidden().into_any_element();
+        };
+        #[cfg(test)]
+        self.construction.count_feature_row();
+        let tokens = cx.theme().semantic_tokens();
+        let (feature_width, item_width, _) = comparison_layout(cx);
+
+        comparison_feature_row_frame(&self.id, &feature)
+            .flex()
+            .border_t_1()
+            .border_color(cx.theme().border)
+            .child(
+                comparison_feature_header_frame(&self.id, &feature)
+                    .w(feature_width)
+                    .flex_none()
+                    .p(tokens.spacing.sm)
+                    .child(
+                        TextView::markdown(
+                            format!("comparison-feature-copy:{}:{}", self.id, feature.id),
+                            escape_markdown_text(&feature.label),
+                        )
+                        .selectable(true),
+                    )
+                    .when_some(feature.description.clone(), |header, description| {
+                        header.child(
+                            TextView::markdown(
+                                format!(
+                                    "comparison-feature-description:{}:{}",
+                                    self.id, feature.id
+                                ),
+                                escape_markdown_text(&description),
+                            )
+                            .selectable(true),
+                        )
+                    }),
+            )
+            .children(items.iter().map(|item| {
+                #[cfg(test)]
+                self.construction.count_cell();
+                let display: SharedString = feature
+                    .value(&item.id)
+                    .map(|value| value.display.clone())
+                    .unwrap_or_else(|| "Not specified".into());
+                comparison_cell_frame(&self.id, &feature.id, item, display.clone())
+                    .w(item_width)
+                    .flex_none()
+                    .p(tokens.spacing.sm)
+                    .border_l_1()
+                    .border_color(cx.theme().border)
+                    .when(item.state == ComparisonItemState::Highlighted, |cell| {
+                        cell.bg(cx.theme().accent)
+                    })
+                    .child(
+                        TextView::markdown(
+                            format!(
+                                "comparison-cell-copy:{}:{}:{}",
+                                self.id, feature.id, item.id
+                            ),
+                            escape_markdown_text(&display),
+                        )
+                        .selectable(true),
+                    )
+            }))
+            .into_any_element()
+    }
+}
+
 impl Render for ComparisonTable {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        self.construction.start_draw();
+        // The rem is a resolved-layout input, so a change to it invalidates
+        // every measured row height. Reading it here costs nothing; the
+        // reaction is deferred so that render itself neither mutates nor
+        // notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |table, _, cx| {
+                table.resolve_layout(rem_size, cx);
+            });
+        }
         let tokens = cx.theme().semantic_tokens();
         let owner = cx.weak_entity();
         let navigation_owner = owner.clone();
@@ -800,14 +1055,18 @@ impl Render for ComparisonTable {
                                     .id(format!("comparison-table-rows:{}", self.id))
                                     .size_full()
                                     .min_h_0()
-                                    .overflow_y_scroll()
-                                    .track_scroll(&self.feature_scroll)
-                                    .vertical_scrollbar(&self.feature_scroll)
+                                    .flex()
+                                    .flex_col()
                                     .role(Role::RowGroup)
                                     .child(
                                         div()
                                             .id(format!("comparison-table-header-row:{}", self.id))
                                             .flex()
+                                            // Column headers sit outside the scrolled
+                                            // list, so they stay put while features
+                                            // scroll under them, and their controls
+                                            // stay reachable from the keyboard.
+                                            .flex_none()
                                             .role(Role::Row)
                                             .child(
                                                 div()
@@ -923,79 +1182,24 @@ impl Render for ComparisonTable {
                                                 cx.stop_propagation();
                                             }),
                                     )
-                                    .children(features.iter().map(|feature| {
-                                        comparison_feature_row_frame(&self.id, feature)
-                                            .flex()
-                                            .border_t_1()
-                                            .border_color(cx.theme().border)
+                                    .child(
+                                        div()
+                                            .id(format!("comparison-table-features:{}", self.id))
+                                            .relative()
+                                            .flex_1()
+                                            .min_h_0()
+                                            .overflow_hidden()
+                                            .vertical_scrollbar(&self.feature_list)
                                             .child(
-                                                comparison_feature_header_frame(&self.id, feature)
-                                                    .w(feature_width)
-                                                    .flex_none()
-                                                    .p(tokens.spacing.sm)
-                                                    .child(
-                                                        TextView::markdown(
-                                                            format!(
-                                                                "comparison-feature-copy:{}:{}",
-                                                                self.id, feature.id
-                                                            ),
-                                                            escape_markdown_text(&feature.label),
-                                                        )
-                                                        .selectable(true),
-                                                    )
-                                                    .when_some(
-                                                        feature.description.clone(),
-                                                        |header, description| {
-                                                            header.child(
-                                                TextView::markdown(
-                                                    format!(
-                                                        "comparison-feature-description:{}:{}",
-                                                        self.id, feature.id
-                                                    ),
-                                                    escape_markdown_text(&description),
+                                                list(
+                                                    self.feature_list.clone(),
+                                                    cx.processor(Self::render_feature_row),
                                                 )
-                                                .selectable(true),
-                                            )
-                                                        },
-                                                    ),
-                                            )
-                                            .children(items.iter().map(|item| {
-                                                let value = feature.value(&item.id);
-                                                let display: SharedString = value
-                                                    .map(|value| value.display.clone())
-                                                    .unwrap_or_else(|| "Not specified".into());
-                                                comparison_cell_frame(
-                                                    &self.id,
-                                                    &feature.id,
-                                                    item,
-                                                    display.clone(),
-                                                )
-                                                .w(item_width)
-                                                .flex_none()
-                                                .p(tokens.spacing.sm)
-                                                .border_l_1()
-                                                .border_color(cx.theme().border)
-                                                .when(
-                                                    item.state == ComparisonItemState::Highlighted,
-                                                    |cell| cell.bg(cx.theme().accent),
-                                                )
-                                                .child(
-                                                    TextView::markdown(
-                                                        format!(
-                                                            "comparison-cell-copy:{}:{}:{}",
-                                                            self.id, feature.id, item.id
-                                                        ),
-                                                        escape_markdown_text(&display),
-                                                    )
-                                                    .selectable(true),
-                                                )
-                                            }))
-                                    })),
+                                                .size_full(),
+                                            ),
+                                    ),
                             )
-                            .child(
-                                ScrollableMask::new(Axis::Vertical, &self.feature_scroll)
-                                    .id((ElementId::from(self.id.clone()), "vertical-scroll-mask")),
-                            ),
+                            .child(list_scroll_mask(&self.feature_list)),
                     ),
             )
             .child(
@@ -1008,8 +1212,14 @@ impl Render for ComparisonTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Element as _, RenderOnce as _, TestAppContext, accesskit, canvas};
-    use std::sync::{Arc, Mutex};
+    use gpui::{
+        Element as _, Entity, RenderOnce as _, TestAppContext, VisualTestContext, accesskit,
+        canvas, px, size,
+    };
+    use std::{
+        sync::{Arc, Mutex},
+        time::Instant,
+    };
 
     type CapturedNodes = Arc<Mutex<Option<[(Option<Role>, accesskit::Node); 9]>>>;
 
@@ -1145,5 +1355,253 @@ mod tests {
         assert_eq!(cell.1.value(), Some("Included"));
         assert_eq!(status.0, Some(Role::ProgressIndicator));
         assert_eq!(status.1.label(), Some("Loading comparison"));
+    }
+
+    /// Viewport used by every construction measurement below. A fixed size
+    /// keeps the numbers comparable between runs; it is smaller than the
+    /// bounded grid on both axes, so the measurement covers the scrolled case
+    /// the surface actually ships in.
+    const MEASURED_VIEWPORT: (f32, f32) = (900., 600.);
+
+    /// Largest feature-row window a draw at [`MEASURED_VIEWPORT`] may build.
+    ///
+    /// The viewport is 600 px, a described row measures around 173 px, and
+    /// the list keeps [`FEATURE_OVERDRAW_REM`] measured past the fold, so the
+    /// window runs to about five rows. Eight leaves room for measurement to
+    /// move without coming anywhere near [`MAX_COMPARISON_FEATURES`], which
+    /// is the number this guard exists to keep a frame away from.
+    const MAX_WINDOWED_ROWS: usize = 8;
+
+    /// Timed draws per shape: enough for a stable median and a p95 that is a
+    /// real sample rather than the single worst draw.
+    const TIMED_DRAWS: usize = 40;
+
+    /// Draws discarded before timing. The first draws pay one-time font, glyph,
+    /// and text-layout caching that no steady-state frame repeats.
+    const WARMUP_DRAWS: usize = 5;
+
+    /// Worst-case content for a bounded shape: every item and every feature
+    /// carries a description, so each row builds the most selectable Markdown
+    /// views the contract allows, and every cell has a value to render.
+    fn bounded_snapshot(features: usize, items: usize) -> ComparisonSnapshot {
+        let item_ids = (0..items)
+            .map(|index| SharedString::from(format!("item-{index}")))
+            .collect::<Vec<_>>();
+        ComparisonSnapshot::try_new(
+            item_ids.iter().enumerate().map(|(index, id)| {
+                ComparisonItem::new(id.clone(), format!("Plan {index}"))
+                    .description("Readable supporting copy for one comparison column")
+            }),
+            (0..features).map(|feature| {
+                ComparisonFeature::new(format!("feature-{feature}"), format!("Feature {feature}"))
+                    .description(
+                        "Selectable supporting detail that makes every feature row variable height",
+                    )
+                    .values(
+                        item_ids
+                            .iter()
+                            .map(|id| ComparisonValue::new(id.clone(), format!("Value {feature}"))),
+                    )
+            }),
+        )
+        .expect("the fixture should stay inside the bounded contract")
+    }
+
+    /// Applies one bounded shape, draws it, and returns what that draw built.
+    fn draw_shape(
+        table: &Entity<ComparisonTable>,
+        cx: &mut VisualTestContext,
+        features: usize,
+        items: usize,
+    ) -> (usize, usize) {
+        cx.update(|window, cx| {
+            table.update(cx, |table, cx| {
+                table.set_snapshot(
+                    Progressive::complete(bounded_snapshot(features, items)),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        table.read_with(cx, |table, _| table.construction_counts())
+    }
+
+    /// Redraws without touching the snapshot — the frame a selection, scroll,
+    /// or theme change produces — and returns what that draw built.
+    fn redraw(table: &Entity<ComparisonTable>, cx: &mut VisualTestContext) -> (usize, usize) {
+        cx.update(|window, cx| {
+            table.update(cx, |_, cx| cx.notify());
+            window.draw(cx).clear(cx);
+        });
+        table.read_with(cx, |table, _| table.construction_counts())
+    }
+
+    /// Redraws once and returns the wall-clock cost of the whole draw, layout
+    /// and paint included, alongside what it built.
+    fn timed_redraw(
+        table: &Entity<ComparisonTable>,
+        cx: &mut VisualTestContext,
+    ) -> (Duration, (usize, usize)) {
+        let elapsed = cx.update(|window, cx| {
+            table.update(cx, |_, cx| cx.notify());
+            let started = Instant::now();
+            window.draw(cx).clear(cx);
+            started.elapsed()
+        });
+        (
+            elapsed,
+            table.read_with(cx, |table, _| table.construction_counts()),
+        )
+    }
+
+    /// Nearest-rank percentile over ascending samples.
+    fn percentile(ascending: &[Duration], percent: usize) -> Duration {
+        let rank = (ascending.len() * percent).div_ceil(100).max(1);
+        ascending[rank - 1]
+    }
+
+    /// A table in a window sized to [`MEASURED_VIEWPORT`], ready to be drawn.
+    fn measured_table(
+        cx: &mut TestAppContext,
+    ) -> (Entity<ComparisonTable>, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let (table, cx) = cx.add_window_view(|window, cx| {
+            ComparisonTable::new("measured", "Measured comparison", window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(MEASURED_VIEWPORT.0), px(MEASURED_VIEWPORT.1)));
+        (table, cx)
+    }
+
+    /// A bound the render draws in full is not a bound on frame cost. Every
+    /// mounted row is laid out whether or not it is on screen, so before
+    /// virtualization a maximum-shape draw laid out 128 rows to show three
+    /// and a half of them.
+    ///
+    /// This is the guard on the window: a draw builds the rows the viewport
+    /// can show plus overdraw, one cell per item in each, and neither the
+    /// snapshot's length nor the number of frames drawn widens it.
+    #[gpui::test]
+    fn a_draw_builds_the_viewport_window_rather_than_the_whole_snapshot(cx: &mut TestAppContext) {
+        let (table, cx) = measured_table(cx);
+
+        let (maximum_rows, maximum_cells) =
+            draw_shape(&table, cx, MAX_COMPARISON_FEATURES, MAX_COMPARISON_ITEMS);
+        assert!(
+            (1..=MAX_WINDOWED_ROWS).contains(&maximum_rows),
+            "the maximum snapshot must build a window, not its whole self: \
+             {maximum_rows} rows"
+        );
+        assert_eq!(
+            maximum_cells,
+            maximum_rows * MAX_COMPARISON_ITEMS,
+            "every constructed row must build one cell per item"
+        );
+
+        // Frames after the first must not creep upward: the window is the
+        // viewport's size, and redrawing does not widen it or accumulate.
+        for _ in 0..3 {
+            let (rows, cells) = redraw(&table, cx);
+            assert!(
+                (1..=maximum_rows).contains(&rows),
+                "a redraw must not widen the window: {rows} rows"
+            );
+            assert_eq!(cells, rows * MAX_COMPARISON_ITEMS);
+        }
+
+        let (typical_rows, typical_cells) = draw_shape(&table, cx, 24, 6);
+        assert_eq!(
+            typical_cells,
+            typical_rows * 6,
+            "a typical snapshot must also build one cell per item"
+        );
+        // The point of the whole change: rows of the same height cost the
+        // same per frame whether the snapshot holds 24 of them or 128.
+        assert_eq!(
+            typical_rows, maximum_rows,
+            "the window must follow the viewport, not the snapshot's length"
+        );
+
+        assert_eq!(
+            draw_shape(&table, cx, 0, 0),
+            (0, 0),
+            "an empty snapshot must build no rows at all"
+        );
+    }
+
+    /// Draw cost at the bounded maximum, printed rather than asserted:
+    /// wall-clock is machine- and load-dependent, so a threshold here would
+    /// gate on noise. The release budget belongs to the release-profile
+    /// harness. What this test does enforce is that every timed draw built
+    /// only the visible window, so the numbers describe the work they claim.
+    ///
+    /// Ignored by default because it exists for its printout, not an
+    /// assertion. Run it deliberately, in the profile you mean to measure:
+    ///
+    /// ```text
+    /// cargo test --release -p gpui-ai --lib comparison -- --ignored --nocapture
+    /// ```
+    ///
+    /// The record that decided this surface's shape, both on desktop Windows
+    /// at a 900x600 viewport, 40 draws after warmup:
+    ///
+    /// ```text
+    /// eager (removed), debug profile, whole bound built every draw:
+    /// 128 x 12 -> 1536 cells | p50 1463..1523 ms | p95 1555..1817 ms
+    /// construction was ~18 ms of a ~1140 ms draw; the rest was layout and
+    /// paint of a 22,144 px grid with ~3.5 rows on screen (~29x overdraw).
+    ///
+    /// virtualized (current), release profile, viewport window only:
+    /// 128 x 12 ->  3 rows / 36 cells | p50 2.420 ms | p95 2.525 ms
+    ///  24 x  6 ->  3 rows / 18 cells | p50 1.400 ms | p95 1.478 ms
+    /// ```
+    ///
+    /// The eager debug row is not comparable to the release row as a
+    /// profile; it is kept because the ~29x overdraw it documents is
+    /// profile-independent and is the reason the list is virtualized.
+    #[gpui::test]
+    #[ignore = "measurement, not a gate: exists for its printout"]
+    fn the_bounded_maximum_draw_cost_is_measured_against_the_frame_budget(cx: &mut TestAppContext) {
+        let (table, cx) = measured_table(cx);
+        // The profile comes from the invocation, so the header must not name
+        // one: this same test prints debug or release numbers.
+        let mut report = format!(
+            "\ncomparison draw cost — profile per invocation, \
+             {}x{} viewport, {TIMED_DRAWS} draws after {WARMUP_DRAWS} warmup\n",
+            MEASURED_VIEWPORT.0, MEASURED_VIEWPORT.1
+        );
+
+        for (features, items) in [(MAX_COMPARISON_FEATURES, MAX_COMPARISON_ITEMS), (24, 6)] {
+            draw_shape(&table, cx, features, items);
+            for _ in 0..WARMUP_DRAWS {
+                redraw(&table, cx);
+            }
+
+            let mut samples = Vec::with_capacity(TIMED_DRAWS);
+            let mut built = (0, 0);
+            for _ in 0..TIMED_DRAWS {
+                let (elapsed, counts) = timed_redraw(&table, cx);
+                assert!(
+                    counts.0 <= MAX_WINDOWED_ROWS && counts.1 == counts.0 * items,
+                    "a timed draw must build a window of whole rows: {counts:?}"
+                );
+                built = counts;
+                samples.push(elapsed);
+            }
+            samples.sort();
+
+            let milliseconds = |sample: Duration| sample.as_secs_f64() * 1000.;
+            report.push_str(&format!(
+                "  {features:>3} features x {items:>2} items -> {:>4} rows, {:>5} cells built | \
+                 p50 {:>8.3} ms | p95 {:>8.3} ms\n",
+                built.0,
+                built.1,
+                milliseconds(percentile(&samples, 50)),
+                milliseconds(percentile(&samples, 95)),
+            ));
+        }
+
+        eprintln!("{report}");
     }
 }
