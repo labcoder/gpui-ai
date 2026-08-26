@@ -1,6 +1,6 @@
 use gpui::{
-    AppContext as _, Context, Entity, Modifiers, ParentElement as _, Render, Styled as _,
-    Subscription, TestAppContext, VisualTestContext, Window, div, px, size,
+    AppContext as _, Bounds, Context, Entity, Modifiers, ParentElement as _, Pixels, Render,
+    Styled as _, Subscription, TestAppContext, VisualTestContext, Window, div, px, size,
 };
 use gpui_ai::thread_list::{ThreadItem, ThreadList, ThreadListEvent, ThreadSection};
 use std::{cell::RefCell, rc::Rc};
@@ -23,6 +23,24 @@ fn sections() -> Vec<ThreadSection> {
                 .archived(true),
         ]),
     ]
+}
+
+/// Ten thousand conversations, spread over ten sections.
+const LARGE_SECTIONS: usize = 10;
+const LARGE_SECTION_SIZE: usize = 1_000;
+
+fn large_sections() -> Vec<ThreadSection> {
+    (0..LARGE_SECTIONS)
+        .map(|section| {
+            ThreadSection::new(format!("s-{section}"), format!("Section {section}")).items(
+                (0..LARGE_SECTION_SIZE).map(|row| {
+                    let index = section * LARGE_SECTION_SIZE + row;
+                    ThreadItem::new(format!("t-{index:05}"), format!("Conversation {index}"))
+                        .subtitle(format!("{index} min ago"))
+                }),
+            )
+        })
+        .collect()
 }
 
 impl Probe {
@@ -84,14 +102,44 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
     draw(cx);
 }
 
+fn press(cx: &mut VisualTestContext, keystrokes: &str) {
+    cx.simulate_keystrokes(keystrokes);
+    draw(cx);
+}
+
+/// `debug_bounds` wants a `'static` selector; the large snapshots need one per
+/// conversation, so a test-lifetime leak buys the lookup.
+fn bounds_of(cx: &mut VisualTestContext, selector: String) -> Option<Bounds<Pixels>> {
+    cx.debug_bounds(Box::leak(selector.into_boxed_str()))
+}
+
+fn set_sections(view: &Entity<Probe>, sections: Vec<ThreadSection>, cx: &mut VisualTestContext) {
+    view.update_in(cx, |probe, _, cx| {
+        probe
+            .threads
+            .update(cx, |threads, cx| threads.set_sections(sections, cx));
+    });
+    draw(cx);
+}
+
+fn take_events(events: &Rc<RefCell<Vec<ThreadListEvent>>>) -> Vec<ThreadListEvent> {
+    std::mem::take(&mut *events.borrow_mut())
+}
+
 #[gpui::test]
 fn selecting_and_row_actions_report_stable_ids(cx: &mut TestAppContext) {
     let (_, events, cx) = harness(cx, 600.);
     click(cx, "thread-cold-chain");
+    // Row actions live in a popup menu, so nothing of them exists until the
+    // row's ellipsis opens it.
     assert!(cx.debug_bounds("thread-rename-supplier").is_none());
     click(cx, "thread-more-supplier");
     assert!(cx.debug_bounds("thread-rename-supplier").is_some());
     click(cx, "thread-rename-supplier");
+    // Choosing an action dismisses the menu, so a stale target cannot linger.
+    assert!(cx.debug_bounds("thread-rename-supplier").is_none());
+
+    click(cx, "thread-more-supplier");
     click(cx, "thread-delete-supplier");
     assert_eq!(
         events.borrow().as_slice(),
@@ -107,7 +155,6 @@ fn selecting_and_row_actions_report_stable_ids(cx: &mut TestAppContext) {
             },
         ]
     );
-    // Destructive actions close the row's toolbar instead of leaving stale targets.
     assert!(cx.debug_bounds("thread-delete-supplier").is_none());
     click(cx, "thread-list-new");
     assert_eq!(events.borrow().last(), Some(&ThreadListEvent::NewRequested));
@@ -160,14 +207,9 @@ fn programmatic_query_filters_rows_and_reports_no_matches(cx: &mut TestAppContex
 #[gpui::test]
 fn active_thread_survives_a_reordered_snapshot(cx: &mut TestAppContext) {
     let (view, _, cx) = harness(cx, 600.);
-    view.update_in(cx, |probe, _, cx| {
-        probe.threads.update(cx, |threads, cx| {
-            let mut reordered = sections();
-            reordered.reverse();
-            threads.set_sections(reordered, cx);
-        });
-    });
-    draw(cx);
+    let mut reordered = sections();
+    reordered.reverse();
+    set_sections(&view, reordered, cx);
     let active = view.read_with(cx, |probe, cx| probe.threads.read(cx).active_id().cloned());
     assert_eq!(active.as_deref(), Some("supplier"));
     assert!(cx.debug_bounds("thread-supplier").is_some());
@@ -175,8 +217,6 @@ fn active_thread_survives_a_reordered_snapshot(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn constrained_list_keeps_the_last_thread_reachable(cx: &mut TestAppContext) {
-    // Geometry, not motion, is under test: settle the row reveals.
-    cx.update(|cx| cx.set_reduce_motion(true));
     let (view, _, cx) = harness(cx, 150.);
     let host = cx
         .debug_bounds("thread-list-scroll")
@@ -229,4 +269,211 @@ fn search_keeps_one_line_height_under_an_overlong_query(cx: &mut TestAppContext)
     });
     draw(cx);
     assert!(cx.debug_bounds("thread-supplier").is_some());
+}
+
+/// Ten thousand conversations must cost a screenful, on the first draw and
+/// again after scrolling. Rows outside the window are absent from the frame,
+/// not merely painted off-screen.
+#[gpui::test]
+fn a_ten_thousand_thread_snapshot_only_builds_its_window(cx: &mut TestAppContext) {
+    let (view, _, cx) = harness(cx, 480.);
+    set_sections(&view, large_sections(), cx);
+
+    assert!(
+        bounds_of(cx, "thread-t-00000".to_owned()).is_some(),
+        "the first conversation should be on screen"
+    );
+    for far in ["thread-t-00200", "thread-t-05000", "thread-t-09999"] {
+        assert!(
+            bounds_of(cx, far.to_owned()).is_none(),
+            "{far} is outside the window and must not be built"
+        );
+    }
+
+    view.update_in(cx, |probe, _, cx| {
+        probe
+            .threads
+            .update(cx, |threads, cx| threads.scroll_to_end(cx));
+    });
+    draw(cx);
+    assert!(
+        bounds_of(cx, "thread-t-09999".to_owned()).is_some(),
+        "the last conversation should be reachable"
+    );
+    assert!(
+        bounds_of(cx, "thread-t-00000".to_owned()).is_none(),
+        "the first conversation scrolled away and must not still be built"
+    );
+}
+
+/// The whole listbox keyboard model, on stable IDs: Up/Down step over the
+/// visible options only, Home/End reach the bounds, Enter and Space select
+/// without the pointer, and neither end wraps.
+#[gpui::test]
+fn the_listbox_walks_visible_rows_with_the_keyboard(cx: &mut TestAppContext) {
+    let (_, events, cx) = harness(cx, 600.);
+    // Clicking takes the roving focus with it, so the keyboard starts where
+    // the pointer left off.
+    click(cx, "thread-supplier");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "supplier".into()
+        }]
+    );
+
+    press(cx, "down");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "cold-chain".into()
+        }],
+        "Down moves focus without selecting; Enter selects"
+    );
+
+    // Down crosses the section header without ever landing on it, and stops
+    // at the last option rather than wrapping. "packaging" is archived and
+    // hidden, so it is not an option at all.
+    press(cx, "down down down");
+    press(cx, "space");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "margins".into()
+        }],
+        "Down skips headers and hidden rows, and the last option is the floor"
+    );
+
+    press(cx, "home");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "supplier".into()
+        }]
+    );
+
+    press(cx, "up");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "supplier".into()
+        }],
+        "the first option is the ceiling"
+    );
+
+    press(cx, "end");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "margins".into()
+        }],
+        "End reaches the last visible option, not the archived one behind it"
+    );
+}
+
+/// Escape closes the menu and hands focus back to the row, which the keyboard
+/// then proves by moving and selecting without another click.
+#[gpui::test]
+fn escape_closes_the_menu_and_returns_focus_to_the_list(cx: &mut TestAppContext) {
+    let (_, events, cx) = harness(cx, 600.);
+    click(cx, "thread-supplier");
+    take_events(&events);
+
+    click(cx, "thread-more-supplier");
+    assert!(cx.debug_bounds("thread-delete-supplier").is_some());
+    press(cx, "escape");
+    assert!(
+        cx.debug_bounds("thread-delete-supplier").is_none(),
+        "Escape closes the menu"
+    );
+
+    press(cx, "down");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "cold-chain".into()
+        }],
+        "focus returned to the listbox, so its keyboard model still answers"
+    );
+}
+
+/// A press outside the menu dismisses it without invoking anything.
+#[gpui::test]
+fn an_outside_press_dismisses_the_menu(cx: &mut TestAppContext) {
+    let (_, events, cx) = harness(cx, 600.);
+    click(cx, "thread-more-supplier");
+    assert!(cx.debug_bounds("thread-delete-supplier").is_some());
+    click(cx, "thread-list-search");
+    assert!(cx.debug_bounds("thread-delete-supplier").is_none());
+    assert_eq!(
+        take_events(&events),
+        vec![],
+        "dismissing a menu is not choosing from it"
+    );
+}
+
+/// Keyboard focus is an ID, not an index: it survives a reordered snapshot and
+/// a narrowing query, and is dropped only when the thread it names goes away.
+#[gpui::test]
+fn keyboard_focus_survives_reorder_and_filtering(cx: &mut TestAppContext) {
+    let (view, events, cx) = harness(cx, 600.);
+    click(cx, "thread-margins");
+    take_events(&events);
+
+    let mut reordered = sections();
+    reordered.reverse();
+    set_sections(&view, reordered, cx);
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "margins".into()
+        }],
+        "a reordered snapshot must not move the focus onto another thread"
+    );
+
+    view.update_in(cx, |probe, window, cx| {
+        probe
+            .threads
+            .update(cx, |threads, cx| threads.set_query("margin", window, cx));
+    });
+    draw(cx);
+    take_events(&events);
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "margins".into()
+        }],
+        "a query that keeps the focused thread keeps the focus"
+    );
+
+    view.update_in(cx, |probe, window, cx| {
+        probe
+            .threads
+            .update(cx, |threads, cx| threads.set_query("supplier", window, cx));
+    });
+    draw(cx);
+    take_events(&events);
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![],
+        "a query that hides the focused thread drops the focus rather than \
+         selecting whatever now sits at its index"
+    );
+    press(cx, "home");
+    press(cx, "enter");
+    assert_eq!(
+        take_events(&events),
+        vec![ThreadListEvent::Selected {
+            id: "supplier".into()
+        }],
+        "Home re-enters the narrowed list at its first option"
+    );
 }

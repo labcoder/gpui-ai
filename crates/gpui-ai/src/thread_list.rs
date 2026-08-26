@@ -2,32 +2,45 @@
 //!
 //! The application owns the threads (grouped into sections such as Today /
 //! Yesterday / Earlier) and the active thread ID; the list owns only its
-//! native search input, the "show archived" toggle, and which row has its
-//! actions expanded. Every intent — selecting, creating, renaming,
-//! archiving, deleting — is a typed [`ThreadListEvent`] keyed by stable ID.
+//! native search input, the "show archived" toggle, which row holds keyboard
+//! focus, and the flattened snapshot it virtualizes. Every intent — selecting,
+//! creating, renaming, archiving, deleting — is a typed [`ThreadListEvent`]
+//! keyed by stable ID.
+//!
+//! Two constraints shape the rendering. Construction is bounded by the visible
+//! window: section headers and surviving threads are flattened into
+//! [`ThreadRow`]s once, in the setters that can change them, and `gpui::list`
+//! asks for rows by index — a ten-thousand-thread snapshot builds a screenful.
+//! And rows are uniform: Rename / Archive / Delete live in an upstream popup
+//! menu anchored to the row's ellipsis rather than in a toolbar revealed
+//! inside the row, so opening one never changes a row's height or shifts the
+//! conversations below it, and dismissal plus focus return come from upstream.
 
 use crate::cues::{self, Cue};
 use crate::{
-    control::{composed_button, outlined_control},
-    motion::{reveal, reveal_staggered},
+    control::composed_button,
+    resolved_layout::ResolvedLayoutKey,
     surface::{eyebrow, icon_button},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement as _, IntoElement, ParentElement as _, Render, Role,
-    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Window,
-    div, prelude::FluentBuilder as _,
+    Anchor, AnyElement, App, AppContext as _, Context, DismissEvent, ElementId, Entity,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ListAlignment, ListOffset, ListState, ParentElement as _, Pixels, Render, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window,
+    div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _,
     button::Button,
     h_flex,
     input::{Input, InputEvent, InputState},
+    menu::{PopupMenu, PopupMenuItem},
+    popover::Popover,
     scroll::ScrollableElement as _,
     v_flex,
 };
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 /// One conversation with stable identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,6 +193,406 @@ fn sections_are_well_formed(sections: &[ThreadSection]) -> bool {
     })
 }
 
+/// One row of the flattened snapshot the virtual list indexes into.
+///
+/// Sections are flattened rather than nested because a list that virtualizes
+/// sections still builds every thread inside a visible section. Headers travel
+/// as rows of their own so one list owns the whole document and a header
+/// scrolls away with the threads it labels.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ThreadRow {
+    /// A section eyebrow.
+    Header {
+        /// Stable section identifier, used to re-find the row after remeasure.
+        section_id: SharedString,
+        /// The section's visible label.
+        label: SharedString,
+    },
+    /// A conversation and its 1-based position among the visible threads.
+    Thread {
+        /// The thread itself; cloning is three refcount bumps and a bool.
+        item: ThreadItem,
+        /// 1-based position across the whole listbox, for `aria-posinset`.
+        position: usize,
+    },
+}
+
+impl ThreadRow {
+    /// The stable thread ID, for rows that are threads.
+    fn thread_id(&self) -> Option<&SharedString> {
+        match self {
+            Self::Header { .. } => None,
+            Self::Thread { item, .. } => Some(&item.id),
+        }
+    }
+
+    /// Identity that survives a rebuild, so a scroll anchor can be re-found.
+    ///
+    /// Section and thread identifiers live in separate namespaces and may
+    /// legitimately collide, so the kind travels with the ID.
+    fn anchor(&self) -> (bool, SharedString) {
+        match self {
+            Self::Header { section_id, .. } => (true, section_id.clone()),
+            Self::Thread { item, .. } => (false, item.id.clone()),
+        }
+    }
+}
+
+/// Row construction counts for one draw.
+///
+/// The whole point of virtualizing is that a draw builds a window, not a
+/// snapshot, so the bound has to be observable. Counting is test-only:
+/// production builds carry neither the field nor the branch.
+#[cfg(test)]
+#[derive(Default, Clone)]
+struct ThreadConstructionCounts {
+    rows: std::rc::Rc<std::cell::Cell<usize>>,
+    threads: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+#[cfg(test)]
+impl ThreadConstructionCounts {
+    /// Opens a draw. Counts describe one draw, never a running total.
+    fn start_draw(&self) {
+        self.rows.set(0);
+        self.threads.set(0);
+    }
+
+    fn count_row(&self) {
+        self.rows.set(self.rows.get() + 1);
+    }
+
+    fn count_thread(&self) {
+        self.threads.set(self.threads.get() + 1);
+    }
+}
+
+/// Everything a row needs that does not come from the row itself.
+///
+/// The virtual list hands its item renderer an `&mut App`, not this entity's
+/// context, so intents travel back through a weak handle rather than through
+/// `cx.listener`. Values are snapshotted per draw: changing the active or
+/// focused thread notifies, which rebuilds this and re-renders the window.
+#[derive(Clone)]
+struct RowRenderer {
+    component: SharedString,
+    owner: WeakEntity<ThreadList>,
+    /// The listbox's single focus handle; the popup menu returns focus here.
+    list_focus: FocusHandle,
+    active: Option<SharedString>,
+    focused: Option<SharedString>,
+    visible_threads: usize,
+    #[cfg(test)]
+    construction: ThreadConstructionCounts,
+}
+
+impl RowRenderer {
+    fn render(&self, row: &ThreadRow, window: &mut Window, cx: &mut App) -> AnyElement {
+        #[cfg(test)]
+        self.construction.count_row();
+        match row {
+            ThreadRow::Header { section_id, label } => self.render_header(section_id, label, cx),
+            ThreadRow::Thread { item, position } => self.render_thread(item, *position, window, cx),
+        }
+    }
+
+    fn render_header(
+        &self,
+        section_id: &SharedString,
+        label: &SharedString,
+        cx: &mut App,
+    ) -> AnyElement {
+        let tokens = cx.theme().semantic_tokens();
+        let section_id =
+            ElementId::from((ElementId::from(self.component.clone()), section_id.clone()));
+        div()
+            .id((section_id, "header"))
+            // Flattening costs the containment a nested group would give, so
+            // the header keeps an accessible node of its own: the boundary is
+            // still announced, it just no longer wraps its options.
+            .role(Role::Label)
+            .aria_label(label.clone())
+            .w_full()
+            .min_w_0()
+            .px(tokens.spacing.sm)
+            .pt(tokens.spacing.sm)
+            .pb(tokens.spacing.xxs)
+            .child(eyebrow(label.clone(), cx))
+            .into_any_element()
+    }
+
+    fn render_thread(
+        &self,
+        item: &ThreadItem,
+        position: usize,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        #[cfg(test)]
+        self.construction.count_thread();
+
+        let tokens = cx.theme().semantic_tokens();
+        let root_id = ElementId::from(self.component.clone());
+        let item_id = ElementId::from((root_id.clone(), item.id.clone()));
+        let selected = self.active.as_ref() == Some(&item.id);
+        let focused = self.focused.as_ref() == Some(&item.id);
+        let accessibility_label: SharedString = if item.archived {
+            format!("{}, archived", item.title).into()
+        } else {
+            item.title.clone()
+        };
+        let debug_id = item.id.to_string();
+        let select_id = item.id.clone();
+        let owner = self.owner.clone();
+
+        h_flex()
+            .id((item_id.clone(), "row"))
+            .w_full()
+            .min_w_0()
+            .items_center()
+            .gap(tokens.spacing.xxs)
+            .px(tokens.spacing.xxs)
+            .pb(tokens.spacing.xxs)
+            .child(
+                composed_button((item_id.clone(), "select"), accessibility_label)
+                    .debug_selector(move || format!("thread-{debug_id}"))
+                    .role(Role::ListBoxOption)
+                    .selected(selected)
+                    .aria_selected(selected)
+                    .aria_position_in_set(position)
+                    .aria_size_of_set(self.visible_threads)
+                    // Keyboard focus stays on the listbox and travels as an
+                    // active descendant, so a row scrolling out of the window
+                    // cannot take the focus with it.
+                    .when(focused, |button| button.aria_active_descendant())
+                    .tab_stop(false)
+                    .flex_1()
+                    .min_w_0()
+                    .px(tokens.spacing.sm)
+                    .py(tokens.spacing.xs)
+                    .rounded(tokens.radius.md)
+                    .border_l_2()
+                    .border_color(if focused {
+                        cx.theme().ring
+                    } else if selected {
+                        cx.theme().primary
+                    } else {
+                        cx.theme().transparent
+                    })
+                    .bg(if selected {
+                        cx.theme().accent
+                    } else {
+                        cx.theme().transparent
+                    })
+                    .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                    .active(|style| style.bg(cx.theme().accent))
+                    .focus_visible(|style| style.border_color(cx.theme().ring))
+                    .child(
+                        v_flex()
+                            .min_w_0()
+                            .items_start()
+                            .child(
+                                div()
+                                    .w_full()
+                                    .truncate()
+                                    .text_token(tokens.typography.sm)
+                                    .text_color(cx.theme().foreground)
+                                    .child(item.title.clone()),
+                            )
+                            .when_some(item.subtitle.clone(), |this, subtitle| {
+                                this.child(
+                                    div()
+                                        .w_full()
+                                        .truncate()
+                                        .text_token(tokens.typography.xs)
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(subtitle),
+                                )
+                            }),
+                    )
+                    .on_click(move |_, window, cx| {
+                        let _ = owner.update(cx, |this, cx| {
+                            this.focus_thread(select_id.clone(), window, cx);
+                            cx.emit(ThreadListEvent::Selected {
+                                id: select_id.clone(),
+                            });
+                            cues::emit(cx, Cue::ThreadSelected);
+                        });
+                    }),
+            )
+            .child(self.render_actions_menu(item, item_id, cx))
+            .into_any_element()
+    }
+
+    /// The row's ellipsis and the popup menu it opens.
+    ///
+    /// Upstream owns the popup: `Popover` owns the open lifecycle, placement,
+    /// and outside dismissal, and `PopupMenu` owns the items, their keyboard
+    /// model, Escape, and the return of focus to the listbox. The row keeps no
+    /// "which row is open" state, so no row can change height.
+    fn render_actions_menu(
+        &self,
+        item: &ThreadItem,
+        item_id: ElementId,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let more_debug_id = item.id.to_string();
+        let list_focus = self.list_focus.clone();
+        let owner = self.owner.clone();
+        let action_id = item.id.clone();
+        let archived = item.archived;
+        // The menu is rebuilt on each open, so the builder clones rather than
+        // moves: it must be able to run again.
+        let debug_id = item.id.to_string();
+
+        ThreadActionsMenu {
+            id: ElementId::from((item_id.clone(), "more-menu")),
+            trigger: icon_button(
+                (item_id, "more"),
+                IconName::Ellipsis,
+                format!("More actions for {}", item.title),
+                cx,
+            )
+            .debug_selector(move || format!("thread-more-{more_debug_id}"))
+            .rounded(tokens.radius.sm),
+            build: Rc::new(move |menu, _, _| {
+                let (rename_debug, archive_debug, delete_debug) =
+                    (debug_id.clone(), debug_id.clone(), debug_id.clone());
+                let rename_id = action_id.clone();
+                let archive_id = action_id.clone();
+                let delete_id = action_id.clone();
+                let rename_owner = owner.clone();
+                let archive_owner = owner.clone();
+                let delete_owner = owner.clone();
+                menu.action_context(list_focus.clone())
+                    .item(
+                        PopupMenuItem::element(move |_, _| {
+                            let debug = rename_debug.clone();
+                            div()
+                                .debug_selector(move || format!("thread-rename-{debug}"))
+                                .child("Rename")
+                        })
+                        .on_click(move |_, _, cx| {
+                            let _ = rename_owner.update(cx, |_, cx| {
+                                cx.emit(ThreadListEvent::RenameRequested {
+                                    id: rename_id.clone(),
+                                });
+                            });
+                        }),
+                    )
+                    .item(
+                        PopupMenuItem::element(move |_, _| {
+                            let debug = archive_debug.clone();
+                            div()
+                                .debug_selector(move || format!("thread-archive-{debug}"))
+                                .child(if archived { "Unarchive" } else { "Archive" })
+                        })
+                        .on_click(move |_, _, cx| {
+                            let _ = archive_owner.update(cx, |_, cx| {
+                                cx.emit(if archived {
+                                    ThreadListEvent::UnarchiveRequested {
+                                        id: archive_id.clone(),
+                                    }
+                                } else {
+                                    ThreadListEvent::ArchiveRequested {
+                                        id: archive_id.clone(),
+                                    }
+                                });
+                            });
+                        }),
+                    )
+                    .item(
+                        PopupMenuItem::element(move |_, cx| {
+                            let debug = delete_debug.clone();
+                            div()
+                                .debug_selector(move || format!("thread-delete-{debug}"))
+                                .text_color(cx.theme().danger)
+                                .child("Delete")
+                        })
+                        .on_click(move |_, _, cx| {
+                            let _ = delete_owner.update(cx, |_, cx| {
+                                cx.emit(ThreadListEvent::DeleteRequested {
+                                    id: delete_id.clone(),
+                                });
+                            });
+                        }),
+                    )
+            }),
+        }
+    }
+}
+
+/// The menu entity a row keeps between the frame that opens it and the frame
+/// that dismisses it.
+#[derive(Default)]
+struct ThreadActionsMenuState {
+    menu: Option<Entity<PopupMenu>>,
+}
+
+/// Fills a freshly built menu with a row's actions.
+///
+/// Called on every open rather than once, so an item's label and handler are
+/// always the ones the current snapshot implies — Archive and Unarchive are
+/// the same item under two names.
+type ThreadMenuBuilder = dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu;
+
+/// An ellipsis trigger and the popup menu it opens.
+///
+/// This composes upstream `Popover` and `PopupMenu` by hand rather than using
+/// the `DropdownMenu` trait, which is implemented only for upstream's own
+/// `Button` — and that button takes its accessible name from a visible label,
+/// which an icon-only control does not have. Everything else, including
+/// rebuilding the menu on each open so item state is never stale, follows
+/// `DropdownMenuPopover`.
+#[derive(IntoElement)]
+struct ThreadActionsMenu {
+    id: ElementId,
+    trigger: gpui_base::Button,
+    build: Rc<ThreadMenuBuilder>,
+}
+
+impl RenderOnce for ThreadActionsMenu {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let build = self.build.clone();
+        let state = window.use_keyed_state((self.id.clone(), "menu"), cx, |_, _| {
+            ThreadActionsMenuState::default()
+        });
+
+        Popover::new(self.id)
+            // The menu paints its own surface, and dismisses its own outside
+            // presses, so the popover must add neither.
+            .appearance(false)
+            .overlay_closable(false)
+            // The menu's top-right corner meets the trigger's, so it drops
+            // downward flush with the row's trailing edge.
+            .anchor(Anchor::TopRight)
+            .trigger(self.trigger)
+            .content(move |_, window, cx| {
+                if let Some(menu) = state.read(cx).menu.clone() {
+                    return menu;
+                }
+                let build = build.clone();
+                let menu =
+                    PopupMenu::build(window, cx, move |menu, window, cx| build(menu, window, cx));
+                state.update(cx, |this, _| this.menu = Some(menu.clone()));
+                menu.focus_handle(cx).focus(window, cx);
+
+                let popover = cx.entity();
+                window
+                    .subscribe(&menu, cx, {
+                        let state = state.clone();
+                        move |_, _: &DismissEvent, window, cx| {
+                            popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                            state.update(cx, |this, _| this.menu = None);
+                        }
+                    })
+                    .detach();
+                menu
+            })
+    }
+}
+
 /// A controlled conversation list with native search.
 ///
 /// # Example
@@ -203,8 +616,23 @@ pub struct ThreadList {
     query: SharedString,
     input: Entity<InputState>,
     show_archived: bool,
-    open_actions: Option<SharedString>,
-    scroll: ScrollHandle,
+    /// The flattened visible snapshot; rebuilt in setters, never in `Render`.
+    rows: Arc<[ThreadRow]>,
+    /// Threads in `rows`, for `aria-setsize`.
+    visible_threads: usize,
+    /// Threads that survive the archive filter, whatever the query — the
+    /// difference between "no conversations yet" and "nothing matches".
+    candidates: usize,
+    /// The row holding keyboard focus, by stable ID. Distinct from `active`,
+    /// which the application owns: moving focus does not select.
+    focused_thread: Option<SharedString>,
+    /// The listbox's single tab stop; options are not focusable themselves.
+    list_focus: FocusHandle,
+    list_state: ListState,
+    /// Rem size the retained row heights were measured against.
+    resolved_layout: ResolvedLayoutKey,
+    #[cfg(test)]
+    construction: ThreadConstructionCounts,
     _input_subscription: Subscription,
 }
 
@@ -226,8 +654,15 @@ impl ThreadList {
             query: "".into(),
             input,
             show_archived: false,
-            open_actions: None,
-            scroll: ScrollHandle::new(),
+            rows: Arc::from([]),
+            visible_threads: 0,
+            candidates: 0,
+            focused_thread: None,
+            list_focus: cx.focus_handle(),
+            list_state: ListState::new(0, ListAlignment::Top, Pixels::ZERO),
+            resolved_layout: ResolvedLayoutKey::default(),
+            #[cfg(test)]
+            construction: ThreadConstructionCounts::default(),
             _input_subscription: subscription,
         }
     }
@@ -243,17 +678,8 @@ impl ThreadList {
         if !sections_are_well_formed(&sections) || self.sections == sections {
             return;
         }
-        let retained = |id: &Option<SharedString>| {
-            id.as_ref().is_some_and(|id| {
-                sections
-                    .iter()
-                    .any(|section| section.items.iter().any(|item| &item.id == id))
-            })
-        };
-        if !retained(&self.open_actions) {
-            self.open_actions = None;
-        }
         self.sections = sections;
+        self.rebuild_rows();
         cx.notify();
     }
 
@@ -262,6 +688,8 @@ impl ThreadList {
         let id = id.map(Into::into);
         if self.active != id {
             self.active = id;
+            // Selection repaints a row; it never changes its height, so the
+            // measured snapshot and the reader's scroll position both stand.
             cx.notify();
         }
     }
@@ -275,6 +703,7 @@ impl ThreadList {
     pub fn set_show_archived(&mut self, show: bool, cx: &mut Context<Self>) {
         if self.show_archived != show {
             self.show_archived = show;
+            self.rebuild_rows();
             cx.notify();
         }
     }
@@ -314,7 +743,7 @@ impl ThreadList {
 
     /// Scrolls the list to its end (the oldest visible thread).
     pub fn scroll_to_end(&mut self, cx: &mut Context<Self>) {
-        self.scroll.scroll_to_bottom();
+        self.list_state.scroll_to_end();
         cx.notify();
     }
 
@@ -323,214 +752,170 @@ impl ThreadList {
             return;
         }
         self.query = query.clone();
+        self.rebuild_rows();
         cx.emit(ThreadListEvent::QueryChanged { query });
         cx.notify();
     }
 
-    fn visible_sections(&self) -> Vec<(&ThreadSection, Vec<&ThreadItem>)> {
-        self.sections
+    /// Rebuilds the flattened row snapshot the virtual list indexes into.
+    ///
+    /// Called from every setter that can change what is visible, and never
+    /// from `Render`: the list asks for rows by index during layout, so a
+    /// snapshot rebuilt per frame would cost exactly what virtualizing saves.
+    fn rebuild_rows(&mut self) {
+        let sections = self.sections.clone();
+        let mut rows: Vec<ThreadRow> = Vec::new();
+        let mut visible_threads = 0usize;
+        let mut candidates = 0usize;
+        for section in sections.iter() {
+            let mut header_written = false;
+            for item in section.items.iter() {
+                if !self.show_archived && item.archived {
+                    continue;
+                }
+                candidates += 1;
+                if !item.matches(&self.query) {
+                    continue;
+                }
+                if !header_written {
+                    rows.push(ThreadRow::Header {
+                        section_id: section.id.clone(),
+                        label: section.label.clone(),
+                    });
+                    header_written = true;
+                }
+                visible_threads += 1;
+                rows.push(ThreadRow::Thread {
+                    item: item.clone(),
+                    position: visible_threads,
+                });
+            }
+        }
+        self.visible_threads = visible_threads;
+        self.candidates = candidates;
+        // Keyboard focus is an ID, not an index: it survives a reorder or a
+        // narrowing query as long as the thread it names is still visible.
+        if !self
+            .focused_thread
+            .as_ref()
+            .is_some_and(|id| rows.iter().any(|row| row.thread_id() == Some(id)))
+        {
+            self.focused_thread = None;
+        }
+        self.rows = rows.into();
+        self.list_state.reset(self.rows.len());
+    }
+
+    /// Re-measures the rows after the window's rem size changed.
+    ///
+    /// Row heights cache text laid out at the previous rem, and neither a
+    /// snapshot nor a filter reports a zoom change. The row that was first on
+    /// screen stays first.
+    fn resolve_layout(&mut self, rem_size: Pixels, cx: &mut Context<Self>) {
+        if !self.resolved_layout.observe(rem_size) {
+            return;
+        }
+        let offset = self.list_state.logical_scroll_top();
+        let anchor = self
+            .rows
+            .get(offset.item_ix)
+            .map(|row| (row.anchor(), offset.offset_in_item));
+
+        self.list_state.remeasure();
+        if let Some((anchor, offset_in_item)) = anchor
+            && let Some(item_ix) = self.rows.iter().position(|row| row.anchor() == anchor)
+        {
+            self.list_state.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item,
+            });
+        }
+        cx.notify();
+    }
+
+    /// Flattened index of the row for `id`, when it is visible.
+    fn row_index_of(&self, id: &SharedString) -> Option<usize> {
+        self.rows.iter().position(|row| row.thread_id() == Some(id))
+    }
+
+    /// Moves the roving focus onto `id` and keeps that row on screen.
+    fn focus_thread(&mut self, id: SharedString, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(index) = self.row_index_of(&id) {
+            self.list_state.scroll_to_reveal_item(index);
+        }
+        self.focused_thread = Some(id);
+        self.list_focus.focus(window, cx);
+        cx.notify();
+    }
+
+    /// The stable IDs of the visible threads, in display order.
+    fn focusable_ids(&self) -> Vec<SharedString> {
+        self.rows
             .iter()
-            .filter_map(|section| {
-                let items: Vec<&ThreadItem> = section
-                    .items
-                    .iter()
-                    .filter(|item| {
-                        (self.show_archived || !item.archived) && item.matches(&self.query)
-                    })
-                    .collect();
-                (!items.is_empty()).then_some((section, items))
-            })
+            .filter_map(|row| row.thread_id().cloned())
             .collect()
     }
 
-    fn total_visible_candidates(&self) -> usize {
-        self.sections
-            .iter()
-            .flat_map(|section| section.items.iter())
-            .filter(|item| self.show_archived || !item.archived)
-            .count()
+    /// Moves the roving focus by `delta` options, clamped at both ends.
+    ///
+    /// Section headers and threads hidden by the archive filter or the query
+    /// are not options, so they are never landed on: only rows that are in the
+    /// snapshot can hold focus. Reaching an end stays there rather than
+    /// wrapping, so Home and End remain the only way to jump the list.
+    fn move_focus(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
+        let ids = self.focusable_ids();
+        if ids.is_empty() {
+            return;
+        }
+        let last = ids.len() - 1;
+        let next = match self
+            .focused_thread
+            .as_ref()
+            .and_then(|id| ids.iter().position(|candidate| candidate == id))
+        {
+            Some(current) => current.saturating_add_signed(delta).min(last),
+            None if delta < 0 => last,
+            None => 0,
+        };
+        let id = ids[next].clone();
+        self.focus_thread(id, window, cx);
     }
 
-    fn render_item(
-        &self,
-        item: &ThreadItem,
-        index: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let tokens = cx.theme().semantic_tokens();
-        let root_id = ElementId::from(self.id.clone());
-        let item_id = ElementId::from((root_id.clone(), item.id.clone()));
-        let selected = self.active.as_ref() == Some(&item.id);
-        let actions_open = self.open_actions.as_ref() == Some(&item.id);
-        let accessibility_label: SharedString = if item.archived {
-            format!("{}, archived", item.title).into()
-        } else {
-            item.title.clone()
+    /// Moves the roving focus to the first or last option.
+    fn focus_bound(&mut self, last: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let ids = self.focusable_ids();
+        let Some(id) = (if last { ids.last() } else { ids.first() }) else {
+            return;
         };
-        let debug_id = item.id.to_string();
-        let more_debug_id = item.id.to_string();
-        let select_id = item.id.clone();
-        let toggle_id = item.id.clone();
+        let id = id.clone();
+        self.focus_thread(id, window, cx);
+    }
 
-        let row = h_flex()
-            .w_full()
-            .min_w_0()
-            .items_center()
-            .gap(tokens.spacing.xxs)
-            .child(
-                composed_button((item_id.clone(), "select"), accessibility_label)
-                    .debug_selector(move || format!("thread-{debug_id}"))
-                    .role(Role::ListBoxOption)
-                    .selected(selected)
-                    .aria_selected(selected)
-                    .flex_1()
-                    .min_w_0()
-                    .px(tokens.spacing.sm)
-                    .py(tokens.spacing.xs)
-                    .rounded(tokens.radius.md)
-                    .border_l_2()
-                    .border_color(if selected {
-                        cx.theme().primary
-                    } else {
-                        cx.theme().transparent
-                    })
-                    .bg(if selected {
-                        cx.theme().accent
-                    } else {
-                        cx.theme().transparent
-                    })
-                    .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                    .active(|style| style.bg(cx.theme().accent))
-                    .focus_visible(|style| style.border_color(cx.theme().ring))
-                    .child(
-                        v_flex()
-                            .min_w_0()
-                            .items_start()
-                            .child(
-                                div()
-                                    .w_full()
-                                    .truncate()
-                                    .text_token(tokens.typography.sm)
-                                    .text_color(cx.theme().foreground)
-                                    .child(item.title.clone()),
-                            )
-                            .when_some(item.subtitle.clone(), |this, subtitle| {
-                                this.child(
-                                    div()
-                                        .w_full()
-                                        .truncate()
-                                        .text_token(tokens.typography.xs)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(subtitle),
-                                )
-                            }),
-                    )
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ThreadListEvent::Selected {
-                            id: select_id.clone(),
-                        });
-                        cues::emit(cx, Cue::ThreadSelected);
-                    })),
-            )
-            .child(
-                icon_button(
-                    (item_id.clone(), "more"),
-                    IconName::Ellipsis,
-                    format!("More actions for {}", item.title),
-                    cx,
-                )
-                .debug_selector(move || format!("thread-more-{more_debug_id}"))
-                .aria_expanded(actions_open)
-                .selected(actions_open)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.open_actions = if this.open_actions.as_ref() == Some(&toggle_id) {
-                        None
-                    } else {
-                        Some(toggle_id.clone())
-                    };
-                    cx.notify();
-                })),
-            );
+    /// Selects the focused option, the way clicking it would.
+    fn activate_focused(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.focused_thread.clone() else {
+            return;
+        };
+        cx.emit(ThreadListEvent::Selected { id });
+        cues::emit(cx, Cue::ThreadSelected);
+    }
 
-        let actions = actions_open.then(|| {
-            let rename_id = item.id.clone();
-            let archive_id = item.id.clone();
-            let delete_id = item.id.clone();
-            let archived = item.archived;
-            let rename_debug = item.id.to_string();
-            let archive_debug = item.id.to_string();
-            let delete_debug = item.id.to_string();
-            reveal(
-                h_flex()
-                    .id((item_id.clone(), "actions"))
-                    .role(Role::Toolbar)
-                    .aria_label(format!("Actions for {}", item.title))
-                    .gap(tokens.spacing.xs)
-                    .pl(tokens.spacing.sm)
-                    .pb(tokens.spacing.xxs)
-                    .child(
-                        outlined_control((item_id.clone(), "rename"), "Rename", cx)
-                            .debug_selector(move || format!("thread-rename-{rename_debug}"))
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                cx.emit(ThreadListEvent::RenameRequested {
-                                    id: rename_id.clone(),
-                                });
-                            })),
-                    )
-                    .child(
-                        outlined_control(
-                            (item_id.clone(), "archive"),
-                            if archived { "Unarchive" } else { "Archive" },
-                            cx,
-                        )
-                        .debug_selector(move || format!("thread-archive-{archive_debug}"))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.open_actions = None;
-                            cx.emit(if archived {
-                                ThreadListEvent::UnarchiveRequested {
-                                    id: archive_id.clone(),
-                                }
-                            } else {
-                                ThreadListEvent::ArchiveRequested {
-                                    id: archive_id.clone(),
-                                }
-                            });
-                            cx.notify();
-                        })),
-                    )
-                    .child(
-                        outlined_control((item_id.clone(), "delete"), "Delete", cx)
-                            .debug_selector(move || format!("thread-delete-{delete_debug}"))
-                            .text_color(cx.theme().danger)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.open_actions = None;
-                                cx.emit(ThreadListEvent::DeleteRequested {
-                                    id: delete_id.clone(),
-                                });
-                                cx.notify();
-                            })),
-                    ),
-                (item_id.clone(), "actions-reveal"),
-                window,
-                cx,
-            )
-        });
-
-        reveal_staggered(
-            v_flex()
-                .id((item_id, "row"))
-                .w_full()
-                .min_w_0()
-                .gap(tokens.spacing.xxs)
-                .child(row)
-                .children(actions),
-            (root_id, format!("reveal-{}", item.id)),
-            index,
-            window,
-            cx,
-        )
-        .into_any_element()
+    /// The listbox's keyboard model, on stable IDs.
+    ///
+    /// Only reaches here when focus is inside the listbox, so the search
+    /// input's own caret keys are untouched. Escape is deliberately absent:
+    /// while a row's menu is open the menu holds focus and closes itself
+    /// first, and with no menu open Escape belongs to the application.
+    fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event.keystroke.key.as_str() {
+            "up" => self.move_focus(-1, window, cx),
+            "down" => self.move_focus(1, window, cx),
+            "home" => self.focus_bound(false, window, cx),
+            "end" => self.focus_bound(true, window, cx),
+            "enter" | "space" => self.activate_focused(cx),
+            _ => return,
+        }
+        cx.stop_propagation();
     }
 }
 
@@ -544,38 +929,40 @@ impl Focusable for ThreadList {
 
 impl Render for ThreadList {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Measured row heights are only valid for the rem they were laid out
+        // at. Reading it here mutates nothing; the reaction is deferred so
+        // that render never notifies.
+        let rem_size = window.rem_size();
+        if !self.resolved_layout.matches(rem_size) {
+            cx.defer_in(window, move |this, _, cx| {
+                this.resolve_layout(rem_size, cx);
+            });
+        }
+        #[cfg(test)]
+        self.construction.start_draw();
+
         let tokens = cx.theme().semantic_tokens();
         let root_id = ElementId::from(self.id.clone());
-        let visible = self.visible_sections();
-        let candidates = self.total_visible_candidates();
         let show_archived = self.show_archived;
-        let empty_message: Option<SharedString> = if candidates == 0 {
+        let empty_message: Option<SharedString> = if self.candidates == 0 {
             Some("No conversations yet".into())
-        } else if visible.is_empty() {
+        } else if self.rows.is_empty() {
             Some(format!("No conversations match “{}”", self.query).into())
         } else {
             None
         };
-        let mut index = 0usize;
-        let mut sections = Vec::new();
-        for (section, items) in &visible {
-            let mut rows = Vec::with_capacity(items.len());
-            for item in items {
-                rows.push(self.render_item(item, index, window, cx));
-                index += 1;
-            }
-            sections.push(
-                v_flex()
-                    .id((root_id.clone(), section.id.clone()))
-                    .role(Role::Group)
-                    .aria_label(section.label.clone())
-                    .w_full()
-                    .min_w_0()
-                    .gap(tokens.spacing.xxs)
-                    .child(eyebrow(section.label.clone(), cx).px(tokens.spacing.sm))
-                    .children(rows),
-            );
-        }
+        let rows = self.rows.clone();
+        let renderer = RowRenderer {
+            component: self.id.clone(),
+            owner: cx.weak_entity(),
+            list_focus: self.list_focus.clone(),
+            active: self.active.clone(),
+            focused: self.focused_thread.clone(),
+            visible_threads: self.visible_threads,
+            #[cfg(test)]
+            construction: self.construction.clone(),
+        };
+        let list_state = self.list_state.clone();
 
         v_flex()
             .id(root_id.clone())
@@ -619,8 +1006,8 @@ impl Render for ThreadList {
                         .selected(show_archived)
                         .aria_expanded(show_archived)
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.show_archived = !this.show_archived;
-                            cx.notify();
+                            let show = !this.show_archived;
+                            this.set_show_archived(show, cx);
                         })),
                     ),
             )
@@ -639,9 +1026,9 @@ impl Render for ThreadList {
                     .child(div().flex_1().min_w_0().child(Input::new(&self.input))),
             )
             .child(
-                // The outer frame owns the flex constraint; the inner
-                // scroll area fills it so long lists scroll instead of
-                // growing the pane.
+                // The outer frame owns the flex constraint; the virtual list
+                // fills it, so a long snapshot scrolls a window of rows
+                // instead of growing the pane or building the whole document.
                 div()
                     .id((root_id.clone(), "list-frame"))
                     .debug_selector(|| "thread-list-scroll".into())
@@ -650,17 +1037,27 @@ impl Render for ThreadList {
                     .min_h_0()
                     .w_full()
                     .overflow_hidden()
-                    .vertical_scrollbar(&self.scroll)
+                    .vertical_scrollbar(&list_state)
                     .child(
-                        v_flex()
+                        div()
                             .id((root_id.clone(), "list"))
                             .role(Role::ListBox)
                             .aria_label("Conversation list")
+                            .track_focus(&self.list_focus)
+                            .tab_stop(true)
+                            .on_key_down(cx.listener(Self::on_key_down))
                             .size_full()
-                            .gap(tokens.spacing.md)
-                            .overflow_y_scroll()
-                            .track_scroll(&self.scroll)
-                            .children(sections)
+                            .min_h_0()
+                            .when(!rows.is_empty(), |this| {
+                                this.child(
+                                    list(list_state, move |index, window, cx| {
+                                        rows.get(index)
+                                            .map(|row| renderer.render(row, window, cx))
+                                            .unwrap_or_else(|| div().hidden().into_any_element())
+                                    })
+                                    .size_full(),
+                                )
+                            })
                             .when_some(empty_message, |this, message| {
                                 this.child(
                                     div()
@@ -682,6 +1079,7 @@ impl Render for ThreadList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Bounds, Modifiers, Pixels, TestAppContext, VisualTestContext, px, size};
 
     #[test]
     fn matching_is_case_insensitive_over_title_and_subtitle() {
@@ -707,5 +1105,224 @@ mod tests {
             ThreadSection::new("b", "B").items([ThreadItem::new("t-2", "Two")]),
         ];
         assert!(sections_are_well_formed(&fine));
+    }
+
+    /// Rows tall enough that a 480pt viewport holds a couple of dozen, so the
+    /// window is unambiguously smaller than the snapshot.
+    const MEASURED_VIEWPORT: (f32, f32) = (320., 480.);
+
+    /// Threads per section in the large snapshot; ten sections of a thousand.
+    const LARGE_SECTION_SIZE: usize = 1_000;
+    const LARGE_SECTIONS: usize = 10;
+
+    fn large_sections() -> Vec<ThreadSection> {
+        (0..LARGE_SECTIONS)
+            .map(|section| {
+                ThreadSection::new(format!("s-{section}"), format!("Section {section}")).items(
+                    (0..LARGE_SECTION_SIZE).map(|row| {
+                        let index = section * LARGE_SECTION_SIZE + row;
+                        ThreadItem::new(format!("t-{index:05}"), format!("Conversation {index}"))
+                            .subtitle(format!("{index} min ago"))
+                    }),
+                )
+            })
+            .collect()
+    }
+
+    fn measured_list(cx: &mut TestAppContext) -> (Entity<ThreadList>, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let (threads, cx) =
+            cx.add_window_view(|window, cx| ThreadList::new("measured", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(MEASURED_VIEWPORT.0), px(MEASURED_VIEWPORT.1)));
+        (threads, cx)
+    }
+
+    /// Redraws and reports `(rows, threads)` built by that one draw.
+    fn redraw(threads: &Entity<ThreadList>, cx: &mut VisualTestContext) -> (usize, usize) {
+        cx.update(|window, cx| {
+            threads.update(cx, |_, cx| cx.notify());
+            window.draw(cx).clear(cx);
+        });
+        threads.read_with(cx, |threads, _| {
+            (
+                threads.construction.rows.get(),
+                threads.construction.threads.get(),
+            )
+        })
+    }
+
+    fn bounds_of(cx: &mut VisualTestContext, selector: String) -> Option<Bounds<Pixels>> {
+        cx.debug_bounds(Box::leak(selector.into_boxed_str()))
+    }
+
+    /// The bound is only a bound if construction tracks the window rather than
+    /// the snapshot. Ten thousand conversations must build a screenful on the
+    /// first draw and a screenful again after scrolling a page, and the rows
+    /// that were not built must be absent from the frame rather than merely
+    /// invisible.
+    #[gpui::test]
+    fn ten_thousand_threads_build_only_the_visible_window(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(large_sections(), cx));
+        });
+
+        let total = LARGE_SECTIONS * LARGE_SECTION_SIZE;
+        let (rows, built) = redraw(&threads, cx);
+        assert!(built > 0, "the first screen must build some threads");
+        assert!(
+            rows <= 32,
+            "a {total}-thread snapshot built {rows} rows on the first draw"
+        );
+        assert!(
+            bounds_of(cx, "thread-t-00000".to_owned()).is_some(),
+            "the first thread should be on screen"
+        );
+        for far in ["thread-t-00500", "thread-t-05000", "thread-t-09999"] {
+            assert!(
+                bounds_of(cx, far.to_owned()).is_none(),
+                "{far} is far outside the window and must not be built"
+            );
+        }
+
+        // One page down: still a window, and a different one.
+        let page = threads.read_with(cx, |threads, _| {
+            threads.list_state.logical_scroll_top().item_ix + rows
+        });
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, _| {
+                threads.list_state.scroll_to(ListOffset {
+                    item_ix: page,
+                    offset_in_item: Pixels::ZERO,
+                });
+            });
+        });
+        let (scrolled_rows, scrolled_threads) = redraw(&threads, cx);
+        assert!(scrolled_threads > 0, "the second page must build threads");
+        assert!(
+            scrolled_rows <= 32,
+            "one page down built {scrolled_rows} rows of {total}"
+        );
+        assert!(
+            bounds_of(cx, "thread-t-00000".to_owned()).is_none(),
+            "the first thread scrolled out and must no longer be built"
+        );
+
+        // Counts describe one draw, never a running total.
+        let (again, _) = redraw(&threads, cx);
+        assert_eq!(again, scrolled_rows, "construction must not accumulate");
+    }
+
+    /// The snapshot is derived once per change, so the flattening itself is
+    /// the contract: headers only for sections that kept a thread, positions
+    /// numbered across the whole listbox, and no row for a hidden thread.
+    #[gpui::test]
+    fn the_flattened_snapshot_carries_headers_and_listbox_positions(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| {
+                threads.set_sections(
+                    [
+                        ThreadSection::new("today", "Today").items([
+                            ThreadItem::new("a", "Alpha"),
+                            ThreadItem::new("b", "Beta").archived(true),
+                        ]),
+                        ThreadSection::new("earlier", "Earlier")
+                            .items([ThreadItem::new("c", "Gamma")]),
+                        ThreadSection::new("empty", "Empty")
+                            .items([ThreadItem::new("d", "Delta").archived(true)]),
+                    ],
+                    cx,
+                );
+            });
+        });
+        threads.read_with(cx, |threads, _| {
+            assert_eq!(
+                threads.rows.as_ref(),
+                &[
+                    ThreadRow::Header {
+                        section_id: "today".into(),
+                        label: "Today".into()
+                    },
+                    ThreadRow::Thread {
+                        item: ThreadItem::new("a", "Alpha"),
+                        position: 1
+                    },
+                    ThreadRow::Header {
+                        section_id: "earlier".into(),
+                        label: "Earlier".into()
+                    },
+                    ThreadRow::Thread {
+                        item: ThreadItem::new("c", "Gamma"),
+                        position: 2
+                    },
+                ],
+                "a section whose every thread is archived contributes no header"
+            );
+            assert_eq!(threads.visible_threads, 2);
+            assert_eq!(threads.candidates, 2);
+        });
+    }
+
+    /// Zoom invalidates measured heights, and the row that was first on screen
+    /// must still be first afterwards.
+    #[gpui::test]
+    fn a_changed_rem_remeasures_and_keeps_the_first_visible_row(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(large_sections(), cx));
+        });
+        redraw(&threads, cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, _| {
+                threads.list_state.scroll_to(ListOffset {
+                    item_ix: 24,
+                    offset_in_item: Pixels::ZERO,
+                });
+            });
+        });
+        redraw(&threads, cx);
+        let before = threads.read_with(cx, |threads, _| {
+            threads.rows[threads.list_state.logical_scroll_top().item_ix].anchor()
+        });
+
+        cx.update(|window, cx| {
+            window.set_rem_size(px(24.));
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let after = threads.read_with(cx, |threads, _| {
+            threads.rows[threads.list_state.logical_scroll_top().item_ix].anchor()
+        });
+        assert_eq!(before, after, "zooming must not move the reader");
+        assert!(
+            threads.read_with(cx, |threads, _| threads.resolved_layout.matches(px(24.))),
+            "the new rem must be recorded so the next draw does not remeasure again"
+        );
+    }
+
+    /// Clicking a row takes the roving focus with it, so the keyboard picks up
+    /// where the pointer left off.
+    #[gpui::test]
+    fn clicking_a_row_moves_the_roving_focus(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| {
+                threads.set_sections(
+                    [ThreadSection::new("today", "Today")
+                        .items([ThreadItem::new("a", "Alpha"), ThreadItem::new("b", "Beta")])],
+                    cx,
+                );
+            });
+        });
+        redraw(&threads, cx);
+        let row = bounds_of(cx, "thread-b".to_owned()).expect("the row should render");
+        cx.simulate_click(row.center(), Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        threads.read_with(cx, |threads, _| {
+            assert_eq!(threads.focused_thread.as_deref(), Some("b"));
+        });
     }
 }
