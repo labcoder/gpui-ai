@@ -130,7 +130,9 @@ pub mod prelude {
     };
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
-    pub use crate::sidebar_nav::{SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarSection};
+    pub use crate::sidebar_nav::{
+        SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarNavPresentation, SidebarSection,
+    };
     pub use crate::status::{StatusBadge, StatusTone};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};
     pub use crate::streaming_text::{

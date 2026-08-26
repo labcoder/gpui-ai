@@ -89,6 +89,14 @@ pub enum StoryId {
     /// — the page compares themes, and the comparison needs the same pixels
     /// re-skinned, not three separate instances.
     ThemesTrio,
+    /// gpui-ai components inside upstream's `DockArea`.
+    ///
+    /// Same contract as [`StoryId::GuidedDemo`]: addressable, absent from the
+    /// catalog. It documents no component — it is the interoperability proof
+    /// that an embedded sidebar, a thread list, a chat, and an artifact
+    /// compose inside someone else's docking, so there is nothing here for the
+    /// website to name or size.
+    DockComposition,
 }
 
 /// Variants the Chat story switches between.
@@ -240,6 +248,7 @@ impl StoryId {
             Self::SelectionActions => "selection-actions",
             Self::GuidedDemo => "guided-demo",
             Self::ThemesTrio => "themes-trio",
+            Self::DockComposition => "dock-composition",
         }
     }
 
@@ -283,6 +292,7 @@ impl StoryId {
             Self::SelectionActions => "Selection actions",
             Self::GuidedDemo => "Guided demo",
             Self::ThemesTrio => "Themes trio",
+            Self::DockComposition => "Dock composition",
         }
     }
 
@@ -292,9 +302,11 @@ impl StoryId {
     /// it has no entry.
     pub const fn meta(self) -> Option<StoryMeta> {
         Some(match self {
-            // Neither the catalog view, the site hero, nor the themes-page
-            // specimen is a component.
-            Self::All | Self::GuidedDemo | Self::ThemesTrio => return None,
+            // Neither the catalog view, the site hero, the themes-page
+            // specimen, nor the dock interoperability proof is a component.
+            Self::All | Self::GuidedDemo | Self::ThemesTrio | Self::DockComposition => {
+                return None;
+            }
             Self::Loading => StoryMeta {
                 category: "Progress",
                 summary: "A token-driven pixel field for work whose duration is not yet known.",
@@ -632,6 +644,9 @@ impl FromStr for StoryId {
         if slug == Self::ThemesTrio.slug() {
             return Ok(Self::ThemesTrio);
         }
+        if slug == Self::DockComposition.slug() {
+            return Ok(Self::DockComposition);
+        }
 
         Self::ALL
             .iter()
@@ -677,6 +692,21 @@ mod tests {
             Ok(StoryId::CommandSearch)
         );
         assert!(StoryId::ALL.contains(&StoryId::CommandSearch));
+    }
+
+    #[test]
+    fn dock_composition_is_addressable_but_not_a_catalog_component() {
+        assert_eq!(StoryId::DockComposition.slug(), "dock-composition");
+        assert_eq!(StoryId::DockComposition.title(), "Dock composition");
+        assert_eq!(
+            "dock-composition".parse::<StoryId>(),
+            Ok(StoryId::DockComposition)
+        );
+        // It documents interoperability, not a component, so the catalog and
+        // the website must not list or size it.
+        assert!(!StoryId::ALL.contains(&StoryId::DockComposition));
+        assert!(StoryId::DockComposition.meta().is_none());
+        assert!(StoryId::DockComposition.variants().is_empty());
     }
 
     #[test]

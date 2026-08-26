@@ -4,6 +4,7 @@
 //! streams, task lifecycles). All simulation lives here — the library
 //! components only ever see data.
 
+use crate::dock_composition::DockCompositionStory;
 use crate::{StoryId, sim};
 
 use gpui::prelude::FluentBuilder as _;
@@ -299,6 +300,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         StoryId::All
         | StoryId::GuidedDemo
         | StoryId::ThemesTrio
+        | StoryId::DockComposition
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::Artifact
@@ -772,7 +774,7 @@ fn demo_queue() -> Vec<QueuedMessage> {
     ]
 }
 
-fn demo_thread_sections() -> Vec<ThreadSection> {
+pub(crate) fn demo_thread_sections() -> Vec<ThreadSection> {
     vec![
         ThreadSection::new("today", "Today").items([
             ThreadItem::new("supplier-pricing", "Supplier pricing review")
@@ -1065,7 +1067,7 @@ impl Render for CommandSearchStory {
     }
 }
 
-fn creamery_sidebar_sections() -> [SidebarSection; 3] {
+pub(crate) fn creamery_sidebar_sections() -> [SidebarSection; 3] {
     [
         SidebarSection::new("production", "Production").items([
             SidebarNavItem::new("overview", "Overview").icon(IconName::LayoutDashboard),
@@ -4149,6 +4151,14 @@ impl Gallery {
                 let guided =
                     window.use_keyed_state(("guided-demo-story-state", self.generation), cx, GuidedDemoStory::new);
                 self.section(story, "Guided demo", || guided, cx)
+            }
+            StoryId::DockComposition => {
+                let dock = window.use_keyed_state(
+                    ("dock-composition-story-state", self.generation),
+                    cx,
+                    DockCompositionStory::new,
+                );
+                self.section(story, "Dock composition", || dock, cx)
             }
             StoryId::ThemesTrio => self.section(
                 story,

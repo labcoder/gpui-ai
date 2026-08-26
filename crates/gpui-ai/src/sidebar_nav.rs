@@ -823,6 +823,28 @@ fn render_row(
         .into_any_element()
 }
 
+/// How the navigation draws its outer shell.
+///
+/// The shell is all this changes. Header, rows, filtering, the keyboard model,
+/// and every accessibility identity are the same in both modes, so a docked
+/// navigation differs from a standalone one by its box alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SidebarNavPresentation {
+    /// A standalone rail that owns its own size: a fixed collapsed or expanded
+    /// width, no flex growth, and a border along its trailing edge.
+    #[default]
+    Standalone,
+    /// A shell that fills whatever box its host gives it, with no forced
+    /// width, no rail sizing, and no edge border.
+    ///
+    /// For hosts that already own placement and size — a dock panel, a split,
+    /// a resizable pane. Placement stays with the host and is deliberately not
+    /// described here: a navigation docked along the bottom fills that
+    /// region's width exactly as one docked left fills its column, because the
+    /// shell contributes no width of its own either way.
+    Embedded,
+}
+
 /// A hybrid-controlled, filterable application sidebar.
 ///
 /// Applications own the immutable section/item snapshot and active item ID.
@@ -863,6 +885,8 @@ pub struct SidebarNav {
     /// Rows the virtual list has constructed, which is what bounded
     /// construction is asserted against.
     constructed_rows: Rc<Cell<usize>>,
+    /// How the shell is drawn. Read only by `render_shell`.
+    presentation: SidebarNavPresentation,
     _input_subscription: Subscription,
 }
 
@@ -891,8 +915,23 @@ impl SidebarNav {
             row_list: ListState::new(0, ListAlignment::Top, Pixels::ZERO),
             resolved_layout: ResolvedLayoutKey::default(),
             constructed_rows: Rc::new(Cell::new(0)),
+            presentation: SidebarNavPresentation::default(),
             _input_subscription: subscription,
         }
+    }
+
+    /// Set how the shell is drawn (default:
+    /// [`SidebarNavPresentation::Standalone`]).
+    ///
+    /// ```ignore
+    /// let nav = cx.new(|cx| {
+    ///     SidebarNav::new("docked-nav", window, cx)
+    ///         .presentation(SidebarNavPresentation::Embedded)
+    /// });
+    /// ```
+    pub fn presentation(mut self, presentation: SidebarNavPresentation) -> Self {
+        self.presentation = presentation;
+        self
     }
 
     /// Replace the controlled section snapshot.
@@ -977,6 +1016,11 @@ impl SidebarNav {
     /// Return the latest quick-filter query.
     pub fn query(&self) -> &SharedString {
         &self.query
+    }
+
+    /// Return how the shell is drawn.
+    pub fn nav_presentation(&self) -> SidebarNavPresentation {
+        self.presentation
     }
 
     /// Move focus into the retained native filter input when it is mounted.
@@ -1263,6 +1307,62 @@ impl Render for SidebarNav {
             });
         }
 
+        let content = self.render_content(window, cx);
+        self.render_shell(cx).children(content)
+    }
+}
+
+impl SidebarNav {
+    /// The outer shell: stable identity, navigation semantics, and the box the
+    /// host sees.
+    ///
+    /// This is the only rendering [`SidebarNavPresentation`] reaches, which is
+    /// what keeps the setting additive: the content below draws the same rows
+    /// either way.
+    fn render_shell(&self, cx: &mut App) -> Stateful<Div> {
+        let tokens = cx.theme().semantic_tokens();
+        let collapsed = self.collapsed;
+        div()
+            .id((ElementId::from(self.id.clone()), "frame"))
+            .debug_selector({
+                let id = self.id.clone();
+                move || format!("sidebar-nav-{id}")
+            })
+            .accessibility_id(format!("sidebar-nav.{}", self.id))
+            .role(Role::Navigation)
+            .aria_label("Workspace navigation")
+            .h_full()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .bg(cx.theme().sidebar)
+            .text_color(cx.theme().sidebar_foreground)
+            .map(|shell| match self.presentation {
+                // A standalone rail sizes itself and draws the edge between
+                // itself and whatever sits beside it.
+                SidebarNavPresentation::Standalone => shell
+                    .w(if collapsed {
+                        tokens.spacing.xxl * 1.5
+                    } else {
+                        tokens.spacing.xxl * 8.
+                    })
+                    .flex_none()
+                    .border_r_1()
+                    .border_color(cx.theme().sidebar_border),
+                // The host owns placement and size, so the shell contributes
+                // neither a width nor an edge: docked along the bottom it
+                // fills that region's width instead of keeping a rail's, and
+                // the host's own divider is the only border drawn.
+                SidebarNavPresentation::Embedded => shell.w_full().min_w_0(),
+            })
+    }
+
+    /// The shell's children, in order: header, virtualized row tree, and the
+    /// empty status.
+    ///
+    /// Nothing here reads [`SidebarNavPresentation`].
+    fn render_content(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let tokens = cx.theme().semantic_tokens();
         let new_task_owner = cx.weak_entity();
         let collapse_owner = cx.weak_entity();
@@ -1355,113 +1455,90 @@ impl Render for SidebarNav {
         let row_list = self.row_list.clone();
         let rows_are_empty = self.rows.is_empty();
 
-        div()
-            .id((ElementId::from(self.id.clone()), "frame"))
-            .debug_selector({
-                let id = self.id.clone();
-                move || format!("sidebar-nav-{id}")
-            })
-            .accessibility_id(format!("sidebar-nav.{}", self.id))
-            .role(Role::Navigation)
-            .aria_label("Workspace navigation")
-            .h_full()
-            .min_h_0()
-            .w(if collapsed {
-                tokens.spacing.xxl * 1.5
-            } else {
-                tokens.spacing.xxl * 8.
-            })
-            .flex()
-            .flex_col()
-            .flex_none()
-            .overflow_hidden()
-            .bg(cx.theme().sidebar)
-            .text_color(cx.theme().sidebar_foreground)
-            .border_r_1()
-            .border_color(cx.theme().sidebar_border)
-            .child(
+        let mut content = vec![
+            div()
+                .w_full()
+                .flex_none()
+                .p(tokens.spacing.sm)
+                .child(header)
+                .into_any_element(),
+            div()
+                .relative()
+                .w_full()
+                .flex_1()
+                .min_h_0()
+                .child(
+                    sidebar_tree_container(&self.id)
+                        // The tree is the single tab stop and holds focus
+                        // for every row, so a row that unmounts while
+                        // scrolled away cannot take the reader's focus
+                        // out of the navigation with it.
+                        .track_focus(&self.tree_focus.clone().tab_index(0).tab_stop(true))
+                        .size_full()
+                        .flex()
+                        .flex_col()
+                        .px(tokens.spacing.sm)
+                        .gap(tokens.spacing.xxs)
+                        .child(
+                            list(row_list.clone(), move |index, window, cx| {
+                                constructed_rows.set(constructed_rows.get() + 1);
+                                rows.get(index)
+                                    .map(|row| {
+                                        render_row(
+                                            row,
+                                            &row_component_id,
+                                            collapsed,
+                                            tree_focused && roving_row.as_ref() == Some(&row.id),
+                                            &row_owner,
+                                            window,
+                                            cx,
+                                        )
+                                    })
+                                    .unwrap_or_else(|| div().hidden().into_any_element())
+                            })
+                            .size_full(),
+                        )
+                        .vertical_scrollbar(&row_list)
+                        .on_key_down(move |event, window, cx| {
+                            if event.keystroke.modifiers.modified() {
+                                return;
+                            }
+                            let key = event.keystroke.key.clone();
+                            let handled = key_owner
+                                .update(cx, |nav, cx| nav.navigate(&key, window, cx))
+                                .unwrap_or(false);
+                            if handled {
+                                cx.stop_propagation();
+                            }
+                        }),
+                )
+                // Capture-phase containment wins over an ancestor catalog
+                // list and releases the wheel at either nav edge.
+                .child(list_scroll_mask(&self.row_list))
+                .into_any_element(),
+        ];
+        if rows_are_empty && !collapsed {
+            content.push(
                 div()
-                    .w_full()
+                    .id((ElementId::from(self.id.clone()), "empty-status"))
+                    .debug_selector(move || {
+                        if empty_selector {
+                            "sidebar-nav-empty".to_owned()
+                        } else {
+                            "sidebar-nav-no-results".to_owned()
+                        }
+                    })
                     .flex_none()
                     .p(tokens.spacing.sm)
-                    .child(header),
-            )
-            .child(
-                div()
-                    .relative()
-                    .w_full()
-                    .flex_1()
-                    .min_h_0()
-                    .child(
-                        sidebar_tree_container(&self.id)
-                            // The tree is the single tab stop and holds focus
-                            // for every row, so a row that unmounts while
-                            // scrolled away cannot take the reader's focus
-                            // out of the navigation with it.
-                            .track_focus(&self.tree_focus.clone().tab_index(0).tab_stop(true))
-                            .size_full()
-                            .flex()
-                            .flex_col()
-                            .px(tokens.spacing.sm)
-                            .gap(tokens.spacing.xxs)
-                            .child(
-                                list(row_list.clone(), move |index, window, cx| {
-                                    constructed_rows.set(constructed_rows.get() + 1);
-                                    rows.get(index)
-                                        .map(|row| {
-                                            render_row(
-                                                row,
-                                                &row_component_id,
-                                                collapsed,
-                                                tree_focused
-                                                    && roving_row.as_ref() == Some(&row.id),
-                                                &row_owner,
-                                                window,
-                                                cx,
-                                            )
-                                        })
-                                        .unwrap_or_else(|| div().hidden().into_any_element())
-                                })
-                                .size_full(),
-                            )
-                            .vertical_scrollbar(&row_list)
-                            .on_key_down(move |event, window, cx| {
-                                if event.keystroke.modifiers.modified() {
-                                    return;
-                                }
-                                let key = event.keystroke.key.clone();
-                                let handled = key_owner
-                                    .update(cx, |nav, cx| nav.navigate(&key, window, cx))
-                                    .unwrap_or(false);
-                                if handled {
-                                    cx.stop_propagation();
-                                }
-                            }),
-                    )
-                    // Capture-phase containment wins over an ancestor catalog
-                    // list and releases the wheel at either nav edge.
-                    .child(list_scroll_mask(&self.row_list)),
-            )
-            .when(rows_are_empty && !collapsed, |this| {
-                this.child(
-                    div()
-                        .id((ElementId::from(self.id.clone()), "empty-status"))
-                        .debug_selector(move || {
-                            if empty_selector {
-                                "sidebar-nav-empty".to_owned()
-                            } else {
-                                "sidebar-nav-no-results".to_owned()
-                            }
-                        })
-                        .flex_none()
-                        .p(tokens.spacing.sm)
-                        .role(Role::Status)
-                        .aria_label(empty_message.clone())
-                        .text_token(tokens.typography.sm)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(empty_message),
-                )
-            })
+                    .role(Role::Status)
+                    .aria_label(empty_message.clone())
+                    .text_token(tokens.typography.sm)
+                    .text_color(cx.theme().muted_foreground)
+                    .child(empty_message)
+                    .into_any_element(),
+            );
+        }
+        content
     }
 }
 
@@ -1469,8 +1546,8 @@ impl Render for SidebarNav {
 mod tests {
     use super::*;
     use gpui::{
-        Element as _, ListAlignment, ListState, RenderOnce as _, ScrollDelta, ScrollWheelEvent,
-        TestAppContext, VisualTestContext, accesskit, canvas, list, px,
+        Bounds, Element as _, ListAlignment, ListState, RenderOnce as _, ScrollDelta,
+        ScrollWheelEvent, TestAppContext, VisualTestContext, accesskit, canvas, list, px, size,
     };
     use gpui_component::theme::Theme;
     use std::sync::{Arc, Mutex};
@@ -2152,5 +2229,143 @@ mod tests {
             (catalog_top.item_ix, catalog_top.offset_in_item),
             (0, px(0.))
         );
+    }
+
+    /// A nav inside a host box of an arbitrary size, in either presentation.
+    struct HostedNavProbe {
+        nav: Entity<SidebarNav>,
+        size: gpui::Size<Pixels>,
+    }
+
+    impl HostedNavProbe {
+        fn new(
+            presentation: SidebarNavPresentation,
+            host: gpui::Size<Pixels>,
+            window: &mut Window,
+            cx: &mut Context<Self>,
+        ) -> Self {
+            let nav = cx.new(|cx| {
+                let mut nav = SidebarNav::new("hosted-nav", window, cx).presentation(presentation);
+                nav.set_sections(probe_sections(), cx);
+                nav
+            });
+            Self { nav, size: host }
+        }
+    }
+
+    impl Render for HostedNavProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("hosted-nav-host")
+                .debug_selector(|| "hosted-nav-host".to_owned())
+                .w(self.size.width)
+                .h(self.size.height)
+                .flex()
+                .child(self.nav.clone())
+        }
+    }
+
+    /// Draws one hosted nav and returns the host's and the nav's bounds.
+    fn hosted_nav_bounds(
+        cx: &mut TestAppContext,
+        presentation: SidebarNavPresentation,
+        host: gpui::Size<Pixels>,
+    ) -> (Bounds<Pixels>, Bounds<Pixels>) {
+        cx.update(crate::init);
+        let (_, cx) = cx
+            .add_window_view(move |window, cx| HostedNavProbe::new(presentation, host, window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(700.)));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        (
+            cx.debug_bounds("hosted-nav-host")
+                .expect("the host should render"),
+            cx.debug_bounds("sidebar-nav-hosted-nav")
+                .expect("the navigation should render"),
+        )
+    }
+
+    #[gpui::test]
+    fn an_embedded_shell_fills_a_wide_short_host(cx: &mut TestAppContext) {
+        let (host, nav) = hosted_nav_bounds(
+            cx,
+            SidebarNavPresentation::Embedded,
+            size(px(620.), px(160.)),
+        );
+
+        // The bottom-dock case: an embedded nav takes the width it is given
+        // rather than a rail's, which is the whole point of the mode.
+        assert_eq!(nav.size, host.size);
+        assert_eq!(nav.origin, host.origin);
+    }
+
+    #[gpui::test]
+    fn an_embedded_shell_fills_a_narrow_tall_host(cx: &mut TestAppContext) {
+        let (host, nav) = hosted_nav_bounds(
+            cx,
+            SidebarNavPresentation::Embedded,
+            size(px(196.), px(460.)),
+        );
+
+        // Narrower than the expanded rail: the shell shrinks with the host
+        // instead of overflowing it.
+        assert_eq!(nav.size, host.size);
+        assert_eq!(nav.origin, host.origin);
+    }
+
+    #[gpui::test]
+    fn the_default_shell_keeps_a_rail_width_inside_a_wide_host(cx: &mut TestAppContext) {
+        let host_size = size(px(620.), px(360.));
+        let (host, nav) = hosted_nav_bounds(cx, SidebarNavPresentation::Standalone, host_size);
+
+        assert_eq!(nav.size.height, host.size.height);
+        assert!(
+            nav.size.width < host.size.width,
+            "a standalone rail sizes itself: {:?} in a {:?} host",
+            nav.size,
+            host.size,
+        );
+    }
+
+    #[gpui::test]
+    fn the_shells_differ_only_by_width_growth_and_trailing_edge(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (nav, cx) = cx.add_window_view(|window, cx| SidebarNav::new("shell", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+
+        let (standalone, embedded, rail) = cx.update(|_, cx| {
+            let rail = cx.theme().semantic_tokens().spacing.xxl * 8.;
+            let standalone = nav.update(cx, |nav, cx| nav.render_shell(cx).style().clone());
+            let embedded = nav.update(cx, |nav, cx| {
+                nav.presentation = SidebarNavPresentation::Embedded;
+                let style = nav.render_shell(cx).style().clone();
+                nav.presentation = SidebarNavPresentation::Standalone;
+                style
+            });
+            (standalone, embedded, rail)
+        });
+
+        let expected_rail = div().w(rail).flex_none().border_r_1().style().clone();
+        assert_eq!(standalone.size.width, expected_rail.size.width);
+        assert_eq!(standalone.flex_grow, expected_rail.flex_grow);
+        assert_eq!(standalone.flex_shrink, expected_rail.flex_shrink);
+        assert_eq!(standalone.border_widths, expected_rail.border_widths);
+
+        // Embedded keeps neither the rail's width nor its edge; the host draws
+        // whatever divider the composition needs.
+        let expected_embedded = div().w_full().style().clone();
+        assert_eq!(embedded.size.width, expected_embedded.size.width);
+        assert_eq!(embedded.flex_grow, expected_embedded.flex_grow);
+        assert_eq!(embedded.flex_shrink, expected_embedded.flex_shrink);
+        assert_eq!(embedded.border_widths, expected_embedded.border_widths);
+
+        // Everything the shell is not asked to change is shared, so the seam
+        // cannot quietly become a second skin.
+        assert_eq!(standalone.size.height, embedded.size.height);
+        assert_eq!(standalone.background, embedded.background);
+        assert_eq!(standalone.text.color, embedded.text.color);
     }
 }
