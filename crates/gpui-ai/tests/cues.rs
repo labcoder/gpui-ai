@@ -191,3 +191,36 @@ fn dropping_the_subscription_stops_delivery(cx: &mut TestAppContext) {
     harness.set_messages(with_reply(StreamedContent::running("Late".to_owned())));
     assert!(harness.take().is_empty());
 }
+
+#[gpui::test]
+fn dropping_a_subscription_retires_only_its_own_apps_observer(
+    a: &mut TestAppContext,
+    b: &mut TestAppContext,
+) {
+    fn observe_into(cx: &mut TestAppContext, received: &Rc<RefCell<Vec<Cue>>>) -> CueSubscription {
+        let received = received.clone();
+        cx.update(move |cx| {
+            cues::observe(cx, move |cue, _| received.borrow_mut().push(cue.clone()))
+        })
+    }
+
+    let in_a = Rc::new(RefCell::new(Vec::new()));
+    let in_b = Rc::new(RefCell::new(Vec::new()));
+    let subscription_a = observe_into(a, &in_a);
+    let _subscription_b = observe_into(b, &in_b);
+
+    drop(subscription_a);
+
+    b.update(|cx| cues::emit(cx, Cue::Copied));
+    assert_eq!(
+        in_b.borrow().as_slice(),
+        &[Cue::Copied],
+        "retiring an observer in one app must leave another app's observer registered"
+    );
+
+    a.update(|cx| cues::emit(cx, Cue::Submitted));
+    assert!(
+        in_a.borrow().is_empty(),
+        "a retired observer must stop receiving cues even after another app emitted first"
+    );
+}

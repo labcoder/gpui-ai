@@ -20,7 +20,11 @@
 //! event or snapshot transition that the application already receives.
 
 use gpui::{App, Global, SharedString};
-use std::rc::Rc;
+use std::{
+    collections::HashSet,
+    rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// A moment worth a cue.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,11 +62,16 @@ type Observer = Rc<dyn Fn(&Cue, &mut App)>;
 
 #[derive(Default)]
 struct CueHub {
-    next_id: usize,
     observers: Vec<(usize, Observer)>,
 }
 
 impl Global for CueHub {}
+
+/// Retired IDs outlive the hub that issued them, so an ID must name at most
+/// one observer in the whole process: counted per-hub, a drop in one `App`
+/// would unregister another's observer. Relaxed ordering suffices — the
+/// counter orders nothing but itself.
+static NEXT_OBSERVER_ID: AtomicUsize = AtomicUsize::new(0);
 
 /// Keeps a cue observer registered; dropping it unregisters the observer.
 #[must_use = "dropping the subscription stops cue delivery"]
@@ -81,20 +90,27 @@ impl Drop for CueSubscription {
     fn drop(&mut self) {
         // Without an `App` handle the observer cannot be removed eagerly; it
         // is pruned on the next emission instead.
-        RETIRED.with(|retired| retired.borrow_mut().push(self.id));
+        RETIRED.with(|retired| {
+            retired.borrow_mut().insert(self.id);
+        });
     }
 }
 
 thread_local! {
-    static RETIRED: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+    // Every app on the thread shares this set, so an emission takes out only
+    // the IDs its own hub holds; consuming the rest would leave another app's
+    // retired observer registered and firing for good. An ID whose app never
+    // emits again outlives that app — one integer, and retirement stays exact.
+    static RETIRED: std::cell::RefCell<HashSet<usize>> =
+        std::cell::RefCell::new(HashSet::new());
 }
 
 /// Registers an observer for every cue emitted by gpui-ai components.
 pub fn observe(cx: &mut App, observer: impl Fn(&Cue, &mut App) + 'static) -> CueSubscription {
-    let hub = cx.default_global::<CueHub>();
-    let id = hub.next_id;
-    hub.next_id += 1;
-    hub.observers.push((id, Rc::new(observer)));
+    let id = NEXT_OBSERVER_ID.fetch_add(1, Ordering::Relaxed);
+    cx.default_global::<CueHub>()
+        .observers
+        .push((id, Rc::new(observer)));
     CueSubscription { id }
 }
 
@@ -104,17 +120,19 @@ pub fn emit(cx: &mut App, cue: Cue) {
     if !cx.has_global::<CueHub>() {
         return;
     }
-    let retired: Vec<usize> = RETIRED.with(|retired| std::mem::take(&mut *retired.borrow_mut()));
-    let observers: Vec<Observer> = {
+    let observers: Vec<Observer> = RETIRED.with(|retired| {
+        let mut retired = retired.borrow_mut();
         let hub = cx.global_mut::<CueHub>();
         if !retired.is_empty() {
-            hub.observers.retain(|(id, _)| !retired.contains(id));
+            hub.observers.retain(|(id, _)| !retired.remove(id));
         }
         hub.observers
             .iter()
             .map(|(_, observer)| observer.clone())
             .collect()
-    };
+    });
+    // Observers run outside the `RETIRED` borrow: one of them may drop a
+    // subscription.
     for observer in observers {
         observer(&cue, cx);
     }
