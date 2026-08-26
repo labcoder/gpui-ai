@@ -126,7 +126,7 @@ pub enum FilterTableEvent {
     },
 }
 
-const FILTER_REORDER_DURATION: Duration = Duration::from_millis(180);
+const FILTER_REORDER_RESPONSE: Duration = Duration::from_millis(180);
 
 /// A controlled, virtualized records table with stable filter controls and reorder motion.
 ///
@@ -166,7 +166,7 @@ impl FilterTable {
         let records_label = label.clone();
         let records_table = cx.new(|cx| {
             let mut table = RecordsTable::new(records_id, records_label, window, cx);
-            table.set_row_reorder_duration(Some(FILTER_REORDER_DURATION), cx);
+            table.set_row_reorder_response(Some(FILTER_REORDER_RESPONSE), cx);
             table
         });
         let records_subscription = cx.subscribe(&records_table, |this, _, event, cx| {

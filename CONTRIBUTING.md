@@ -14,7 +14,7 @@ script/install-linux.sh   # Linux only, for system dependencies
 npm run dev               # opens the native gallery
 ```
 
-Rust stable, edition 2024 (1.85+). `rust-toolchain.toml` pins the channel. The
+Rust 1.89 or newer, edition 2024. `rust-toolchain.toml` pins the stable channel. The
 root `package.json` is a task runner with no JavaScript dependencies — the
 scripts shell out to cargo. Add new workflows there so they stay discoverable.
 
@@ -132,8 +132,8 @@ version and give it a date — `node script/release-notes.mjs <version>` warns
 while a section is still marked `unreleased`.
 
 ```sh
-node script/release-notes.mjs 0.2.0                  # the changelog section
-node script/release-notes.mjs 0.2.0 --release-body   # the full release body
+node script/release-notes.mjs <version>                  # the changelog section
+node script/release-notes.mjs <version> --release-body   # the full release body
 ```
 
 The `--release-body` form fills `.github/release-template.md`, including the

@@ -415,7 +415,7 @@ struct RecordsDelegate {
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
     activation_label: SharedString,
-    row_reorder_duration: Option<Duration>,
+    row_reorder_response: Option<Duration>,
     row_reorder_motion: HashMap<SharedString, RowReorderMotion>,
     row_reorder_current_offsets: HashMap<SharedString, Pixels>,
     row_reorder_generation: usize,
@@ -434,7 +434,7 @@ impl RecordsDelegate {
             sort_column_id: None,
             sort_direction: None,
             activation_label: "Open".into(),
-            row_reorder_duration: None,
+            row_reorder_response: None,
             row_reorder_motion: HashMap::new(),
             row_reorder_current_offsets: HashMap::new(),
             row_reorder_generation: 0,
@@ -484,7 +484,7 @@ impl TableDelegate for RecordsDelegate {
         window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
-        if self.row_reorder_duration.is_none() {
+        if self.row_reorder_response.is_none() {
             let Some(row) = self.row(row_ix) else {
                 return div().id(("records-placeholder-row", row_ix));
             };
@@ -512,8 +512,8 @@ impl TableDelegate for RecordsDelegate {
             &row,
             self.selected_row_id.as_ref() == Some(&row.id),
         );
-        let row_frame = if let (Some(duration), Some(motion)) = (
-            self.row_reorder_duration,
+        let row_frame = if let (Some(response), Some(motion)) = (
+            self.row_reorder_response,
             self.row_reorder_motion.get(&row.id).copied(),
         ) {
             let channel: SharedString = format!(
@@ -522,7 +522,7 @@ impl TableDelegate for RecordsDelegate {
                 motion.incarnation
             )
             .into();
-            let policy = Spring::new(duration).with_epsilon(ROW_REORDER_SPRING_EPSILON);
+            let policy = Spring::new(response).with_epsilon(ROW_REORDER_SPRING_EPSILON);
             if motion.needs_adopt {
                 // Create the channel at rest — zero is the animation's
                 // physical origin, not a spacing value — so the retarget
@@ -774,8 +774,8 @@ impl TableDelegate for RecordsDelegate {
         cx: &mut Context<TableState<Self>>,
     ) {
         let anchor = self.row(visible_range.start).map(|row| row.id.clone());
-        if self.row_reorder_duration.is_some() {
-            self.visible_row_ids = self
+        if self.row_reorder_response.is_some() {
+            let visible_row_ids: HashSet<_> = self
                 .records
                 .content()
                 .get(visible_range)
@@ -783,6 +783,15 @@ impl TableDelegate for RecordsDelegate {
                 .iter()
                 .map(|row| row.id.clone())
                 .collect();
+            // A virtualized row that leaves the rendered window will no
+            // longer be sampled, so it cannot settle itself in `render_tr`.
+            // Drop its delegate bookkeeping here, at the visibility owner,
+            // instead of retaining motion state until another snapshot.
+            self.row_reorder_motion
+                .retain(|row_id, _| visible_row_ids.contains(row_id));
+            self.row_reorder_current_offsets
+                .retain(|row_id, _| visible_row_ids.contains(row_id));
+            self.visible_row_ids = visible_row_ids;
         }
         let _ = self.owner.update(cx, |table, _| {
             table.viewport_row_anchor_id = anchor;
@@ -1090,7 +1099,7 @@ pub struct RecordsTable {
     sort_column_id: Option<SharedString>,
     sort_direction: Option<RecordSortDirection>,
     activation_label: SharedString,
-    row_reorder_duration: Option<Duration>,
+    row_reorder_response: Option<Duration>,
     pending_suppressed_selection_events: usize,
     pending_pointer_row_id: Option<SharedString>,
     viewport_row_anchor_id: Option<SharedString>,
@@ -1131,7 +1140,7 @@ impl RecordsTable {
             sort_column_id: None,
             sort_direction: None,
             activation_label: "Open".into(),
-            row_reorder_duration: None,
+            row_reorder_response: None,
             pending_suppressed_selection_events: 0,
             pending_pointer_row_id: None,
             viewport_row_anchor_id: None,
@@ -1156,14 +1165,14 @@ impl RecordsTable {
         cx.notify();
     }
 
-    pub(crate) fn set_row_reorder_duration(
+    pub(crate) fn set_row_reorder_response(
         &mut self,
-        duration: Option<Duration>,
+        response: Option<Duration>,
         cx: &mut Context<Self>,
     ) {
-        self.row_reorder_duration = duration;
+        self.row_reorder_response = response;
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().row_reorder_duration = duration;
+            table.delegate_mut().row_reorder_response = response;
             cx.notify();
         });
         cx.notify();
@@ -1269,7 +1278,7 @@ impl RecordsTable {
                 .map(|row| row.id.clone())
         });
         let old_visible_range = self.table.read(cx).visible_range().rows().clone();
-        let visible_row_ids = if self.row_reorder_duration.is_some() {
+        let visible_row_ids = if self.row_reorder_response.is_some() {
             let rendered = self.table.read(cx).delegate().visible_row_ids.clone();
             if rendered.is_empty() {
                 self.records
@@ -1294,7 +1303,7 @@ impl RecordsTable {
                     .filter_map(|row_id| records.content().iter().position(|row| row.id == *row_id))
                     .min()
             });
-        let reorder_motion = if self.row_reorder_duration.is_some() && !cx.reduce_motion() {
+        let reorder_motion = if self.row_reorder_response.is_some() && !cx.reduce_motion() {
             let delegate = self.table.read(cx).delegate();
             let current_offsets = delegate.row_reorder_current_offsets.clone();
             let previous_motion = delegate.row_reorder_motion.clone();
@@ -1328,31 +1337,39 @@ impl RecordsTable {
                     let new_position = new_ix.saturating_sub(new_visible_start);
                     let displacement = Size::Medium.table_row_height()
                         * (old_position as f32 - new_position as f32);
-                    let seed = displacement + prior_offset;
-                    if seed == gpui::px(0.) {
-                        // At rest in its new slot: no entry, which is also
-                        // how a settled row's state gets pruned at the next
-                        // snapshot even when it was never rendered again.
-                        return None;
-                    }
                     let motion = match previous_motion.get(row_id) {
                         // Mid-flight: keep the channel and shift only its
                         // target, so the sample — position and velocity —
                         // carries straight through the new projection.
-                        Some(prior) if !prior.needs_adopt => RowReorderMotion {
+                        Some(prior) => RowReorderMotion {
                             target: prior.target - displacement,
                             incarnation: prior.incarnation,
-                            needs_adopt: false,
+                            needs_adopt: prior.needs_adopt,
                         },
                         // Never rendered (or newly moving): there is no
                         // retained sample to carry, so seed from rest with
                         // the full displacement painted on the first frame.
                         _ => RowReorderMotion {
-                            target: gpui::px(0.) - seed,
+                            target: gpui::px(0.) - displacement,
                             incarnation: fresh_incarnation,
                             needs_adopt: true,
                         },
                     };
+                    let projected_offset = if motion.needs_adopt {
+                        // No frame has sampled this channel yet. Its retained
+                        // target still describes every unpainted projection
+                        // change from the last visible frame, so two snapshots
+                        // that cancel before a draw correctly collapse to rest.
+                        gpui::px(0.) - motion.target
+                    } else {
+                        displacement + prior_offset
+                    };
+                    if projected_offset == gpui::px(0.) {
+                        // At rest in its new slot: no entry, which is also
+                        // how a settled row's state gets pruned at the next
+                        // snapshot even when it was never rendered again.
+                        return None;
+                    }
                     Some((row_id.clone(), motion))
                 })
                 .collect::<HashMap<_, _>>()
@@ -1808,7 +1825,7 @@ mod tests {
         };
         cx.update(|window, cx| {
             records.update(cx, |records, cx| {
-                records.set_row_reorder_duration(Some(Duration::from_millis(180)), cx);
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
                 records.set_columns([RecordColumn::new("name", "Name")], window, cx);
                 records.set_records(Progressive::complete(make_rows().into()), window, cx);
             });
@@ -1833,6 +1850,31 @@ mod tests {
             "only visible stable rows should retain motion state, got {}",
             offsets.len()
         );
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| records.scroll_to_row("row-990", cx));
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+        records.read_with(cx, |records, cx| {
+            let delegate = records.table.read(cx).delegate();
+            assert!(
+                delegate
+                    .row_reorder_motion
+                    .keys()
+                    .all(|row_id| delegate.visible_row_ids.contains(row_id)),
+                "virtualized rows must not retain spring motion"
+            );
+            assert!(
+                delegate
+                    .row_reorder_current_offsets
+                    .keys()
+                    .all(|row_id| delegate.visible_row_ids.contains(row_id)),
+                "virtualized rows must not retain sampled offsets"
+            );
+            assert!(!delegate.row_reorder_motion.contains_key("row-1"));
+            assert!(!delegate.row_reorder_motion.contains_key("row-2"));
+        });
 
         cx.update(|window, cx| {
             records.update(cx, |records, cx| {
@@ -1891,9 +1933,9 @@ mod tests {
         let make_rows = |order: &[usize]| {
             order
                 .iter()
-                .map(|index| {
-                    RecordRow::new(format!("row-{index}"), format!("Row {index}"))
-                        .cells([RecordCell::new("name", format!("Row {index}"))])
+                .map(|row_ix| {
+                    RecordRow::new(format!("row-{row_ix}"), format!("Row {row_ix}"))
+                        .cells([RecordCell::new("name", format!("Row {row_ix}"))])
                 })
                 .collect::<Vec<_>>()
         };
@@ -1902,7 +1944,7 @@ mod tests {
         swapped.swap(1, 2);
         cx.update(|window, cx| {
             records.update(cx, |records, cx| {
-                records.set_row_reorder_duration(Some(Duration::from_millis(180)), cx);
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
                 records.set_columns([RecordColumn::new("name", "Name")], window, cx);
                 records.set_records(
                     Progressive::complete(make_rows(&forward).into()),
@@ -2004,6 +2046,65 @@ mod tests {
             records.read_with(cx, |records, cx| records.animating_row_count(cx)),
             0
         );
+    }
+
+    #[gpui::test]
+    fn unpainted_projection_changes_do_not_create_phantom_motion(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (records, cx) =
+            cx.add_window_view(|window, cx| RecordsTable::new("unpainted", "Rows", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let make_rows = |order: &[usize]| {
+            order
+                .iter()
+                .map(|row_ix| {
+                    RecordRow::new(format!("row-{row_ix}"), format!("Row {row_ix}"))
+                        .cells([RecordCell::new("name", format!("Row {row_ix}"))])
+                })
+                .collect::<Vec<_>>()
+        };
+        let forward: Vec<usize> = (0..12).collect();
+        let mut swapped = forward.clone();
+        swapped.swap(1, 2);
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                records.set_row_reorder_response(Some(Duration::from_millis(180)), cx);
+                records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+                records.set_records(
+                    Progressive::complete(make_rows(&forward).into()),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.run_until_parked();
+
+        cx.update(|window, cx| {
+            records.update(cx, |records, cx| {
+                // Neither intermediate projection reaches the screen. The
+                // second snapshot cancels the first relative to the last
+                // painted frame, so there is nowhere for a row to travel.
+                records.set_records(
+                    Progressive::complete(make_rows(&swapped).into()),
+                    window,
+                    cx,
+                );
+                records.set_records(
+                    Progressive::complete(make_rows(&forward).into()),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        records.read_with(cx, |records, cx| {
+            let delegate = records.table.read(cx).delegate();
+            assert!(delegate.row_reorder_motion.is_empty());
+            assert!(delegate.row_reorder_current_offsets.is_empty());
+            assert_eq!(records.animating_row_count(cx), 0);
+        });
     }
 
     #[test]

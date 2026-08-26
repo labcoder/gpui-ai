@@ -58,6 +58,12 @@ const body = releaseNotes('0.1.0', '--release-body');
 check(body.status === 0, `release-body exited ${body.status}: ${body.stderr}`);
 check(body.stdout.includes('# gpui-ai 0.1.0'), 'The release body did not resolve the version.');
 check(body.stdout.includes('tag = "v0.1.0"'), 'The release body did not resolve the install tag.');
+check(body.stdout.includes('gpui-component = { git ='), 'The release body omitted gpui-component.');
+check(body.stdout.includes('gpui_platform = { git ='), 'The release body omitted gpui_platform.');
+check(body.stdout.includes('Rust 1.89 or newer'), 'The release body has the wrong Rust floor.');
+check(body.stdout.includes('## Tested platforms'), 'The release body omitted tested platforms.');
+check(body.stdout.includes('## Known limitations'), 'The release body omitted current limitations.');
+check(body.stdout.includes('Windows 11'), 'The release body omitted the tested platform.');
 check(
   body.stdout.includes('### Known limitations'),
   'The release body did not include the changelog section.',
