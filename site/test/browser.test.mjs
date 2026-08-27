@@ -720,6 +720,36 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     describe: drawerDiagnosis,
     errors,
   });
+
+  // The demo behind the drawer is still booting, and the moment it finishes
+  // GPUI focuses a hidden input inside its frame — a grab that used to pull
+  // focus out of this open modal at whatever instant the boot landed, through
+  // the inert page, because inert does not bind a child document focusing its
+  // own elements. The embed now refuses boot-time focus (gallery-web's
+  // focus.js); waiting for the boot to have happened and then holding the
+  // drawer to its claim is what keeps the race a fact this gate samples every
+  // run rather than at whatever moment a loaded runner happened to serve.
+  await waitForValue(
+    cdp,
+    `(() => {
+      const frame = document.querySelector('[data-specimen-frame] iframe');
+      const state = frame?.contentDocument?.body?.dataset;
+      return Boolean(state && ('ready' in state || 'failed' in state));
+    })()`,
+    {
+      label: "the demo behind the drawer to finish booting",
+      describe: GALLERY_DIAGNOSIS,
+      errors,
+    },
+  );
+  assert.equal(
+    await cdp.evaluate(
+      "document.activeElement === document.querySelector('#site-nav-panel button[data-nav-close]')",
+    ),
+    true,
+    "a demo finishing its boot must not take focus out of the open drawer",
+  );
+
   const opened = await cdp.evaluate(`(() => {
     const toggle = document.querySelector('[data-nav-toggle]');
     const panel = document.getElementById('site-nav-panel');
@@ -764,8 +794,11 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   })()`);
   assert.ok(wrapped.count > 2, `the drawer has only ${wrapped.count} tab stops`);
 
+  // `button[data-nav-close]`, not `[data-nav-close]`: the backdrop carries
+  // the same mark and sits first in the panel, and focusing a plain div is a
+  // silent no-op that left this step leaning on focus already being there.
   await cdp.evaluate(
-    "document.querySelector('#site-nav-panel [data-nav-close]').focus()",
+    "document.querySelector('#site-nav-panel button[data-nav-close]').focus()",
   );
   await cdp.key("Tab", "Tab", 9, 8);
   assert.equal(

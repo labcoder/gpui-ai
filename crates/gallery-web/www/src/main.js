@@ -1,5 +1,6 @@
 import './styles.css';
 import { hasDrawn } from './canvas.js';
+import { guardEmbeddedFocus } from './focus.js';
 import {
   parseEmbedOptions,
   parseStatusMessage,
@@ -392,6 +393,13 @@ function shareTheWheel(story) {
 }
 
 async function initEmbed() {
+  // GPUI focuses a hidden input the moment its window is created — that is
+  // how the canvas hears the keyboard — and a boot landing half a minute into
+  // the visit would take the reader's focus with it, out of whatever they
+  // were doing in the page around this frame. Embedded, focus arrives only by
+  // the reader's own pointer or key; popped out there is nobody to rob, and
+  // the boot-time grab is what makes keys work without a click.
+  if (window.parent !== window) guardEmbeddedFocus();
   pinScaleFactor();
   const options = parseEmbedOptions(window.location.search);
   shareTheWheel(options.story);
