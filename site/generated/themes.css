@@ -13,7 +13,7 @@
   --ai-primary: #88c0d0;
   --ai-primary-foreground: #2e3440;
   --ai-accent: #434c5e;
-  --ai-danger: #bf616a;
+  --ai-danger: #d08b91;
   --ai-success: #a3be8c;
   --ai-warning: #ebcb8b;
   --ai-info: #81a1c1;
@@ -26,7 +26,7 @@
   --ai-muted-text: #a7b1c2;
   --ai-accent-text: #eceff4;
   --ai-code-comment: #b4bdcb;
-  --ai-code-keyword: #dfb0b5;
+  --ai-code-keyword: #e0b4b8;
   --ai-code-string: #acc598;
   --ai-code-type: #adc2d7;
   --ai-code-number: #ebcb8b;
@@ -99,7 +99,7 @@
   --ai-foreground: #ffffff;
   --ai-muted: #d4d4d4;
   --ai-border: #525252;
-  --ai-surface: #050505;
+  --ai-surface: #0f0f0f;
   --ai-primary: #facc15;
   --ai-primary-foreground: #171717;
   --ai-accent: #404040;
@@ -223,7 +223,7 @@
   --ai-primary: #88c0d0;
   --ai-primary-foreground: #2e3440;
   --ai-accent: #434c5e;
-  --ai-danger: #bf616a;
+  --ai-danger: #d08b91;
   --ai-success: #a3be8c;
   --ai-warning: #ebcb8b;
   --ai-info: #81a1c1;
@@ -236,7 +236,7 @@
   --ai-muted-text: #a7b1c2;
   --ai-accent-text: #eceff4;
   --ai-code-comment: #b4bdcb;
-  --ai-code-keyword: #dfb0b5;
+  --ai-code-keyword: #e0b4b8;
   --ai-code-string: #acc598;
   --ai-code-type: #adc2d7;
   --ai-code-number: #ebcb8b;
@@ -247,29 +247,29 @@
   color-scheme: light;
   --ai-background: #faf9f7;
   --ai-foreground: #1f2937;
-  --ai-muted: #6b7280;
+  --ai-muted: #646b78;
   --ai-border: #e5e1da;
   --ai-surface: #ffffff;
   --ai-primary: #0f766e;
   --ai-primary-foreground: #ffffff;
   --ai-accent: #e7e2d8;
   --ai-danger: #dc2626;
-  --ai-success: #16a34a;
-  --ai-warning: #d97706;
-  --ai-info: #0284c7;
+  --ai-success: #15803d;
+  --ai-warning: #a16207;
+  --ai-info: #0369a1;
   --ai-radius: 8px;
   --ai-radius-lg: 12px;
   --ai-font-size: 16px;
   --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --ai-shadow: none;
-  --ai-muted-text: #6b7280;
+  --ai-muted-text: #646b78;
   --ai-accent-text: #1f2937;
-  --ai-code-comment: #5b616d;
+  --ai-code-comment: #5a606c;
   --ai-code-keyword: #bb2020;
-  --ai-code-string: #0f7234;
-  --ai-code-type: #026a9f;
-  --ai-code-number: #985304;
+  --ai-code-string: #137337;
+  --ai-code-type: #0369a1;
+  --ai-code-number: #915806;
 }
 
 /* Solstice — gpui-ai, light */
@@ -284,9 +284,9 @@
   --ai-primary-foreground: #fffaf3;
   --ai-accent: #ffe8cc;
   --ai-danger: #dc2626;
-  --ai-success: #059669;
-  --ai-warning: #d97706;
-  --ai-info: #0284c7;
+  --ai-success: #047857;
+  --ai-warning: #a16207;
+  --ai-info: #0369a1;
   --ai-radius: 14px;
   --ai-radius-lg: 20px;
   --ai-font-size: 17px;
@@ -297,9 +297,9 @@
   --ai-accent-text: #24160b;
   --ai-code-comment: #785a3c;
   --ai-code-keyword: #c62222;
-  --ai-code-string: #047854;
-  --ai-code-type: #0270a9;
-  --ai-code-number: #985304;
+  --ai-code-string: #047857;
+  --ai-code-type: #0369a1;
+  --ai-code-number: #995d07;
 }
 
 /* Adventure — gpui-component, dark */

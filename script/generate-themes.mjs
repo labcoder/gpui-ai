@@ -201,6 +201,114 @@ function readableOnAll(source, againsts, target = 4.5) {
   return undefined;
 }
 
+// T1 — the raw authored contract for gpui-ai-owned themes.
+//
+// The site tokens below are *derived*: they walk toward readability until
+// they pass by construction, so they can never catch an unreadable source
+// palette. These checks read the pairs as authored, before any derivation,
+// and fail the run instead of shipping a preset that leans on fallbacks.
+// Vendored third-party packs keep gpui-component's optional-field contract;
+// our own presets demonstrate the full one.
+const OWNED_REQUIRED_COLORS = [
+  "background",
+  "foreground",
+  "popover.background",
+  "popover.foreground",
+  "sidebar.background",
+  "sidebar.border",
+  "border",
+  "input.border",
+  "primary.background",
+  "primary.foreground",
+  "primary.hover.background",
+  "secondary.background",
+  "secondary.foreground",
+  "muted.background",
+  "muted.foreground",
+  "accent.background",
+  "accent.foreground",
+  "ring",
+  "danger.background",
+  "danger.foreground",
+  "info.background",
+  "info.foreground",
+  "success.background",
+  "success.foreground",
+  "warning.background",
+  "warning.foreground",
+  "chart.1",
+  "chart.2",
+  "chart.3",
+  "chart.4",
+  "chart.5",
+];
+
+// Text and status pairs must read at 4.5:1 as authored. Status fills double
+// as status text on the page background in the components, so they are
+// checked against it too.
+const OWNED_TEXT_PAIRS = [
+  ["foreground", "background"],
+  ["popover.foreground", "popover.background"],
+  ["muted.foreground", "muted.background"],
+  ["muted.foreground", "background"],
+  ["primary.foreground", "primary.background"],
+  ["secondary.foreground", "secondary.background"],
+  ["accent.foreground", "accent.background"],
+  ["danger.foreground", "danger.background"],
+  ["info.foreground", "info.background"],
+  ["success.foreground", "success.background"],
+  ["warning.foreground", "warning.background"],
+  ["danger.background", "background"],
+  ["info.background", "background"],
+  ["success.background", "background"],
+  ["warning.background", "background"],
+];
+
+// Sole-affordance boundaries: the focus ring always, and the input border
+// because inputs draw no distinct fill of their own. Decorative hairlines
+// (`border`, `sidebar.border`) stay out of the automated gate and belong to
+// the theme-stress visual review.
+const OWNED_BOUNDARY_PAIRS = [
+  ["ring", "background"],
+  ["input.border", "background"],
+];
+
+function validateOwned(file, theme) {
+  if (theme.mode !== "light" && theme.mode !== "dark") {
+    fail(`${file}: mode must be "light" or "dark"`);
+  }
+  if (typeof theme.name !== "string" || theme.name.trim() === "") {
+    fail(`${file}: the theme needs a non-empty name`);
+  }
+  for (const key of ["radius", "radius.lg"]) {
+    const value = theme[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      fail(`${file}: ${key} must be a non-negative number`);
+    }
+  }
+  const colors = theme.colors ?? {};
+  const resolved = {};
+  for (const key of OWNED_REQUIRED_COLORS) {
+    const value = resolveColor(colors[key]);
+    const rgb = toRgb(value);
+    if (!rgb) fail(`${file}: required color "${key}" is missing or does not resolve`);
+    resolved[key] = rgb;
+  }
+  const check = (pairs, target) => {
+    for (const [fg, bg] of pairs) {
+      const ratio = contrast(resolved[fg], resolved[bg]);
+      if (ratio < target) {
+        fail(
+          `${file}: "${fg}" on "${bg}" is ${ratio.toFixed(2)}:1 as authored; ` +
+            `the raw pair must reach ${target}:1 before derivation`,
+        );
+      }
+    }
+  };
+  check(OWNED_TEXT_PAIRS, 4.5);
+  check(OWNED_BOUNDARY_PAIRS, 3.0);
+}
+
 function tokensFor(theme) {
   const colors = theme.colors ?? {};
   const mode = theme.mode === "dark" ? "dark" : "light";
@@ -348,6 +456,7 @@ for (const group of GROUPS) {
       fail(`${file} must hold exactly one theme so its file name can be the slug`);
     }
     for (const theme of bundled) {
+      if (group.id === "gpui-ai") validateOwned(file, theme);
       const slug = group.id === "gpui-ai" ? file.replace(/\.json$/, "") : kebab(theme.name);
       themes.push(describe(theme, slug, group.id));
     }

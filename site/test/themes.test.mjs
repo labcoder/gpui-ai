@@ -210,6 +210,82 @@ test("text on the accent surface is readable, in every theme", async () => {
   assert.ok(nudged > 0 && nudged < total, `${nudged} of ${total} altered, which is not plausible`);
 });
 
+test("owned source palettes read as authored, before any derivation", async () => {
+  // Mirror of the T1 gate in script/generate-themes.mjs, run against the
+  // source files rather than the generated outputs: the derived site tokens
+  // walk until readable by construction, so only the raw authored pairs can
+  // prove a preset does not lean on fallbacks.
+  const owned = path.join(repositoryRoot, "themes", "gpui-ai");
+  const palette = JSON.parse(
+    await readFile(path.join(repositoryRoot, "themes", "upstream", "defaults", "default-colors.json"), "utf8"),
+  );
+  const resolve = (value) => {
+    if (typeof value !== "string" || value === "") return undefined;
+    if (value.startsWith("#")) return value;
+    const direct = palette[value];
+    if (typeof direct === "string") return direct;
+    if (direct && typeof direct.hex === "string") return direct.hex;
+    const scaled = /^([a-z]+)-(\d+)$/.exec(value);
+    if (scaled && Array.isArray(palette[scaled[1]])) {
+      const step = palette[scaled[1]].find((entry) => entry.scale === Number(scaled[2]));
+      if (step && typeof step.hex === "string") return step.hex;
+    }
+    return undefined;
+  };
+  const textPairs = [
+    ["foreground", "background"],
+    ["popover.foreground", "popover.background"],
+    ["muted.foreground", "muted.background"],
+    ["muted.foreground", "background"],
+    ["primary.foreground", "primary.background"],
+    ["secondary.foreground", "secondary.background"],
+    ["accent.foreground", "accent.background"],
+    ["danger.foreground", "danger.background"],
+    ["info.foreground", "info.background"],
+    ["success.foreground", "success.background"],
+    ["warning.foreground", "warning.background"],
+    ["danger.background", "background"],
+    ["info.background", "background"],
+    ["success.background", "background"],
+    ["warning.background", "background"],
+  ];
+  const boundaryPairs = [
+    ["ring", "background"],
+    ["input.border", "background"],
+  ];
+  const failures = [];
+  const files = (await readdir(owned)).filter((name) => name.endsWith(".json")).sort();
+  assert.ok(files.length > 0, "the owned theme directory must not be empty");
+  for (const file of files) {
+    const pack = JSON.parse(await readFile(path.join(owned, file), "utf8"));
+    assert.equal(pack.themes?.length, 1, `${file} must hold exactly one theme`);
+    const colors = pack.themes[0].colors ?? {};
+    const resolved = new Map();
+    const color = (key) => {
+      if (!resolved.has(key)) resolved.set(key, resolve(colors[key]));
+      const value = resolved.get(key);
+      assert.ok(value, `${file}: required color "${key}" is missing or unresolved`);
+      return value;
+    };
+    for (let index = 1; index <= 5; index += 1) color(`chart.${index}`);
+    for (const key of ["sidebar.background", "sidebar.border", "border", "primary.hover.background"]) {
+      color(key);
+    }
+    for (const [pairs, target] of [
+      [textPairs, 4.5],
+      [boundaryPairs, 3.0],
+    ]) {
+      for (const [fg, bg] of pairs) {
+        const ratio = contrast(color(fg), color(bg));
+        if (ratio < target) {
+          failures.push(`${file}: "${fg}" on "${bg}" is ${ratio.toFixed(2)}:1 (< ${target}:1)`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(failures, [], `raw authored pairs fail in ${failures.length} places`);
+});
+
 test("the upstream group is credited separately from gpui-ai's own themes", async () => {
   const { groups } = JSON.parse(await readFile(path.join(generated, "themes.json"), "utf8"));
   assert.deepEqual(
