@@ -325,7 +325,7 @@ impl RowRenderer {
         &self,
         item: &ThreadItem,
         position: usize,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
         #[cfg(test)]
@@ -335,6 +335,16 @@ impl RowRenderer {
         let root_id = ElementId::from(self.component.clone());
         let item_id = ElementId::from((root_id.clone(), item.id.clone()));
         let selected = self.active.as_ref() == Some(&item.id);
+        // The marker a mounted list starts with is placed settled; a row the
+        // user activates fades its surface in once at the quick tempo. Only
+        // constructed rows reach here, so offscreen rows spend nothing, and
+        // a row scrolled out and back keeps its acknowledged state.
+        let acknowledged = crate::motion::acknowledged_state(
+            ElementId::from((item_id.clone(), "active-ack")),
+            selected as u64,
+            window,
+            cx,
+        );
         let focused = self.focused.as_ref() == Some(&item.id);
         let accessibility_label: SharedString = if item.archived {
             format!("{}, archived", item.title).into()
@@ -375,12 +385,12 @@ impl RowRenderer {
                     .border_color(if focused {
                         cx.theme().ring
                     } else if selected {
-                        cx.theme().primary
+                        cx.theme().primary.opacity(acknowledged)
                     } else {
                         cx.theme().transparent
                     })
                     .bg(if selected {
-                        cx.theme().accent
+                        cx.theme().accent.opacity(acknowledged)
                     } else {
                         cx.theme().transparent
                     })
@@ -1189,6 +1199,43 @@ mod tests {
     /// Threads per section in the large snapshot; ten sections of a thousand.
     const LARGE_SECTION_SIZE: usize = 1_000;
     const LARGE_SECTIONS: usize = 10;
+
+    #[gpui::test]
+    fn activating_a_thread_acknowledges_once_and_a_mounted_marker_is_settled(
+        cx: &mut TestAppContext,
+    ) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| {
+                threads.set_sections(
+                    [ThreadSection::new("today", "Today")
+                        .items([ThreadItem::new("t-1", "One"), ThreadItem::new("t-2", "Two")])],
+                    cx,
+                );
+                threads.set_active(Some("t-1"), cx);
+            });
+        });
+        redraw(&threads, cx);
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        redraw(&threads, cx);
+        crate::motion::take_reveal_frame_requests();
+        redraw(&threads, cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "the marker the list mounts with is placed settled"
+        );
+
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_active(Some("t-2"), cx));
+        });
+        redraw(&threads, cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "activating a thread must acknowledge the new marker"
+        );
+    }
 
     fn large_sections() -> Vec<ThreadSection> {
         (0..LARGE_SECTIONS)
