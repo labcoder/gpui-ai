@@ -1,6 +1,7 @@
 //! Selection-anchored actions for readable Markdown content.
 
 use crate::control::composed_button;
+use crate::motion::swap_progress;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, AppContext as _, Axis, Bounds, ElementId, Entity, EventEmitter, FocusHandle,
@@ -159,6 +160,27 @@ fn selection_toolbar_positioner(
         .child(toolbar)
 }
 
+/// The entrance's travel: from the anchor's side of the toolbar.
+///
+/// Mirrors the positioner's flip rule against the bounded maximum the frame
+/// enforces, with the offset and margin the positioner is given. An actual
+/// toolbar shorter than the maximum can keep the preferred side in a band
+/// one maximum tall above the bottom edge where this predicts a flip; the
+/// travel is a few pixels, so a mismatch there reads as a plain fade.
+fn entrance_travel(
+    anchor_y: Pixels,
+    viewport_height: Pixels,
+    maximum_height: Pixels,
+    gap: Pixels,
+    travel: Pixels,
+) -> Pixels {
+    if anchor_y + gap + maximum_height + gap <= viewport_height {
+        -travel
+    } else {
+        travel
+    }
+}
+
 fn defer_selection_settle(
     entity: Entity<SelectionActions>,
     pointer: Point<Pixels>,
@@ -205,6 +227,9 @@ pub struct SelectionActions {
     toolbar_scroll: ScrollHandle,
     content_scroll: ScrollHandle,
     toolbar_pointer_active: bool,
+    /// Bumped for each newly settled, distinct selection, so the toolbar's
+    /// entrance replays for a replacement and never for a re-render.
+    toolbar_generation: u64,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -256,6 +281,7 @@ impl SelectionActions {
             toolbar_scroll: ScrollHandle::new(),
             content_scroll: ScrollHandle::new(),
             toolbar_pointer_active: false,
+            toolbar_generation: 0,
             _subscriptions: vec![observation],
         }
     }
@@ -354,6 +380,9 @@ impl SelectionActions {
             self.restore_text_focus(cx);
         }
         let changed = self.selected_text != next;
+        if changed && !next.is_empty() {
+            self.toolbar_generation = self.toolbar_generation.wrapping_add(1);
+        }
         self.selected_text = next;
         if let Some(next_focus) = next_focus {
             self.selection_focus = Some(next_focus);
@@ -424,7 +453,33 @@ impl SelectionActions {
             }),
         );
 
-        selection_toolbar_positioner(self.toolbar_anchor(window), Placement::Bottom, toolbar, cx)
+        // The toolbar enters from the selection's side: a quick fade with a
+        // few pixels of travel out of the anchor, keyed by the selection
+        // generation so a replaced selection replays the entrance from its
+        // new anchor while a re-render replays nothing. Reduced motion
+        // renders the settled toolbar in one frame.
+        let entrance = swap_progress(
+            ElementId::Name(SharedString::from(format!(
+                "{}-toolbar-entrance-{}",
+                self.id, self.toolbar_generation
+            ))),
+            window,
+            cx,
+        );
+        let anchor = self.toolbar_anchor(window);
+        let travel = entrance_travel(
+            anchor.y,
+            window.viewport_size().height,
+            maximum_size.height,
+            tokens.spacing.sm,
+            tokens.spacing.xxs,
+        );
+        let toolbar = div()
+            .opacity(entrance)
+            .top(travel * (1.0 - entrance))
+            .child(toolbar);
+
+        selection_toolbar_positioner(anchor, Placement::Bottom, toolbar, cx)
     }
 
     fn toolbar_anchor(&self, window: &Window) -> Point<Pixels> {
@@ -825,6 +880,53 @@ mod tests {
 
         assert_on_screen(bounds, viewport);
         assert_eq!(bounds.size, size(px(576.), px(128.)));
+    }
+
+    #[gpui::test]
+    fn a_replaced_selection_replays_the_entrance_and_a_re_render_does_not(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(SelectionProbe::new);
+        let cx: &mut gpui::VisualTestContext = cx;
+        let selection = probe.read_with(cx, |probe, _| probe.selection.clone());
+
+        let generation =
+            |cx: &mut gpui::VisualTestContext| selection.read_with(cx, |s, _| s.toolbar_generation);
+        assert_eq!(generation(cx), 0, "no selection has settled yet");
+
+        selection.update(cx, |this, cx| {
+            this.apply_selection("chosen words", Some(point(px(40.), px(40.))), cx)
+        });
+        assert_eq!(generation(cx), 1, "a settled selection enters once");
+
+        selection.update(cx, |this, cx| {
+            this.apply_selection("chosen words", Some(point(px(48.), px(44.))), cx)
+        });
+        assert_eq!(generation(cx), 1, "the same selection must not re-enter");
+
+        selection.update(cx, |this, cx| {
+            this.apply_selection("other words", Some(point(px(60.), px(200.))), cx)
+        });
+        assert_eq!(generation(cx), 2, "a replacement replays the entrance");
+
+        selection.update(cx, |this, cx| this.apply_selection("", None, cx));
+        assert_eq!(generation(cx), 2, "clearing enters nothing");
+    }
+
+    #[test]
+    fn the_entrance_travels_out_of_the_anchors_side() {
+        // Room below: the toolbar sits under the anchor and drops into
+        // place, so it starts a little above its settled spot.
+        assert_eq!(
+            entrance_travel(px(100.), px(600.), px(96.), px(8.), px(4.)),
+            px(-4.)
+        );
+        // Bottom edge: the positioner flips above, and the entrance rises.
+        assert_eq!(
+            entrance_travel(px(560.), px(600.), px(96.), px(8.), px(4.)),
+            px(4.)
+        );
     }
 
     struct SelectionProbe {
