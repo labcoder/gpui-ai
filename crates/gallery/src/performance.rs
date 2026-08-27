@@ -5,21 +5,23 @@ use crate::StoryId;
 /// Equal number of steady-state draws retained for every representative viewport.
 pub const STEADY_DRAWS_PER_VIEWPORT: usize = 100;
 /// Driven draws retained per driven viewport while its controlled state is
-/// being flipped — the Filter Table's projection, and the Thinking trace's
-/// disclosure reversed mid-flight.
+/// being flipped: table projection and thinking/tool disclosures.
 pub const FILTER_TRANSITION_DRAWS: usize = 40;
 /// Unmeasured driven-viewport draws allowed after the final change before
 /// idle sampling.
 pub const FILTER_SETTLING_DRAWS: usize = 30;
 /// The viewports the gate drives through controlled-state flips, each held
 /// to the driven ordinary-motion budgets.
-pub const DRIVEN_VIEWPORTS: [StoryId; 2] = [StoryId::FilterTable, StoryId::Thinking];
+pub const DRIVEN_VIEWPORTS: [StoryId; 3] =
+    [StoryId::FilterTable, StoryId::Thinking, StoryId::ToolCalls];
 /// Maximum constructed/paint-eligible rows accepted for the 1,000-row Filter Table.
 pub const MAX_VISIBLE_FILTER_ROWS: usize = 64;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 11] = [
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 13] = [
     StoryId::Loading,
     StoryId::Orbs,
+    StoryId::Voice,
+    StoryId::ToolCalls,
     StoryId::Thinking,
     StoryId::StreamingText,
     StoryId::Approval,
@@ -31,10 +33,10 @@ pub const PERFORMANCE_VIEWPORTS: [StoryId; 11] = [
     StoryId::ComparisonTable,
 ];
 /// The always-animating viewports: each is one single-clock region owner —
-/// the loader's grid, and five phase-locked orb lattices — whose steady state
+/// the loader grid, five orb lattices, and the listening voice field, whose steady state
 /// *is* its driven state, so these are held to the driven-scenario budgets
 /// below rather than only the global draw gate.
-pub const AMBIENT_VIEWPORTS: [StoryId; 2] = [StoryId::Loading, StoryId::Orbs];
+pub const AMBIENT_VIEWPORTS: [StoryId; 3] = [StoryId::Loading, StoryId::Orbs, StoryId::Voice];
 /// Driven ordinary-motion budget: 95th percentile, leaving headroom for the
 /// consumer application around the library's own work.
 pub const MAX_AMBIENT_P95_DRAW_NANOS: u64 = 4_000_000;
@@ -197,6 +199,8 @@ mod tests {
             [
                 StoryId::Loading,
                 StoryId::Orbs,
+                StoryId::Voice,
+                StoryId::ToolCalls,
                 StoryId::Thinking,
                 StoryId::StreamingText,
                 StoryId::Approval,

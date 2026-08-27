@@ -4034,6 +4034,13 @@ impl Gallery {
         if story == StoryId::Chat {
             self.simulation_task.take();
         }
+        if story == StoryId::Voice {
+            self.voice_state = VoiceState::Listening { level: 0.6 };
+        }
+        if story == StoryId::ToolCalls {
+            self.simulation_task.take();
+            self.tool_group_open = Some(true);
+        }
         cx.notify();
     }
 
@@ -4042,6 +4049,20 @@ impl Gallery {
     #[cfg(feature = "performance")]
     pub fn set_performance_thinking_open(&mut self, open: bool, cx: &mut Context<Self>) {
         self.trace_open = open;
+        cx.notify();
+    }
+
+    /// Reverses the composed tool disclosures while their header motion is active.
+    #[cfg(feature = "performance")]
+    pub fn set_performance_tools_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        for id in [
+            "read-pricing",
+            "search-suppliers",
+            "send-confirmations",
+            "query-prices",
+        ] {
+            self.tool_call_open.insert(id.into(), open);
+        }
         cx.notify();
     }
 
@@ -6326,6 +6347,64 @@ mod tests {
             Some(anchor),
             "restoring the base font restores the reader's place"
         );
+    }
+
+    #[gpui::test]
+    fn added_themes_render_the_composition_matrix_at_double_rem(cx: &mut TestAppContext) {
+        let (gallery, cx) = all_stories(cx);
+        let themes = [
+            "blood-moon-cathedral",
+            "forest-spirit",
+            "mako-reactor",
+            "moon-prism",
+            "neon-pilgrim",
+            "pocket-voltage",
+            "silver-key-sky",
+            "spice-horizon",
+            "sunday-panel",
+            "vector-grid",
+        ];
+        for slug in themes {
+            let theme = GalleryTheme::from_slug(slug).expect("release theme must be registered");
+            cx.update(|window, cx| super::apply_gallery_theme(theme, Some(window), cx));
+            for (width, rem, reduced) in [(900., 16., false), (390., 32., true)] {
+                cx.simulate_resize(size(px(width), px(844.)));
+                cx.update(|_, cx| cx.set_reduce_motion(reduced));
+                zoom_to(cx, rem);
+                for story in [
+                    StoryId::Chat,
+                    StoryId::PromptBar,
+                    StoryId::RecordsTable,
+                    StoryId::ToolCalls,
+                ] {
+                    gallery.update(cx, |gallery, cx| {
+                        gallery.prepare_performance_viewport(story, cx)
+                    });
+                    cx.run_until_parked();
+                    cx.update(|window, cx| window.draw(cx).clear(cx));
+                    let bounds = cx
+                        .debug_bounds(story_selector(story))
+                        .expect("themed story must render");
+                    assert!(
+                        bounds.size.width > px(0.) && bounds.size.width <= px(width),
+                        "{slug} / {} at {rem}px must fit its host width",
+                        story.slug()
+                    );
+                }
+                gallery.update(cx, |gallery, cx| {
+                    gallery.prepare_performance_viewport(StoryId::All, cx)
+                });
+                cx.run_until_parked();
+                gallery.update(cx, |gallery, cx| gallery.scroll_catalog_edge(true, cx));
+                cx.run_until_parked();
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+                let last = *StoryId::ALL.last().expect("catalog");
+                assert!(
+                    cx.debug_bounds(story_selector(last)).is_some(),
+                    "{slug} catalog tail at {rem}px"
+                );
+            }
+        }
     }
 
     #[gpui::test]

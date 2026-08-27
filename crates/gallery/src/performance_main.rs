@@ -208,6 +208,9 @@ async fn run_performance_measurement(
                     StoryId::Thinking => {
                         gallery.set_performance_thinking_open(filter_projection_is_filtered, cx)
                     }
+                    StoryId::ToolCalls => {
+                        gallery.set_performance_tools_open(filter_projection_is_filtered, cx)
+                    }
                     _ => {
                         gallery.set_performance_filter_projection(filter_projection_is_filtered, cx)
                     }
