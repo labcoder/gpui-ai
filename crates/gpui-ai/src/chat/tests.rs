@@ -189,6 +189,76 @@ fn controlled_snapshots_require_unique_stable_message_ids() {
     assert!(!message_ids_are_unique(&duplicate));
 }
 
+/// Rides the animated jump-to-latest drive to its end, painting between
+/// ticks the way a live window does — the drive holds, by design, while a
+/// step it took has not painted yet.
+fn settle_jump(cx: &mut VisualTestContext) {
+    for _ in 0..200 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(8));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+}
+
+#[gpui::test]
+fn a_far_jump_starts_near_the_tail_and_settles_into_it(cx: &mut TestAppContext) {
+    let (harness, cx) = harness(cx);
+    set_messages(&harness, messages(0..60), cx);
+    let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+    chat.update(cx, |chat, cx| {
+        chat.list_state.scroll_to(ListOffset {
+            item_ix: 2,
+            offset_in_item: px(0.),
+        });
+        chat.pinned_to_bottom = false;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    set_messages(&harness, messages(0..62), cx);
+
+    cx.update(|window, cx| window.focus_next(cx));
+    activate_key(cx, "enter");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    // The drive is distance-capped: one frame after the jump the last
+    // message's top is in view — legible context, never a teleport — and
+    // the drive is still settling the bottom alignment.
+    assert!(
+        !chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()),
+        "a far jump must settle into the tail, not land pinned in one frame"
+    );
+    settle_jump(cx);
+    assert!(cx.debug_bounds("chat-message-m0061").is_some());
+    assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+}
+
+#[gpui::test]
+fn reduced_motion_jumps_without_travel(cx: &mut TestAppContext) {
+    let (harness, cx) = harness(cx);
+    cx.update(|_, cx| cx.set_reduce_motion(true));
+    set_messages(&harness, messages(0..60), cx);
+    let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+    chat.update(cx, |chat, cx| {
+        chat.list_state.scroll_to(ListOffset {
+            item_ix: 2,
+            offset_in_item: px(0.),
+        });
+        chat.pinned_to_bottom = false;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    set_messages(&harness, messages(0..62), cx);
+
+    cx.update(|window, cx| window.focus_next(cx));
+    activate_key(cx, "enter");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        cx.debug_bounds("chat-message-m0061").is_some(),
+        "reduced motion snaps to the tail with no drive to wait out"
+    );
+    assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+}
+
 #[gpui::test]
 fn chat_owned_controls_expose_production_role_name_and_click_action(cx: &mut TestAppContext) {
     let retry = capture_chat_control(ChatControlKind::Retry, cx);
@@ -386,7 +456,10 @@ fn offscreen_append_increments_unread_without_moving_the_anchor(cx: &mut TestApp
         .expect("named jump action should remain reachable");
     cx.simulate_click(jump.center(), Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
+    // Semantics land immediately; the travel is staged and distance-capped,
+    // so the tail arrives once the drive settles.
     assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
+    settle_jump(cx);
     assert!(cx.debug_bounds("chat-message-m0062").is_some());
     harness.read_with(cx, |harness, _| {
         assert!(
@@ -425,6 +498,7 @@ fn unread_reconciles_removed_messages_and_targets_the_latest_retained_id(cx: &mu
         .expect("remaining unread messages should keep the jump action reachable");
     cx.simulate_click(jump.center(), Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
+    settle_jump(cx);
     assert!(cx.debug_bounds("chat-message-m0061").is_some());
     assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);
 }
@@ -801,6 +875,7 @@ fn rendered_jump_to_latest_activates_from_keyboard(cx: &mut TestAppContext) {
     cx.update(|window, cx| window.focus_next(cx));
     activate_key(cx, "enter");
     cx.update(|window, cx| window.draw(cx).clear(cx));
+    settle_jump(cx);
 
     assert!(cx.debug_bounds("chat-message-m0061").is_some());
     assert_eq!(chat.read_with(cx, |chat, _| chat.unread_count()), 0);

@@ -576,6 +576,9 @@ pub struct Chat {
     welcome: Option<ChatWelcome>,
     copied_message: Option<SharedString>,
     copied_reset: Option<Task<()>>,
+    /// The animated jump-to-latest drive. Owned so exactly one can run;
+    /// dropped on user interference, replacement, or completion.
+    jump_drive: Option<Task<()>>,
     feedback: HashMap<SharedString, bool>,
     editing: Option<EditSession>,
     _prompt_subscription: Subscription,
@@ -626,6 +629,7 @@ impl Chat {
             welcome: None,
             copied_message: None,
             copied_reset: None,
+            jump_drive: None,
             feedback: HashMap::new(),
             editing: None,
             _prompt_subscription: prompt_subscription,
@@ -860,12 +864,106 @@ impl Chat {
 
     /// Resumes tail-following, clears unread state, and emits a typed event.
     pub fn scroll_to_latest(&mut self, cx: &mut Context<Self>) {
-        self.list_state.set_follow_mode(FollowMode::Tail);
-        self.list_state.scroll_to_end();
-        self.pinned_to_bottom = true;
         self.unread_message_ids.clear();
         cx.emit(ChatEvent::JumpedToLatest);
+
+        // The semantics land immediately; only the travel is staged. Under
+        // reduced motion, or with nothing measured to travel through, the
+        // jump snaps exactly as it always did.
+        let viewport = self.list_state.viewport_bounds().size.height;
+        if cx.reduce_motion() || viewport <= gpui::px(0.) || self.messages.is_empty() {
+            self.jump_drive = None;
+            self.list_state.set_follow_mode(FollowMode::Tail);
+            self.list_state.scroll_to_end();
+            self.pinned_to_bottom = true;
+            cx.notify();
+            return;
+        }
+
+        // Distance is measured through the scrollbar readbacks: both walk
+        // the list's cached heights synchronously, and unlike per-item
+        // bounds they stay readable at the scrolled-to-end sentinel.
+        let current = self.list_state.scroll_px_offset_for_scrollbar().y;
+        let max = self.list_state.max_offset_for_scrollbar().y;
+        if max + current <= gpui::px(1.) {
+            // Already at the tail; nothing to travel.
+            self.jump_drive = None;
+            self.list_state.set_follow_mode(FollowMode::Tail);
+            self.list_state.scroll_to_end();
+            self.pinned_to_bottom = true;
+            cx.notify();
+            return;
+        }
+
+        // Distance-capped: a tail more than about two viewports out does
+        // not scroll a blur of skipped transcript past the reader — the
+        // jump starts just under one viewport from the end and settles the
+        // remainder, so the motion always ends in legible context.
+        if max + current > viewport * 2.0 {
+            self.list_state.scroll_to_end();
+            self.list_state.scroll_by(-viewport * 0.9);
+        }
         cx.notify();
+
+        // An exponential approach stepped across frames: each tick closes a
+        // fraction of whatever remains, which retargets naturally when
+        // streaming grows the transcript mid-drive. The drive owns the
+        // scroll only while nothing else touches it — the readback after a
+        // step is compared against (offset before the step, offset the step
+        // predicts). Nearer the prediction proceeds; nearer the pre-step
+        // value is a paint clamping the step away, which at the end of the
+        // scrollable range means arrival; far from both is the reader
+        // taking the wheel, and the drive yields immediately.
+        self.jump_drive = Some(cx.spawn(async move |chat, cx| {
+            let tick = std::time::Duration::from_millis(8);
+            let mut last_step: Option<(Pixels, Pixels)> = None;
+            let mut held: u32 = 0;
+            loop {
+                cx.background_executor().timer(tick).await;
+                let done = chat.update(cx, |chat, cx| {
+                    let current = chat.list_state.scroll_px_offset_for_scrollbar().y;
+                    if let Some((before, predicted)) = last_step {
+                        let to_predicted = (current - predicted).abs();
+                        let to_before = (current - before).abs();
+                        if to_predicted > gpui::px(2.) && to_before > gpui::px(2.) {
+                            // The reader took the wheel; leave them there.
+                            return true;
+                        }
+                        if to_before < to_predicted {
+                            held += 1;
+                            if held < 8 {
+                                return false;
+                            }
+                        } else {
+                            held = 0;
+                        }
+                    }
+                    let max = chat.list_state.max_offset_for_scrollbar().y;
+                    let remaining = max + current;
+                    if remaining <= gpui::px(1.)
+                        || held >= 8
+                        || chat.list_state.is_scrolled_to_end() == Some(true)
+                    {
+                        chat.list_state.set_follow_mode(FollowMode::Tail);
+                        chat.list_state.scroll_to_end();
+                        chat.pinned_to_bottom = true;
+                        cx.notify();
+                        return true;
+                    }
+                    let step = (remaining * 0.22).max(gpui::px(2.)).min(remaining);
+                    chat.list_state.scroll_by(step);
+                    // The scrollbar readback runs negative as the list
+                    // scrolls toward the end, so a downward step subtracts.
+                    last_step = Some((current, current - step));
+                    cx.notify();
+                    false
+                });
+                match done {
+                    Ok(false) => {}
+                    _ => return,
+                }
+            }
+        }));
     }
 
     /// Re-measures the transcript after the window's rem size changed.
