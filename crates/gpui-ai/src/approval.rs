@@ -2,6 +2,7 @@
 
 use crate::cues::{self, Cue};
 use crate::handlers::SharedHandler;
+use crate::motion::acknowledged_state;
 use crate::status::{StatusBadge, StatusTone};
 use crate::surface::{card, description, inset, meta, title};
 use gpui::{
@@ -165,7 +166,7 @@ impl Styled for ApprovalCard {
 }
 
 impl RenderOnce for ApprovalCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let has_payload = !self.children.is_empty();
         let handler = self.on_event;
@@ -194,9 +195,22 @@ impl RenderOnce for ApprovalCard {
         let always_debug = debug_id.clone();
         let decision_debug = debug_id.clone();
         let footer: AnyElement = if decided {
+            // The event fired the moment the button was pressed; this is
+            // acknowledgment, staged after the controlled state. It plays
+            // once per decision — a card that mounts already decided shows
+            // its resolved text without motion, and rapid decision changes
+            // retarget by playing the new state's own acknowledgment.
+            let settled = acknowledged_state(
+                ElementId::Name(SharedString::from(format!("{}-resolved", self.id))),
+                self.decision as u64,
+                window,
+                cx,
+            );
             h_flex()
                 .items_center()
                 .gap(tokens.spacing.sm)
+                .opacity(settled)
+                .top(tokens.spacing.xxs * (1.0 - settled))
                 .child(
                     div()
                         .debug_selector(move || format!("approval-decision-{decision_debug}"))

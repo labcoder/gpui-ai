@@ -4,9 +4,9 @@ use crate::handlers::Handler;
 use crate::surface::{card, description, eyebrow, title};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, relative,
+    App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, relative,
 };
 
 /// An interaction emitted by [`RecommendationCard`].
@@ -18,6 +18,9 @@ pub enum RecommendationEvent {
         id: SharedString,
     },
 }
+use crate::motion::MotionTokens;
+use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
@@ -109,7 +112,7 @@ impl Styled for RecommendationCard {
 }
 
 impl RenderOnce for RecommendationCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let event = RecommendationEvent::Accepted {
             id: self.id.clone(),
@@ -151,9 +154,30 @@ impl RenderOnce for RecommendationCard {
                                 .rounded(tokens.radius.full)
                                 .bg(cx.theme().muted)
                                 .child(
+                                    // The fill retargets from its current
+                                    // sample when the controlled confidence
+                                    // changes; the first render adopts the
+                                    // supplied value and reduced motion
+                                    // snaps — the transition contract. The
+                                    // meter's numeric value above is the
+                                    // controlled figure, never the sample:
+                                    // no animated count-up.
                                     div()
                                         .h_full()
-                                        .w(relative(confidence))
+                                        .w(relative(transition(
+                                            (
+                                                ElementId::from(SharedString::from(format!(
+                                                    "{}-confidence-fill",
+                                                    self.id
+                                                ))),
+                                                "value",
+                                            ),
+                                            confidence,
+                                            Transition::new(MotionTokens::read(cx).standard())
+                                                .ease(ease_out_cubic),
+                                            window,
+                                            cx,
+                                        )))
                                         .rounded(tokens.radius.full)
                                         .bg(meter_color),
                                 ),
