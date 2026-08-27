@@ -86,6 +86,88 @@ impl SidebarInCatalogProbe {
     }
 }
 
+/// A standalone rail whose collapse glide the width tests measure.
+struct CollapseProbe {
+    nav: Entity<SidebarNav>,
+}
+
+impl CollapseProbe {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let nav = cx.new(|cx| {
+            let mut nav = SidebarNav::new("collapse-nav", window, cx);
+            nav.set_sections(probe_sections(), cx);
+            nav
+        });
+        Self { nav }
+    }
+}
+
+impl Render for CollapseProbe {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().w(px(480.)).h(px(360.)).child(self.nav.clone())
+    }
+}
+
+fn rail_width(cx: &mut VisualTestContext) -> Pixels {
+    cx.debug_bounds("sidebar-nav-collapse-nav")
+        .expect("the rail should render")
+        .size
+        .width
+}
+
+#[gpui::test]
+fn collapsing_glides_the_rail_width_between_its_poles(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (probe, cx) = cx.add_window_view(CollapseProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    let wide = rail_width(cx);
+
+    nav.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(80));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let mid = rail_width(cx);
+
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(2));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let narrow = rail_width(cx);
+
+    assert!(narrow < wide, "collapse must narrow the rail");
+    assert!(
+        narrow < mid && mid < wide,
+        "mid-glide the rail must sit between its poles: narrow {narrow:?} mid {mid:?} wide {wide:?}"
+    );
+}
+
+#[gpui::test]
+fn reduced_motion_collapses_without_travel(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    cx.update(|cx| cx.set_reduce_motion(true));
+    let (probe, cx) = cx.add_window_view(CollapseProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
+    let wide = rail_width(cx);
+
+    nav.update(cx, |nav, cx| nav.set_collapsed(true, cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let snapped = rail_width(cx);
+    assert!(snapped < wide, "collapse must narrow the rail");
+
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(2));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        rail_width(cx),
+        snapped,
+        "reduced motion must land on the pole in one frame"
+    );
+}
+
 /// A nav in a box too short for its rows, so the row list scrolls.
 struct ShortSidebarProbe {
     nav: Entity<SidebarNav>,
@@ -786,10 +868,10 @@ fn the_shells_differ_only_by_width_growth_and_trailing_edge(cx: &mut TestAppCont
 
     let (standalone, embedded, rail) = cx.update(|_, cx| {
         let rail = cx.theme().semantic_tokens().spacing.xxl * 8.;
-        let standalone = nav.update(cx, |nav, cx| nav.render_shell(cx).style().clone());
+        let standalone = nav.update(cx, |nav, cx| nav.render_shell(1.0, cx).style().clone());
         let embedded = nav.update(cx, |nav, cx| {
             nav.presentation = SidebarNavPresentation::Embedded;
-            let style = nav.render_shell(cx).style().clone();
+            let style = nav.render_shell(1.0, cx).style().clone();
             nav.presentation = SidebarNavPresentation::Standalone;
             style
         });

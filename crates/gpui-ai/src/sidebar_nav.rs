@@ -35,7 +35,8 @@ use gpui_component::{
 };
 
 use crate::{
-    resolved_layout::ResolvedLayoutKey, scrolling::list_scroll_mask, theme::SemanticStyledExt as _,
+    motion::disclosure_progress, resolved_layout::ResolvedLayoutKey, scrolling::list_scroll_mask,
+    theme::SemanticStyledExt as _,
 };
 
 use render::{nav_control, render_row, sidebar_tree_container};
@@ -447,7 +448,34 @@ impl Render for SidebarNav {
         }
 
         let content = self.render_content(window, cx);
-        self.render_shell(cx).children(content)
+
+        // Collapse restructures the tree — descendants unmount, levels
+        // flatten — so the rail cannot cross-fade rows one by one. Instead
+        // the standalone shell glides its width between the poles while the
+        // incoming structure fades in as the width settles, which keeps
+        // icons and focus at their settled positions rather than dragging
+        // them through the travel. Reduced motion snaps both.
+        let expansion = disclosure_progress(
+            (ElementId::from(self.id.clone()), "expanse"),
+            !self.collapsed,
+            window,
+            cx,
+        );
+        let settle = if self.collapsed {
+            1.0 - expansion
+        } else {
+            expansion
+        };
+        self.render_shell(expansion, cx).child(
+            div()
+                .flex()
+                .flex_col()
+                .h_full()
+                .min_h_0()
+                .w_full()
+                .opacity(settle)
+                .children(content),
+        )
     }
 }
 
@@ -458,9 +486,8 @@ impl SidebarNav {
     /// This is the only rendering [`SidebarNavPresentation`] reaches, which is
     /// what keeps the setting additive: the content below draws the same rows
     /// either way.
-    fn render_shell(&self, cx: &mut App) -> Stateful<Div> {
+    fn render_shell(&self, expansion: f32, cx: &mut App) -> Stateful<Div> {
         let tokens = cx.theme().semantic_tokens();
-        let collapsed = self.collapsed;
         div()
             .id((ElementId::from(self.id.clone()), "frame"))
             .debug_selector({
@@ -480,15 +507,15 @@ impl SidebarNav {
             .map(|shell| match self.presentation {
                 // A standalone rail sizes itself and draws the edge between
                 // itself and whatever sits beside it.
-                SidebarNavPresentation::Standalone => shell
-                    .w(if collapsed {
-                        tokens.spacing.xxl * 1.5
-                    } else {
-                        tokens.spacing.xxl * 8.
-                    })
-                    .flex_none()
-                    .border_r_1()
-                    .border_color(cx.theme().sidebar_border),
+                SidebarNavPresentation::Standalone => {
+                    let narrow = tokens.spacing.xxl * 1.5;
+                    let wide = tokens.spacing.xxl * 8.;
+                    shell
+                        .w(narrow + (wide - narrow) * expansion)
+                        .flex_none()
+                        .border_r_1()
+                        .border_color(cx.theme().sidebar_border)
+                }
                 // The host owns placement and size, so the shell contributes
                 // neither a width nor an edge: docked along the bottom it
                 // fills that region's width instead of keeping a rail's, and
