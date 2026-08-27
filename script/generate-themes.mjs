@@ -270,7 +270,11 @@ const OWNED_TEXT_PAIRS = [
 // the theme-stress visual review.
 const OWNED_BOUNDARY_PAIRS = [
   ["ring", "background"],
+  ["ring", "popover.background"],
+  ["ring", "sidebar.background"],
   ["input.border", "background"],
+  ["input.border", "popover.background"],
+  ["input.border", "sidebar.background"],
 ];
 
 function validateOwned(file, theme) {

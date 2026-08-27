@@ -25,7 +25,7 @@
         "foreground": "#252449",
         "info.background": "#1D4ED8",
         "info.foreground": "#FFFFFF",
-        "input.border": "#BC7CA5",
+        "input.border": "#b3769d",
         "muted.background": "#F7ECF3",
         "muted.foreground": "#6B5770",
         "popover.background": "#FFFFFF",

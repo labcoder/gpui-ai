@@ -251,7 +251,11 @@ test("owned source palettes read as authored, before any derivation", async () =
   ];
   const boundaryPairs = [
     ["ring", "background"],
+    ["ring", "popover.background"],
+    ["ring", "sidebar.background"],
     ["input.border", "background"],
+    ["input.border", "popover.background"],
+    ["input.border", "sidebar.background"],
   ];
   const failures = [];
   const files = (await readdir(owned)).filter((name) => name.endsWith(".json")).sort();
