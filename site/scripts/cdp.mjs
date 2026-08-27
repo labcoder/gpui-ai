@@ -281,9 +281,13 @@ const LAUNCHER_HANDOFF_GRACE_MS = 15_000;
 /** How much of Chromium's own complaint to quote when it will not start. */
 const STDERR_KEPT = 4_000;
 
-export async function launchBrowser(userDataDir) {
+export async function launchBrowser(userDataDir, { deviceScaleFactor } = {}) {
+  if (deviceScaleFactor !== undefined && (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor <= 0)) {
+    throw new Error("deviceScaleFactor must be a positive finite number");
+  }
   const child = spawn(browserPath, [
     "--headless=new",
+    ...(deviceScaleFactor === undefined ? [] : [`--force-device-scale-factor=${deviceScaleFactor}`]),
     "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",

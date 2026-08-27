@@ -11,7 +11,6 @@ import {
   themeMessage,
   wheelMessage,
 } from './query.js';
-import { pinScaleFactor } from './scale.js';
 import { schemeFor } from './scheme.js';
 
 /**
@@ -400,7 +399,8 @@ async function initEmbed() {
   // the reader's own pointer or key; popped out there is nobody to rob, and
   // the boot-time grab is what makes keys work without a click.
   if (window.parent !== window) guardEmbeddedFocus();
-  pinScaleFactor();
+  // gpui_web sizes its backing store in device pixels and keeps layout/input
+  // in CSS pixels. Leave the real DPR intact, including browser zoom changes.
   const options = parseEmbedOptions(window.location.search);
   shareTheWheel(options.story);
   const theme = preferredTheme(options.theme);

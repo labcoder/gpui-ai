@@ -1,8 +1,8 @@
 // Keeps an embedded example from stealing its host page's focus.
 //
 // GPUI's web platform focuses a hidden input element the moment it creates
-// its window — that is how the canvas hears the keyboard — and again on every
-// pointerdown. Standalone that is correct. Embedded it is a page-wide event:
+// its window — that is how the canvas hears the keyboard — and during later
+// input-focus changes. Standalone that is correct. Embedded it is a page-wide event:
 // a focus() call inside an iframe pulls the browser's focus out of the host
 // document and into this frame, and the host cannot defend itself — `inert`
 // on the frame's ancestors does not reach a child document focusing its own

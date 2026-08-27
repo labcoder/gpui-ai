@@ -93,6 +93,10 @@ revision.
 
 ### Fixed
 
+- High-density WASM demos keep the display's real device pixel ratio,
+  restoring crisp text and consistent CSS-space hit testing. Release browser
+  tests cover 2x/3x displays, the Safari sizing fallback, and the upgraded
+  GPUI backend's touch-aware keyboard focus and text entry.
 - Button labels retain descenders, accents, and ligatures across theme and
   rem changes. The gallery theme picker and composed action buttons use
   theme-token leading instead of a clipped one-em label box; padding and

@@ -332,11 +332,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // check that the demo a visitor actually meets ever starts. A page that
   // renders perfectly and never loads its demo passes every other gate.
   // Served from the project-page base the site was built for, because that is
-  // where its own bundle and stylesheet live. Driven at a HiDPI device pixel
-  // ratio, which is what most visitors have: GPUI's web backend takes that
-  // ratio as its scale factor without scaling the canvas surface, so an
-  // unpinned ratio lays the story out at double size and it overflows a frame
-  // sized from the catalog. Nothing else here would notice.
+  // where its own bundle and stylesheet live. HiDPI geometry is exercised in
+  // mobile.test.mjs with real browser device scales: CDP-only DPR emulation
+  // does not scale ResizeObserver's device-pixel box, so it is not a faithful
+  // renderer test. This lifecycle test stays at the browser's native 1x scale.
   const specimen = components.find((component) => component.slug === POSTER_SPECIMEN) ?? components[0];
   // Records every size the demo reports and whether the embed had drawn by
   // then, for the ordering assertion below. Installed before the page exists;
@@ -356,7 +355,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       });
     }`,
   });
-  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900, 2);
+  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/${specimen.slug}/`, 1280, 900);
   await waitForValue(
     cdp,
     "Boolean(document.querySelector('[data-specimen-frame] iframe'))",
@@ -391,19 +390,14 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   assert.deepEqual(errors, []);
 
-  // And the story inside it is laid out at that same scale. Nothing in the DOM
-  // reports what the canvas drew, so check the input GPUI reads: unpinned, the
-  // ratio the page is running at becomes its scale factor and the demo paints
-  // at double size inside a frame that cannot grow. Asserted only once the
-  // canvas exists — before that the iframe's window is a fresh about:blank
-  // that has not run the embed's script and still reports the parent's ratio.
-  assert.equal(await cdp.evaluate("window.devicePixelRatio"), 2, "the page is running HiDPI");
+  // The host and its demo must agree about device pixels. Do not reinstate
+  // the old DPR=1 workaround: it made high-density screens blurry.
   assert.equal(
     await cdp.evaluate(
       "document.querySelector('[data-specimen-frame] iframe').contentWindow.devicePixelRatio",
     ),
-    1,
-    "the embed must pin its scale factor or every measured height is wrong",
+    await cdp.evaluate("window.devicePixelRatio"),
+    "the embed must preserve the display's device pixel ratio",
   );
 
   // The height the host is told is measured at the width the story is really
