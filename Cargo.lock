@@ -2099,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "gallery"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "gallery-web"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "console_error_panic_hook",
  "gallery",
@@ -2382,7 +2382,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-ai"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "gpui",
  "gpui-base",

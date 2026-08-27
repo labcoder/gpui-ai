@@ -9,8 +9,65 @@ revision.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-27
+
+### Added
+
+- A semantic motion policy: `MotionTokens` names the crate's tempos
+  (instant, quick, standard, deliberate), spring roles (press, selection,
+  disclosure, reflow), and repeating loops, installs as an app global with
+  builder overrides, and every repeating and staged effect in the crate now
+  resolves through it. Reduced motion remains the override the policy
+  cannot express away.
+- Ten new themes — five light, five dark — each authored as a complete
+  registry file: Pocket Voltage, Mako Reactor, Silver Key Sky, Neon
+  Pilgrim, Spice Horizon, Moon Prism, Vector Grid, Forest Spirit, Blood
+  Moon Cathedral, and Sunday Panel. Theme generation now validates the raw
+  authored palette before derivation: text and status pairs at 4.5:1,
+  focus rings and border-only input boundaries at 3:1, and the full
+  semantic key set for every owned file.
+- `VoiceControls` listening state paints a six-lobe signal field: lobe
+  heights follow the application-owned level and one phase-locked clock
+  drives a wave across them. Reduced motion keeps a static graded envelope.
+- The gallery gained a Status story, a motion-lab instrument for tuning
+  the policy (kept out of the catalog), and a `GALLERY_STORY` environment
+  variable that opens a story by slug.
+
 ### Changed
 
+- Agent-state surfaces choreograph their lifecycle through the shared
+  policy: Thinking discloses through one channel and follows new reasoning
+  with a capped arrival cascade; StatusBadge swaps states in a fixed slot
+  sized by its ghost labels; tool calls, chips, tasks, todos, and plans
+  acknowledge settled states once, in place, with terminal glyphs in fixed
+  slots; approvals and recommendations stage their resolved footer and
+  confidence fill from controlled values.
+- Composition surfaces treat history as at rest: the message queue,
+  attachment strip, search results, todo lists, and plan cards take an
+  arrival roster's roll call — the first render joins settled, and only
+  stable IDs added to a mounted surface settle in. Queue reorders exchange
+  no motion state and command events stay immediate.
+- Chat's jump-to-latest is a distance-capped drive: semantics land
+  immediately, a nearby tail travels its whole distance, a far one starts
+  just under a viewport out and settles into place, and reader input takes
+  the scroll back instantly. Reduced motion keeps the one-frame snap.
+- The prompt bar swaps Send and Cancel inside one fixed slot; the sidebar
+  rail glides between its collapse poles while the incoming structure
+  fades in; the selection toolbar enters from the selection's own side;
+  thread lists and comparison tables acknowledge their newly active row or
+  column without reflowing what surrounds it.
+- Data surfaces retarget instead of replaying: context meters move their
+  drawn geometry from the previous controlled usage, insight cards enter
+  pages directionally and morph chart points only for in-place updates,
+  records-table status cells acknowledge changed values, and the
+  filter-table reorder reads its response from the policy's reflow role.
+- The existing presets were re-authored to the raw contract the new
+  validation enforces: registry chart keys corrected from `chart_1`…
+  `chart_5` to `chart.1`…`chart.5`, the high-contrast theme rebuilt from
+  shorthand keys the schema never read, status roles completed as
+  fill-plus-foreground pairs, and six input borders, Nord Frost's danger,
+  Paper Light's secondary text, and Solstice's focus ring corrected to
+  their contrast floors with same-hue lightness walks.
 - gpui-component, its assets, and gpui-base moved together from `d5821f27` to
   `9890a77c`, and GPUI follows upstream's own lock from `8b1497db` to
   `f66ed399`. The component range styles markdown tables with the `table_*`
@@ -21,6 +78,12 @@ revision.
   and fixes the action profiler's clock on `wasm32` — the defect this
   project reported and has excluded from web builds since 0.2.0; native
   performance binaries keep the profiler and now share the safe clock.
+
+### Fixed
+
+- The web embed no longer takes the host page's focus at boot: the
+  gallery's focus gate defers upstream's input focus until the reader
+  interacts, which also removes the docs drawer flake it caused.
 
 ## [0.2.1] - 2026-08-26
 
@@ -369,7 +432,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/labcoder/gpui-ai/releases/tag/v0.1.0
