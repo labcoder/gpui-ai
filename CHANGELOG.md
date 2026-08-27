@@ -16,8 +16,9 @@ revision.
 - A semantic motion policy: `MotionTokens` names the crate's tempos
   (instant, quick, standard, deliberate), spring roles (press, selection,
   disclosure, reflow), and repeating loops, installs as an app global with
-  builder overrides, and every repeating and staged effect in the crate now
-  resolves through it. Reduced motion remains the override the policy
+  builder overrides, and the composed components resolve their timing
+  through it. The low-level `breathing` helper retains its default tempo
+  and concrete return type for compatibility. Reduced motion remains the override the policy
   cannot express away.
 - Ten new themes — five light, five dark — each authored as a complete
   registry file: Pocket Voltage, Mako Reactor, Silver Key Sky, Neon
@@ -32,6 +33,8 @@ revision.
 - The gallery gained a Status story, a motion-lab instrument for tuning
   the policy (kept out of the catalog), and a `GALLERY_STORY` environment
   variable that opens a story by slug.
+- `Orbs::id` supplies stable identity for repeated instances from one call
+  site, keeping their visibility and animation state separate.
 
 ### Changed
 
@@ -47,6 +50,12 @@ revision.
   arrival roster's roll call — the first render joins settled, and only
   stable IDs added to a mounted surface settle in. Queue reorders exchange
   no motion state and command events stay immediate.
+- Arrival rosters retire removed identities and settled clocks, with at
+  most six active arrivals per owner. Status acknowledgments observe
+  running-to-terminal and returning-state changes without replaying history.
+- Closed disclosures remove their interactive and accessible descendants
+  on the closing frame. Composed repeating indicators stop requesting
+  animation frames while clipped outside the viewport.
 - Chat's jump-to-latest is a distance-capped drive: semantics land
   immediately, a nearby tail travels its whole distance, a far one starts
   just under a viewport out and settles into place, and reader input takes
