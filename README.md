@@ -63,7 +63,7 @@ let _subscription = cx.subscribe(&prompt, |_, _, event: &PromptBarEvent, _| {
 
 ## Components
 
-The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 34 components with source code and live WebAssembly demos. The catalog groups them into:
+The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 35 components with source code and live WebAssembly demos. The catalog groups them into:
 
 - responses, progress, code, and diffs
 - tools, plans, approvals, and tasks
@@ -71,12 +71,13 @@ The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 
 - search, context, tables, navigation, and utility controls
 
 <details>
-<summary>View all 34 components</summary>
+<summary>View all 35 components</summary>
 
 | Component | Kind | What it does |
 |---|---|---|
 | [`LoadingState`](https://labcoder.github.io/gpui-ai/components/loading/) | stateless | Loader with shimmer and elapsed time |
 | [`Orbs`](https://labcoder.github.io/gpui-ai/components/orbs/) | stateless | Dot-lattice activity indicator with five animations |
+| [`StatusBadge`](https://labcoder.github.io/gpui-ai/components/status/) | stateless | One status pill for every lifecycle, swapping states in a fixed slot |
 | [`Thinking`](https://labcoder.github.io/gpui-ai/components/thinking/) | stateless | Collapsible reasoning trace for running and completed work |
 | [`StreamingText`](https://labcoder.github.io/gpui-ai/components/streaming-text/) | stateless | Streaming Markdown with citations, sources, and follow-up prompts |
 | [`CodeBlock`](https://labcoder.github.io/gpui-ai/components/code-block/) | stateless | Syntax-highlighted code with copy and streaming states |
