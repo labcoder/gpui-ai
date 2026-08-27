@@ -1,6 +1,6 @@
 //! An animated pixel-grid loading state with optional elapsed time.
 
-use crate::motion::ProgressLoopSpec;
+use crate::motion::MotionTokens;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -79,6 +79,7 @@ impl RenderOnce for LoadingState {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let color = cx.theme().primary;
+        let sweep = MotionTokens::read(cx).grid_sweep();
 
         let grid = div()
             .flex()
@@ -103,7 +104,7 @@ impl RenderOnce for LoadingState {
                                 // so it settles by being unmounted. Reduced
                                 // motion holds delta at 0, leaving a static
                                 // diagonal gradient across the grid.
-                                ProgressLoopSpec::GRID_SWEEP.looping(),
+                                sweep.looping(),
                                 move |this, delta| {
                                     let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
                                     this.opacity(0.15 + 0.85 * wave)

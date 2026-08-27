@@ -7,7 +7,7 @@
 //! pulse — so an application can pick the one that matches its voice.
 //! Under reduced motion every variant resolves to a useful static frame.
 
-use crate::motion::AmbientLoopSpec;
+use crate::motion::{AmbientLoopSpec, MotionTokens};
 use gpui::{
     AnimationExt as _, App, ElementId, IntoElement, ParentElement as _, Pixels, RenderOnce,
     StyleRefinement, Styled, Window, div, px,
@@ -194,6 +194,7 @@ impl Styled for Orbs {
 impl RenderOnce for Orbs {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let lattice = MotionTokens::read(cx).orb_lattice();
         let scale = self.diameter.as_f32() / STAGE;
         let dot = px(4.2 * scale);
         // Center-to-center spacing between lattice dots.
@@ -255,7 +256,7 @@ impl RenderOnce for Orbs {
                             // holds delta at 0, leaving each dot at its
                             // seeded phase — a still choreographed frame, not
                             // nine identical dots.
-                            AmbientLoopSpec::ORB_LATTICE.looping(),
+                            lattice.looping(),
                             move |this, delta| {
                                 let phase = (delta + seeded_phase) % 1.0;
                                 // Eased triangle: 0→1→0 across the cycle so

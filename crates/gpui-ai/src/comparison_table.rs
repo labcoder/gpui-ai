@@ -16,7 +16,7 @@ use gpui_component::{
 
 use crate::{
     control::outlined_control_with_label,
-    motion::ProgressLoopSpec,
+    motion::MotionTokens,
     records_table::escape_markdown_text,
     resolved_layout::ResolvedLayoutKey,
     scrolling::list_scroll_mask,
@@ -1020,7 +1020,8 @@ impl Render for ComparisonTable {
                                                             // statuses take the branch below and
                                                             // render a still icon. Reduced motion
                                                             // holds delta at 0 — an unrotated icon.
-                                                            ProgressLoopSpec::STATUS_SPINNER
+                                                            MotionTokens::read(cx)
+                                                                .status_spinner()
                                                                 .looping(),
                                                             |this, delta| {
                                                                 this.rotate(gpui::percentage(delta))

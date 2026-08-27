@@ -1,6 +1,6 @@
 //! Progressive reveal for image generation.
 
-use crate::motion::ProgressLoopSpec;
+use crate::motion::MotionTokens;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
@@ -134,7 +134,7 @@ impl RenderOnce for ImageGeneration {
                                     // is not built at all, so a finished
                                     // frame demands nothing. Reduced motion
                                     // holds delta at 0 — a fully opaque icon.
-                                    ProgressLoopSpec::IMAGE_PULSE.looping(),
+                                    MotionTokens::read(cx).image_pulse().looping(),
                                     |this, delta| {
                                         let wave = (delta * 2.0 - 1.0).abs();
                                         this.opacity(0.35 + 0.65 * wave)

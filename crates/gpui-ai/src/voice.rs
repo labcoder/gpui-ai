@@ -9,7 +9,7 @@
 use crate::{
     control::{composed_button, outlined_control_with_label},
     handlers::SharedHandler,
-    motion::breathing,
+    motion::{MotionTokens, breathing_with},
     surface::icon_button,
     theme::SemanticStyledExt as _,
 };
@@ -157,10 +157,12 @@ impl RenderOnce for VoiceControls {
                 VoiceState::Transcribing => ("Transcribing", "Transcribing", None),
             };
         let indicator: AnyElement = match state {
-            VoiceState::Listening { level } => {
-                breathing(level_meter(level, cx), (root_id.clone(), "level-breath"))
-                    .into_any_element()
-            }
+            VoiceState::Listening { level } => breathing_with(
+                MotionTokens::read(cx).breathing(),
+                level_meter(level, cx),
+                (root_id.clone(), "level-breath"),
+            )
+            .into_any_element(),
             VoiceState::Transcribing => Spinner::new().xsmall().into_any_element(),
             VoiceState::Idle | VoiceState::Speaking => div()
                 .flex_none()

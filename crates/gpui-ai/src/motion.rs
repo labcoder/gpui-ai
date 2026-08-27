@@ -6,28 +6,36 @@
 //! render at rest. Components opt in explicitly — nothing in this module
 //! installs idle redraw on its own.
 //!
-//! # Motion roles
+//! # The motion policy
 //!
 //! No component spells out a duration. Every animated timing in the crate
-//! resolves through one of three internal roles, each a const-constructible
-//! spec whose members are named associated constants:
+//! resolves through [`MotionTokens`], one application-global policy that
+//! [`crate::init`] installs with the crate's defaults and an application may
+//! replace once, up front, for all components at a stroke.
 //!
-//! - enter / reveal — `EnterSpec`: `REVEAL`.
-//! - progress loop — `ProgressLoopSpec`: `SHIMMER`, `GRID_SWEEP`,
-//!   `IMAGE_PULSE`, `STATUS_SPINNER`.
-//! - ambient loop — `AmbientLoopSpec`: `BREATHING`, `ORB_LATTICE`.
+//! The policy speaks two vocabularies:
+//!
+//! - **Semantic roles**, the consumer-facing surface: [`MotionTokens::instant`],
+//!   [`MotionTokens::quick`], [`MotionTokens::standard`], and
+//!   [`MotionTokens::deliberate`] for durations, and the four spring roles —
+//!   press, selection, disclosure, reflow — as [`SpringRole`] response/damping
+//!   pairs. Components consume roles, never raw numbers.
+//! - **Named effects**, the crate-internal table: each shipped repeating
+//!   effect (shimmer, grid sweep, image pulse, status spinner, breathing, orb
+//!   lattice) keeps its own tempo entry, because collapsing six tuned tempos
+//!   into one "ambient" number would be a visual change wearing a refactor's
+//!   clothes. These readers stay `pub(crate)`.
 //!
 //! A progress loop is bound to work that ends: the element carrying it is
 //! gone once the work finishes. An ambient loop has no completion to report
-//! and runs for as long as its element is on screen. The fourth role the
-//! roadmap names, immediate feedback, has no member: nothing in the crate
-//! delays or eases a direct response to input, and inventing a timing to
-//! fill the table would be a new visual decision rather than a relocation
-//! of an existing one.
+//! and runs for as long as its element is on screen. The instant role is
+//! zero by conviction, not omission: nothing in the crate delays or eases a
+//! direct response to input.
 //!
-//! The whole seam is `pub(crate)`. Whether any of it becomes consumer-facing
-//! — theme JSON, a public token type — is a later decision, and nothing here
-//! commits to one.
+//! Reduced motion outranks the policy. Every effect here routes through
+//! GPUI's animation system, whose reduced-motion contract no token value can
+//! override — a policy with ten-second durations still renders still frames
+//! when the platform asks for stillness.
 //!
 //! # Example
 //!
@@ -42,7 +50,7 @@
 //! ```
 
 use gpui::{
-    Animation, AnimationElement, AnimationExt as _, App, ElementId, Hsla, IntoElement,
+    Animation, AnimationElement, AnimationExt as _, App, ElementId, Global, Hsla, IntoElement,
     ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
     ease_in_out, pulsating_between, px, relative,
 };
@@ -60,7 +68,7 @@ const SHIMMER_BAND: f32 = 0.45;
 /// One spec covers every entrance in the crate deliberately. Rows, chips,
 /// tool calls, and attachments arrive at one tempo; a second entrance tempo
 /// would be a design decision, not a configuration.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct EnterSpec {
     /// Mount to settled.
     pub(crate) duration: Duration,
@@ -81,12 +89,18 @@ impl EnterSpec {
         stagger_cap: 12,
         rise: 6.0,
     };
+
+    /// The per-item delay of a staggered reveal, capped so long lists settle
+    /// in a bounded time.
+    pub(crate) fn stagger_delay(self, index: usize) -> Duration {
+        self.stagger * index.min(self.stagger_cap) as u32
+    }
 }
 
 /// A repeating loop that means "this work is in flight". It exists only
 /// while the work does: the caller stops rendering the element that carries
 /// it once the work finishes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ProgressLoopSpec {
     /// One full pass, including any rest beat.
     pub(crate) period: Duration,
@@ -130,7 +144,7 @@ impl ProgressLoopSpec {
 
 /// A repeating loop with nothing to complete. It runs for as long as its
 /// element is on screen, which is the state it reports.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct AmbientLoopSpec {
     /// One full cycle. Choreographed phase offsets are fractions of this.
     pub(crate) period: Duration,
@@ -167,6 +181,283 @@ impl AmbientLoopSpec {
 /// that check.
 fn repeating(period: Duration) -> Animation {
     Animation::new(period).repeat()
+}
+
+/// A spring's feel, as the pair the ecosystem tunes springs by: the response
+/// period and the damping ratio.
+///
+/// `response` is the period one full oscillation would take undamped — the
+/// scale the motion is felt at, not the moment it stops. `damping` is the
+/// ratio ζ: `1.0` approaches without overshoot, below it passes the target
+/// and comes back, above it approaches slowly. These are the two numbers
+/// `gpui_base::motion::Spring` is built from, so a role converts to a
+/// running spring without translation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpringRole {
+    response: Duration,
+    damping: f32,
+}
+
+impl SpringRole {
+    const fn new(response: Duration, damping: f32) -> Self {
+        Self { response, damping }
+    }
+
+    /// The response period the role is felt at.
+    pub const fn response(self) -> Duration {
+        self.response
+    }
+
+    /// The damping ratio ζ; `1.0` means no overshoot.
+    pub const fn damping(self) -> f32 {
+        self.damping
+    }
+}
+
+/// The application-global motion policy: every duration, stagger beat, and
+/// spring response the crate animates with, resolved through one value.
+///
+/// [`crate::init`] installs [`MotionTokens::DEFAULT`] unless the application
+/// already chose. To customize, build from `default()` and [`set`](Self::set)
+/// the result — before windows render, so no frame is timed under two
+/// policies:
+///
+/// ```ignore
+/// gpui_ai::init(cx);
+/// gpui_ai::motion::MotionTokens::default()
+///     .with_quick(Duration::from_millis(120))
+///     .set(cx);
+/// ```
+///
+/// The duration roles with no consumer in the crate yet — `instant`, `quick`,
+/// `deliberate` — and the four spring roles carry provisional defaults inside
+/// the 0.3.0 plan's tuning ranges; the shipped effects (reveal tempo and the
+/// named loops) default to exactly the values they have always had, so
+/// installing this policy changes nothing a released application shows.
+///
+/// What the policy cannot do: override reduced motion. `cx.reduce_motion()`
+/// stays authoritative in every consumer, so customization tunes tempo and
+/// feel, never whether travel happens for someone who asked for stillness.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MotionTokens {
+    instant: Duration,
+    quick: Duration,
+    standard: Duration,
+    deliberate: Duration,
+    stagger_beat: Duration,
+    stagger_cap: usize,
+    press: SpringRole,
+    selection: SpringRole,
+    disclosure: SpringRole,
+    reflow: SpringRole,
+    shimmer: ProgressLoopSpec,
+    grid_sweep: ProgressLoopSpec,
+    image_pulse: ProgressLoopSpec,
+    status_spinner: ProgressLoopSpec,
+    breathing: AmbientLoopSpec,
+    orb_lattice: AmbientLoopSpec,
+}
+
+impl Global for MotionTokens {}
+
+impl Default for MotionTokens {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl MotionTokens {
+    /// The crate's own policy. Shipped effects keep their long-standing
+    /// values by construction — each is defined as the spec constant it
+    /// replaces — and the not-yet-consumed roles sit inside the plan's
+    /// tuning ranges awaiting motion-lab validation.
+    pub const DEFAULT: Self = Self {
+        instant: Duration::ZERO,
+        quick: Duration::from_millis(150),
+        standard: EnterSpec::REVEAL.duration,
+        deliberate: Duration::from_millis(380),
+        stagger_beat: EnterSpec::REVEAL.stagger,
+        stagger_cap: EnterSpec::REVEAL.stagger_cap,
+        press: SpringRole::new(Duration::from_millis(140), 1.0),
+        selection: SpringRole::new(Duration::from_millis(220), 0.9),
+        disclosure: SpringRole::new(Duration::from_millis(280), 1.0),
+        reflow: SpringRole::new(Duration::from_millis(300), 1.0),
+        shimmer: ProgressLoopSpec::SHIMMER,
+        grid_sweep: ProgressLoopSpec::GRID_SWEEP,
+        image_pulse: ProgressLoopSpec::IMAGE_PULSE,
+        status_spinner: ProgressLoopSpec::STATUS_SPINNER,
+        breathing: AmbientLoopSpec::BREATHING,
+        orb_lattice: AmbientLoopSpec::ORB_LATTICE,
+    };
+
+    /// The policy the application installed, or the crate's default where it
+    /// installed none. Never panics: a window rendered before `init` runs is
+    /// timed by [`Self::DEFAULT`], the same values `init` would install.
+    pub fn read(cx: &App) -> &Self {
+        cx.try_global::<Self>().unwrap_or(&Self::DEFAULT)
+    }
+
+    /// Makes this policy the application's, for every component at once.
+    pub fn set(self, cx: &mut App) {
+        cx.set_global(self);
+    }
+
+    // -- Duration roles ----------------------------------------------------
+
+    /// Focus, press acknowledgement, pointer capture: zero, because a direct
+    /// response to input is not eased.
+    pub const fn instant(&self) -> Duration {
+        self.instant
+    }
+
+    /// Icon or label swap, copy acknowledgement, close.
+    pub const fn quick(&self) -> Duration {
+        self.quick
+    }
+
+    /// Selected indicator, compact disclosure, progress retarget — and the
+    /// crate's entrance tempo.
+    pub const fn standard(&self) -> Duration {
+        self.standard
+    }
+
+    /// Larger bounded panel or success choreography.
+    pub const fn deliberate(&self) -> Duration {
+        self.deliberate
+    }
+
+    // -- Spring roles ------------------------------------------------------
+
+    /// Reversible control compression: fast and fully damped.
+    pub const fn press_spring(&self) -> SpringRole {
+        self.press
+    }
+
+    /// An active pill or marker gliding between targets.
+    pub const fn selection_spring(&self) -> SpringRole {
+        self.selection
+    }
+
+    /// Bounded panel geometry; no bounce, so it also suits destructive and
+    /// error surfaces.
+    pub const fn disclosure_spring(&self) -> SpringRole {
+        self.disclosure
+    }
+
+    /// Visible row displacement: critically damped, velocity-preserving.
+    pub const fn reflow_spring(&self) -> SpringRole {
+        self.reflow
+    }
+
+    // -- Builders ----------------------------------------------------------
+
+    /// Replaces the [`instant`](Self::instant) duration.
+    pub const fn with_instant(mut self, duration: Duration) -> Self {
+        self.instant = duration;
+        self
+    }
+
+    /// Replaces the [`quick`](Self::quick) duration.
+    pub const fn with_quick(mut self, duration: Duration) -> Self {
+        self.quick = duration;
+        self
+    }
+
+    /// Replaces the [`standard`](Self::standard) duration, which is also the
+    /// entrance tempo every reveal in the crate settles at.
+    pub const fn with_standard(mut self, duration: Duration) -> Self {
+        self.standard = duration;
+        self
+    }
+
+    /// Replaces the [`deliberate`](Self::deliberate) duration.
+    pub const fn with_deliberate(mut self, duration: Duration) -> Self {
+        self.deliberate = duration;
+        self
+    }
+
+    /// Replaces the per-item stagger beat. The participation and aggregate
+    /// caps are policy, not configuration, and stay where they are.
+    pub const fn with_stagger_beat(mut self, beat: Duration) -> Self {
+        self.stagger_beat = beat;
+        self
+    }
+
+    /// Replaces the press spring's feel.
+    pub const fn with_press_spring(mut self, response: Duration, damping: f32) -> Self {
+        self.press = SpringRole::new(response, damping);
+        self
+    }
+
+    /// Replaces the selection spring's feel.
+    pub const fn with_selection_spring(mut self, response: Duration, damping: f32) -> Self {
+        self.selection = SpringRole::new(response, damping);
+        self
+    }
+
+    /// Replaces the disclosure spring's feel.
+    pub const fn with_disclosure_spring(mut self, response: Duration, damping: f32) -> Self {
+        self.disclosure = SpringRole::new(response, damping);
+        self
+    }
+
+    /// Replaces the reflow spring's feel.
+    pub const fn with_reflow_spring(mut self, response: Duration, damping: f32) -> Self {
+        self.reflow = SpringRole::new(response, damping);
+        self
+    }
+
+    // -- Crate-internal readers --------------------------------------------
+
+    /// The entrance spec every reveal resolves through: the standard tempo,
+    /// the stagger beat and cap, and the crate's fixed travel distance.
+    pub(crate) const fn reveal(&self) -> EnterSpec {
+        EnterSpec {
+            duration: self.standard,
+            stagger: self.stagger_beat,
+            stagger_cap: self.stagger_cap,
+            rise: EnterSpec::REVEAL.rise,
+        }
+    }
+
+    /// Label shimmer tempo.
+    pub(crate) const fn shimmer(&self) -> ProgressLoopSpec {
+        self.shimmer
+    }
+
+    /// Pixel-grid loader sweep tempo.
+    pub(crate) const fn grid_sweep(&self) -> ProgressLoopSpec {
+        self.grid_sweep
+    }
+
+    /// Image placeholder pulse tempo.
+    pub(crate) const fn image_pulse(&self) -> ProgressLoopSpec {
+        self.image_pulse
+    }
+
+    /// In-flight status icon rotation tempo.
+    pub(crate) const fn status_spinner(&self) -> ProgressLoopSpec {
+        self.status_spinner
+    }
+
+    /// Opacity-breathing tempo.
+    pub(crate) const fn breathing(&self) -> AmbientLoopSpec {
+        self.breathing
+    }
+
+    /// Orb lattice cycle tempo.
+    pub(crate) const fn orb_lattice(&self) -> AmbientLoopSpec {
+        self.orb_lattice
+    }
+}
+
+/// Installs [`MotionTokens::DEFAULT`] unless the application already chose a
+/// policy — so `init` never overwrites a customization made before it ran,
+/// and a customization made after simply replaces the default.
+pub(crate) fn install(cx: &mut App) {
+    if !cx.has_global::<MotionTokens>() {
+        cx.set_global(MotionTokens::DEFAULT);
+    }
 }
 
 /// Text with a soft highlight travelling across it — the ecosystem's
@@ -234,6 +525,7 @@ impl RenderOnce for Shimmer {
         }
 
         let text = self.text;
+        let spec = MotionTokens::read(cx).shimmer();
         div()
             .relative()
             .overflow_hidden()
@@ -249,11 +541,11 @@ impl RenderOnce for Shimmer {
                 // over a settled surface. Reduced motion holds delta at 0 —
                 // the band sits fully off the leading edge and the label is
                 // plain muted text.
-                ProgressLoopSpec::SHIMMER.looping(),
+                spec.looping(),
                 move |container, delta| {
                     // Travel during the first part of the cycle, then rest
                     // fully off the trailing edge.
-                    let progress = ease_in_out((delta / ProgressLoopSpec::SHIMMER.duty).min(1.0));
+                    let progress = ease_in_out((delta / spec.duty).min(1.0));
                     let start = -SHIMMER_BAND + progress * (1.0 + SHIMMER_BAND);
                     container.child(
                         div()
@@ -302,14 +594,14 @@ pub fn reveal_progress(
     if cx.reduce_motion() {
         return 1.0;
     }
+    let spec = MotionTokens::read(cx).reveal();
     let now = cx.background_executor().now();
     let started = *window.use_keyed_state(id, cx, |_, _| now).read(cx);
     let elapsed = now.saturating_duration_since(started);
     let progress = if elapsed <= delay {
         0.0
     } else {
-        (elapsed.saturating_sub(delay).as_secs_f32() / EnterSpec::REVEAL.duration.as_secs_f32())
-            .min(1.0)
+        (elapsed.saturating_sub(delay).as_secs_f32() / spec.duration.as_secs_f32()).min(1.0)
     };
     if progress < 1.0 {
         note_reveal_frame_request();
@@ -355,13 +647,6 @@ where
     apply_reveal(element, reveal_progress(id, Duration::ZERO, window, cx))
 }
 
-/// The per-item delay of a staggered reveal, capped so long lists settle
-/// in a bounded time.
-fn stagger_delay(index: usize) -> Duration {
-    let spec = EnterSpec::REVEAL;
-    spec.stagger * index.min(spec.stagger_cap) as u32
-}
-
 /// Like [`reveal`], but item `index` waits `index` stagger beats before it
 /// starts, so a list of chips or rows ripples into place.
 pub fn reveal_staggered<E>(
@@ -374,7 +659,7 @@ pub fn reveal_staggered<E>(
 where
     E: Styled,
 {
-    let delay = stagger_delay(index);
+    let delay = MotionTokens::read(cx).reveal().stagger_delay(index);
     apply_reveal(element, reveal_progress(id, delay, window, cx))
 }
 
@@ -393,7 +678,24 @@ fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
 
 /// Slowly breathes an element's opacity — for indicators that mean "still
 /// working" without a measurable progress value.
+///
+/// Breathes at the crate's default ambient tempo: this signature predates
+/// [`MotionTokens`] and carries no `App`, so it has no way to see a replaced
+/// policy. Components inside the crate route through the policy instead;
+/// under the default tokens the two are identical.
 pub fn breathing<E>(element: E, id: impl Into<ElementId>) -> AnimationElement<E>
+where
+    E: IntoElement + Styled + 'static,
+{
+    breathing_with(MotionTokens::DEFAULT.breathing(), element, id)
+}
+
+/// [`breathing`], at the tempo the given policy entry sets.
+pub(crate) fn breathing_with<E>(
+    spec: AmbientLoopSpec,
+    element: E,
+    id: impl Into<ElementId>,
+) -> AnimationElement<E>
 where
     E: IntoElement + Styled + 'static,
 {
@@ -403,9 +705,7 @@ where
         // element mounted, which is the "still working, nothing to report"
         // state itself, so there is no settled frame to reach. Reduced
         // motion holds delta at 0, the middle of the opacity range.
-        AmbientLoopSpec::BREATHING
-            .looping()
-            .with_easing(pulsating_between(0.35, 1.0)),
+        spec.looping().with_easing(pulsating_between(0.35, 1.0)),
         |element, alpha| element.opacity(alpha),
     )
 }
@@ -435,10 +735,79 @@ mod tests {
 
     #[test]
     fn stagger_is_bounded_so_long_lists_do_not_wait_forever() {
-        let far = stagger_delay(12);
-        let capped = stagger_delay(100);
+        let spec = MotionTokens::DEFAULT.reveal();
+        let far = spec.stagger_delay(12);
+        let capped = spec.stagger_delay(100);
         assert_eq!(far, capped);
-        assert!(stagger_delay(1) < far);
+        assert!(spec.stagger_delay(1) < far);
+    }
+
+    #[test]
+    fn the_default_policy_is_exactly_the_shipped_specs() {
+        // Field-by-field, not "looks right": the promise is that installing
+        // the policy changes nothing a released application shows.
+        let tokens = MotionTokens::DEFAULT;
+        assert_eq!(tokens.reveal(), EnterSpec::REVEAL);
+        assert_eq!(tokens.shimmer(), ProgressLoopSpec::SHIMMER);
+        assert_eq!(tokens.grid_sweep(), ProgressLoopSpec::GRID_SWEEP);
+        assert_eq!(tokens.image_pulse(), ProgressLoopSpec::IMAGE_PULSE);
+        assert_eq!(tokens.status_spinner(), ProgressLoopSpec::STATUS_SPINNER);
+        assert_eq!(tokens.breathing(), AmbientLoopSpec::BREATHING);
+        assert_eq!(tokens.orb_lattice(), AmbientLoopSpec::ORB_LATTICE);
+        assert_eq!(tokens.standard(), EnterSpec::REVEAL.duration);
+        assert_eq!(tokens.instant(), Duration::ZERO, "immediate is immediate");
+        assert_eq!(MotionTokens::default(), tokens);
+    }
+
+    #[test]
+    fn provisional_roles_sit_inside_the_plans_tuning_ranges() {
+        let tokens = MotionTokens::DEFAULT;
+        assert!(tokens.quick() >= Duration::from_millis(120));
+        assert!(tokens.quick() <= Duration::from_millis(180));
+        assert!(tokens.standard() >= Duration::from_millis(200));
+        assert!(tokens.standard() <= Duration::from_millis(300));
+        assert!(tokens.deliberate() >= Duration::from_millis(320));
+        assert!(tokens.deliberate() <= Duration::from_millis(450));
+        for spring in [
+            tokens.press_spring(),
+            tokens.selection_spring(),
+            tokens.disclosure_spring(),
+            tokens.reflow_spring(),
+        ] {
+            assert!(spring.response() > Duration::ZERO);
+            assert!(spring.damping() > 0.0);
+        }
+        // Destructive-adjacent roles must not overshoot.
+        assert!(tokens.press_spring().damping() >= 1.0);
+        assert!(tokens.disclosure_spring().damping() >= 1.0);
+        assert!(tokens.reflow_spring().damping() >= 1.0);
+    }
+
+    #[gpui::test]
+    fn install_respects_a_policy_the_application_chose_first(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let chosen = Duration::from_millis(10);
+            MotionTokens::default().with_standard(chosen).set(cx);
+            install(cx);
+            assert_eq!(
+                MotionTokens::read(cx).standard(),
+                chosen,
+                "init must not overwrite an earlier application choice"
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn install_provides_the_default_policy_when_none_was_chosen(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            assert_eq!(
+                MotionTokens::read(cx),
+                &MotionTokens::DEFAULT,
+                "reads before install fall back to the same values"
+            );
+            install(cx);
+            assert_eq!(MotionTokens::read(cx), &MotionTokens::DEFAULT);
+        });
     }
 
     #[test]
@@ -638,5 +1007,51 @@ mod tests {
         cx.executor().advance_clock(EnterSpec::REVEAL.duration);
         assert_eq!(draw(cx), 0);
         assert_eq!(progress.get(), 1.0);
+    }
+
+    #[gpui::test]
+    fn a_replaced_policy_drives_a_running_reveal(cx: &mut TestAppContext) {
+        let quickened = Duration::from_millis(10);
+        let (progress, cx) = reveal_probe(false, cx);
+        cx.update(|_, cx| MotionTokens::default().with_standard(quickened).set(cx));
+
+        assert_eq!(draw(cx), 1, "the reveal is live under the new policy");
+        cx.executor().advance_clock(quickened);
+        draw(cx);
+        assert_eq!(
+            progress.get(),
+            1.0,
+            "ten milliseconds settles a ten-millisecond policy"
+        );
+        assert_eq!(draw(cx), 0, "and a settled reveal stays settled");
+    }
+
+    #[gpui::test]
+    fn the_default_policy_is_still_travelling_at_that_moment(cx: &mut TestAppContext) {
+        // The differential half of the test above: the same clock advance
+        // under the default policy must not have settled, or the assertion
+        // there would pass for reasons other than the replacement working.
+        let (progress, cx) = reveal_probe(false, cx);
+        draw(cx);
+        cx.executor().advance_clock(Duration::from_millis(10));
+        draw(cx);
+        assert!(
+            progress.get() < 1.0,
+            "progress={} — the default tempo settled implausibly fast",
+            progress.get()
+        );
+    }
+
+    #[gpui::test]
+    fn no_policy_value_can_override_reduced_motion(cx: &mut TestAppContext) {
+        let (progress, cx) = reveal_probe(true, cx);
+        cx.update(|_, cx| {
+            MotionTokens::default()
+                .with_standard(Duration::from_secs(10))
+                .set(cx);
+        });
+
+        assert_eq!(draw(cx), 0, "reduced motion outranks any policy");
+        assert_eq!(progress.get(), 1.0, "and still resolves to the end state");
     }
 }

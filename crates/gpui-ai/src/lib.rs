@@ -169,5 +169,9 @@ use gpui::App;
 /// `gpui_component::init` separately.
 pub fn init(cx: &mut App) {
     gpui_component::init(cx);
+    // The motion policy, before any component renders — and only unless the
+    // application already chose one, so either order of init and
+    // customization lands on the application's values.
+    motion::install(cx);
     records_table::init(cx);
 }
