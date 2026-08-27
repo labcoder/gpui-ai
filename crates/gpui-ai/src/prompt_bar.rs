@@ -290,22 +290,25 @@ fn prompt_control(
     prompt_control_with_tone(id, label, false, cx)
 }
 
-fn prompt_primary_control(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
-    cx: &mut App,
-) -> Button {
-    prompt_control_with_tone(id, label, true, cx)
-}
-
 fn prompt_control_with_tone(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     primary: bool,
     cx: &mut App,
 ) -> Button {
-    let tokens = cx.theme().semantic_tokens();
     let label = label.into();
+    prompt_control_shell(id, label.clone(), primary, cx).child(div().child(label))
+}
+
+/// The shared control chrome without a label child, for controls that stage
+/// their own label slot. `label` is still the accessible name.
+fn prompt_control_shell(
+    id: impl Into<ElementId>,
+    label: SharedString,
+    primary: bool,
+    cx: &mut App,
+) -> Button {
+    let tokens = cx.theme().semantic_tokens();
     let (background, foreground, border, hover, active) = if primary {
         (
             cx.theme().button_primary,
@@ -345,7 +348,6 @@ fn prompt_control_with_tone(
                     .text_color(cx.theme().muted_foreground)
             })
         })
-        .child(div().child(label))
 }
 
 /// A native, hybrid-controlled prompt composer.
@@ -788,7 +790,7 @@ impl Focusable for PromptBar {
 }
 
 impl Render for PromptBar {
-    fn render(&mut self, _: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let root_id = self.id.clone();
         let suggestions = self
@@ -828,6 +830,14 @@ impl Render for PromptBar {
             .unwrap_or_else(|| "No models available".into());
         let draft = self.editor.read(cx).value().to_string();
         let running = self.progress == ProgressState::Running;
+        // Send and Cancel share one slot; the face the control settles into
+        // fades in once per state, and the state it mounts with is exempt.
+        let submit_ack = crate::motion::acknowledged_state(
+            ElementId::from((ElementId::from(self.id.clone()), "submit-swap")),
+            running as u64,
+            window,
+            cx,
+        );
         let progress_text = match &self.progress {
             ProgressState::Pending => None,
             ProgressState::Running => Some(SharedString::from("Running; cancel is available")),
@@ -988,10 +998,35 @@ impl Render for PromptBar {
                             ),
                     )
                     .child(
-                        prompt_primary_control(
+                        prompt_control_shell(
                             (gpui::ElementId::from(root_id.clone()), "submit"),
-                            if running { "Cancel" } else { "Send" },
+                            if running {
+                                "Cancel".into()
+                            } else {
+                                "Send".into()
+                            },
+                            true,
                             cx,
+                        )
+                        .child(
+                            // Zero-height ghosts of both faces hold the slot
+                            // at the widest label, so Send↔Cancel swaps
+                            // without nudging the composer row.
+                            v_flex()
+                                .relative()
+                                .items_center()
+                                .children(["Send", "Cancel"].map(|ghost| {
+                                    div()
+                                        .h(gpui::rems(0.))
+                                        .overflow_hidden()
+                                        .opacity(0.)
+                                        .child(ghost)
+                                }))
+                                .child(div().opacity(submit_ack).child(if running {
+                                    "Cancel"
+                                } else {
+                                    "Send"
+                                })),
                         )
                         .when(running, |button| {
                             button.debug_selector(|| "prompt-bar-cancel-control".to_owned())

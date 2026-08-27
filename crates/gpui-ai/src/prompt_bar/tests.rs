@@ -784,6 +784,38 @@ fn constrained_width_keeps_the_primary_action_reachable(cx: &mut TestAppContext)
     );
 }
 
+#[gpui::test]
+fn the_submit_slot_holds_one_width_across_send_and_cancel(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let (harness, cx) =
+        cx.add_window_view(move |window, cx| PromptHarness::new(events, window, cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let send = cx
+        .debug_bounds("prompt-bar-send-control")
+        .expect("the send control should render")
+        .size
+        .width;
+
+    harness.update(cx, |harness, cx| {
+        harness.prompt.update(cx, |prompt, cx| {
+            prompt.set_progress(ProgressState::Running, cx)
+        });
+    });
+    cx.executor()
+        .advance_clock(crate::motion::MotionTokens::DEFAULT.quick() * 2);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let cancel = cx
+        .debug_bounds("prompt-bar-cancel-control")
+        .expect("the cancel control should render")
+        .size
+        .width;
+    assert_eq!(
+        cancel, send,
+        "Send and Cancel must swap inside one fixed slot, not resize the control"
+    );
+}
+
 #[test]
 fn active_suggestion_falls_back_safely_after_catalog_change() {
     let available = vec![SuggestionKey::Mention("remaining".into())];
