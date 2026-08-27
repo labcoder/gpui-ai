@@ -314,7 +314,10 @@ impl MotionTokens {
         press: SpringRole::new(Duration::from_millis(140), 1.0),
         selection: SpringRole::new(Duration::from_millis(220), 0.9),
         disclosure: SpringRole::new(Duration::from_millis(280), 1.0),
-        reflow: SpringRole::new(Duration::from_millis(300), 1.0),
+        // The response the shipped FilterTable reorder proved in 0.2.x,
+        // adopted as the role's value when that reorder became the role's
+        // first consumer.
+        reflow: SpringRole::new(Duration::from_millis(180), 1.0),
         shimmer: ProgressLoopSpec::SHIMMER,
         grid_sweep: ProgressLoopSpec::GRID_SWEEP,
         image_pulse: ProgressLoopSpec::IMAGE_PULSE,

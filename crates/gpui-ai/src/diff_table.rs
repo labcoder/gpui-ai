@@ -913,6 +913,60 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn deciding_a_proposal_acknowledges_and_a_loaded_diff_is_settled(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (table, cx) =
+            cx.add_window_view(|window, cx| DiffTable::new("decide", "Decide diff", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(640.), px(300.)));
+        let rows = |state: DiffProposalState| {
+            vec![
+                DiffRow::new("keep", "Keep", DiffChangeKind::Changed)
+                    .cells([DiffCell::changed("value", "Before", "After")]),
+                DiffRow::new("decide", "Decide", DiffChangeKind::Changed)
+                    .state(state)
+                    .cells([DiffCell::changed("value", "Old", "New")]),
+            ]
+        };
+        cx.update(|window, cx| {
+            table.update(cx, |table, cx| {
+                table.set_columns([DiffColumn::new("value", "Value")], window, cx);
+                table.set_rows(
+                    Progressive::complete(rows(DiffProposalState::Pending).into()),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        crate::motion::take_reveal_frame_requests();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a loaded diff presents its decisions settled"
+        );
+
+        cx.update(|window, cx| {
+            table.update(cx, |table, cx| {
+                table.set_rows(
+                    Progressive::complete(rows(DiffProposalState::Accepted).into()),
+                    window,
+                    cx,
+                );
+            });
+            window.draw(cx).clear(cx);
+        });
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "an accepted proposal must acknowledge its new decision"
+        );
+    }
+
     type CapturedControls = Arc<Mutex<Vec<(Option<Role>, accesskit::Node)>>>;
 
     struct DiffControlProbe {

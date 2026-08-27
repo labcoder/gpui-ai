@@ -1,6 +1,6 @@
 //! Controlled filter-table values and animated stable-row presentation.
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
     App, AppContext as _, Axis, Context, Div, EventEmitter, FocusHandle, Focusable,
@@ -15,6 +15,7 @@ use gpui_component::{
 
 use crate::{
     control::outlined_control_with_label,
+    motion::MotionTokens,
     records_table::{
         RecordsTable, RecordsTableEvent, record_columns_have_unique_ids,
         record_rows_have_unique_ids,
@@ -126,8 +127,6 @@ pub enum FilterTableEvent {
     },
 }
 
-const FILTER_REORDER_RESPONSE: Duration = Duration::from_millis(180);
-
 /// A controlled, virtualized records table with stable filter controls and reorder motion.
 ///
 /// Applications own filters, filtered row order, selection, sorting, and async
@@ -166,7 +165,13 @@ impl FilterTable {
         let records_label = label.clone();
         let records_table = cx.new(|cx| {
             let mut table = RecordsTable::new(records_id, records_label, window, cx);
-            table.set_row_reorder_response(Some(FILTER_REORDER_RESPONSE), cx);
+            // Visible-row reorder rides the policy's reflow role, read at
+            // construction: the proven response, replaceable with the
+            // policy before the table is built.
+            table.set_row_reorder_response(
+                Some(MotionTokens::read(cx).reflow_spring().response()),
+                cx,
+            );
             table
         });
         let records_subscription = cx.subscribe(&records_table, |this, _, event, cx| {

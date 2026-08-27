@@ -232,7 +232,7 @@ impl TableDelegate for RecordsDelegate {
         &mut self,
         row_ix: usize,
         col_ix: usize,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> impl gpui::IntoElement {
         let row = self.row(row_ix);
@@ -266,7 +266,7 @@ impl TableDelegate for RecordsDelegate {
 
         let content = cell
             .as_ref()
-            .map(|cell| record_cell_content(&scoped_identity, cell, cx))
+            .map(|cell| record_cell_content(&scoped_identity, cell, window, cx))
             .unwrap_or_else(|| div().into_any_element());
         let content = if col_ix == 0 {
             if let Some(row) = row {
@@ -513,7 +513,12 @@ pub(super) fn record_cell_accessible_value(
         .unwrap_or_default()
 }
 
-fn record_cell_content(identity: &str, cell: &RecordCell, cx: &mut App) -> gpui::AnyElement {
+fn record_cell_content(
+    identity: &str,
+    cell: &RecordCell,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::AnyElement {
     let tokens = cx.theme().semantic_tokens();
     match cell.kind {
         RecordCellKind::Text => TextView::markdown(
@@ -551,10 +556,28 @@ fn record_cell_content(identity: &str, cell: &RecordCell, cx: &mut App) -> gpui:
                 RecordStatusTone::Caution => cx.theme().warning,
                 RecordStatusTone::Critical => cx.theme().danger,
             };
+            // The status a cell is constructed with is presented settled; a
+            // status changed in place — a proposal decided, a run finishing
+            // — fades its new face in once at the quick tempo. The ordinal
+            // is a hash of the value, so any change plays exactly once and
+            // a colliding pair merely skips its acknowledgment.
+            let ordinal = cell
+                .value()
+                .bytes()
+                .fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| {
+                    (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+                });
+            let acknowledged = crate::motion::acknowledged_state(
+                gpui::ElementId::Name(format!("records-status-ack-{identity}").into()),
+                ordinal,
+                window,
+                cx,
+            );
             div()
                 .flex()
                 .items_center()
                 .gap(tokens.spacing.xs)
+                .opacity(acknowledged)
                 .child(
                     div()
                         .size(tokens.spacing.xs)

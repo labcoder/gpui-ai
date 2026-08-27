@@ -1093,6 +1093,24 @@ impl Render for ComparisonTable {
                                                 let handler_owner = owner.clone();
                                                 let selected = self.selected_item_id.as_ref()
                                                     == Some(&item.id);
+                                                // The selection a table mounts
+                                                // with is placed settled; a
+                                                // column the user selects fades
+                                                // its marker in once at the
+                                                // quick tempo.
+                                                let acknowledged =
+                                                    crate::motion::acknowledged_state(
+                                                        ElementId::Name(
+                                                            format!(
+                                                                "comparison-selected:{}:{}",
+                                                                self.id, item.id
+                                                            )
+                                                            .into(),
+                                                        ),
+                                                        selected as u64,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 let focused =
                                                     self.focused_item_id.as_ref() == Some(&item.id);
                                                 let state_label = match item.state {
@@ -1118,7 +1136,21 @@ impl Render for ComparisonTable {
                                                     |header| header.bg(cx.theme().accent),
                                                 )
                                                 .when(selected, |header| {
-                                                    header.border_2().border_color(cx.theme().ring)
+                                                    // An absolute overlay ring
+                                                    // takes no layout space, so
+                                                    // the marker cannot reflow
+                                                    // the header it outlines.
+                                                    header.child(
+                                                        div()
+                                                            .absolute()
+                                                            .inset_0()
+                                                            .border_2()
+                                                            .border_color(
+                                                                cx.theme()
+                                                                    .ring
+                                                                    .opacity(acknowledged),
+                                                            ),
+                                                    )
                                                 })
                                                 .child(
                                                     comparison_item_control(&self.id, item, cx)
@@ -1166,14 +1198,17 @@ impl Render for ComparisonTable {
                                                             .child(state),
                                                     )
                                                 })
-                                                .when(selected, |header| {
-                                                    header.child(
-                                                        div()
-                                                            .mt(tokens.spacing.xs)
-                                                            .text_token(tokens.typography.xs)
-                                                            .child("Selected"),
-                                                    )
-                                                })
+                                                .child(
+                                                    div()
+                                                        .mt(tokens.spacing.xs)
+                                                        .text_token(tokens.typography.xs)
+                                                        .opacity(if selected {
+                                                            acknowledged
+                                                        } else {
+                                                            0.0
+                                                        })
+                                                        .child("Selected"),
+                                                )
                                             }))
                                             .on_key_down(move |event, window, cx| {
                                                 let delta = match event.keystroke.key.as_str() {
@@ -1388,6 +1423,40 @@ mod tests {
     /// Worst-case content for a bounded shape: every item and every feature
     /// carries a description, so each row builds the most selectable Markdown
     /// views the contract allows, and every cell has a value to render.
+    #[gpui::test]
+    fn selecting_a_column_keeps_the_header_height_and_acknowledges_once(cx: &mut TestAppContext) {
+        let (table, cx) = measured_table(cx);
+        draw_shape(&table, cx, 4, 3);
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        redraw(&table, cx);
+        let header = |cx: &mut VisualTestContext| {
+            cx.debug_bounds("comparison-item-header:measured:item-1")
+                .expect("the header should render")
+        };
+        let unselected = header(cx);
+
+        crate::motion::take_reveal_frame_requests();
+        cx.update(|window, cx| {
+            table.update(cx, |table, cx| {
+                table.set_selected_item("item-1", window, cx);
+            });
+        });
+        redraw(&table, cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "selecting a column must acknowledge the new marker"
+        );
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        redraw(&table, cx);
+        let selected = header(cx);
+        assert_eq!(
+            selected.size.height, unselected.size.height,
+            "the Selected label lives in a reserved slot; selection must not reflow the header"
+        );
+    }
+
     fn bounded_snapshot(features: usize, items: usize) -> ComparisonSnapshot {
         let item_ids = (0..items)
             .map(|index| SharedString::from(format!("item-{index}")))
