@@ -4,16 +4,23 @@ use crate::StoryId;
 
 /// Equal number of steady-state draws retained for every representative viewport.
 pub const STEADY_DRAWS_PER_VIEWPORT: usize = 100;
-/// Driven Filter Table draws retained while its controlled projection is changing.
+/// Driven draws retained per driven viewport while its controlled state is
+/// being flipped — the Filter Table's projection, and the Thinking trace's
+/// disclosure reversed mid-flight.
 pub const FILTER_TRANSITION_DRAWS: usize = 40;
-/// Unmeasured Filter Table draws allowed after the final change before idle sampling.
+/// Unmeasured driven-viewport draws allowed after the final change before
+/// idle sampling.
 pub const FILTER_SETTLING_DRAWS: usize = 30;
+/// The viewports the gate drives through controlled-state flips, each held
+/// to the driven ordinary-motion budgets.
+pub const DRIVEN_VIEWPORTS: [StoryId; 2] = [StoryId::FilterTable, StoryId::Thinking];
 /// Maximum constructed/paint-eligible rows accepted for the 1,000-row Filter Table.
 pub const MAX_VISIBLE_FILTER_ROWS: usize = 64;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 10] = [
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 11] = [
     StoryId::Loading,
     StoryId::Orbs,
+    StoryId::Thinking,
     StoryId::StreamingText,
     StoryId::Approval,
     StoryId::PromptBar,
@@ -190,6 +197,7 @@ mod tests {
             [
                 StoryId::Loading,
                 StoryId::Orbs,
+                StoryId::Thinking,
                 StoryId::StreamingText,
                 StoryId::Approval,
                 StoryId::PromptBar,
@@ -204,6 +212,9 @@ mod tests {
         // driven budgets stay strictly inside the global one.
         for ambient in super::AMBIENT_VIEWPORTS {
             assert!(super::PERFORMANCE_VIEWPORTS.contains(&ambient));
+        }
+        for driven in super::DRIVEN_VIEWPORTS {
+            assert!(super::PERFORMANCE_VIEWPORTS.contains(&driven));
         }
         const {
             assert!(super::MAX_AMBIENT_P95_DRAW_NANOS < super::MAX_AMBIENT_P99_DRAW_NANOS);

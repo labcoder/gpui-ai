@@ -4037,6 +4037,14 @@ impl Gallery {
         cx.notify();
     }
 
+    /// Flips the Thinking trace's controlled disclosure — exactly the state
+    /// a reader's toggle flips — so the gate can reverse it mid-flight.
+    #[cfg(feature = "performance")]
+    pub fn set_performance_thinking_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        self.trace_open = open;
+        cx.notify();
+    }
+
     /// Replaces the controlled 1,000-row performance projection.
     #[cfg(feature = "performance")]
     pub fn set_performance_filter_projection(&mut self, filtered: bool, cx: &mut Context<Self>) {
