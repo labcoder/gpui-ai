@@ -68,8 +68,8 @@ impl OrbVariant {
     }
 
     /// Per-cell animation delay in milliseconds. Negative values seed a cell
-    /// partway into its cycle, which turns nine identical animations into one
-    /// traveling pattern.
+    /// partway into the shared cycle, which turns nine identical dots on one
+    /// clock into one traveling pattern.
     fn cell_delay(self, x: usize, y: usize) -> i64 {
         let mid = (N - 1) as f32 / 2.0;
         let dx = x as f32 - mid;
@@ -191,6 +191,20 @@ impl Styled for Orbs {
     }
 }
 
+/// Everything one dot needs per animation frame, computed once per render.
+///
+/// The whole lattice samples a single clock, so per-frame work is this table
+/// walked nine times — no per-dot animation state, and nothing allocated
+/// while the clock runs.
+struct LatticeDot {
+    home_x: Pixels,
+    home_y: Pixels,
+    gather: (f32, f32),
+    release: (f32, f32),
+    seeded_phase: f32,
+    color: gpui::Hsla,
+}
+
 impl RenderOnce for Orbs {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -210,77 +224,82 @@ impl RenderOnce for Orbs {
         // the lattice is centered regardless of diameter.
         let span = px((N - 1) as f32 * pitch.as_f32());
         let origin = (self.diameter - span - dot) / 2.0;
+        let radius = tokens.radius.full;
+
+        let dots: Vec<LatticeDot> = (0..N)
+            .flat_map(|y| (0..N).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let delay = variant.cell_delay(x, y);
+                // Negative delays seed partway into the cycle; the shared
+                // clock starts at zero, so shift into the positive domain by
+                // pre-advancing the phase.
+                let seeded_phase = if delay < 0 {
+                    (CYCLE_MS as i64 + delay % CYCLE_MS as i64) as f32 / CYCLE_MS as f32
+                } else {
+                    delay as f32 / CYCLE_MS as f32
+                };
+                // Swirl-settle: each dot gathers from a position rotated one
+                // way around the lattice center and releases to the mirror
+                // rotation, so the cycle keeps swirling in one direction
+                // instead of rewinding.
+                LatticeDot {
+                    home_x: origin + pitch * x,
+                    home_y: origin + pitch * y,
+                    gather: swirl_offset(x, y, -SWIRL_RADIANS, scale),
+                    release: swirl_offset(x, y, SWIRL_RADIANS, scale),
+                    seeded_phase,
+                    color: colors[(x + y) % colors.len()].opacity(0.55),
+                }
+            })
+            .collect();
 
         div()
             .relative()
             .size(self.diameter)
-            .children((0..N).flat_map(move |y| {
-                (0..N).map(move |x| {
-                    let color = colors[(x + y) % colors.len()].opacity(0.55);
-                    let delay = variant.cell_delay(x, y);
-                    // Negative delays seed partway into the cycle; GPUI
-                    // animations start at zero, so shift into the positive
-                    // domain by pre-advancing the phase.
-                    let seeded_phase = if delay < 0 {
-                        (CYCLE_MS as i64 + delay % CYCLE_MS as i64) as f32 / CYCLE_MS as f32
-                    } else {
-                        delay as f32 / CYCLE_MS as f32
-                    };
-                    // Swirl-settle: each dot gathers from a position rotated
-                    // one way around the lattice center and releases to the
-                    // mirror rotation, so the cycle keeps swirling in one
-                    // direction instead of rewinding.
-                    let (ax, ay) = swirl_offset(x, y, -SWIRL_RADIANS, scale);
-                    let (bx, by) = swirl_offset(x, y, SWIRL_RADIANS, scale);
-                    let home_x = origin + pitch * x;
-                    let home_y = origin + pitch * y;
-                    div()
-                        .absolute()
-                        .left(home_x)
-                        .top(home_y)
-                        .size(dot)
-                        .rounded(tokens.radius.full)
-                        .bg(color)
-                        .with_animation(
-                            ElementId::NamedInteger(
-                                format!("lattice-dot-{x}-{y}").into(),
-                                variant_index,
-                            ),
-                            // Frame demand: intentionally ambient. Orbs are
-                            // the "the model is alive" glyph, so every dot
-                            // animates for as long as the cluster is on
-                            // screen; there is no settled state to reach and
-                            // treating one as a bug would delete the
-                            // component's reason to exist. The caller decides
-                            // when the cluster is mounted. Reduced motion
-                            // holds delta at 0, leaving each dot at its
-                            // seeded phase — a still choreographed frame, not
-                            // nine identical dots.
-                            lattice.looping(),
-                            move |this, delta| {
-                                let phase = (delta + seeded_phase) % 1.0;
-                                // Eased triangle: 0→1→0 across the cycle so
-                                // each dot leaves home, swings through the
-                                // far rotation, and returns.
-                                let swing = if phase < 0.5 {
-                                    phase * 2.0
-                                } else {
-                                    2.0 - phase * 2.0
-                                };
-                                let eased = swing * swing * (3.0 - 2.0 * swing);
-                                let dx = ax + (bx - ax) * eased;
-                                let dy = ay + (by - ay) * eased;
-                                // One-beat swell rides on top of the travel:
-                                // brightest mid-swing, dimmest at rest.
-                                let swell = (phase * std::f32::consts::TAU).sin();
-                                this.left(home_x + px(dx))
-                                    .top(home_y + px(dy))
-                                    .opacity(0.35 + 0.5 * (0.5 + 0.5 * swell))
-                            },
-                        )
-                })
-            }))
             .refine_style(&self.style)
+            .with_animation(
+                ElementId::NamedInteger("orb-lattice".into(), variant_index),
+                // Frame demand: intentionally ambient. Orbs are the "the
+                // model is alive" glyph, so the lattice animates for as long
+                // as the cluster is on screen; there is no settled state to
+                // reach and treating one as a bug would delete the
+                // component's reason to exist. The caller decides when the
+                // cluster is mounted. One clock for all nine dots,
+                // phase-locked to the shared epoch so side-by-side clusters
+                // tick together. Reduced motion holds delta at 0, leaving
+                // each dot at its seeded phase — a still choreographed
+                // frame, not nine identical dots.
+                lattice.looping_synced(),
+                move |stage, delta| {
+                    stage.children(dots.iter().map(|spec| {
+                        let phase = (delta + spec.seeded_phase) % 1.0;
+                        // Eased triangle: 0→1→0 across the cycle so each dot
+                        // leaves home, swings through the far rotation, and
+                        // returns.
+                        let swing = if phase < 0.5 {
+                            phase * 2.0
+                        } else {
+                            2.0 - phase * 2.0
+                        };
+                        let eased = swing * swing * (3.0 - 2.0 * swing);
+                        let (ax, ay) = spec.gather;
+                        let (bx, by) = spec.release;
+                        let dx = ax + (bx - ax) * eased;
+                        let dy = ay + (by - ay) * eased;
+                        // One-beat swell rides on top of the travel:
+                        // brightest mid-swing, dimmest at rest.
+                        let swell = (phase * std::f32::consts::TAU).sin();
+                        div()
+                            .absolute()
+                            .left(spec.home_x + px(dx))
+                            .top(spec.home_y + px(dy))
+                            .size(dot)
+                            .rounded(radius)
+                            .bg(spec.color)
+                            .opacity(0.35 + 0.5 * (0.5 + 0.5 * swell))
+                    }))
+                },
+            )
     }
 }
 
@@ -308,6 +327,65 @@ fn swirl_offset(x: usize, y: usize, angle: f32, scale: f32) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, WindowHandle, size};
+
+    struct LatticeProbe {
+        variant: OrbVariant,
+    }
+
+    impl Render for LatticeProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().child(Orbs::new().variant(self.variant))
+        }
+    }
+
+    fn open(variant: OrbVariant, cx: &mut TestAppContext) -> WindowHandle<LatticeProbe> {
+        cx.update(crate::init);
+        let window = cx.open_window(size(px(80.), px(80.)), |_, _| LatticeProbe { variant });
+        cx.run_until_parked();
+        window
+    }
+
+    fn next_frame(window: &WindowHandle<LatticeProbe>, cx: &mut TestAppContext) -> usize {
+        let callbacks = window
+            .update(cx, |_, window, cx| window.simulate_next_frame(cx))
+            .expect("the lattice window should remain open");
+        cx.run_until_parked();
+        callbacks
+    }
+
+    #[gpui::test]
+    fn every_variant_runs_its_lattice_on_one_clock(cx: &mut TestAppContext) {
+        let window = open(OrbVariant::Radial, cx);
+        for variant in OrbVariant::ALL {
+            window
+                .update(cx, |probe, _, cx| {
+                    probe.variant = variant;
+                    cx.notify();
+                })
+                .expect("the lattice window should remain open");
+            cx.run_until_parked();
+            // The switch re-renders while the previous frame's callback is
+            // still queued; drain it, then hold the steady state.
+            next_frame(&window, cx);
+            assert_eq!(
+                next_frame(&window, cx),
+                1,
+                "{variant:?} must derive nine dots from one clock"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn reduced_motion_leaves_a_choreographed_still_lattice(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let window = open(OrbVariant::Radial, cx);
+        assert_eq!(
+            next_frame(&window, cx),
+            0,
+            "a held lattice schedules nothing; seeded phases are the still frame"
+        );
+    }
 
     #[test]
     fn radial_wavefront_radiates_from_center() {

@@ -140,6 +140,12 @@ impl ProgressLoopSpec {
     pub(crate) fn looping(self) -> Animation {
         repeating(self.period)
     }
+
+    /// This loop as a repeating animation phase-locked to the application's
+    /// shared epoch, for a region clock whose siblings should tick together.
+    pub(crate) fn looping_synced(self) -> Animation {
+        repeating_synced(self.period)
+    }
 }
 
 /// A repeating loop with nothing to complete. It runs for as long as its
@@ -171,6 +177,12 @@ impl AmbientLoopSpec {
     pub(crate) fn looping(self) -> Animation {
         repeating(self.period)
     }
+
+    /// This loop as a repeating animation phase-locked to the application's
+    /// shared epoch, for a region clock whose siblings should tick together.
+    pub(crate) fn looping_synced(self) -> Animation {
+        repeating_synced(self.period)
+    }
 }
 
 /// A loop over `period`.
@@ -181,6 +193,17 @@ impl AmbientLoopSpec {
 /// that check.
 fn repeating(period: Duration) -> Animation {
     Animation::new(period).repeat()
+}
+
+/// A loop over `period`, phase-locked against `App`'s shared animation epoch
+/// rather than the element's own mount instant.
+///
+/// For region clocks: two clusters mounted at different moments sample the
+/// same phase, so side-by-side instances tick together instead of beating
+/// against each other. The reduced-motion contract is unchanged — a held
+/// animation is held whichever clock it reads.
+fn repeating_synced(period: Duration) -> Animation {
+    Animation::new(period).repeat_synced()
 }
 
 /// A spring's feel, as the pair the ecosystem tunes springs by: the response
