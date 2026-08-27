@@ -1,138 +1,127 @@
 name: Pages
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-  # Pages has to be switched on by hand first (C-04). A manual trigger means
-  # the first live deploy does not need an empty commit to provoke it.
+  # Recovery path: explicitly rebuild and test main without waiting on CI.
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  # deploy-pages mints its deployment credential from an OIDC token.
-  id-token: write
 
-# Deliberately not ci.yml's group. The contended resource is the one live site,
-# not the branch, and a deploy already handing files to the CDN has to finish
-# rather than be cancelled by the next push.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build
+  source:
+    name: Select trusted publication
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      GPUI_AI_WEB_GPU: software
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      run-id: ${{ steps.source.outputs.run-id }}
+    steps:
+      - name: Reject superseded runs
+        id: source
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const sha = run?.head_sha ?? context.sha;
+            const { data: branch } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (sha !== branch.commit.sha) {
+              core.notice('Skipping superseded publication; main has moved.');
+              return;
+            }
+            core.setOutput('sha', sha);
+            core.setOutput('run-id', String(run?.id ?? context.runId));
+
+  manual:
+    name: Standalone build
+    needs: source
+    if: github.event_name == 'workflow_dispatch' && needs.source.outputs.sha != ''
+    uses: ./.github/workflows/build-site.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+
+  prepare:
+    name: Import verified publication
+    needs: [source, manual]
+    if: >-
+      always() && !cancelled() && needs.source.outputs.sha != '' &&
+      ((github.event_name == 'workflow_run' && needs.manual.result == 'skipped') ||
+      (github.event_name == 'workflow_dispatch' && needs.manual.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+    outputs:
+      artifact-name: ${{ format('github-pages-{0}', github.run_attempt) }}
     steps:
       - uses: actions/checkout@v7
-      - name: Set browser evidence paths
-        run: |
-          echo "GPUI_AI_WEB_EVIDENCE_ROOT=$RUNNER_TEMP/gpui-ai-web-evidence" >> "$GITHUB_ENV"
-          echo "GPUI_AI_WEB_ARTIFACTS=$RUNNER_TEMP/gpui-ai-web-evidence/captures" >> "$GITHUB_ENV"
-      # Its `base_path` output goes unused — site/vite.config.ts hardcodes
-      # `/gpui-ai/`. It is here, and this early, because it fails by name when
-      # Pages is not enabled for the repository, instead of letting the whole
-      # build run and then fail at the deploy.
-      - uses: actions/configure-pages@v6
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: nightly
-          target: wasm32-unknown-unknown
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            crates/gallery-web/www/package-lock.json
-            site/package-lock.json
-      - name: Install Linux system dependencies
-        # ci.yml's WASM job needs none of these because nothing there links for
-        # the host. This job also runs the catalog export and rustdoc, which
-        # build GPUI natively.
-        run: bash script/install-linux.sh
-      - name: Cache Cargo
-        uses: actions/cache@v6
+      - uses: actions/configure-pages@v6
+      - name: Download only the selected run's artifact
+        uses: actions/download-artifact@v8
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: pages-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-      # No binaryen step here either, for the reason ci.yml records at its own
-      # WASM job: `wasm-opt -Oz -all` returns a module the browser cannot
-      # instantiate. Publishing a gallery that fails to start would be worse
-      # than publishing a large one.
-      - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
-      - name: Install the pinned test browser
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xauth libvulkan1 mesa-vulkan-drivers
-          test -u "$CHROME_DEVEL_SANDBOX"
-          npm run setup:web-browser
-      - name: Install web host dependencies
-        run: npm ci --prefix crates/gallery-web/www
-      - name: Install site dependencies
-        # `npm run generate` highlights with Shiki and the site build runs Vite,
-        # both from site/node_modules, so this precedes either of them.
-        run: npm ci --prefix site
-      - name: Generate the site data
-        # The generated files are tracked and ci.yml gates their freshness, but
-        # that gate lives in another workflow and runs alongside this one.
-        # Regenerating here is what makes the published site match the commit it
-        # was built from, whatever state the checked-in copies are in.
-        run: npm run generate
-      - name: Build the API documentation
-        # Ahead of the gallery on purpose: build-docs.mjs fails when a
-        # catalogued component has no rustdoc page, and that is worth hearing in
-        # a couple of minutes rather than after the fat-LTO WASM build.
-        run: npm run build:docs
-      - name: Build the shared gallery artifact and the site
-        # build:web renders the posters between the gallery build and the site
-        # build, and the social cards after it: both need a browser, and both
-        # are derived output rather than checked-in files.
-        run: |
-          npm run build:wasm
-          npm run build:web
-          npm run report:wasm
-      # Pages runs independently of CI. A successful compile/capture alone
-      # must never authorize publishing a gallery with broken interactions.
-      - name: Test the gallery artifact before publishing it
-        run: npm run test:web:browser
-      - name: Upload browser evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pages-browser-evidence
-          path: ${{ runner.temp }}/gpui-ai-web-evidence/
-          retention-days: 7
-      - name: Copy the API documentation into the site
-        # site/scripts/build.mjs promotes a staging directory onto site/dist by
-        # rename, so anything written there beforehand is discarded — this has
-        # to follow the site build. `api/` is the path site/app/links.ts gives
-        # every rustdoc link, masthead and footer included.
-        run: |
-          mkdir -p site/dist/api
-          cp -r target/doc/. site/dist/api/
-      - name: Upload the site
+          name: pages-site
+          run-id: ${{ needs.source.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/pages-site
+      - name: Verify source, run, and file hashes
+        env:
+          SITE_SHA: ${{ needs.source.outputs.sha }}
+          SITE_RUN_ID: ${{ needs.source.outputs.run-id }}
+        run: node script/pages-artifact.mjs verify "$RUNNER_TEMP/pages-site"
+      - name: Package the verified bytes for Pages
         uses: actions/upload-pages-artifact@v5
         with:
-          path: site/dist
+          # Artifact names are immutable within a run. A packaging retry must
+          # not collide, and deploy-only retries retain this job's output.
+          name: ${{ format('github-pages-{0}', github.run_attempt) }}
+          path: ${{ runner.temp }}/pages-site
+          include-hidden-files: true
 
   deploy:
     name: Deploy
-    needs: build
+    needs: [source, prepare]
+    # The optional manual ancestor is skipped on automatic runs. Override
+    # skipped-ancestor propagation without allowing a failed import to deploy.
+    if: ${{ !cancelled() && needs.source.result == 'success' && needs.prepare.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
+      - name: Reject a run superseded while waiting for deployment
+        id: current
+        uses: actions/github-script@v8
+        env:
+          SITE_SHA: ${{ needs.source.outputs.sha }}
+        with:
+          script: |
+            const { data: branch } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            core.setOutput('current', String(branch.commit.sha === process.env.SITE_SHA));
+      - name: Deploy the verified artifact
         id: deployment
+        if: steps.current.outputs.current == 'true'
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: ${{ needs.prepare.outputs.artifact-name }}

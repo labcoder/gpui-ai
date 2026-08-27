@@ -4,9 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
-    # A tag is the one build nothing else follows, so it is the one that runs
-    # everything — see the capture steps in the WASM gallery job.
     tags: ["v*"]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -86,17 +87,8 @@ jobs:
       # Functional browser checks use a known Linux WebGPU adapter, not the
       # runner image's changing graphics defaults. Not a performance profile.
       GPUI_AI_WEB_GPU: software
-      # Ubuntu restricts user namespaces for downloaded Chrome binaries. Use
-      # the runner's installed sandbox helper, not --no-sandbox or a sysctl.
-      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
     steps:
       - uses: actions/checkout@v7
-      - name: Set browser evidence paths
-        # Runtime runner paths are not available in job-level env expressions.
-        # Keep evidence outside the Cargo cache so old runs cannot be uploaded.
-        run: |
-          echo "GPUI_AI_WEB_EVIDENCE_ROOT=$RUNNER_TEMP/gpui-ai-web-evidence" >> "$GITHUB_ENV"
-          echo "GPUI_AI_WEB_ARTIFACTS=$RUNNER_TEMP/gpui-ai-web-evidence/captures" >> "$GITHUB_ENV"
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
@@ -117,12 +109,7 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: wasm-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install the pinned test browser
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xauth libvulkan1 mesa-vulkan-drivers
-          test -u "$CHROME_DEVEL_SANDBOX"
-          npm run setup:web-browser
+      - uses: ./.github/actions/setup-web-browser
       # build-wasm.sh deliberately never runs wasm-opt, locally or here:
       # Binaryen 108 and 132 both produced non-instantiable artifacts.
       - name: Install wasm-bindgen CLI
@@ -144,31 +131,16 @@ jobs:
       - name: Test the built release gallery in the pinned browser
         run: npm run test:web:browser
 
-      # Two ways to build the site, differing only in whether the seventy
-      # posters and forty-three social cards are rendered. They cost about
-      # seven minutes of a browser drawing every story twice, and they are
-      # ordered around the site build rather than appended to it — the posters
-      # have to exist before Vite copies `site/public`, and the cards are
-      # rendered out of the built site's own stylesheet — so this is two paths
-      # rather than one path and an extra step.
-      #
-      # Full image generation is skipped on branches/PRs: the release gate
-      # captures representative posters/cards and smoke-tests every story and
-      # declared variant. Tags and Pages additionally render all the images.
-      - name: Build the site
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: npm run build:site
-
-      - name: Build the site, with every poster and social card
-        if: startsWith(github.ref, 'refs/tags/')
-        # Reuse the artifact just tested; do not rebuild it after the gate.
-        run: |
-          npm run generate:posters
-          npm run build:site
-          npm run generate:og
-
       - name: Report the WASM size
         run: npm run report:wasm
+      - name: Retain the tested gallery for publication assembly
+        uses: actions/upload-artifact@v7
+        with:
+          name: tested-gallery
+          path: crates/gallery-web/www/dist
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -176,3 +148,15 @@ jobs:
           name: wasm-browser-evidence
           path: ${{ runner.temp }}/gpui-ai-web-evidence/
           retention-days: 7
+          overwrite: true
+
+  pages-build:
+    name: Assemble publishable site
+    needs: [quality, native, wasm]
+    # Expensive posters/docs/site work begins only after every CI gate passes.
+    # Tags get a complete artifact too, but only main pushes auto-deploy it.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    uses: ./.github/workflows/build-site.yml
+    with:
+      source-sha: ${{ github.sha }}
+      gallery-artifact: tested-gallery

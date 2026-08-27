@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, lstat, mkdir, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
@@ -9,9 +9,9 @@ import config from "./web-test-config.json" with { type: "json" };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function run(command, args, stdio = "inherit") {
+function run(command, args, stdio = "inherit", env = process.env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio });
+    const child = spawn(command, args, { stdio, env });
     child.once("error", reject);
     child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`${command} failed: ${code}`)));
   });
@@ -61,7 +61,42 @@ export async function installBrowser() {
   return build;
 }
 
+export async function installLinuxSandbox(build) {
+  if (process.platform !== "linux") throw new Error("--linux-sandbox requires Linux");
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(build.version)) throw new Error("Invalid pinned Chrome version");
+  // CfT ships this helper itself. Do not assume the runner's unrelated Chrome
+  // installation contains /opt/google/chrome/chrome-sandbox or has its SUID bit.
+  const source = path.join(path.dirname(build.executable), "chrome_sandbox");
+  if (!(await lstat(source)).isFile()) throw new Error(`Chrome sandbox is not a regular file: ${source}`);
+  const directory = `/usr/local/lib/gpui-ai-chrome/${build.version}`;
+  const sandbox = `${directory}/chrome-sandbox`;
+  // Copy out of the writable checkout/cache before granting SUID. Neither the
+  // helper nor its parent is writable by the browser's unprivileged user.
+  await run("sudo", ["install", "-d", "-o", "root", "-g", "root", "-m", "0755", directory]);
+  await run("sudo", ["install", "-o", "root", "-g", "root", "-m", "4755", source, sandbox]);
+  await verifyLinuxSandbox(build, sandbox);
+  if (process.env.GITHUB_ENV) {
+    await appendFile(process.env.GITHUB_ENV, `CHROME_DEVEL_SANDBOX=${sandbox}\nCHROME_PATH=${build.executable}\n`);
+  }
+  return sandbox;
+}
+
+export async function verifyLinuxSandbox(build, sandbox) {
+  const installed = await lstat(sandbox);
+  if (!installed.isFile() || installed.uid !== 0 || (installed.mode & 0o7777) !== 0o4755) {
+    throw new Error(`Chrome sandbox must be a root-owned 4755 file: ${sandbox}`);
+  }
+  await run(process.execPath, [path.join(root, "script/check-browser-sandbox.mjs")], "inherit", {
+    ...process.env, CHROME_DEVEL_SANDBOX: sandbox, CHROME_PATH: build.executable,
+    GPUI_AI_WEB_CHROME_VERSION: build.version,
+  });
+  console.log(`Sandbox renderer probe passed: ${sandbox}`);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2);
+  if (args.length && (args.length !== 1 || args[0] !== "--linux-sandbox")) throw new Error("Usage: web-browser.mjs [--linux-sandbox]");
   const build = await installBrowser();
   console.log(`Chrome for Testing ${build.version}: ${build.executable}`);
+  if (args[0] === "--linux-sandbox") await installLinuxSandbox(build);
 }

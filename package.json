@@ -23,6 +23,7 @@
     "check:docs": "cargo rustdoc -p gpui-ai --lib -- -D warnings",
     "check:native": "cargo check --workspace",
     "check:scripts": "node script/test-run-bash.mjs && node script/test-release-notes.mjs && node script/test-docs-cleanup.mjs",
+    "check:pipeline": "node --test site/test/workflows.test.mjs site/test/pages-artifact.test.mjs",
     "release:notes": "node script/release-notes.mjs",
     "check:web": "npm --prefix crates/gallery-web/www test && npm run check:site && npm run check:web:release",
     "check:web:release": "node script/check-web-release.mjs",

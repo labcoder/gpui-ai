@@ -1,0 +1,20 @@
+name: Set up the sandboxed test browser
+description: Install the pinned Chrome and its own sandbox, then prove a renderer can start.
+runs:
+  using: composite
+  steps:
+    - name: Set isolated evidence paths
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/gpui-ai-web-evidence"
+        echo "GPUI_AI_WEB_EVIDENCE_ROOT=$RUNNER_TEMP/gpui-ai-web-evidence" >> "$GITHUB_ENV"
+        echo "GPUI_AI_WEB_ARTIFACTS=$RUNNER_TEMP/gpui-ai-web-evidence/captures" >> "$GITHUB_ENV"
+    - name: Install Linux browser dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb xauth libvulkan1 mesa-vulkan-drivers
+    - name: Install and smoke-test the pinned browser sandbox
+      shell: bash
+      run: |
+        npm run setup:web-browser -- --linux-sandbox 2>&1 | tee "$RUNNER_TEMP/gpui-ai-web-evidence/browser-setup.log"

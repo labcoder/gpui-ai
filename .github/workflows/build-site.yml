@@ -1,0 +1,106 @@
+name: Build publishable site
+
+on:
+  workflow_call:
+    inputs:
+      source-sha:
+        description: Exact trusted commit being published
+        required: true
+        type: string
+      gallery-artifact:
+        description: Tested gallery in this run; empty for a standalone manual build
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GPUI_AI_WEB_GPU: software
+      SITE_SHA: ${{ inputs.source-sha }}
+      SITE_RUN_ID: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source-sha }}
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: wasm32-unknown-unknown
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            crates/gallery-web/www/package-lock.json
+            site/package-lock.json
+      - name: Install Linux system dependencies
+        run: bash script/install-linux.sh
+      - name: Cache Cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: site-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - uses: ./.github/actions/setup-web-browser
+      - name: Install web dependencies
+        run: |
+          npm ci --prefix crates/gallery-web/www
+          npm ci --prefix site
+      - name: Reuse CI's tested gallery
+        if: inputs.gallery-artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.gallery-artifact }}
+          path: crates/gallery-web/www/dist
+      - name: Install wasm-bindgen for the standalone path
+        if: inputs.gallery-artifact == ''
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Build and test a standalone gallery
+        if: inputs.gallery-artifact == ''
+        run: |
+          npm --prefix crates/gallery-web/www test
+          npm run check:site
+          npm run build:wasm
+          npm --prefix crates/gallery-web/www run build
+          npm run test:web:browser
+      - name: Verify generated site data
+        run: |
+          npm run generate
+          git diff --exit-code
+      - name: Build API documentation
+        run: npm run build:docs
+      - name: Assemble the site from the tested gallery
+        # Do not call build:web: that would rebuild the host after its test.
+        run: |
+          npm run generate:posters
+          npm run build:site
+          npm run generate:og
+          mkdir -p site/dist/api
+          cp -r target/doc/. site/dist/api/
+          node script/pages-artifact.mjs seal site/dist
+      - name: Upload the complete publication
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-site
+          path: site/dist
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+          include-hidden-files: true
+      - name: Upload browser and capture evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-browser-evidence
+          path: ${{ runner.temp }}/gpui-ai-web-evidence/
+          retention-days: 7
+          overwrite: true

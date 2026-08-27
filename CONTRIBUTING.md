@@ -48,9 +48,15 @@ Windows/macOS use their normal graphics adapter. All profiles must produce
 nonblank canvas pixels; a silent WebGL fallback fails the WebGPU checks.
 On Ubuntu 23.10+ with restricted user namespaces, follow Chromium's
 [sandbox setup guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
-CI uses the already-installed Chrome sandbox helper through
-`CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox`; it does not disable
-the browser sandbox or change global AppArmor settings.
+CI installs the helper shipped with the pinned Chrome archive into a
+root-owned versioned directory under `/usr/local/lib/gpui-ai-chrome/`, verifies
+its ownership and mode, and starts a real renderer before compiling WASM.
+It does not assume `/opt/google/chrome/chrome-sandbox` exists, disable the
+browser sandbox, or change global AppArmor settings. On a Linux development
+machine with sudo access, `npm run setup:web-browser -- --linux-sandbox` runs
+the same setup and probe. CI exports the resulting helper path automatically;
+locally, set `CHROME_DEVEL_SANDBOX` to the path printed by setup for subsequent
+browser checks.
 
 `build:wasm` uses the locked dependency graph and **never invokes `wasm-opt`**,
 even if it is on `PATH`. Binaryen 108 and 132 produced non-instantiable gallery
@@ -94,9 +100,40 @@ npm run check:prepush # native quality gates + web tests + fresh release WASM/br
 
 `check:prepush` runs `check` followed by `check:web`. Compilation alone is not
 browser evidence. CI uses the same checks, naming compile and browser steps
-separately so failures identify the layer. Pages also tests its built artifact
-before publishing. Regenerate catalog/theme data with `npm run generate` when
-changing those inputs and review the generated diff; CI checks freshness.
+separately so failures identify the layer. Regenerate catalog/theme data with
+`npm run generate` when changing those inputs and review the generated diff;
+CI checks freshness.
+
+### Publication pipeline
+
+On a main push, Quality, the native matrix, and WASM/browser checks must all
+pass before CI assembles the publishable site. That assembly downloads the
+already-tested gallery: it does not compile WASM, rebuild its host, or rerun
+the browser suite. It generates the complete posters, social cards, API docs,
+and static site once, then uploads `pages-site` with source/run provenance and
+per-file hashes. Tag CI also retains a complete artifact without deploying it.
+
+Pages runs automatically only after successful main-push CI. It downloads
+`pages-site` from that exact run, verifies its identity and bytes, packages
+those files for Pages, and deploys without rebuilding. Failed/cancelled CI,
+forks, PRs, and superseded commits cannot publish. Publication is checked
+against current main again after any deployment-environment approval wait.
+Packaging retries use distinct artifact names; retrying deployment alone
+uses the artifact name saved by its successful preparation job.
+
+For recovery, use **Actions → Pages → Run workflow**, selecting **main**.
+This is an explicit standalone path: it uses the shared site builder but first
+compiles and tests a fresh gallery, without requiring a successful CI run.
+It still verifies generated data and the complete publication before deploying.
+Automatic runs never silently fall back to rebuilding a missing/expired artifact;
+rerun CI or choose the manual path.
+
+`npm run check:pipeline` exercises parsed workflow conditions, artifact reuse,
+manual/failure paths, and publication provenance/hash checks. These tests also
+run under `check:site`. They use test-only YAML and GitHub expression parsers;
+the shipped site has no new runtime dependency. Run `actionlint` on all workflow
+files too. A local test cannot exercise GitHub's hosted event delivery or OIDC
+deployment; the first pushed run remains the hosted integration check.
 
 For a shorter web-only run or a focused reproduction:
 
@@ -113,11 +150,12 @@ New `site/test/release/*.test.mjs` files join the full gate automatically.
 
 The gate writes a manifest (commit, dirty state, browser/profile, artifact
 hashes), JUnit results, screenshots, browser errors, and CDP command timings
-under `target/web-evidence/`. CI/Pages upload their own run's evidence even
-when tests fail; it is not restored from the Cargo cache. To compare a system
-browser, use `--system-browser` and optionally `CHROME_PATH`. That diagnostic
-run is not the pinned release profile. `GPUI_AI_WEB_GPU=default` selects the
-platform's normal adapter; Linux defaults to `software` in the release runner.
+under `target/web-evidence/`. CI and standalone Pages builds upload their own
+run's evidence even when tests fail; it is not restored from the Cargo cache.
+To compare a system browser, use `--system-browser` and optionally `CHROME_PATH`.
+That diagnostic run is not the pinned release profile. `GPUI_AI_WEB_GPU=default`
+selects the platform's normal adapter; Linux defaults to `software` in the
+release runner.
 
 Mobile coverage uses real touch events at 2x/3x density, verifies the backing
 store, checks an actual approval decision, and exercises edit/blur/re-entry.
