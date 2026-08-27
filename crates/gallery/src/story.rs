@@ -97,6 +97,16 @@ pub enum StoryId {
     /// compose inside someone else's docking, so there is nothing here for the
     /// website to name or size.
     DockComposition,
+    /// The motion lab: an instrument, not an exhibit.
+    ///
+    /// Same contract as [`StoryId::GuidedDemo`]: addressable, absent from the
+    /// catalog. It drives the shared motion primitives through their failure
+    /// cases — rapid interruption, mid-flight reversal, environment changes,
+    /// arrival cascades — with live readouts and a scrub, so a primitive that
+    /// jumps on reversal or schedules after settling is seen here rather
+    /// than shipped. A tool for tuning the motion policy has no place on a
+    /// site that documents components.
+    MotionLab,
 }
 
 /// Variants the Chat story switches between.
@@ -247,6 +257,7 @@ impl StoryId {
             Self::Queue => "queue",
             Self::SelectionActions => "selection-actions",
             Self::GuidedDemo => "guided-demo",
+            Self::MotionLab => "motion-lab",
             Self::ThemesTrio => "themes-trio",
             Self::DockComposition => "dock-composition",
         }
@@ -293,6 +304,7 @@ impl StoryId {
             Self::GuidedDemo => "Guided demo",
             Self::ThemesTrio => "Themes trio",
             Self::DockComposition => "Dock composition",
+            Self::MotionLab => "Motion lab",
         }
     }
 
@@ -303,8 +315,13 @@ impl StoryId {
     pub const fn meta(self) -> Option<StoryMeta> {
         Some(match self {
             // Neither the catalog view, the site hero, the themes-page
-            // specimen, nor the dock interoperability proof is a component.
-            Self::All | Self::GuidedDemo | Self::ThemesTrio | Self::DockComposition => {
+            // specimen, the dock interoperability proof, nor the motion
+            // instrument is a component.
+            Self::All
+            | Self::GuidedDemo
+            | Self::ThemesTrio
+            | Self::DockComposition
+            | Self::MotionLab => {
                 return None;
             }
             Self::Loading => StoryMeta {
@@ -647,6 +664,9 @@ impl FromStr for StoryId {
         if slug == Self::DockComposition.slug() {
             return Ok(Self::DockComposition);
         }
+        if slug == Self::MotionLab.slug() {
+            return Ok(Self::MotionLab);
+        }
 
         Self::ALL
             .iter()
@@ -707,6 +727,18 @@ mod tests {
         assert!(!StoryId::ALL.contains(&StoryId::DockComposition));
         assert!(StoryId::DockComposition.meta().is_none());
         assert!(StoryId::DockComposition.variants().is_empty());
+    }
+
+    #[test]
+    fn the_motion_lab_is_addressable_but_not_a_catalog_component() {
+        assert_eq!(StoryId::MotionLab.slug(), "motion-lab");
+        assert_eq!(StoryId::MotionLab.title(), "Motion lab");
+        assert_eq!("motion-lab".parse::<StoryId>(), Ok(StoryId::MotionLab));
+        // It is an instrument for tuning the motion policy, not a component,
+        // so the catalog and the website must not list or size it.
+        assert!(!StoryId::ALL.contains(&StoryId::MotionLab));
+        assert!(StoryId::MotionLab.meta().is_none());
+        assert!(StoryId::MotionLab.variants().is_empty());
     }
 
     #[test]

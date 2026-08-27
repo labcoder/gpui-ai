@@ -2104,6 +2104,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "gpui-ai",
+ "gpui-base",
  "gpui-component",
  "gpui-component-assets",
  "gpui_platform",

@@ -4,6 +4,7 @@
 pub mod catalog_performance;
 mod dock_composition;
 mod gallery;
+mod motion_lab;
 pub mod performance;
 mod sim;
 mod story;

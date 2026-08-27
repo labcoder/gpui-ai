@@ -35,6 +35,7 @@ gpui_platform.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
 gpui-ai.workspace = true
+gpui-base.workspace = true
 serde_json = { version = "1", optional = true }
 
 # Syntax highlighting for Markdown code fences in native CodeBlock stories.

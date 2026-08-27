@@ -5,6 +5,7 @@
 //! components only ever see data.
 
 use crate::dock_composition::DockCompositionStory;
+use crate::motion_lab::MotionLabStory;
 use crate::{StoryId, sim};
 
 use gpui::prelude::FluentBuilder as _;
@@ -301,6 +302,7 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::GuidedDemo
         | StoryId::ThemesTrio
         | StoryId::DockComposition
+        | StoryId::MotionLab
         | StoryId::Suggestions
         | StoryId::Attachments
         | StoryId::Artifact
@@ -4166,6 +4168,14 @@ impl Gallery {
                     DockCompositionStory::new,
                 );
                 self.section(story, "Dock composition", || dock, cx)
+            }
+            StoryId::MotionLab => {
+                let lab = window.use_keyed_state(
+                    ("motion-lab-story-state", self.generation),
+                    cx,
+                    MotionLabStory::new,
+                );
+                self.section(story, "Motion lab", || lab, cx)
             }
             StoryId::ThemesTrio => self.section(
                 story,

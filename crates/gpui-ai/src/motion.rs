@@ -289,6 +289,14 @@ impl Default for MotionTokens {
     }
 }
 
+/// How many items may take part in one arrival cascade. The bound is the
+/// bounded-choreography rule, not a tunable: a longer list arrives with the
+/// last beat rather than queueing behind it.
+const STAGGER_PARTICIPANTS: usize = 6;
+
+/// The most aggregate delay one cascade may spread across its participants.
+const STAGGER_TOTAL_CAP: Duration = Duration::from_millis(220);
+
 impl MotionTokens {
     /// The crate's own policy. Shipped effects keep their long-standing
     /// values by construction — each is defined as the spec constant it
@@ -471,6 +479,34 @@ impl MotionTokens {
     /// Orb lattice cycle tempo.
     pub(crate) const fn orb_lattice(&self) -> AmbientLoopSpec {
         self.orb_lattice
+    }
+
+    /// The delay item `index` of `arriving` newly visible items waits before
+    /// its arrival plays — the stagger role.
+    ///
+    /// The cascade decelerates: delays are spread with ease-out spacing, so
+    /// later items land closer together and the group resolves quickly
+    /// instead of trailing. At most six items take part, the whole cascade
+    /// spends at most 220 ms, and items past the participation bound arrive
+    /// with the last beat rather than after it — the bounded-choreography
+    /// caps, which are policy rather than configuration. The per-item beat
+    /// scales with [`with_stagger_beat`](Self::with_stagger_beat).
+    ///
+    /// Provisional like the other unconsumed roles: the motion lab is its
+    /// first consumer and its validator, and the shipped `reveal_staggered`
+    /// keeps its documented linear beats regardless.
+    pub fn arrival_stagger(&self, index: usize, arriving: usize) -> Duration {
+        let last = arriving.min(STAGGER_PARTICIPANTS).saturating_sub(1);
+        if last == 0 {
+            return Duration::ZERO;
+        }
+        let natural = self.stagger_beat * last as u32;
+        let total = natural.min(STAGGER_TOTAL_CAP);
+        let position = index.min(last) as f32 / last as f32;
+        // Ease-out spacing: the derivative shrinks as position grows, so
+        // each gap is smaller than the one before it.
+        let eased = position * (2.0 - position);
+        total.mul_f32(eased)
     }
 }
 
@@ -804,6 +840,29 @@ mod tests {
         assert!(tokens.press_spring().damping() >= 1.0);
         assert!(tokens.disclosure_spring().damping() >= 1.0);
         assert!(tokens.reflow_spring().damping() >= 1.0);
+    }
+
+    #[test]
+    fn arrival_stagger_decelerates_within_its_caps() {
+        let tokens = MotionTokens::DEFAULT;
+        let delays: Vec<_> = (0..STAGGER_PARTICIPANTS)
+            .map(|index| tokens.arrival_stagger(index, STAGGER_PARTICIPANTS))
+            .collect();
+        assert_eq!(delays[0], Duration::ZERO, "the first item leads at once");
+        let gaps: Vec<_> = delays.windows(2).map(|pair| pair[1] - pair[0]).collect();
+        for pair in gaps.windows(2) {
+            assert!(
+                pair[1] < pair[0],
+                "the cascade must decelerate: gaps {gaps:?}"
+            );
+        }
+        let last = *delays.last().expect("participants exist");
+        assert!(last <= STAGGER_TOTAL_CAP);
+        // Items past the participation bound arrive with the last beat, not
+        // after it — a hundred-item load does not queue a hundred delays.
+        assert_eq!(tokens.arrival_stagger(99, 100), last);
+        // A single arrival has no cascade to join.
+        assert_eq!(tokens.arrival_stagger(0, 1), Duration::ZERO);
     }
 
     #[gpui::test]
