@@ -1,7 +1,8 @@
 use gallery::{
     Gallery, GalleryTheme, StoryId, init, open_gallery_with_theme,
     performance::{
-        FILTER_SETTLING_DRAWS, FILTER_TRANSITION_DRAWS, MAX_P99_DRAW_NANOS,
+        AMBIENT_VIEWPORTS, FILTER_SETTLING_DRAWS, FILTER_TRANSITION_DRAWS,
+        MAX_AMBIENT_P95_DRAW_NANOS, MAX_AMBIENT_P99_DRAW_NANOS, MAX_P99_DRAW_NANOS,
         MAX_VISIBLE_FILTER_ROWS, MIN_DRAW_SAMPLES, PERFORMANCE_VIEWPORTS, PerformanceReport,
         SIXTY_HZ_DRAW_NANOS, STEADY_DRAWS_PER_VIEWPORT,
     },
@@ -252,6 +253,40 @@ async fn run_performance_measurement(
             transition_report.draw.max_nanos as f64 / 1_000_000.0
         ));
     }
+    // The ambient viewports' steady state is their driven state — the clocks
+    // never rest while mounted — so they answer to the driven-scenario
+    // budgets, not only the global gate. Counts are already printed above,
+    // even when the percentiles pass.
+    for ambient in AMBIENT_VIEWPORTS {
+        let viewport = PERFORMANCE_VIEWPORTS
+            .iter()
+            .position(|story| *story == ambient)
+            .expect("every ambient viewport is measured");
+        let ambient_report =
+            PerformanceReport::from_samples(viewport_draw_samples[viewport].clone(), Vec::new());
+        if ambient_report.draw.p95_nanos > MAX_AMBIENT_P95_DRAW_NANOS {
+            failures.push(format!(
+                "{} steady draw p95 {:.3}ms exceeds the 4.0ms driven budget",
+                ambient.title(),
+                ambient_report.draw.p95_nanos as f64 / 1_000_000.0
+            ));
+        }
+        if ambient_report.draw.p99_nanos > MAX_AMBIENT_P99_DRAW_NANOS {
+            failures.push(format!(
+                "{} steady draw p99 {:.3}ms exceeds the 6.0ms driven budget",
+                ambient.title(),
+                ambient_report.draw.p99_nanos as f64 / 1_000_000.0
+            ));
+        }
+        if ambient_report.draw.max_nanos > SIXTY_HZ_DRAW_NANOS {
+            failures.push(format!(
+                "{} steady max {:.3}ms exceeds the 16.667ms long-frame threshold",
+                ambient.title(),
+                ambient_report.draw.max_nanos as f64 / 1_000_000.0
+            ));
+        }
+    }
+
     if maximum_visible_filter_rows == 0 || maximum_visible_filter_rows >= MAX_VISIBLE_FILTER_ROWS {
         failures.push(format!(
             "Filter visible construction must be 1..{MAX_VISIBLE_FILTER_ROWS}; observed {maximum_visible_filter_rows}"

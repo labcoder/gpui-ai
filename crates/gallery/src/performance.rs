@@ -11,8 +11,9 @@ pub const FILTER_SETTLING_DRAWS: usize = 30;
 /// Maximum constructed/paint-eligible rows accepted for the 1,000-row Filter Table.
 pub const MAX_VISIBLE_FILTER_ROWS: usize = 64;
 /// Representative catalog viewports measured by the native frame-budget gate.
-pub const PERFORMANCE_VIEWPORTS: [StoryId; 9] = [
+pub const PERFORMANCE_VIEWPORTS: [StoryId; 10] = [
     StoryId::Loading,
+    StoryId::Orbs,
     StoryId::StreamingText,
     StoryId::Approval,
     StoryId::PromptBar,
@@ -22,6 +23,16 @@ pub const PERFORMANCE_VIEWPORTS: [StoryId; 9] = [
     StoryId::DiffTable,
     StoryId::ComparisonTable,
 ];
+/// The always-animating viewports: each is one single-clock region owner —
+/// the loader's grid, and five phase-locked orb lattices — whose steady state
+/// *is* its driven state, so these are held to the driven-scenario budgets
+/// below rather than only the global draw gate.
+pub const AMBIENT_VIEWPORTS: [StoryId; 2] = [StoryId::Loading, StoryId::Orbs];
+/// Driven ordinary-motion budget: 95th percentile, leaving headroom for the
+/// consumer application around the library's own work.
+pub const MAX_AMBIENT_P95_DRAW_NANOS: u64 = 4_000_000;
+/// Driven ordinary-motion budget: 99th percentile.
+pub const MAX_AMBIENT_P99_DRAW_NANOS: u64 = 6_000_000;
 /// Minimum number of measured draws required by the performance gate.
 pub const MIN_DRAW_SAMPLES: usize = PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT;
 /// Maximum accepted 99th-percentile draw time for a 120 Hz frame budget.
@@ -178,6 +189,7 @@ mod tests {
             super::PERFORMANCE_VIEWPORTS,
             [
                 StoryId::Loading,
+                StoryId::Orbs,
                 StoryId::StreamingText,
                 StoryId::Approval,
                 StoryId::PromptBar,
@@ -188,6 +200,15 @@ mod tests {
                 StoryId::ComparisonTable,
             ]
         );
+        // Every ambient viewport is one the gate actually measures, and the
+        // driven budgets stay strictly inside the global one.
+        for ambient in super::AMBIENT_VIEWPORTS {
+            assert!(super::PERFORMANCE_VIEWPORTS.contains(&ambient));
+        }
+        const {
+            assert!(super::MAX_AMBIENT_P95_DRAW_NANOS < super::MAX_AMBIENT_P99_DRAW_NANOS);
+            assert!(super::MAX_AMBIENT_P99_DRAW_NANOS < MAX_P99_DRAW_NANOS);
+        }
         assert_eq!(
             MIN_DRAW_SAMPLES,
             PERFORMANCE_VIEWPORTS.len() * STEADY_DRAWS_PER_VIEWPORT
