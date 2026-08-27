@@ -9,14 +9,15 @@
 use crate::{
     control::{composed_button, outlined_control_with_label},
     handlers::SharedHandler,
-    motion::{MotionTokens, breathing_with},
+    motion::MotionTokens,
     surface::icon_button,
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
+    AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
@@ -157,12 +158,17 @@ impl RenderOnce for VoiceControls {
                 VoiceState::Transcribing => ("Transcribing", "Transcribing", None),
             };
         let indicator: AnyElement = match state {
-            VoiceState::Listening { level } => breathing_with(
-                MotionTokens::read(cx).breathing(),
-                level_meter(level, cx),
-                (root_id.clone(), "level-breath"),
-            )
-            .into_any_element(),
+            VoiceState::Listening { level } => {
+                let field_debug = debug_id.clone();
+                div()
+                    .debug_selector(move || format!("voice-signal-{field_debug}"))
+                    .child(signal_field(
+                        ElementId::from((root_id.clone(), "signal-field")),
+                        level,
+                        cx,
+                    ))
+                    .into_any_element()
+            }
             VoiceState::Transcribing => Spinner::new().xsmall().into_any_element(),
             VoiceState::Idle | VoiceState::Speaking => div()
                 .flex_none()
@@ -299,27 +305,111 @@ impl RenderOnce for VoiceControls {
 
 /// Four bars that rise with the input level; heights stay in rems so the
 /// meter scales with the UI.
-fn level_meter(level: f32, cx: &App) -> gpui::Div {
+/// The listening signal field: six lobes shaped by the controlled level,
+/// pulsing on one shared clock.
+///
+/// Spike C's shipped outcome: plain layout primitives produce a clean
+/// field with no shader, no overdraw pass, and no background job. Lobe
+/// heights follow the application-owned level — sampled from the
+/// controlled snapshot, never smoothed here — and a single phase-locked
+/// animation drives a wave of opacity across the lobes, so the whole
+/// field costs one scheduled clock. Reduced motion holds the phase at
+/// zero, leaving a static graded envelope at the level's heights as the
+/// meaningful mark; the status text remains the semantic carrier.
+fn signal_field(id: ElementId, level: f32, cx: &App) -> impl IntoElement {
     let tokens = cx.theme().semantic_tokens();
+    let color = cx.theme().primary;
     let level = level.clamp(0.0, 1.0);
-    const WEIGHTS: [f32; 4] = [0.55, 1.0, 0.75, 0.45];
+    let gap = tokens.spacing.xxs;
+    let radius = tokens.radius.full;
+    const WEIGHTS: [f32; 6] = [0.35, 0.65, 1.0, 0.85, 0.55, 0.3];
     h_flex()
         .flex_none()
         .items_end()
         .h(rems(0.9))
-        .gap(tokens.spacing.xxs)
-        .children(WEIGHTS.iter().map(|weight| {
-            div()
-                .w(rems(0.18))
-                .h(rems(0.25 + 0.65 * level * weight))
-                .rounded(tokens.radius.full)
-                .bg(cx.theme().primary)
-        }))
+        .gap(gap)
+        .with_animation(
+            id,
+            // Frame demand: active while the state stays Listening — the
+            // field is that state's indicator and settles by the state
+            // changing, which unmounts it. Phase-locked to the shared
+            // epoch, so a field remounted mid-session rejoins the beat.
+            MotionTokens::read(cx).breathing().looping_synced(),
+            move |field, delta| {
+                field.children(WEIGHTS.iter().enumerate().map(|(index, weight)| {
+                    let phase = index as f32 / WEIGHTS.len() as f32;
+                    let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
+                    div()
+                        .w(rems(0.14))
+                        .h(rems(0.25 + 0.65 * level * weight))
+                        .rounded(radius)
+                        .bg(color)
+                        .opacity(0.35 + 0.65 * wave)
+                }))
+            },
+        )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
+
+    struct VoiceProbe {
+        state: VoiceState,
+    }
+
+    impl Render for VoiceProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(420.))
+                .h(px(160.))
+                .child(VoiceControls::new("probe-voice", self.state).speakable(true))
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn the_signal_field_exists_exactly_while_listening(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| VoiceProbe {
+            state: VoiceState::Listening { level: 0.6 },
+        });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        assert!(
+            cx.debug_bounds("voice-signal-probe-voice").is_some(),
+            "listening must show the signal field"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.state = VoiceState::Idle;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            cx.debug_bounds("voice-signal-probe-voice").is_none(),
+            "leaving Listening must unmount the field, and its clock with it"
+        );
+    }
+
+    #[gpui::test]
+    fn reduced_motion_keeps_a_static_field(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let (_, cx) = cx.add_window_view(|_, _| VoiceProbe {
+            state: VoiceState::Listening { level: 0.6 },
+        });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        assert!(
+            cx.debug_bounds("voice-signal-probe-voice").is_some(),
+            "reduced motion keeps the static envelope as the meaningful mark"
+        );
+    }
 
     #[test]
     fn states_describe_themselves() {
