@@ -690,8 +690,11 @@ fn note_reveal_frame_request() {
 }
 
 /// Reveal frames requested since the last call, and resets the counter.
+///
+/// `pub(crate)` so component tests can audit their own reveal demand — a
+/// loaded trace proving it revealed nothing reads this, not a proxy.
 #[cfg(test)]
-fn take_reveal_frame_requests() -> usize {
+pub(crate) fn take_reveal_frame_requests() -> usize {
     REVEAL_FRAME_REQUESTS.with(|count| count.replace(0))
 }
 

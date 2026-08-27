@@ -10,7 +10,7 @@
 use crate::{
     control::composed_button,
     handlers::Handler,
-    motion::{Shimmer, reveal},
+    motion::{MotionTokens, Shimmer, reveal, reveal_progress},
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -19,6 +19,8 @@ use gpui::{
     RenderOnce, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _,
 };
+use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
     text::TextView, v_flex,
@@ -42,6 +44,7 @@ pub enum StepStatus {
 /// One step of a reasoning trace: a title plus optional detail.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThinkingStep {
+    id: Option<SharedString>,
     title: SharedString,
     detail: Option<SharedString>,
     status: StepStatus,
@@ -51,10 +54,23 @@ impl ThinkingStep {
     /// Creates a step with a short title.
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
+            id: None,
             title: title.into(),
             detail: None,
             status: StepStatus::default(),
         }
+    }
+
+    /// Names the step's stable identity.
+    ///
+    /// Motion is keyed by this ID, so a step keeps its completion
+    /// acknowledgment and its arrival across insertion and reordering.
+    /// Without one the step falls back to its position, which is stable only
+    /// while nothing is inserted above it — a legacy snapshot renders fine,
+    /// but only identified steps may ever animate a reorder.
+    pub fn id(mut self, id: impl Into<SharedString>) -> Self {
+        self.id = Some(id.into());
+        self
     }
 
     /// Adds detail rendered as muted markdown under the title.
@@ -67,6 +83,15 @@ impl ThinkingStep {
     pub fn status(mut self, status: StepStatus) -> Self {
         self.status = status;
         self
+    }
+
+    /// The key this step's motion is stable under: its declared identity, or
+    /// its position for legacy snapshots.
+    fn motion_key(&self, trace_id: &SharedString, channel: &str, ix: usize) -> ElementId {
+        match &self.id {
+            Some(id) => ElementId::Name(format!("{trace_id}-step-{id}-{channel}").into()),
+            None => ElementId::NamedInteger(format!("{trace_id}-step-{channel}").into(), ix as u64),
+        }
     }
 }
 
@@ -184,6 +209,21 @@ struct LivePreview {
     revision: Option<u64>,
     /// Whether the user was at the tail when the preview last rendered.
     follow: bool,
+    /// Whether the preview has taken its first roll call. The steps present
+    /// then are history and join the seen set without motion; only steps
+    /// whose identity appears later are fresh.
+    primed: bool,
+    /// Every step identity the preview has shown. Keyed by the step's motion
+    /// key, so an identified step stays seen wherever it moves, while an
+    /// unidentified one is only as stable as its position — the documented
+    /// fallback limit.
+    seen: std::collections::HashSet<ElementId>,
+    /// The arrival delay each fresh step was assigned when it first
+    /// appeared. Frozen at assignment: a later batch must not re-space a
+    /// cascade already playing. A fresh step that arrived while the reader
+    /// was away from the tail, or under a body fade that owns the
+    /// acknowledgment, gets no entry and appears at rest.
+    delays: std::collections::HashMap<ElementId, Duration>,
 }
 
 impl LivePreview {
@@ -192,6 +232,9 @@ impl LivePreview {
             scroll: ScrollHandle::new(),
             revision: None,
             follow: true,
+            primed: false,
+            seen: std::collections::HashSet::new(),
+            delays: std::collections::HashMap::new(),
         }
     }
 
@@ -204,6 +247,41 @@ impl LivePreview {
         let arrived = self.revision != Some(revision);
         self.revision = Some(revision);
         arrived && self.follow
+    }
+
+    /// Takes the roll call of this render's step identities and assigns one
+    /// decelerating cascade to the identities not seen before.
+    ///
+    /// The first roll call is history and joins at rest. Later batches
+    /// cascade only when `assign` and the reader is following: the caller
+    /// passes `assign` only while the disclosure rests fully open, because
+    /// during a body fade-in the fade owns the acknowledgment — one dominant
+    /// signal, never two. Reasoning that streams in behind a reader who
+    /// scrolled away likewise appears at rest when they return. Either way
+    /// the identity is marked seen, so nothing retro-animates.
+    fn note_steps(
+        &mut self,
+        keys: impl Iterator<Item = ElementId>,
+        assign: bool,
+        tokens: &MotionTokens,
+    ) {
+        let fresh: Vec<ElementId> = keys.filter(|key| !self.seen.contains(key)).collect();
+        let primed = std::mem::replace(&mut self.primed, true);
+        let cascade = primed && assign && self.follow;
+        let batch = fresh.len();
+        for (position, key) in fresh.into_iter().enumerate() {
+            if cascade {
+                self.delays
+                    .insert(key.clone(), tokens.arrival_stagger(position, batch));
+            }
+            self.seen.insert(key);
+        }
+    }
+
+    /// The arrival delay this step identity was assigned, or `None` for one
+    /// that appears at rest.
+    fn arrival_delay(&self, key: &ElementId) -> Option<Duration> {
+        self.delays.get(key).copied()
     }
 }
 
@@ -229,6 +307,7 @@ fn content_revision(revision: u64, trace: &ThinkingTrace) -> u64 {
     trace.prose.hash(&mut hasher);
     trace.thought_for.hash(&mut hasher);
     for step in &trace.steps {
+        step.id.hash(&mut hasher);
         step.title.hash(&mut hasher);
         step.detail.hash(&mut hasher);
         discriminant(&step.status).hash(&mut hasher);
@@ -247,11 +326,6 @@ impl RenderOnce for Thinking {
             (_, Some(duration)) => format!("Thought for {:.0}s", duration.as_secs_f64()).into(),
             _ => "Thoughts".into(),
         };
-        let chevron = if open {
-            IconName::ChevronDown
-        } else {
-            IconName::ChevronRight
-        };
         let event = ThinkingEvent::Toggled {
             id: self.id.clone(),
             open: !open,
@@ -262,16 +336,69 @@ impl RenderOnce for Thinking {
         };
         let trace_id = self.id.clone();
         let root_id = ElementId::from(self.id.clone());
-        // A collapsed trace has no preview to follow, so it keeps no follow
-        // state either: reopening starts again on the newest reasoning.
-        let live_revision = (live && open).then(|| content_revision(self.revision, &self.trace));
+        let motion = MotionTokens::read(cx).clone();
+
+        // The disclosure is one retargetable channel from closed to open.
+        // Rapid toggling resumes from the current sample rather than
+        // restarting, streamed content leaves a settled channel untouched,
+        // and reduced motion snaps to the target — GPUI's transition
+        // contract, not per-component policy. The body cross-fades with a
+        // small token-derived lift instead of animating its height: the
+        // trace is rich markdown, and measuring it per frame is the layout
+        // loop the motion plan forbids.
+        //
+        // Frame demand: only while the channel is travelling. Settled open
+        // it requests nothing; settled closed the body unmounts below.
+        let disclosure = transition(
+            (root_id.clone(), "disclosure"),
+            if open { 1.0f32 } else { 0.0 },
+            Transition::new(motion.standard()).ease(ease_out_cubic),
+            window,
+            cx,
+        );
+        let showing = open || disclosure > 0.0;
+
+        // Observed before the steps render, so a batch that arrived this
+        // frame has its cascade assigned by the time each row asks for its
+        // delay. A collapsed trace has no preview to follow, so it keeps no
+        // follow state either: reopening starts again on the newest
+        // reasoning.
+        let preview = (live && showing).then(|| {
+            let revision = content_revision(self.revision, &self.trace);
+            let preview = window.use_keyed_state((root_id.clone(), "live-follow"), cx, |_, _| {
+                LivePreview::new()
+            });
+            let (scroll, follow) = preview.update(cx, |state, _| {
+                let follow = state.observe(revision, tokens.typography.sm.line_height);
+                state.note_steps(
+                    self.trace
+                        .steps
+                        .iter()
+                        .enumerate()
+                        .map(|(ix, step)| step.motion_key(&trace_id, "arrive", ix)),
+                    disclosure >= 1.0,
+                    &motion,
+                );
+                (state.scroll.clone(), follow)
+            });
+            (preview, scroll, follow)
+        });
+
         let interactive = self.on_event.is_some();
         let header = h_flex()
             .items_center()
             .gap(tokens.spacing.xs)
             .text_token(tokens.typography.sm)
             .text_color(cx.theme().muted_foreground)
-            .when(interactive, |this| this.child(Icon::new(chevron).xsmall()))
+            .when(interactive, |this| {
+                // One chevron, rotated by the disclosure channel — the same
+                // sample the body fades on, so the two can never disagree.
+                this.child(
+                    Icon::new(IconName::ChevronRight)
+                        .xsmall()
+                        .rotate(gpui::percentage(0.25 * disclosure)),
+                )
+            })
             .child(
                 Shimmer::new((root_id.clone(), "title"), title.clone())
                     .active(live)
@@ -321,19 +448,32 @@ impl RenderOnce for Thinking {
                         .xsmall()
                         .color(cx.theme().info)
                         .into_any_element(),
-                    // Completion settles in with a one-shot reveal; the
-                    // step keeps its stable id, so re-renders never replay it.
+                    // Completion settles into the fixed indicator slot with a
+                    // one-shot reveal, keyed by the step's declared identity
+                    // where it has one. The positional fallback is stable
+                    // only while nothing is inserted above the step — an
+                    // insertion shifts every later index and would replay
+                    // acknowledgments on the wrong rows — which is why
+                    // unidentified steps never animate reordering.
                     StepStatus::Done => reveal(
                         div()
                             .size_1p5()
                             .rounded(tokens.radius.full)
                             .bg(cx.theme().success),
-                        ElementId::NamedInteger(format!("{trace_id}-step-done").into(), ix as u64),
+                        step.motion_key(&trace_id, "done", ix),
                         window,
                         cx,
                     )
                     .into_any_element(),
                 };
+                // Freshly streamed steps settle in on the batch's assigned
+                // cascade; history and steps that arrived behind a scrolled
+                // reader carry no delay entry and render at rest.
+                let arrival_key = step.motion_key(&trace_id, "arrive", ix);
+                let arrival = preview
+                    .as_ref()
+                    .and_then(|(state, ..)| state.read(cx).arrival_delay(&arrival_key))
+                    .map(|delay| reveal_progress(arrival_key.clone(), delay, window, cx));
                 v_flex()
                     .id((trace_id.clone(), ix))
                     .role(Role::ListItem)
@@ -367,6 +507,10 @@ impl RenderOnce for Thinking {
                                 ),
                         )
                     })
+                    .when_some(arrival, |this, progress| {
+                        this.opacity(progress)
+                            .top(tokens.spacing.xxs * (1.0 - progress))
+                    })
             }))
             .when_some(failed.clone(), |this, reason| {
                 this.child(
@@ -381,24 +525,14 @@ impl RenderOnce for Thinking {
         // While reasoning streams, the body is a bounded live preview that
         // follows its newest content; it still scrolls, and the full trace
         // renders unbounded once the state settles.
-        let body = match live_revision {
-            Some(revision) => {
-                let preview =
-                    window.use_keyed_state((root_id.clone(), "live-follow"), cx, |_, _| {
-                        LivePreview::new()
-                    });
+        let body = match &preview {
+            Some((_, scroll, follow)) => {
                 // GPUI applies the request during this preview's own prepaint,
                 // so it has to be made while the tree is built — a prepaint or
                 // next-frame hook lands a frame late. It is never
                 // unconditional: it takes content this preview has not shown
                 // yet plus a user who has not scrolled away from the tail.
-                let (scroll, follow) = preview.update(cx, |state, _| {
-                    (
-                        state.scroll.clone(),
-                        state.observe(revision, tokens.typography.sm.line_height),
-                    )
-                });
-                if follow {
+                if *follow {
                     scroll.scroll_to_bottom();
                 }
                 div()
@@ -406,7 +540,7 @@ impl RenderOnce for Thinking {
                     .debug_selector(|| format!("thinking-live-preview-{trace_id}"))
                     .max_h(tokens.spacing.xxl * 4.0)
                     .overflow_y_scroll()
-                    .track_scroll(&scroll)
+                    .track_scroll(scroll)
                     .child(body)
                     .into_any_element()
             }
@@ -420,7 +554,18 @@ impl RenderOnce for Thinking {
             .when_some(failed, |this, reason| this.aria_description(reason))
             .gap(tokens.spacing.xs)
             .child(toggle)
-            .when(open, |this| this.child(body))
+            .when(showing, |this| {
+                // Mounted for as long as the cross-fade needs it: a closing
+                // body fades and lifts away, then unmounts when the channel
+                // settles at zero. Semantics do not wait for the fade —
+                // aria_expanded above tracks the controlled state.
+                this.child(
+                    div()
+                        .opacity(disclosure)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .child(body),
+                )
+            })
             .refine_style(&self.style)
     }
 }
@@ -534,6 +679,14 @@ mod tests {
         draw(cx);
     }
 
+    /// Advances past the disclosure cross-fade and draws the settled frame.
+    fn settle_disclosure(cx: &mut VisualTestContext) {
+        cx.executor()
+            .advance_clock(MotionTokens::DEFAULT.standard() * 2);
+        draw(cx);
+        draw(cx);
+    }
+
     /// Wheels the preview back toward earlier reasoning; positive GPUI offsets
     /// move toward the top of the content.
     fn scroll_up(cx: &mut VisualTestContext, distance: f32) {
@@ -601,8 +754,13 @@ mod tests {
 
         set_open(&probe, cx, false);
         assert!(
+            cx.debug_bounds(PREVIEW).is_some(),
+            "a closing body cross-fades away rather than vanishing"
+        );
+        settle_disclosure(cx);
+        assert!(
             cx.debug_bounds(PREVIEW).is_none(),
-            "a collapsed trace renders no live preview"
+            "a collapsed trace renders no live preview once the fade settles"
         );
 
         // Reasoning keeps streaming behind the collapsed disclosure.
@@ -612,6 +770,174 @@ mod tests {
         });
         set_open(&probe, cx, true);
         assert_pinned_to_tail(cx, "reopening a live trace lands on the newest reasoning");
+    }
+
+    #[gpui::test]
+    fn ten_rapid_toggles_keep_the_body_continuous(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| TraceProbe::running());
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        // Faster than the cross-fade can finish: the body must stay mounted
+        // the whole burst, retargeting from its current sample, never
+        // flashing away and back.
+        for toggle in 0..10 {
+            probe.update(cx, |probe, cx| {
+                probe.open = !probe.open;
+                cx.notify();
+            });
+            cx.executor().advance_clock(Duration::from_millis(70));
+            draw(cx);
+            assert!(
+                cx.debug_bounds(BODY).is_some(),
+                "toggle {toggle} must find the body mid-fade, not unmounted"
+            );
+        }
+
+        // Ten flips from open land back on open; close deliberately, and
+        // once the channel settles the body is gone for real.
+        set_open(&probe, cx, false);
+        settle_disclosure(cx);
+        assert!(
+            cx.debug_bounds(BODY).is_none(),
+            "a settled closed disclosure unmounts its body"
+        );
+    }
+
+    #[gpui::test]
+    fn streamed_reasoning_does_not_replay_the_open_transition(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| TraceProbe::running());
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        settle_disclosure(cx);
+        // The preview box, not the body: the body scrolls inside it as the
+        // tail is followed, while the box only moves if the disclosure lift
+        // re-runs — which is exactly what must not happen.
+        let settled_top = cx
+            .debug_bounds(PREVIEW)
+            .expect("the settled preview should render")
+            .top();
+
+        append_step(&probe, cx);
+        draw(cx);
+        assert_eq!(
+            cx.debug_bounds(PREVIEW)
+                .expect("the streaming preview should render")
+                .top(),
+            settled_top,
+            "appended reasoning must not re-run the disclosure lift"
+        );
+    }
+
+    #[gpui::test]
+    fn fresh_steps_animate_and_history_does_not(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| TraceProbe::running());
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        settle_disclosure(cx);
+        crate::motion::take_reveal_frame_requests();
+
+        // History shown at mount stays at rest: no reveal demand.
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "steps the preview opened with must not animate arrival"
+        );
+
+        // A step streamed while following the tail settles in.
+        append_step(&probe, cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "a freshly streamed step must acknowledge its arrival"
+        );
+
+        // Let it finish, then stream one in behind a scrolled-away reader:
+        // choreography is bounded to the live tail.
+        settle_disclosure(cx);
+        scroll_up(cx, 80.);
+        crate::motion::take_reveal_frame_requests();
+        append_step(&probe, cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "reasoning that streams in behind the reader appears at rest"
+        );
+    }
+
+    #[gpui::test]
+    fn an_identified_step_keeps_its_acknowledgment_across_insertion(cx: &mut TestAppContext) {
+        struct IdentityProbe {
+            leading: usize,
+        }
+
+        impl Render for IdentityProbe {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let steps = (0..self.leading)
+                    .map(|ix| ThinkingStep::new(format!("Inserted {ix}")))
+                    .chain([ThinkingStep::new("Anchored")
+                        .id("anchored")
+                        .status(StepStatus::Done)]);
+                // Settled, so the arrival machinery is out of the picture and
+                // the only reveal in play is the completion acknowledgment
+                // whose keying is under test.
+                let trace = Progressive::complete(ThinkingTrace::new().steps(steps));
+                div()
+                    .w(px(320.))
+                    .h(px(480.))
+                    .child(Thinking::new(TRACE_ID, &trace).open(true))
+            }
+        }
+
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| IdentityProbe { leading: 0 });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        settle_disclosure(cx);
+        // Let the completion reveal play out entirely.
+        cx.executor().advance_clock(Duration::from_secs(2));
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+
+        // Insert a step above: the identified step's index shifts, but its
+        // declared identity keys the acknowledgment, so nothing replays.
+        // (The positional fallback would shift keys here and replay the
+        // reveal on the wrong row — the failure the ID exists to prevent.)
+        probe.update(cx, |probe, cx| {
+            probe.leading = 1;
+            cx.notify();
+        });
+        draw(cx);
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "an identified step must not replay completion when its index shifts"
+        );
+    }
+
+    #[gpui::test]
+    fn reduced_motion_opens_and_closes_without_travel(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::init(cx);
+            cx.set_reduce_motion(true);
+        });
+        let (probe, cx) = cx.add_window_view(|_, _| TraceProbe::running());
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        assert!(
+            cx.debug_bounds(BODY).is_some(),
+            "reduced motion still opens the body — immediately"
+        );
+
+        set_open(&probe, cx, false);
+        assert!(
+            cx.debug_bounds(BODY).is_none(),
+            "reduced motion closes without a fade to wait out"
+        );
     }
 
     #[gpui::test]
@@ -709,6 +1035,70 @@ mod tests {
             "a re-render of the same content never scrolls"
         );
         assert!(preview.observe(8, slack), "appended reasoning follows");
+    }
+
+    #[test]
+    fn arrival_delays_belong_to_fresh_followed_identities_only() {
+        let tokens = MotionTokens::DEFAULT;
+        let key = |name: &str| ElementId::Name(format!("step-{name}").into());
+        let keys = |names: &[&str]| names.iter().map(|name| key(name)).collect::<Vec<_>>();
+        let mut preview = LivePreview::new();
+
+        // The first roll call is history: seen, at rest.
+        preview.note_steps(keys(&["a", "b"]).into_iter(), true, &tokens);
+        assert_eq!(preview.arrival_delay(&key("a")), None);
+        assert_eq!(preview.arrival_delay(&key("b")), None);
+
+        // One appended identity is a batch of one — acknowledged, no cascade.
+        preview.note_steps(keys(&["a", "b", "c"]).into_iter(), true, &tokens);
+        assert_eq!(preview.arrival_delay(&key("c")), Some(Duration::ZERO));
+
+        // A three-identity batch cascades, decelerating, and the assignment
+        // is frozen: a later roll call must not re-space it.
+        preview.note_steps(
+            keys(&["a", "b", "c", "d", "e", "f"]).into_iter(),
+            true,
+            &tokens,
+        );
+        let batch: Vec<_> = ["d", "e", "f"]
+            .iter()
+            .map(|name| preview.arrival_delay(&key(name)))
+            .collect();
+        assert_eq!(batch[0], Some(Duration::ZERO));
+        assert!(batch[1] < batch[2], "the cascade is ordered");
+        preview.note_steps(
+            keys(&["a", "b", "c", "d", "e", "f", "g"]).into_iter(),
+            true,
+            &tokens,
+        );
+        assert_eq!(
+            ["d", "e", "f"]
+                .iter()
+                .map(|name| preview.arrival_delay(&key(name)))
+                .collect::<Vec<_>>(),
+            batch,
+            "an earlier batch keeps the delays it was assigned"
+        );
+
+        // An identity that arrives while the reader is away from the tail
+        // appears at rest when they return.
+        preview.follow = false;
+        preview.note_steps(
+            keys(&["a", "b", "c", "d", "e", "f", "g", "h"]).into_iter(),
+            true,
+            &tokens,
+        );
+        assert_eq!(preview.arrival_delay(&key("h")), None);
+
+        // So does one that lands under the body's own fade-in, which owns
+        // the acknowledgment.
+        preview.follow = true;
+        preview.note_steps(
+            keys(&["a", "b", "c", "d", "e", "f", "g", "h", "i"]).into_iter(),
+            false,
+            &tokens,
+        );
+        assert_eq!(preview.arrival_delay(&key("i")), None);
     }
 
     #[test]
