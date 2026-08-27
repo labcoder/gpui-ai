@@ -155,13 +155,14 @@ impl RenderOnce for StatusBadge {
         // while the incoming one lifts into the same fixed slot. Semantics
         // never wait — aria_label and the tone below are the incoming state
         // from the first frame of the change.
-        let swap = window.use_keyed_state((self.id.clone(), "status-swap"), cx, |_, _| StatusSwap {
-            label: self.label.clone(),
-            tone: self.tone,
-            active: self.active,
-            generation: 0,
-            outgoing: None,
-        });
+        let swap =
+            window.use_keyed_state((self.id.clone(), "status-swap"), cx, |_, _| StatusSwap {
+                label: self.label.clone(),
+                tone: self.tone,
+                active: self.active,
+                generation: 0,
+                outgoing: None,
+            });
         let (generation, outgoing) = swap.update(cx, |swap, _| {
             if swap.label != self.label || swap.tone != self.tone || swap.active != self.active {
                 // A label or tone change stages the old face; an
@@ -230,12 +231,7 @@ impl RenderOnce for StatusBadge {
                         .child(*label)
                 }))
             })
-            .child(
-                div()
-                    .opacity(progress)
-                    .top(entry)
-                    .child(self.label.clone()),
-            )
+            .child(div().opacity(progress).top(entry).child(self.label.clone()))
             .when_some(outgoing, |slot, (label, tone)| {
                 // The outgoing face drifts down as it fades, layered over
                 // the slot so it never contributes width of its own.
@@ -278,8 +274,7 @@ const LIFECYCLE_LABELS: [&str; 4] = ["Pending", "Running", "Completed", "Failed"
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px, size};
-    use std::time::Duration;
+    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px};
 
     struct BadgeProbe {
         state: ProgressState,

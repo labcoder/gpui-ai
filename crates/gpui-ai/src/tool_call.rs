@@ -866,7 +866,7 @@ fn format_elapsed(elapsed: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px, size};
+    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px};
 
     struct GroupProbe {
         open: bool,

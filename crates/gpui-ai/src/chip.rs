@@ -218,7 +218,7 @@ impl RenderOnce for ToolChip {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px, size};
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
     use gpui_component::h_flex;
 
     struct ChipProbe {
