@@ -3,10 +3,10 @@
 use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
-    AnimationExt as _, AnyElement, App, Axis, Context, ElementId, EventEmitter, FocusHandle,
-    Focusable, Hsla, InteractiveElement as _, IntoElement, ListAlignment, ListOffset, ListState,
-    ParentElement as _, Pixels, Render, Role, ScrollHandle, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, list, prelude::FluentBuilder as _,
+    AnyElement, App, Axis, Context, ElementId, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement as _, IntoElement, ListAlignment, ListOffset, ListState, ParentElement as _,
+    Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Window, div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex,
@@ -16,7 +16,7 @@ use gpui_component::{
 
 use crate::{
     control::outlined_control_with_label,
-    motion::MotionTokens,
+    motion::{MotionTokens, VisibleAnimationExt as _},
     records_table::escape_markdown_text,
     resolved_layout::ResolvedLayoutKey,
     scrolling::list_scroll_mask,
@@ -1013,7 +1013,7 @@ impl Render for ComparisonTable {
                                                 div().size_4().child(
                                                     Icon::new(icon)
                                                         .text_color(color)
-                                                        .with_animation(
+                                                        .with_visible_animation(
                                                             "comparison-status-spinner",
                                                             // Frame demand: active only for a
                                                             // ProgressIndicator status. Settled

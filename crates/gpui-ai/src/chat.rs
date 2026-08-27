@@ -12,7 +12,7 @@ use crate::{
     attachment::{Attachment, AttachmentEvent, AttachmentStrip},
     control::{outlined_control, outlined_control_with_label},
     cues::{self, Cue},
-    motion::reveal,
+    motion::{MotionTokens, reveal},
     orbs::Orbs,
     prompt_bar::{PromptBar, PromptBarEvent},
     resolved_layout::ResolvedLayoutKey,
@@ -30,7 +30,10 @@ use gpui::{
     Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, div, list,
     prelude::FluentBuilder as _, px, relative,
 };
-use gpui_base::Button;
+use gpui_base::{
+    Button,
+    motion::{Transition, transition},
+};
 use gpui_component::{
     ActiveTheme as _, IconName, Sizable as _,
     button::{Button as LabeledButton, ButtonVariants as _},
@@ -578,10 +581,19 @@ pub struct Chat {
     copied_reset: Option<Task<()>>,
     /// The animated jump-to-latest drive. Owned so exactly one can run;
     /// dropped on user interference, replacement, or completion.
-    jump_drive: Option<Task<()>>,
+    jump_drive: Option<JumpDrive>,
+    jump_generation: u64,
     feedback: HashMap<SharedString, bool>,
     editing: Option<EditSession>,
     _prompt_subscription: Subscription,
+}
+
+#[derive(Clone, Copy)]
+struct JumpDrive {
+    generation: u64,
+    distance: Pixels,
+    primed: bool,
+    progress: f32,
 }
 
 impl Chat {
@@ -630,6 +642,7 @@ impl Chat {
             copied_message: None,
             copied_reset: None,
             jump_drive: None,
+            jump_generation: 0,
             feedback: HashMap::new(),
             editing: None,
             _prompt_subscription: prompt_subscription,
@@ -791,6 +804,9 @@ impl Chat {
             }
         }
         self.messages = messages;
+        if self.messages.is_empty() || is_replacement {
+            self.jump_drive = None;
+        }
         if self.messages.is_empty() {
             self.list_state.set_follow_mode(FollowMode::Tail);
             self.list_state.scroll_to_end();
@@ -899,73 +915,79 @@ impl Chat {
         // not scroll a blur of skipped transcript past the reader — the
         // jump starts just under one viewport from the end and settles the
         // remainder, so the motion always ends in legible context.
-        if max + current > viewport * 2.0 {
-            self.list_state.scroll_to_end();
-            self.list_state.scroll_by(-viewport * 0.9);
-        }
+        let distance = if max + current > viewport * 2.0 {
+            // Use the viewport-top coordinate, not scroll_to_end's sentinel
+            // one whole viewport past it; subtracting .9V from the sentinel
+            // would clamp straight to the tail and show no travel at all.
+            self.list_state
+                .set_offset_from_scrollbar(gpui::point(Pixels::ZERO, -max + viewport * 0.9));
+            viewport * 0.9
+        } else {
+            max + current
+        };
+        self.jump_generation = self.jump_generation.wrapping_add(1);
+        self.jump_drive = Some(JumpDrive {
+            generation: self.jump_generation,
+            distance,
+            primed: false,
+            progress: 0.0,
+        });
+        self.pinned_to_bottom = false;
         cx.notify();
+    }
 
-        // An exponential approach stepped across frames: each tick closes a
-        // fraction of whatever remains, which retargets naturally when
-        // streaming grows the transcript mid-drive. The drive owns the
-        // scroll only while nothing else touches it — the readback after a
-        // step is compared against (offset before the step, offset the step
-        // predicts). Nearer the prediction proceeds; nearer the pre-step
-        // value is a paint clamping the step away, which at the end of the
-        // scrollable range means arrival; far from both is the reader
-        // taking the wheel, and the drive yields immediately.
-        self.jump_drive = Some(cx.spawn(async move |chat, cx| {
-            let tick = std::time::Duration::from_millis(8);
-            let mut last_step: Option<(Pixels, Pixels)> = None;
-            let mut held: u32 = 0;
-            loop {
-                cx.background_executor().timer(tick).await;
-                let done = chat.update(cx, |chat, cx| {
-                    let current = chat.list_state.scroll_px_offset_for_scrollbar().y;
-                    if let Some((before, predicted)) = last_step {
-                        let to_predicted = (current - predicted).abs();
-                        let to_before = (current - before).abs();
-                        // Wider than paint rounding, narrower than any step.
-                        let tolerance = gpui::px(2.);
-                        if to_predicted > tolerance && to_before > tolerance {
-                            // The reader took the wheel; leave them there.
-                            return true;
-                        }
-                        if to_before < to_predicted {
-                            held += 1;
-                            if held < 8 {
-                                return false;
-                            }
-                        } else {
-                            held = 0;
-                        }
-                    }
-                    let max = chat.list_state.max_offset_for_scrollbar().y;
-                    let remaining = max + current;
-                    if remaining <= gpui::px(1.)
-                        || held >= 8
-                        || chat.list_state.is_scrolled_to_end() == Some(true)
-                    {
-                        chat.list_state.set_follow_mode(FollowMode::Tail);
-                        chat.list_state.scroll_to_end();
-                        chat.pinned_to_bottom = true;
-                        cx.notify();
-                        return true;
-                    }
-                    let step = (remaining * 0.22).max(gpui::px(2.)).min(remaining);
-                    chat.list_state.scroll_by(step);
-                    // The scrollbar readback runs negative as the list
-                    // scrolls toward the end, so a downward step subtracts.
-                    last_step = Some((current, current - step));
-                    cx.notify();
-                    false
+    fn cancel_jump(&mut self, cx: &mut Context<Self>) {
+        if self.jump_drive.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    fn render_jump(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(drive) = self.jump_drive else { return };
+        // Use the framework's frame demand and transition clock. A hidden
+        // chat has no timer waking it; reduction and input apply on the next
+        // frame, and every deferred write is guarded by this drive's identity.
+        let progress = transition(
+            ElementId::Name(format!("{}-jump-{}", self.id, drive.generation).into()),
+            if drive.primed || cx.reduce_motion() {
+                1.0_f32
+            } else {
+                0.0
+            },
+            Transition::new(MotionTokens::read(cx).standard()),
+            window,
+            cx,
+        );
+        cx.defer_in(window, move |chat, _, cx| {
+            if !chat
+                .jump_drive
+                .is_some_and(|active| active.generation == drive.generation)
+            {
+                return;
+            }
+            if progress >= 1.0 || cx.reduce_motion() {
+                chat.jump_drive = None;
+                chat.list_state.set_follow_mode(FollowMode::Tail);
+                chat.list_state.scroll_to_end();
+                chat.pinned_to_bottom = true;
+                cx.notify();
+            } else if !drive.primed {
+                chat.jump_drive = Some(JumpDrive {
+                    primed: true,
+                    ..drive
                 });
-                match done {
-                    Ok(false) => {}
-                    _ => return,
+                cx.notify();
+            } else if progress > drive.progress {
+                chat.jump_drive = Some(JumpDrive { progress, ..drive });
+                let remaining = chat.list_state.max_offset_for_scrollbar().y
+                    + chat.list_state.scroll_px_offset_for_scrollbar().y;
+                let step = remaining - drive.distance * (1.0 - progress);
+                if step > Pixels::ZERO {
+                    chat.list_state.scroll_by(step);
+                    cx.notify();
                 }
             }
-        }));
+        });
     }
 
     /// Re-measures the transcript after the window's rem size changed.
@@ -1080,6 +1102,7 @@ impl EventEmitter<ChatEvent> for Chat {}
 
 impl Render for Chat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        self.render_jump(window, cx);
         // The rem is a resolved-layout input, so a change to it invalidates
         // every measured row height. Reading it here costs nothing; the
         // reaction is deferred so that render itself neither mutates nor
@@ -1103,12 +1126,34 @@ impl Render for Chat {
         .into();
 
         chat_frame(&self.id)
+            .capture_any_mouse_down(cx.listener(|chat, _, _, cx| chat.cancel_jump(cx)))
+            .capture_key_down(cx.listener(|chat, _, _, cx| chat.cancel_jump(cx)))
             .gap(tokens.spacing.sm)
             .child(
                 transcript_frame(transcript_id)
                     .relative()
                     .flex_1()
                     .overflow_hidden()
+                    .child({
+                        let chat = cx.weak_entity();
+                        let list = self.list_state.clone();
+                        gpui::canvas(
+                            |_, _, _| (),
+                            move |_, _, window, _| {
+                                window.on_mouse_event(
+                                    move |event: &gpui::ScrollWheelEvent, phase, _, cx| {
+                                        if phase == gpui::DispatchPhase::Capture
+                                            && list.viewport_bounds().contains(&event.position)
+                                        {
+                                            chat.update(cx, |chat, cx| chat.cancel_jump(cx)).ok();
+                                        }
+                                    },
+                                );
+                            },
+                        )
+                        .absolute()
+                        .size_full()
+                    })
                     .when(self.messages.is_empty(), |this| {
                         this.child(self.render_welcome(cx))
                     })

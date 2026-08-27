@@ -10,7 +10,7 @@
 use crate::{
     control::composed_button,
     handlers::Handler,
-    motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal, reveal_progress},
+    motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal},
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -251,13 +251,16 @@ impl LivePreview {
         keys: impl Iterator<Item = ElementId>,
         assign_arrivals: bool,
         tokens: &MotionTokens,
+        now: crate::motion::Instant,
     ) {
         let follow = self.follow;
-        self.arrivals.note(keys, assign_arrivals && follow, tokens);
+        self.arrivals
+            .note(keys, assign_arrivals && follow, tokens, now);
     }
 
     /// The arrival delay this step identity was assigned, or `None` for one
     /// that appears at rest.
+    #[cfg(test)]
     fn arrival_delay(&self, key: &ElementId) -> Option<Duration> {
         self.arrivals.delay(key)
     }
@@ -317,7 +320,7 @@ impl RenderOnce for Thinking {
         let motion = MotionTokens::read(cx).clone();
 
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
-        let showing = open || disclosure > 0.0;
+        let showing = open;
 
         // Observed before the steps render, so a batch that arrived this
         // frame has its cascade assigned by the time each row asks for its
@@ -329,7 +332,7 @@ impl RenderOnce for Thinking {
             let preview = window.use_keyed_state((root_id.clone(), "live-follow"), cx, |_, _| {
                 LivePreview::new()
             });
-            let (scroll, follow) = preview.update(cx, |state, _| {
+            let (scroll, follow) = preview.update(cx, |state, cx| {
                 let follow = state.observe(revision, tokens.typography.sm.line_height);
                 state.note_steps(
                     self.trace
@@ -339,6 +342,7 @@ impl RenderOnce for Thinking {
                         .map(|(ix, step)| step.motion_key(&trace_id, "arrive", ix)),
                     disclosure >= 1.0,
                     &motion,
+                    cx.background_executor().now(),
                 );
                 (state.scroll.clone(), follow)
             });
@@ -431,10 +435,11 @@ impl RenderOnce for Thinking {
                 // cascade; history and steps that arrived behind a scrolled
                 // reader carry no delay entry and render at rest.
                 let arrival_key = step.motion_key(&trace_id, "arrive", ix);
-                let arrival = preview
-                    .as_ref()
-                    .and_then(|(state, ..)| state.read(cx).arrival_delay(&arrival_key))
-                    .map(|delay| reveal_progress(arrival_key.clone(), delay, window, cx));
+                let arrival = preview.as_ref().and_then(|(state, ..)| {
+                    state.update(cx, |state, cx| {
+                        state.arrivals.progress(&arrival_key, window, cx)
+                    })
+                });
                 v_flex()
                     .id((trace_id.clone(), ix))
                     .role(Role::ListItem)
@@ -516,10 +521,8 @@ impl RenderOnce for Thinking {
             .gap(tokens.spacing.xs)
             .child(toggle)
             .when(showing, |this| {
-                // Mounted for as long as the cross-fade needs it: a closing
-                // body fades and lifts away, then unmounts when the channel
-                // settles at zero. Semantics do not wait for the fade —
-                // aria_expanded above tracks the controlled state.
+                // Opening content fades in; closed content leaves the tree
+                // immediately, including its selectable text and controls.
                 this.child(
                     div()
                         .opacity(disclosure)
@@ -715,13 +718,8 @@ mod tests {
 
         set_open(&probe, cx, false);
         assert!(
-            cx.debug_bounds(PREVIEW).is_some(),
-            "a closing body cross-fades away rather than vanishing"
-        );
-        settle_disclosure(cx);
-        assert!(
             cx.debug_bounds(PREVIEW).is_none(),
-            "a collapsed trace renders no live preview once the fade settles"
+            "a collapsed trace immediately removes its live preview"
         );
 
         // Reasoning keeps streaming behind the collapsed disclosure.
@@ -734,15 +732,14 @@ mod tests {
     }
 
     #[gpui::test]
-    fn ten_rapid_toggles_keep_the_body_continuous(cx: &mut TestAppContext) {
+    fn ten_rapid_toggles_keep_the_body_consistent_with_expansion(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|_, _| TraceProbe::running());
         let cx: &mut VisualTestContext = cx;
         draw(cx);
 
-        // Faster than the cross-fade can finish: the body must stay mounted
-        // the whole burst, retargeting from its current sample, never
-        // flashing away and back.
+        // Faster than the header transition can finish: closed content must
+        // still leave the semantic and interaction tree on every toggle.
         for toggle in 0..10 {
             probe.update(cx, |probe, cx| {
                 probe.open = !probe.open;
@@ -750,9 +747,10 @@ mod tests {
             });
             cx.executor().advance_clock(Duration::from_millis(70));
             draw(cx);
-            assert!(
+            assert_eq!(
                 cx.debug_bounds(BODY).is_some(),
-                "toggle {toggle} must find the body mid-fade, not unmounted"
+                toggle % 2 == 1,
+                "toggle {toggle} must match the expanded state"
             );
         }
 
@@ -1001,17 +999,18 @@ mod tests {
     #[test]
     fn arrival_delays_belong_to_fresh_followed_identities_only() {
         let tokens = MotionTokens::DEFAULT;
+        let now = crate::motion::Instant::now();
         let key = |name: &str| ElementId::Name(format!("step-{name}").into());
         let keys = |names: &[&str]| names.iter().map(|name| key(name)).collect::<Vec<_>>();
         let mut preview = LivePreview::new();
 
         // The first roll call is history: seen, at rest.
-        preview.note_steps(keys(&["a", "b"]).into_iter(), true, &tokens);
+        preview.note_steps(keys(&["a", "b"]).into_iter(), true, &tokens, now);
         assert_eq!(preview.arrival_delay(&key("a")), None);
         assert_eq!(preview.arrival_delay(&key("b")), None);
 
         // One appended identity is a batch of one — acknowledged, no cascade.
-        preview.note_steps(keys(&["a", "b", "c"]).into_iter(), true, &tokens);
+        preview.note_steps(keys(&["a", "b", "c"]).into_iter(), true, &tokens, now);
         assert_eq!(preview.arrival_delay(&key("c")), Some(Duration::ZERO));
 
         // A three-identity batch cascades, decelerating, and the assignment
@@ -1020,6 +1019,7 @@ mod tests {
             keys(&["a", "b", "c", "d", "e", "f"]).into_iter(),
             true,
             &tokens,
+            now,
         );
         let batch: Vec<_> = ["d", "e", "f"]
             .iter()
@@ -1031,6 +1031,7 @@ mod tests {
             keys(&["a", "b", "c", "d", "e", "f", "g"]).into_iter(),
             true,
             &tokens,
+            now,
         );
         assert_eq!(
             ["d", "e", "f"]
@@ -1048,6 +1049,7 @@ mod tests {
             keys(&["a", "b", "c", "d", "e", "f", "g", "h"]).into_iter(),
             true,
             &tokens,
+            now,
         );
         assert_eq!(preview.arrival_delay(&key("h")), None);
 
@@ -1058,6 +1060,7 @@ mod tests {
             keys(&["a", "b", "c", "d", "e", "f", "g", "h", "i"]).into_iter(),
             false,
             &tokens,
+            now,
         );
         assert_eq!(preview.arrival_delay(&key("i")), None);
     }

@@ -1,11 +1,11 @@
 //! Progressive reveal for image generation.
 
-use crate::motion::MotionTokens;
+use crate::motion::{MotionTokens, VisibleAnimationExt as _};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    AnimationExt as _, AnyElement, App, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{ActiveTheme as _, Icon, IconName, StyledExt as _, h_flex, v_flex};
 
@@ -126,7 +126,7 @@ impl RenderOnce for ImageGeneration {
                                     Icon::new(IconName::Palette)
                                         .text_color(cx.theme().muted_foreground),
                                 )
-                                .with_animation(
+                                .with_visible_animation(
                                     "image-pulse",
                                     // Frame demand: active only on this
                                     // placeholder branch. Once the caller

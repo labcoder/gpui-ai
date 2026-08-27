@@ -126,17 +126,18 @@ impl RenderOnce for ToolChip {
         // mounts with is exempt — a first render is not a transition. The
         // chip's label never changes with status, so the indicator is the
         // whole swap.
+        let status_progress = crate::motion::acknowledged_state(
+            ElementId::from((ElementId::from(self.id.clone()), "chip-status")),
+            self.status as u64,
+            window,
+            cx,
+        );
         let acknowledged = if self.status == ToolStatus::Running {
             // A running chip's signal is its spinner; fading the spinner in
             // would stack two motions on one slot.
             1.0
         } else {
-            crate::motion::acknowledged_state(
-                ElementId::Name(SharedString::from(format!("{}-chip-status", self.id))),
-                self.status as u64,
-                window,
-                cx,
-            )
+            status_progress
         };
 
         let event = ToolChipEvent::Activated {

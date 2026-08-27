@@ -93,14 +93,18 @@ impl RenderOnce for TaskRow {
         // The durable completion and failure marks settle in once, after the
         // controlled state changes — never on a re-render, and never for the
         // state the row mounts with.
-        let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
-            acknowledged_state(
-                ElementId::Name(SharedString::from(format!("{}-task-glyph", self.task.id))),
-                ordinal,
-                window,
-                cx,
-            )
+        let ordinal = match self.state {
+            ProgressState::Pending => 0,
+            ProgressState::Running => 1,
+            ProgressState::Complete => 2,
+            ProgressState::Failed(_) => 3,
         };
+        let acknowledged = acknowledged_state(
+            ElementId::from((ElementId::from(self.task.id.clone()), "task-glyph")),
+            ordinal,
+            window,
+            cx,
+        );
         let indicator = match &self.state {
             ProgressState::Pending => div()
                 .size_2()
@@ -115,12 +119,12 @@ impl RenderOnce for TaskRow {
             ProgressState::Complete => Icon::new(IconName::CircleCheck)
                 .small()
                 .text_color(cx.theme().success)
-                .opacity(acknowledged(window, cx, 2))
+                .opacity(acknowledged)
                 .into_any_element(),
             ProgressState::Failed(_) => Icon::new(IconName::CircleX)
                 .small()
                 .text_color(cx.theme().danger)
-                .opacity(acknowledged(window, cx, 3))
+                .opacity(acknowledged)
                 .into_any_element(),
         };
         let failed_reason = match &self.state {
@@ -212,6 +216,41 @@ fn format_elapsed(elapsed: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext};
+
+    struct LifecycleProbe {
+        state: ProgressState,
+    }
+
+    impl Render for LifecycleProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            TaskRow {
+                task: TaskSnapshot::new("task", "Index repository"),
+                state: self.state.clone(),
+                style: StyleRefinement::default(),
+            }
+        }
+    }
+
+    #[gpui::test]
+    fn running_to_complete_acknowledges_the_controlled_change(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| LifecycleProbe {
+            state: ProgressState::Running,
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        crate::motion::take_reveal_frame_requests();
+
+        probe.update(cx, |probe, cx| {
+            probe.state = ProgressState::Complete;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "completion is a state change, not the glyph's first mount"
+        );
+    }
 
     #[test]
     fn elapsed_formatting() {

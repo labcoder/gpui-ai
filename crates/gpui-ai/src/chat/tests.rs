@@ -227,9 +227,87 @@ fn a_far_jump_starts_near_the_tail_and_settles_into_it(cx: &mut TestAppContext) 
         !chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()),
         "a far jump must settle into the tail, not land pinned in one frame"
     );
+    assert!(
+        chat.read_with(cx, |chat, _| {
+            let remaining = chat.list_state.max_offset_for_scrollbar().y
+                + chat.list_state.scroll_px_offset_for_scrollbar().y;
+            remaining > chat.list_state.viewport_bounds().size.height * 0.5
+        }),
+        "the first painted frame must actually precede the tail, not just retain a drive flag"
+    );
     settle_jump(cx);
     assert!(cx.debug_bounds("chat-message-m0061").is_some());
     assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+}
+
+#[gpui::test]
+fn changing_to_reduced_motion_finishes_an_in_flight_jump(cx: &mut TestAppContext) {
+    let (harness, cx) = harness(cx);
+    set_messages(&harness, messages(0..60), cx);
+    let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+    chat.update(cx, |chat, cx| {
+        chat.list_state.scroll_to(ListOffset {
+            item_ix: 2,
+            offset_in_item: px(0.),
+        });
+        chat.pinned_to_bottom = false;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    chat.update(cx, |chat, cx| chat.scroll_to_latest(cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(chat.read_with(cx, |chat, _| chat.jump_drive.is_some()));
+    cx.update(|_, cx| cx.set_reduce_motion(true));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    assert!(chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()
+        && chat.jump_drive.is_none()));
+}
+
+#[gpui::test]
+fn a_medium_jump_keeps_its_full_distance_and_reader_input_cancels_it(cx: &mut TestAppContext) {
+    let (harness, cx) = harness(cx);
+    set_messages(&harness, messages(0..60), cx);
+    let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+    chat.update(cx, |chat, cx| {
+        let viewport = chat.list_state.viewport_bounds().size.height;
+        chat.list_state.scroll_by(-viewport * 1.5);
+        chat.pinned_to_bottom = false;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    chat.update(cx, |chat, cx| {
+        let distance = chat.list_state.max_offset_for_scrollbar().y
+            + chat.list_state.scroll_px_offset_for_scrollbar().y;
+        chat.scroll_to_latest(cx);
+        assert_eq!(chat.jump_drive.expect("medium jump").distance, distance);
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let center = chat.read_with(cx, |chat, _| chat.list_state.viewport_bounds().center());
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position: center,
+        delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(0.5))),
+        modifiers: Modifiers::default(),
+        touch_phase: gpui::TouchPhase::Moved,
+    });
+    assert!(
+        chat.read_with(cx, |chat, _| chat.jump_drive.is_none()),
+        "even subpixel reader input cancels the drive"
+    );
+    settle_jump(cx);
+    assert!(!chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()));
+    cx.update(|window, cx| {
+        let focus = chat.read(cx).prompt_bar.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+        chat.update(cx, |chat, cx| chat.scroll_to_latest(cx));
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(chat.read_with(cx, |chat, _| chat.jump_drive.is_some()));
+    activate_key(cx, "escape");
+    assert!(
+        chat.read_with(cx, |chat, _| chat.jump_drive.is_none()),
+        "keyboard input cancels before a descendant can consume it"
+    );
 }
 
 #[gpui::test]

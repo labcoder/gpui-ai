@@ -11,7 +11,7 @@ use crate::{
     control::composed_button,
     cues::{self, Cue},
     handlers::SharedHandler,
-    motion::{ArrivalRoster, MotionTokens, acknowledged_state, reveal_progress},
+    motion::{ArrivalRoster, MotionTokens, acknowledged_state},
     status::{StatusBadge, StatusTone},
     surface::{card, description, eyebrow, meta, title},
     theme::SemanticStyledExt as _,
@@ -303,31 +303,25 @@ impl RenderOnce for PlanCard {
         let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
             ArrivalRoster::new()
         });
-        roster.update(cx, |roster, _| {
+        roster.update(cx, |roster, cx| {
             roster.note(
                 self.steps.iter().map(|step| {
                     ElementId::Name(SharedString::from(format!("plan-step-{}", step.id)))
                 }),
                 true,
                 &motion,
+                cx.background_executor().now(),
             );
         });
         let mut steps = Vec::with_capacity(total);
         for (index, step) in self.steps.iter().enumerate() {
-            let arrival = roster
-                .read(cx)
-                .delay(&ElementId::Name(SharedString::from(format!(
-                    "plan-step-{}",
-                    step.id
-                ))))
-                .map(|delay| {
-                    reveal_progress(
-                        (root_id.clone(), format!("reveal-{}", step.id)),
-                        delay,
-                        window,
-                        cx,
-                    )
-                });
+            let arrival = roster.update(cx, |roster, cx| {
+                roster.progress(
+                    &ElementId::Name(SharedString::from(format!("plan-step-{}", step.id))),
+                    window,
+                    cx,
+                )
+            });
             steps.push(render_step(
                 &root_id,
                 &plan_id,
@@ -505,14 +499,12 @@ fn render_step(
     // Terminal marks settle into the fixed glyph ring once, after the
     // controlled status changes; the status a step mounts with is exempt,
     // and error paths share the same quick, overshoot-free acknowledgment.
-    let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
-        acknowledged_state(
-            ElementId::Name(SharedString::from(format!("{plan_id}-glyph-{}", step.id))),
-            ordinal,
-            window,
-            cx,
-        )
-    };
+    let acknowledged = acknowledged_state(
+        ElementId::from((step_id.clone(), "glyph")),
+        step.status as u64,
+        window,
+        cx,
+    );
     let (glyph, ring, fill): (AnyElement, gpui::Hsla, gpui::Hsla) = match step.status {
         PlanStepStatus::Pending => (
             div()
@@ -533,7 +525,7 @@ fn render_step(
             Icon::new(IconName::Check)
                 .xsmall()
                 .text_color(cx.theme().success)
-                .opacity(acknowledged(window, cx, 2))
+                .opacity(acknowledged)
                 .into_any_element(),
             cx.theme().success.opacity(0.5),
             cx.theme().success.opacity(0.12),
@@ -542,7 +534,7 @@ fn render_step(
             Icon::new(IconName::CircleX)
                 .xsmall()
                 .text_color(cx.theme().danger)
-                .opacity(acknowledged(window, cx, 3))
+                .opacity(acknowledged)
                 .into_any_element(),
             cx.theme().danger.opacity(0.5),
             cx.theme().danger.opacity(0.12),
@@ -551,7 +543,7 @@ fn render_step(
             Icon::new(IconName::Dash)
                 .xsmall()
                 .text_color(cx.theme().muted_foreground)
-                .opacity(acknowledged(window, cx, 4))
+                .opacity(acknowledged)
                 .into_any_element(),
             cx.theme().border,
             cx.theme().muted.opacity(0.5),

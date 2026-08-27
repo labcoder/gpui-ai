@@ -49,6 +49,9 @@
 //! reveal(v_flex().child("New tool call"), ("tool-call", 3), window, cx)
 //! ```
 
+mod visibility;
+pub(crate) use visibility::VisibleAnimationExt;
+
 use gpui::{
     Animation, AnimationElement, AnimationExt as _, App, ElementId, Global, Hsla, IntoElement,
     ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
@@ -57,8 +60,12 @@ use gpui::{
 use gpui_base::animation::ease_out_cubic;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{ActiveTheme as _, StyledExt as _};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Duration;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) use std::time::Instant;
+#[cfg(target_family = "wasm")]
+pub(crate) use web_time::Instant;
 
 /// Width of the travelling shimmer highlight as a fraction of the label
 /// width. Highlight geometry rather than tempo, so it stays out of the role
@@ -254,11 +261,10 @@ impl SpringRole {
 ///     .set(cx);
 /// ```
 ///
-/// The duration roles with no consumer in the crate yet — `instant`, `quick`,
-/// `deliberate` — and the four spring roles carry provisional defaults inside
-/// the 0.3.0 plan's tuning ranges; the shipped effects (reveal tempo and the
-/// named loops) default to exactly the values they have always had, so
-/// installing this policy changes nothing a released application shows.
+/// Components use the quick role for acknowledgments, standard for entrances
+/// and compact disclosures, and spring roles for bounded retargets. Named
+/// repeating effects keep their individual tempos. The deliberate role is
+/// available for application composition without adding motion implicitly.
 ///
 /// What the policy cannot do: override reduced motion. `cx.reduce_motion()`
 /// stays authoritative in every consumer, so customization tunes tempo and
@@ -300,10 +306,7 @@ const STAGGER_PARTICIPANTS: usize = 6;
 const STAGGER_TOTAL_CAP: Duration = Duration::from_millis(220);
 
 impl MotionTokens {
-    /// The crate's own policy. Shipped effects keep their long-standing
-    /// values by construction — each is defined as the spec constant it
-    /// replaces — and the not-yet-consumed roles sit inside the plan's
-    /// tuning ranges awaiting motion-lab validation.
+    /// The crate's default duration, spring, and repeating-effect policy.
     pub const DEFAULT: Self = Self {
         instant: Duration::ZERO,
         quick: Duration::from_millis(150),
@@ -531,8 +534,10 @@ pub(crate) fn install(cx: &mut App) {
 /// restarting, content changes leave a settled channel untouched, and
 /// reduced motion snaps to the target — GPUI's transition contract, not
 /// per-component policy. Callers cross-fade their body on the returned
-/// progress (opacity plus a small token-derived lift) and keep it mounted
-/// while `open || progress > 0.0`; they never animate the body's height,
+/// progress (opacity plus a small token-derived lift) while open. Closed
+/// bodies leave the tree immediately: opacity does not suppress focus,
+/// input, or accessibility. Headers can retain the closing transition.
+/// Callers never animate the body's height,
 /// because rich content re-measured per frame is the layout loop the motion
 /// plan forbids.
 ///
@@ -554,29 +559,43 @@ pub(crate) fn disclosure_progress(
     )
 }
 
-/// Which identities a surface has already shown, and the arrival delay each
-/// fresh one was assigned — the bookkeeping behind a bounded arrival
-/// cascade.
-///
-/// Kept in the owner's keyed window state, so it survives the surface
-/// closing and reopening: an identity acknowledged once is never
-/// acknowledged again. The first roll call is history and joins at rest;
-/// later batches cascade on [`MotionTokens::arrival_stagger`], frozen at
-/// assignment so a following batch cannot re-space a cascade already
-/// playing. A batch the caller marks ineligible — the reader away from the
-/// tail, a disclosure still fading in and owning the acknowledgment — is
-/// marked seen without motion, so nothing retro-animates.
+/// Arrival bookkeeping for one owner. History starts at rest; later batches
+/// animate at most six current identities. The owner retains the clocks, so
+/// temporarily unmounting a child cannot restart its arrival. Removed items
+/// and settled clocks are retired instead of accumulating lifetime history.
 pub(crate) struct ArrivalRoster {
     primed: bool,
-    seen: HashSet<ElementId>,
-    delays: HashMap<ElementId, Duration>,
+    epoch: bool,
+    seen: HashMap<ElementId, bool>,
+    delays: HashMap<ElementId, ArrivalTiming>,
+}
+
+struct ArrivalTiming {
+    started_at: Instant,
+    delay: Duration,
+    duration: Duration,
+}
+
+impl ArrivalTiming {
+    fn progress(&self, now: Instant) -> f32 {
+        let elapsed = now.saturating_duration_since(self.started_at);
+        if self.duration.is_zero() {
+            1.0
+        } else if elapsed < self.delay {
+            0.0
+        } else {
+            (elapsed.saturating_sub(self.delay).as_secs_f32() / self.duration.as_secs_f32())
+                .min(1.0)
+        }
+    }
 }
 
 impl ArrivalRoster {
     pub(crate) fn new() -> Self {
         Self {
             primed: false,
-            seen: HashSet::new(),
+            epoch: false,
+            seen: HashMap::new(),
             delays: HashMap::new(),
         }
     }
@@ -588,24 +607,63 @@ impl ArrivalRoster {
         keys: impl Iterator<Item = ElementId>,
         assign: bool,
         tokens: &MotionTokens,
+        now: Instant,
     ) {
-        let fresh: Vec<ElementId> = keys.filter(|key| !self.seen.contains(key)).collect();
+        self.epoch = !self.epoch;
+        let mut fresh = Vec::new();
+        for key in keys {
+            if self.seen.insert(key.clone(), self.epoch).is_none()
+                && fresh.len() < STAGGER_PARTICIPANTS
+            {
+                fresh.push(key);
+            }
+        }
+        self.seen.retain(|_, epoch| *epoch == self.epoch);
+        self.delays.retain(|key, timing| {
+            assign && self.seen.contains_key(key) && timing.progress(now) < 1.0
+        });
         let primed = std::mem::replace(&mut self.primed, true);
         let cascade = primed && assign;
+        fresh.truncate(STAGGER_PARTICIPANTS.saturating_sub(self.delays.len()));
         let batch = fresh.len();
         for (position, key) in fresh.into_iter().enumerate() {
             if cascade {
-                self.delays
-                    .insert(key.clone(), tokens.arrival_stagger(position, batch));
+                self.delays.insert(
+                    key,
+                    ArrivalTiming {
+                        started_at: now,
+                        delay: tokens.arrival_stagger(position, batch),
+                        duration: tokens.standard(),
+                    },
+                );
             }
-            self.seen.insert(key);
         }
     }
 
-    /// The arrival delay this identity was assigned, or `None` for one that
-    /// appears at rest.
+    /// Samples the owner's clock, retiring it on completion or reduced
+    /// motion. Only a live sample asks for another frame.
+    pub(crate) fn progress(
+        &mut self,
+        key: &ElementId,
+        window: &mut Window,
+        cx: &App,
+    ) -> Option<f32> {
+        let progress = self
+            .delays
+            .get(key)?
+            .progress(cx.background_executor().now());
+        if cx.reduce_motion() || progress >= 1.0 {
+            self.delays.remove(key);
+            return None;
+        }
+        note_reveal_frame_request();
+        window.request_animation_frame();
+        Some(ease_out_cubic(progress))
+    }
+
+    #[cfg(test)]
     pub(crate) fn delay(&self, key: &ElementId) -> Option<Duration> {
-        self.delays.get(key).copied()
+        self.delays.get(key).map(|timing| timing.delay)
     }
 }
 
@@ -682,7 +740,7 @@ impl RenderOnce for Shimmer {
             .text_color(base)
             .child(text.clone())
             .refine_style(&self.style)
-            .with_animation(
+            .with_visible_animation(
                 (self.id, "shimmer"),
                 // Frame demand: active while the caller's work is in flight,
                 // which is what `active` reports; the caller stops passing
@@ -748,33 +806,51 @@ pub(crate) fn swap_progress(id: impl Into<ElementId>, window: &mut Window, cx: &
 
 /// One-shot acknowledgment of the state a fixed slot has settled into.
 ///
-/// Keyed by the slot plus the state's `ordinal`: the acknowledgment plays
-/// once, at the quick tempo, when the slot first shows a new state — and
-/// never again for that state, so re-renders replay nothing. The state a
-/// slot mounts with is exempt, because a first render is not a transition.
-/// Consumers apply the returned progress as the incoming face's opacity;
-/// running states keep their spinner untouched, since fading an animation
-/// in would stack two motions on one slot.
+/// Observe the slot on every render, including states that do not apply the
+/// returned opacity. The initial state is settled; each subsequent change
+/// starts one quick acknowledgment, including a return to the initial state.
+/// One retained slot owns the clock rather than allocating a key per value.
+/// Running faces may ignore the sample so their spinner remains unmodified.
 pub(crate) fn acknowledged_state(
     slot: ElementId,
     ordinal: u64,
     window: &mut Window,
     cx: &mut App,
 ) -> f32 {
-    let mounted = window.use_keyed_state((slot.clone(), "acknowledged-mount"), cx, move |_, _| {
-        ordinal
-    });
-    if *mounted.read(cx) == ordinal {
-        return 1.0;
-    }
-    swap_progress(
-        ElementId::NamedInteger(
-            SharedString::from(format!("{slot:?}-acknowledged")),
+    let now = cx.background_executor().now();
+    let duration = MotionTokens::read(cx).quick();
+    let reduced = cx.reduce_motion() || duration.is_zero();
+    let state =
+        window.use_keyed_state((slot, "acknowledged-state"), cx, |_, _| AcknowledgedState {
             ordinal,
-        ),
-        window,
-        cx,
-    )
+            started_at: None,
+        });
+    let progress = state.update(cx, |state, _| {
+        if state.ordinal != ordinal {
+            state.ordinal = ordinal;
+            state.started_at = Some(now);
+        }
+        if reduced {
+            state.started_at = None;
+        }
+        let progress = state.started_at.map_or(1.0, |started| {
+            (now.saturating_duration_since(started).as_secs_f32() / duration.as_secs_f32()).min(1.0)
+        });
+        if progress >= 1.0 {
+            state.started_at = None;
+        }
+        progress
+    });
+    if progress < 1.0 {
+        note_reveal_frame_request();
+        window.request_animation_frame();
+    }
+    ease_out_cubic(progress)
+}
+
+struct AcknowledgedState {
+    ordinal: u64,
+    started_at: Option<Instant>,
 }
 
 /// The shared clock behind [`reveal_progress`] and [`swap_progress`]: `0.0`
@@ -886,6 +962,10 @@ fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
 /// [`MotionTokens`] and carries no `App`, so it has no way to see a replaced
 /// policy. Components inside the crate route through the policy instead;
 /// under the default tokens the two are identical.
+///
+/// This low-level compatibility helper returns GPUI's `AnimationElement`;
+/// callers must unmount it while offscreen. The library's composed looping
+/// components additionally suspend when clipped by a scroll container.
 pub fn breathing<E>(element: E, id: impl Into<ElementId>) -> AnimationElement<E>
 where
     E: IntoElement + Styled + 'static,
@@ -1007,6 +1087,97 @@ mod tests {
         assert_eq!(tokens.arrival_stagger(99, 100), last);
         // A single arrival has no cascade to join.
         assert_eq!(tokens.arrival_stagger(0, 1), Duration::ZERO);
+    }
+
+    #[test]
+    fn arrival_roster_retires_removed_identities() {
+        let mut roster = ArrivalRoster::new();
+        for id in 0..1_000 {
+            roster.note(
+                std::iter::once(ElementId::Integer(id)),
+                true,
+                &MotionTokens::DEFAULT,
+                Instant::now(),
+            );
+            assert!(
+                roster.seen.len() <= 1 && roster.delays.len() <= 1,
+                "a one-item surface must not retain the history of removed items"
+            );
+        }
+    }
+
+    #[test]
+    fn arrival_roster_caps_overlapping_batches_and_retires_settled_clocks() {
+        let mut roster = ArrivalRoster::new();
+        let now = Instant::now();
+        let tokens = MotionTokens::DEFAULT;
+        roster.note(std::iter::empty(), true, &tokens, now);
+        roster.note((0..1_000).map(ElementId::Integer), true, &tokens, now);
+        assert_eq!(roster.delays.len(), STAGGER_PARTICIPANTS);
+        roster.note((0..2_000).map(ElementId::Integer), true, &tokens, now);
+        assert_eq!(roster.delays.len(), STAGGER_PARTICIPANTS);
+        roster.note(
+            (0..2_000).map(ElementId::Integer),
+            true,
+            &tokens,
+            now + tokens.standard() + STAGGER_TOTAL_CAP,
+        );
+        assert!(roster.delays.is_empty(), "settled clocks must be retired");
+    }
+
+    struct AcknowledgmentProbe {
+        ordinal: u64,
+        sample: Rc<Cell<f32>>,
+    }
+
+    impl Render for AcknowledgmentProbe {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            self.sample.set(acknowledged_state(
+                "ack-probe".into(),
+                self.ordinal,
+                window,
+                cx,
+            ));
+            div()
+        }
+    }
+
+    #[gpui::test]
+    fn acknowledgments_observe_every_change_without_replaying_snapshots(cx: &mut TestAppContext) {
+        let sample = Rc::new(Cell::new(f32::NAN));
+        let (probe, cx) = cx.add_window_view({
+            let sample = sample.clone();
+            move |_, _| AcknowledgmentProbe { ordinal: 0, sample }
+        });
+        draw(cx);
+        assert_eq!(sample.get(), 1.0, "the first state is already presented");
+
+        for ordinal in [1, 0, 1] {
+            probe.update(cx, |probe, cx| {
+                probe.ordinal = ordinal;
+                cx.notify();
+            });
+            draw(cx);
+            assert_eq!(sample.get(), 0.0, "every controlled change acknowledges");
+            cx.executor().advance_clock(MotionTokens::DEFAULT.quick());
+            assert_eq!(draw(cx), 0);
+            assert_eq!(sample.get(), 1.0);
+            assert_eq!(draw(cx), 0, "unchanged snapshots stay settled");
+        }
+
+        cx.update(|_, cx| cx.set_reduce_motion(true));
+        probe.update(cx, |probe, cx| {
+            probe.ordinal = 2;
+            cx.notify();
+        });
+        assert_eq!(draw(cx), 0);
+        assert_eq!(sample.get(), 1.0);
+        cx.update(|_, cx| cx.set_reduce_motion(false));
+        assert_eq!(
+            draw(cx),
+            0,
+            "leaving reduced motion must not replay history"
+        );
     }
 
     #[gpui::test]

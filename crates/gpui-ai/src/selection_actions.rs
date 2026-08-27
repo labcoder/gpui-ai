@@ -4,9 +4,10 @@ use crate::control::composed_button;
 use crate::motion::swap_progress;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, AppContext as _, Axis, Bounds, ElementId, Entity, EventEmitter, FocusHandle,
-    InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
-    ParentElement as _, Pixels, Point, Render, Role, ScrollHandle, SharedString, Size, Stateful,
+    AnyElement, App, AppContext as _, Axis, Bounds, Element, ElementId, Entity, EventEmitter,
+    FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement,
+    KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels,
+    Point, Render, Role, ScrollHandle, SharedString, Size, Stateful,
     StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
     prelude::FluentBuilder as _,
 };
@@ -160,24 +161,76 @@ fn selection_toolbar_positioner(
         .child(toolbar)
 }
 
-/// The entrance's travel: from the anchor's side of the toolbar.
-///
-/// Mirrors the positioner's flip rule against the bounded maximum the frame
-/// enforces, with the offset and margin the positioner is given. An actual
-/// toolbar shorter than the maximum can keep the preferred side in a band
-/// one maximum tall above the bottom edge where this predicts a flip; the
-/// travel is a few pixels, so a mismatch there reads as a plain fade.
-fn entrance_travel(
-    anchor_y: Pixels,
-    viewport_height: Pixels,
-    maximum_height: Pixels,
-    gap: Pixels,
-    travel: Pixels,
-) -> Pixels {
-    if anchor_y + gap + maximum_height + gap <= viewport_height {
+/// Sample the resolved bounds, not an estimate of the positioner's flip.
+fn entrance_travel(anchor_y: Pixels, bounds: Bounds<Pixels>, travel: Pixels) -> Pixels {
+    if bounds.top() >= anchor_y {
         -travel
-    } else {
+    } else if bounds.bottom() <= anchor_y {
         travel
+    } else {
+        Pixels::ZERO
+    }
+}
+
+/// Positioner resolves the final layout before this wrapper prepaints. Move
+/// hitboxes and paint together, without copying its private flip algorithm.
+struct ToolbarEntrance {
+    child: AnyElement,
+    anchor_y: Pixels,
+    travel: Pixels,
+}
+
+impl IntoElement for ToolbarEntrance {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for ToolbarEntrance {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let offset = point(
+            Pixels::ZERO,
+            entrance_travel(self.anchor_y, bounds, self.travel),
+        );
+        window.with_element_offset(offset, |window| self.child.prepaint(window, cx));
+    }
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.paint(window, cx);
     }
 }
 
@@ -467,17 +520,11 @@ impl SelectionActions {
             cx,
         );
         let anchor = self.toolbar_anchor(window);
-        let travel = entrance_travel(
-            anchor.y,
-            window.viewport_size().height,
-            maximum_size.height,
-            tokens.spacing.sm,
-            tokens.spacing.xxs,
-        );
-        let toolbar = div()
-            .opacity(entrance)
-            .top(travel * (1.0 - entrance))
-            .child(toolbar);
+        let toolbar = ToolbarEntrance {
+            child: div().opacity(entrance).child(toolbar).into_any_element(),
+            anchor_y: anchor.y,
+            travel: tokens.spacing.xxs * (1.0 - entrance),
+        };
 
         selection_toolbar_positioner(anchor, Placement::Bottom, toolbar, cx)
     }
@@ -596,8 +643,8 @@ impl Render for SelectionActions {
 mod tests {
     use super::*;
     use gpui::{
-        Bounds, Element as _, Modifiers, RenderOnce as _, ScrollDelta, ScrollWheelEvent, Size,
-        TestAppContext, VisualTestContext, accesskit, canvas, point, px, rems, size,
+        Bounds, Modifiers, RenderOnce as _, ScrollDelta, ScrollWheelEvent, Size, TestAppContext,
+        VisualTestContext, accesskit, canvas, point, px, rems, size,
     };
     use std::sync::{Arc, Mutex};
 
@@ -919,13 +966,31 @@ mod tests {
         // Room below: the toolbar sits under the anchor and drops into
         // place, so it starts a little above its settled spot.
         assert_eq!(
-            entrance_travel(px(100.), px(600.), px(96.), px(8.), px(4.)),
+            entrance_travel(
+                px(100.),
+                Bounds::new(point(px(0.), px(108.)), size(px(100.), px(40.))),
+                px(4.)
+            ),
             px(-4.)
         );
         // Bottom edge: the positioner flips above, and the entrance rises.
         assert_eq!(
-            entrance_travel(px(560.), px(600.), px(96.), px(8.), px(4.)),
+            entrance_travel(
+                px(560.),
+                Bounds::new(point(px(0.), px(512.)), size(px(100.), px(40.))),
+                px(4.)
+            ),
             px(4.)
+        );
+        // A short toolbar still fits below where a maximum-height estimate
+        // would have predicted a flip to the top.
+        assert_eq!(
+            entrance_travel(
+                px(510.),
+                Bounds::new(point(px(0.), px(518.)), size(px(100.), px(40.))),
+                px(4.)
+            ),
+            px(-4.)
         );
     }
 

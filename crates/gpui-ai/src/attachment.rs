@@ -14,7 +14,7 @@
 use crate::{
     control::composed_button,
     handlers::SharedHandler,
-    motion::{ArrivalRoster, MotionTokens, Shimmer, reveal_progress},
+    motion::{ArrivalRoster, MotionTokens, Shimmer},
     stream::ProgressState,
     surface::icon_button,
     theme::SemanticStyledExt as _,
@@ -660,13 +660,14 @@ impl RenderOnce for AttachmentStrip {
         let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
             ArrivalRoster::new()
         });
-        roster.update(cx, |roster, _| {
+        roster.update(cx, |roster, cx| {
             roster.note(
                 self.items.iter().map(|attachment| {
                     ElementId::Name(SharedString::from(format!("tile-arrive-{}", attachment.id)))
                 }),
                 true,
                 &motion,
+                cx.background_executor().now(),
             );
         });
 
@@ -679,23 +680,13 @@ impl RenderOnce for AttachmentStrip {
             if let Some(handler) = self.on_event.clone() {
                 preview = preview.on_shared_event(handler);
             }
-            let arrival = roster
-                .read(cx)
-                .delay(&ElementId::Name(SharedString::from(format!(
-                    "tile-arrive-{}",
-                    attachment.id
-                ))))
-                .map(|delay| {
-                    reveal_progress(
-                        ElementId::Name(SharedString::from(format!(
-                            "tile-settle-{}",
-                            attachment.id
-                        ))),
-                        delay,
-                        window,
-                        cx,
-                    )
-                });
+            let arrival = roster.update(cx, |roster, cx| {
+                roster.progress(
+                    &ElementId::Name(SharedString::from(format!("tile-arrive-{}", attachment.id))),
+                    window,
+                    cx,
+                )
+            });
             let preview = match arrival {
                 Some(progress) => preview
                     .opacity(progress)

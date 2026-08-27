@@ -9,15 +9,14 @@
 use crate::{
     control::{composed_button, outlined_control_with_label},
     handlers::SharedHandler,
-    motion::MotionTokens,
+    motion::{MotionTokens, VisibleAnimationExt as _},
     surface::icon_button,
     theme::SemanticStyledExt as _,
 };
 use gpui::{
-    AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, rems,
+    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
@@ -328,7 +327,7 @@ fn signal_field(id: ElementId, level: f32, cx: &App) -> impl IntoElement {
         .items_end()
         .h(rems(0.9))
         .gap(gap)
-        .with_animation(
+        .with_visible_animation(
             id,
             // Frame demand: active while the state stays Listening — the
             // field is that state's indicator and settles by the state

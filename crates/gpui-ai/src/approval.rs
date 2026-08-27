@@ -194,18 +194,18 @@ impl RenderOnce for ApprovalCard {
         let reject_debug = debug_id.clone();
         let always_debug = debug_id.clone();
         let decision_debug = debug_id.clone();
+        let settled = acknowledged_state(
+            ElementId::from((root_id.clone(), "resolved")),
+            self.decision as u64,
+            window,
+            cx,
+        );
         let footer: AnyElement = if decided {
             // The event fired the moment the button was pressed; this is
             // acknowledgment, staged after the controlled state. It plays
             // once per decision — a card that mounts already decided shows
             // its resolved text without motion, and rapid decision changes
             // retarget by playing the new state's own acknowledgment.
-            let settled = acknowledged_state(
-                ElementId::Name(SharedString::from(format!("{}-resolved", self.id))),
-                self.decision as u64,
-                window,
-                cx,
-            );
             h_flex()
                 .items_center()
                 .gap(tokens.spacing.sm)

@@ -2,7 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
-use crate::motion::{ArrivalRoster, MotionTokens, reveal_progress};
+use crate::motion::{ArrivalRoster, MotionTokens};
 use crate::surface::{initial_badge, initial_of};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -146,13 +146,14 @@ impl RenderOnce for SearchResults {
         let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
             ArrivalRoster::new()
         });
-        roster.update(cx, |roster, _| {
+        roster.update(cx, |roster, cx| {
             roster.note(
                 self.results.iter().map(|result| {
                     ElementId::Name(SharedString::from(format!("result-{}", result.id)))
                 }),
                 true,
                 &motion,
+                cx.background_executor().now(),
             );
         });
 
@@ -195,23 +196,16 @@ impl RenderOnce for SearchResults {
                         .children(self.results.into_iter().map(|result| {
                             let event = result.opened_event();
                             let result_id = result.id.clone();
-                            let arrival = roster
-                                .read(cx)
-                                .delay(&ElementId::Name(SharedString::from(format!(
-                                    "result-{}",
-                                    result.id
-                                ))))
-                                .map(|delay| {
-                                    reveal_progress(
-                                        ElementId::Name(SharedString::from(format!(
-                                            "result-arrive-{}",
-                                            result.id
-                                        ))),
-                                        delay,
-                                        window,
-                                        cx,
-                                    )
-                                });
+                            let arrival = roster.update(cx, |roster, cx| {
+                                roster.progress(
+                                    &ElementId::Name(SharedString::from(format!(
+                                        "result-{}",
+                                        result.id
+                                    ))),
+                                    window,
+                                    cx,
+                                )
+                            });
                             let accessibility_label = result.title.clone();
                             let accessibility_description = result.domain.clone();
                             let row = h_flex()

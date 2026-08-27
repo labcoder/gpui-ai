@@ -8,7 +8,7 @@
 
 use crate::{
     handlers::SharedHandler,
-    motion::{ArrivalRoster, MotionTokens, reveal_progress},
+    motion::{ArrivalRoster, MotionTokens},
     surface::{eyebrow, icon_button, meta},
     theme::SemanticStyledExt as _,
 };
@@ -163,10 +163,6 @@ impl RenderOnce for MessageQueue {
         let handler = self.on_event;
         let count = self.items.len();
 
-        if count == 0 {
-            return div().id(root_id).hidden().refine_style(&self.style);
-        }
-
         // Rows the queue has already shown stay at rest; stable IDs queued
         // onto a mounted surface settle in on the capped cascade, and the
         // restored initial snapshot joins at rest. Reorders exchange no
@@ -177,32 +173,30 @@ impl RenderOnce for MessageQueue {
         let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
             ArrivalRoster::new()
         });
-        roster.update(cx, |roster, _| {
+        roster.update(cx, |roster, cx| {
             roster.note(
                 self.items.iter().map(|item| {
                     ElementId::Name(SharedString::from(format!("queue-arrive-{}", item.id)))
                 }),
                 true,
                 &motion,
+                cx.background_executor().now(),
             );
         });
 
+        if count == 0 {
+            return div().id(root_id).hidden().refine_style(&self.style);
+        }
+
         let mut rows = Vec::with_capacity(count);
         for (index, item) in self.items.iter().enumerate() {
-            let arrival = roster
-                .read(cx)
-                .delay(&ElementId::Name(SharedString::from(format!(
-                    "queue-arrive-{}",
-                    item.id
-                ))))
-                .map(|delay| {
-                    reveal_progress(
-                        ElementId::Name(SharedString::from(format!("queue-settle-{}", item.id))),
-                        delay,
-                        window,
-                        cx,
-                    )
-                });
+            let arrival = roster.update(cx, |roster, cx| {
+                roster.progress(
+                    &ElementId::Name(SharedString::from(format!("queue-arrive-{}", item.id))),
+                    window,
+                    cx,
+                )
+            });
             rows.push(render_row(
                 &root_id,
                 &debug_id,
@@ -450,6 +444,46 @@ mod tests {
             crate::motion::take_reveal_frame_requests(),
             0,
             "a re-render must not replay an acknowledged arrival"
+        );
+    }
+
+    struct SiblingQueues {
+        counts: [usize; 2],
+    }
+
+    impl Render for SiblingQueues {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            v_flex().children(self.counts.iter().enumerate().map(|(owner, count)| {
+                MessageQueue::new(format!("queue-{owner}")).items(
+                    (0..*count).map(|item| QueuedMessage::new(format!("item-{item}"), "Prompt")),
+                )
+            }))
+        }
+    }
+
+    #[gpui::test]
+    fn sibling_queues_do_not_share_arrival_clocks(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| SiblingQueues { counts: [1, 1] });
+        draw(cx);
+        probe.update(cx, |probe, cx| {
+            probe.counts[0] = 2;
+            cx.notify();
+        });
+        draw(cx);
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+
+        probe.update(cx, |probe, cx| {
+            probe.counts[1] = 2;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "the second queue's arrival must not inherit the first queue's settled clock"
         );
     }
 

@@ -2,7 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
-use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state, reveal_progress};
+use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
@@ -182,16 +182,18 @@ impl RenderOnce for TodoList {
         let roster = window.use_keyed_state((self.id.clone(), "arrivals"), cx, |_, _| {
             ArrivalRoster::new()
         });
-        roster.update(cx, |roster, _| {
+        roster.update(cx, |roster, cx| {
             roster.note(
                 self.items
                     .iter()
                     .map(|item| ElementId::Name(SharedString::from(format!("todo-{}", item.id)))),
                 true,
                 &motion,
+                cx.background_executor().now(),
             );
         });
         let list_name = self.title.clone().unwrap_or_else(|| "To-do list".into());
+        let root_id = self.id.clone();
         let accessibility_label: SharedString =
             format!("{list_name}, {done} of {total} complete").into();
 
@@ -249,6 +251,12 @@ impl RenderOnce for TodoList {
                 let accessibility_toggled = item.accessibility_toggled();
                 let accessibility_description =
                     (item.status == TodoStatus::Active).then_some("In progress");
+                let acknowledged = acknowledged_state(
+                    ElementId::from((ElementId::from((root_id.clone(), item.id.clone())), "glyph")),
+                    item.status as u64,
+                    window,
+                    cx,
+                );
                 let indicator = match item.status {
                     TodoStatus::Pending => div()
                         .size_3()
@@ -266,28 +274,16 @@ impl RenderOnce for TodoList {
                     TodoStatus::Done => Icon::new(IconName::CircleCheck)
                         .small()
                         .text_color(cx.theme().success)
-                        .opacity(acknowledged_state(
-                            ElementId::Name(SharedString::from(format!("todo-glyph-{}", item.id))),
-                            2,
-                            window,
-                            cx,
-                        ))
+                        .opacity(acknowledged)
                         .into_any_element(),
                 };
-                let arrival = roster
-                    .read(cx)
-                    .delay(&ElementId::Name(SharedString::from(format!(
-                        "todo-{}",
-                        item.id
-                    ))))
-                    .map(|delay| {
-                        reveal_progress(
-                            ElementId::Name(SharedString::from(format!("todo-arrive-{}", item.id))),
-                            delay,
-                            window,
-                            cx,
-                        )
-                    });
+                let arrival = roster.update(cx, |roster, cx| {
+                    roster.progress(
+                        &ElementId::Name(SharedString::from(format!("todo-{}", item.id))),
+                        window,
+                        cx,
+                    )
+                });
 
                 let event = item.toggled_event();
                 let row = h_flex()

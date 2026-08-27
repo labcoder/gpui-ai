@@ -529,7 +529,7 @@ impl RenderOnce for CodeDiff {
         let root_id = self.id.clone();
         let disclosure =
             disclosure_progress((root_id.clone(), "disclosure"), self.open, window, cx);
-        let showing = self.open || disclosure > 0.0;
+        let showing = self.open;
 
         let toggle = handler.clone().map(|handler| {
             let toggle_path = path.clone();
@@ -638,8 +638,7 @@ impl RenderOnce for CodeDiff {
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
-                // Mounted for as long as the cross-fade needs it; semantics
-                // do not wait for the fade.
+                // The body is selectable only while the disclosure is open.
                 this.child(
                     div()
                         .w_full()
@@ -678,19 +677,16 @@ fn render_hunk(
     // diff that mounts already reviewed shows its badges at rest, and the
     // badge's own fixed-slot swap covers a later accepted-to-rejected
     // change.
-    let resolved_debug = hunk_debug.clone();
-    let resolved = |window: &mut Window, cx: &mut App, ordinal: u64| {
-        acknowledged_state(
-            ElementId::Name(SharedString::from(format!("{resolved_debug}-resolved"))),
-            ordinal,
-            window,
-            cx,
-        )
-    };
+    let resolved = acknowledged_state(
+        ElementId::from((hunk_id.clone(), "resolved")),
+        hunk.review as u64,
+        window,
+        cx,
+    );
     let review = match (hunk.review, reviewable, handler) {
         (HunkReview::Accepted, _, _) => Some(
             div()
-                .opacity(resolved(window, cx, 1))
+                .opacity(resolved)
                 .child(
                     StatusBadge::new((hunk_id.clone(), "review"), "Accepted")
                         .tone(StatusTone::Success),
@@ -699,7 +695,7 @@ fn render_hunk(
         ),
         (HunkReview::Rejected, _, _) => Some(
             div()
-                .opacity(resolved(window, cx, 2))
+                .opacity(resolved)
                 .child(
                     StatusBadge::new((hunk_id.clone(), "review"), "Rejected")
                         .tone(StatusTone::Neutral),

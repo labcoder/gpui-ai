@@ -1,11 +1,11 @@
 //! An animated pixel-grid loading state with optional elapsed time.
 
-use crate::motion::MotionTokens;
+use crate::motion::{MotionTokens, VisibleAnimationExt as _};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    AnimationExt as _, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _,
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
 use std::panic::Location;
@@ -88,30 +88,34 @@ impl RenderOnce for LoadingState {
         // phase and every cell derives its pulse from it, so nine squares
         // cost one scheduled animation, not nine. Phase-locked to the shared
         // epoch, so loaders mounted at different moments sweep together.
-        let grid = div().flex().flex_col().gap(cell_gap).with_animation(
-            "loading-grid",
-            // Frame demand: active while the caller keeps the loader mounted
-            // — the loader *is* the "work is running" state and owns no
-            // clock, so it settles by being unmounted. Reduced motion holds
-            // delta at 0, leaving a static diagonal gradient across the grid.
-            sweep.looping_synced(),
-            move |grid, delta| {
-                grid.children((0..ROWS).map(|row| {
-                    h_flex().gap(cell_gap).children((0..COLS).map(move |col| {
-                        // Each cell's pulse is phase-shifted along the
-                        // diagonal, producing a sweep from the top-left
-                        // corner.
-                        let phase = (row + col) as f32 / ((ROWS + COLS) as f32);
-                        let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
-                        div()
-                            .size(cell_size)
-                            .rounded(cell_radius)
-                            .bg(color)
-                            .opacity(0.15 + 0.85 * wave)
+        let grid = div()
+            .flex()
+            .flex_col()
+            .gap(cell_gap)
+            .with_visible_animation(
+                "loading-grid",
+                // Frame demand: active while the caller keeps the loader mounted
+                // — the loader *is* the "work is running" state and owns no
+                // clock, so it settles by being unmounted. Reduced motion holds
+                // delta at 0, leaving a static diagonal gradient across the grid.
+                sweep.looping_synced(),
+                move |grid, delta| {
+                    grid.children((0..ROWS).map(|row| {
+                        h_flex().gap(cell_gap).children((0..COLS).map(move |col| {
+                            // Each cell's pulse is phase-shifted along the
+                            // diagonal, producing a sweep from the top-left
+                            // corner.
+                            let phase = (row + col) as f32 / ((ROWS + COLS) as f32);
+                            let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();
+                            div()
+                                .size(cell_size)
+                                .rounded(cell_radius)
+                                .bg(color)
+                                .opacity(0.15 + 0.85 * wave)
+                        }))
                     }))
-                }))
-            },
-        );
+                },
+            );
 
         h_flex()
             .id(self.id)
@@ -162,6 +166,9 @@ mod tests {
         cx.update(crate::init);
         let window = cx.open_window(size(px(240.), px(80.)), |_, _| LoaderProbe { elapsed });
         cx.run_until_parked();
+        // Resolve the initial visibility observation before measuring the
+        // steady region clock (the visibility transition is a one-off).
+        next_frame(&window, cx);
         window
     }
 

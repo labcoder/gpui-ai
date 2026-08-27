@@ -15,7 +15,7 @@ use crate::{
     code_block::CodeBlock,
     control::composed_button,
     handlers::{Handler, SharedHandler},
-    motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal_progress},
+    motion::{Shimmer, disclosure_progress},
     status::{StatusBadge, StatusTone, progress_label},
     stream::{ProgressState, Progressive},
     surface::{eyebrow, inset, meta},
@@ -252,14 +252,18 @@ impl ToolCall {
         let tokens = cx.theme().semantic_tokens();
         // The terminal glyphs settle in rather than popping, once per state
         // and never on a re-render; the state a card mounts with is exempt.
-        let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
-            crate::motion::acknowledged_state(
-                ElementId::Name(SharedString::from(format!("{}-glyph", self.invocation.id))),
-                ordinal,
-                window,
-                cx,
-            )
+        let ordinal = match self.state {
+            ProgressState::Pending => 0,
+            ProgressState::Running => 1,
+            ProgressState::Complete => 2,
+            ProgressState::Failed(_) => 3,
         };
+        let acknowledged = crate::motion::acknowledged_state(
+            ElementId::from((ElementId::from(self.invocation.id.clone()), "glyph")),
+            ordinal,
+            window,
+            cx,
+        );
         match &self.state {
             ProgressState::Running => Spinner::new()
                 .xsmall()
@@ -268,12 +272,12 @@ impl ToolCall {
             ProgressState::Complete => Icon::new(IconName::CircleCheck)
                 .xsmall()
                 .text_color(cx.theme().success)
-                .opacity(acknowledged(window, cx, 2))
+                .opacity(acknowledged)
                 .into_any_element(),
             ProgressState::Failed(_) => Icon::new(IconName::CircleX)
                 .xsmall()
                 .text_color(cx.theme().danger)
-                .opacity(acknowledged(window, cx, 3))
+                .opacity(acknowledged)
                 .into_any_element(),
             ProgressState::Pending => div()
                 .size_1p5()
@@ -298,7 +302,9 @@ impl RenderOnce for ToolCall {
         let id = self.invocation.id.clone();
         let root_id = ElementId::from(id.clone());
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
-        let showing = open || disclosure > 0.0;
+        // Opacity does not make descendants inert. Close the interaction tree
+        // immediately; the header alone retains the closing transition.
+        let showing = open;
         let accessibility_label = self.accessibility_label();
         let interactive = self.on_event.is_some();
         let handler = self.on_event.clone();
@@ -549,10 +555,8 @@ impl RenderOnce for ToolCall {
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
-                // Mounted for as long as the cross-fade needs it: a closing
-                // body fades and lifts away, then unmounts when the channel
-                // settles at zero. Semantics do not wait for the fade —
-                // aria_expanded above tracks the controlled state.
+                // Opening content fades in; closing removes descendants
+                // immediately so input and semantics match aria_expanded.
                 this.child(
                     div()
                         .opacity(disclosure)
@@ -692,51 +696,17 @@ impl RenderOnce for ToolGroup {
         let open = self.is_open();
         let title = self.resolved_title();
         let root_id = ElementId::from(self.id.clone());
-        let motion = MotionTokens::read(cx).clone();
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
-        let showing = open || disclosure > 0.0;
+        let showing = open;
 
-        // Which calls the group has already shown, kept across close and
-        // reopen: an acknowledged call never cascades again, and only calls
-        // that appear while the group rests fully open cascade at all — the
-        // opening fade owns the acknowledgment for everything it reveals.
-        // Keys are positional, which is the honest fallback for a transcript
-        // burst: groups append calls as the agent works, and nothing
-        // reorders inside one.
+        // ParentElement accepts opaque children without domain identity.
+        // Keep their content at rest rather than assigning mutable positions
+        // to arrival clocks; the group's disclosure owns its transition.
         let call_count = self.children.len();
-        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
-            ArrivalRoster::new()
-        });
-        if showing {
-            roster.update(cx, |roster, _| {
-                roster.note(
-                    (0..call_count).map(|index| {
-                        ElementId::NamedInteger("tool-group-call".into(), index as u64)
-                    }),
-                    disclosure >= 1.0,
-                    &motion,
-                );
-            });
-        }
         let mut calls = Vec::with_capacity(if showing { call_count } else { 0 });
         if showing {
-            for (index, child) in self.children.into_iter().enumerate() {
-                let key = ElementId::NamedInteger("tool-group-call".into(), index as u64);
-                let arrival = roster.read(cx).delay(&key).map(|delay| {
-                    reveal_progress(
-                        (root_id.clone(), format!("call-{index}")),
-                        delay,
-                        window,
-                        cx,
-                    )
-                });
-                let row = div().w_full().min_w_0().child(child);
-                calls.push(match arrival {
-                    Some(progress) => row
-                        .opacity(progress)
-                        .top(tokens.spacing.xxs * (1.0 - progress)),
-                    None => row,
-                });
+            for child in self.children {
+                calls.push(div().w_full().min_w_0().child(child));
             }
         }
         let interactive = self.on_event.is_some();
@@ -809,9 +779,7 @@ impl RenderOnce for ToolGroup {
             .gap(tokens.spacing.xs)
             .child(toggle)
             .when(showing, |this| {
-                // Mounted for as long as the cross-fade needs it; semantics
-                // do not wait — aria_expanded above tracks the controlled
-                // state.
+                // Only expanded groups expose their child controls.
                 this.child(
                     v_flex()
                         .id((root_id, "calls"))
@@ -931,7 +899,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_call_appended_while_open_cascades_once(cx: &mut TestAppContext) {
+    fn unkeyed_group_children_do_not_acquire_positional_arrival_motion(cx: &mut TestAppContext) {
         let (probe, cx) = open_group(cx);
         settle(cx);
         crate::motion::take_reveal_frame_requests();
@@ -941,9 +909,10 @@ mod tests {
             cx.notify();
         });
         draw(cx);
-        assert!(
-            crate::motion::take_reveal_frame_requests() > 0,
-            "a call appended to a resting group must settle in"
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "opaque children cannot acquire arrival state by mutable position"
         );
 
         settle(cx);

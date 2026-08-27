@@ -7,10 +7,11 @@
 //! pulse — so an application can pick the one that matches its voice.
 //! Under reduced motion every variant resolves to a useful static frame.
 
-use crate::motion::{AmbientLoopSpec, MotionTokens};
+use crate::motion::{AmbientLoopSpec, MotionTokens, VisibleAnimationExt as _};
+use gpui::InteractiveElement as _;
 use gpui::{
-    AnimationExt as _, App, ElementId, IntoElement, ParentElement as _, Pixels, RenderOnce,
-    StyleRefinement, Styled, Window, div, px,
+    App, ElementId, IntoElement, ParentElement as _, Pixels, RenderOnce, StyleRefinement, Styled,
+    Window, div, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 
@@ -151,6 +152,7 @@ fn perimeter_len() -> usize {
 /// ```
 #[derive(IntoElement)]
 pub struct Orbs {
+    id: ElementId,
     style: StyleRefinement,
     diameter: Pixels,
     variant: OrbVariant,
@@ -158,12 +160,21 @@ pub struct Orbs {
 
 impl Orbs {
     /// Creates a 40px orb cluster using the [`OrbVariant::Radial`] variant.
+    #[track_caller]
     pub fn new() -> Self {
         Self {
+            id: ElementId::CodeLocation(*std::panic::Location::caller()),
             style: StyleRefinement::default(),
             diameter: px(40.),
             variant: OrbVariant::default(),
         }
+    }
+
+    /// Sets stable instance identity. Supply a domain ID when constructing
+    /// multiple clusters from the same call site (for example, in a loop).
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = id.into();
+        self
     }
 
     /// Sets the overall cluster diameter. Dot sizes and spacing scale with it.
@@ -180,6 +191,7 @@ impl Orbs {
 }
 
 impl Default for Orbs {
+    #[track_caller]
     fn default() -> Self {
         Self::new()
     }
@@ -254,10 +266,11 @@ impl RenderOnce for Orbs {
             .collect();
 
         div()
+            .id(self.id)
             .relative()
             .size(self.diameter)
             .refine_style(&self.style)
-            .with_animation(
+            .child(div().relative().size_full().with_visible_animation(
                 ElementId::NamedInteger("orb-lattice".into(), variant_index),
                 // Frame demand: intentionally ambient. Orbs are the "the
                 // model is alive" glyph, so the lattice animates for as long
@@ -299,7 +312,7 @@ impl RenderOnce for Orbs {
                             .opacity(0.35 + 0.5 * (0.5 + 0.5 * swell))
                     }))
                 },
-            )
+            ))
     }
 }
 
@@ -343,6 +356,7 @@ mod tests {
         cx.update(crate::init);
         let window = cx.open_window(size(px(80.), px(80.)), |_, _| LatticeProbe { variant });
         cx.run_until_parked();
+        next_frame(&window, cx);
         window
     }
 

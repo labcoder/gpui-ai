@@ -816,6 +816,12 @@ impl RenderOnce for StreamingText {
         let settled = self.state == ProgressState::Complete;
         let interactive_citations = self.on_event.is_some();
         let root_id = self.id.clone();
+        let sources_settled = crate::motion::acknowledged_state(
+            ElementId::from((root_id.clone(), "sources-settled")),
+            (settled && !self.sources.is_empty()) as u64,
+            window,
+            cx,
+        );
         let cache = window.use_keyed_state((root_id.clone(), "citation-cache"), cx, |_, _| {
             CitationCache::new()
         });
@@ -969,12 +975,7 @@ impl RenderOnce for StreamingText {
                 // that mounts already settled shows it at rest, and
                 // repeated snapshots replay nothing. Streamed prose above
                 // is never animated.
-                let settled_in = crate::motion::acknowledged_state(
-                    ElementId::Name(SharedString::from(format!("{root_id:?}-sources-settled"))),
-                    1,
-                    window,
-                    cx,
-                );
+                let settled_in = sources_settled;
                 this.child(
                     h_flex()
                         .id((root_id.clone(), "sources"))

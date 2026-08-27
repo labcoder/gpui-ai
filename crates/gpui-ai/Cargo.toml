@@ -16,6 +16,10 @@ gpui.workspace = true
 gpui-base.workspace = true
 gpui-component.workspace = true
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+# Matches GPUI's executor clock when retaining animation timestamps.
+web-time = "1.1"
+
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
 
