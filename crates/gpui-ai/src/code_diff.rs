@@ -11,6 +11,7 @@
 //! selectable text view; the gutter and change tints are laid out beside it
 //! on the same rem-based line height so numbers and lines stay aligned.
 
+use crate::motion::{acknowledged_state, disclosure_progress};
 use crate::{
     handlers::SharedHandler,
     status::{StatusBadge, StatusTone},
@@ -513,7 +514,7 @@ impl Styled for CodeDiff {
 }
 
 impl RenderOnce for CodeDiff {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let file = self.file;
         let handler = self.on_event;
@@ -526,6 +527,9 @@ impl RenderOnce for CodeDiff {
             .clone()
             .unwrap_or_else(|| SharedString::from("text"));
         let root_id = self.id.clone();
+        let disclosure =
+            disclosure_progress((root_id.clone(), "disclosure"), self.open, window, cx);
+        let showing = self.open || disclosure > 0.0;
 
         let toggle = handler.clone().map(|handler| {
             let toggle_path = path.clone();
@@ -562,7 +566,7 @@ impl RenderOnce for CodeDiff {
             .px(tokens.spacing.md)
             .py(tokens.spacing.xs)
             .bg(cx.theme().muted.opacity(0.35))
-            .when(self.open, |this| {
+            .when(showing, |this| {
                 this.border_b_1().border_color(cx.theme().border)
             })
             .children(toggle)
@@ -604,7 +608,7 @@ impl RenderOnce for CodeDiff {
             .child(Clipboard::new((root_id.clone(), "copy")).value(file.to_unified()));
 
         let mut hunks = Vec::with_capacity(file.hunks.len());
-        if self.open {
+        if showing {
             for (index, hunk) in file.hunks.iter().enumerate() {
                 hunks.push(render_hunk(
                     &root_id,
@@ -614,6 +618,7 @@ impl RenderOnce for CodeDiff {
                     &language,
                     self.reviewable,
                     handler.clone(),
+                    window,
                     cx,
                 ));
             }
@@ -632,7 +637,18 @@ impl RenderOnce for CodeDiff {
             .rounded(tokens.radius.md)
             .overflow_hidden()
             .child(header)
-            .children(hunks)
+            .when(showing, |this| {
+                // Mounted for as long as the cross-fade needs it; semantics
+                // do not wait for the fade.
+                this.child(
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .opacity(disclosure)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .children(hunks),
+                )
+            })
             .refine_style(&self.style)
     }
 }
@@ -646,6 +662,7 @@ fn render_hunk(
     language: &SharedString,
     reviewable: bool,
     handler: Option<SharedHandler<CodeDiffEvent>>,
+    window: &mut Window,
     cx: &mut App,
 ) -> gpui::AnyElement {
     let tokens = cx.theme().semantic_tokens();
@@ -657,15 +674,36 @@ fn render_hunk(
     let hunk_label: SharedString =
         format!("Hunk {} of {}: {}", index + 1, hunk.header, stats.label()).into();
 
+    // Resolution settles in once, after the controlled review changes; a
+    // diff that mounts already reviewed shows its badges at rest, and the
+    // badge's own fixed-slot swap covers a later accepted-to-rejected
+    // change.
+    let resolved_debug = hunk_debug.clone();
+    let resolved = |window: &mut Window, cx: &mut App, ordinal: u64| {
+        acknowledged_state(
+            ElementId::Name(SharedString::from(format!("{resolved_debug}-resolved"))),
+            ordinal,
+            window,
+            cx,
+        )
+    };
     let review = match (hunk.review, reviewable, handler) {
         (HunkReview::Accepted, _, _) => Some(
-            StatusBadge::new((hunk_id.clone(), "review"), "Accepted")
-                .tone(StatusTone::Success)
+            div()
+                .opacity(resolved(window, cx, 1))
+                .child(
+                    StatusBadge::new((hunk_id.clone(), "review"), "Accepted")
+                        .tone(StatusTone::Success),
+                )
                 .into_any_element(),
         ),
         (HunkReview::Rejected, _, _) => Some(
-            StatusBadge::new((hunk_id.clone(), "review"), "Rejected")
-                .tone(StatusTone::Neutral)
+            div()
+                .opacity(resolved(window, cx, 2))
+                .child(
+                    StatusBadge::new((hunk_id.clone(), "review"), "Rejected")
+                        .tone(StatusTone::Neutral),
+                )
                 .into_any_element(),
         ),
         (HunkReview::Pending, true, Some(handler)) => {

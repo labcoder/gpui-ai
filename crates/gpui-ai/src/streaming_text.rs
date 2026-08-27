@@ -964,9 +964,22 @@ impl RenderOnce for StreamingText {
                 })
             })
             .when(settled && !self.sources.is_empty(), |this| {
+                // The sources row is a discrete addition: it appears whole
+                // when the answer settles, acknowledged once — an answer
+                // that mounts already settled shows it at rest, and
+                // repeated snapshots replay nothing. Streamed prose above
+                // is never animated.
+                let settled_in = crate::motion::acknowledged_state(
+                    ElementId::Name(SharedString::from(format!("{root_id:?}-sources-settled"))),
+                    1,
+                    window,
+                    cx,
+                );
                 this.child(
                     h_flex()
                         .id((root_id.clone(), "sources"))
+                        .opacity(settled_in)
+                        .top(tokens.spacing.xxs * (1.0 - settled_in))
                         .role(Role::List)
                         .aria_label("Sources")
                         .flex_wrap()

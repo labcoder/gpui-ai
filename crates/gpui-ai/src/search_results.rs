@@ -2,6 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::motion::{ArrivalRoster, MotionTokens, reveal_progress};
 use crate::surface::{initial_badge, initial_of};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -122,7 +123,7 @@ impl Styled for SearchResults {
 }
 
 impl RenderOnce for SearchResults {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let header: SharedString = if self.searching {
             format!("Searching \u{201c}{}\u{201d}\u{2026}", self.query).into()
@@ -136,6 +137,24 @@ impl RenderOnce for SearchResults {
             .into()
         };
         let handler = self.on_event;
+        let root_id = self.id.clone();
+
+        // Results the list has already shown stay at rest; stable IDs
+        // streamed into a mounted list settle in on the capped cascade, and
+        // the initial set joins at rest.
+        let motion = MotionTokens::read(cx).clone();
+        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        roster.update(cx, |roster, _| {
+            roster.note(
+                self.results.iter().map(|result| {
+                    ElementId::Name(SharedString::from(format!("result-{}", result.id)))
+                }),
+                true,
+                &motion,
+            );
+        });
 
         v_flex()
             .id(self.id)
@@ -176,6 +195,23 @@ impl RenderOnce for SearchResults {
                         .children(self.results.into_iter().map(|result| {
                             let event = result.opened_event();
                             let result_id = result.id.clone();
+                            let arrival = roster
+                                .read(cx)
+                                .delay(&ElementId::Name(SharedString::from(format!(
+                                    "result-{}",
+                                    result.id
+                                ))))
+                                .map(|delay| {
+                                    reveal_progress(
+                                        ElementId::Name(SharedString::from(format!(
+                                            "result-arrive-{}",
+                                            result.id
+                                        ))),
+                                        delay,
+                                        window,
+                                        cx,
+                                    )
+                                });
                             let accessibility_label = result.title.clone();
                             let accessibility_description = result.domain.clone();
                             let row = h_flex()
@@ -209,6 +245,13 @@ impl RenderOnce for SearchResults {
                                             .child(domain),
                                     )
                                 });
+
+                            let row = match arrival {
+                                Some(progress) => row
+                                    .opacity(progress)
+                                    .top(tokens.spacing.xxs * (1.0 - progress)),
+                                None => row,
+                            };
 
                             match handler.clone() {
                                 Some(handler) => {
