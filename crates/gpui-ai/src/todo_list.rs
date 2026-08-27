@@ -2,12 +2,15 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state, reveal_progress};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, accesskit, div, prelude::FluentBuilder as _,
 };
+use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
     v_flex,
@@ -145,8 +148,9 @@ impl Styled for TodoList {
 }
 
 impl RenderOnce for TodoList {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let motion = MotionTokens::read(cx).clone();
         let done = self
             .items
             .iter()
@@ -154,6 +158,39 @@ impl RenderOnce for TodoList {
             .count();
         let total = self.items.len();
         let handler = self.on_event;
+
+        // One shared fill carries the plan's completion: it retargets from
+        // its current sample when steps complete or reopen, starts at the
+        // supplied value on first render, and snaps under reduced motion —
+        // the transition contract, not local policy.
+        let fraction = if total == 0 {
+            0.0
+        } else {
+            done as f32 / total as f32
+        };
+        let fill = transition(
+            (self.id.clone(), "todo-fill"),
+            fraction,
+            Transition::new(motion.standard()).ease(ease_out_cubic),
+            window,
+            cx,
+        );
+
+        // Items the list has already shown never re-animate; new stable IDs
+        // appended to a mounted list settle in on the capped cascade, and
+        // the initial load joins at rest.
+        let roster = window.use_keyed_state((self.id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        roster.update(cx, |roster, _| {
+            roster.note(
+                self.items
+                    .iter()
+                    .map(|item| ElementId::Name(SharedString::from(format!("todo-{}", item.id)))),
+                true,
+                &motion,
+            );
+        });
         let list_name = self.title.clone().unwrap_or_else(|| "To-do list".into());
         let accessibility_label: SharedString =
             format!("{list_name}, {done} of {total} complete").into();
@@ -190,6 +227,22 @@ impl RenderOnce for TodoList {
                         ),
                 )
             })
+            .child(
+                // The shared completion fill under the header; the track is
+                // always full width, the fill is the sampled fraction.
+                div()
+                    .w_full()
+                    .h(tokens.spacing.xxs)
+                    .rounded(tokens.radius.full)
+                    .bg(cx.theme().muted)
+                    .child(
+                        div()
+                            .h_full()
+                            .w(gpui::relative(fill))
+                            .rounded(tokens.radius.full)
+                            .bg(cx.theme().primary),
+                    ),
+            )
             .children(self.items.into_iter().map(|item| {
                 let item_id = item.id.clone();
                 let accessibility_label = item.label.clone();
@@ -207,18 +260,52 @@ impl RenderOnce for TodoList {
                         .xsmall()
                         .color(cx.theme().info)
                         .into_any_element(),
+                    // The durable completion mark settles in once, after the
+                    // controlled status changes; loaded-done items are the
+                    // mount state and exempt.
                     TodoStatus::Done => Icon::new(IconName::CircleCheck)
                         .small()
                         .text_color(cx.theme().success)
+                        .opacity(acknowledged_state(
+                            ElementId::Name(SharedString::from(format!("todo-glyph-{}", item.id))),
+                            2,
+                            window,
+                            cx,
+                        ))
                         .into_any_element(),
                 };
+                let arrival = roster
+                    .read(cx)
+                    .delay(&ElementId::Name(SharedString::from(format!(
+                        "todo-{}",
+                        item.id
+                    ))))
+                    .map(|delay| {
+                        reveal_progress(
+                            ElementId::Name(SharedString::from(format!("todo-arrive-{}", item.id))),
+                            delay,
+                            window,
+                            cx,
+                        )
+                    });
 
                 let event = item.toggled_event();
                 let row = h_flex()
                     .w_full()
                     .items_center()
                     .gap(tokens.spacing.sm)
-                    .child(div().flex_none().child(indicator))
+                    .child(
+                        // A fixed square slot: ring, spinner, and check all
+                        // centre in the same box, so a status change never
+                        // nudges the label sideways.
+                        div()
+                            .flex_none()
+                            .size(tokens.spacing.lg)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(indicator),
+                    )
                     .child(
                         div()
                             .flex_1()
@@ -232,6 +319,13 @@ impl RenderOnce for TodoList {
                             })
                             .child(item.label),
                     );
+
+                let row = match arrival {
+                    Some(progress) => row
+                        .opacity(progress)
+                        .top(tokens.spacing.xxs * (1.0 - progress)),
+                    None => row,
+                };
 
                 match handler.clone() {
                     Some(handler) => composed_button(item.id.clone(), accessibility_label)
@@ -268,6 +362,62 @@ impl RenderOnce for TodoList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
+
+    struct ListProbe {
+        count: usize,
+    }
+
+    impl Render for ListProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(320.)).h(px(320.)).child(
+                TodoList::new("probe-plan")
+                    .title("Plan")
+                    .items((0..self.count).map(|ix| TodoItem::new(format!("step-{ix}"), "Step"))),
+            )
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn a_loaded_list_rests_and_an_appended_item_settles_in(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| ListProbe { count: 3 });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "the initial load joins at rest"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "an item appended to a mounted list must settle in"
+        );
+
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+        probe.update(cx, |_, cx| cx.notify());
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a re-render must not replay an acknowledged arrival"
+        );
+    }
 
     #[test]
     fn duplicate_labels_emit_distinct_stable_ids() {

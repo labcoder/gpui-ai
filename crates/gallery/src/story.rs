@@ -407,7 +407,7 @@ impl StoryId {
                 module: "todo_list",
                 api: "TodoList",
                 usage: "TodoList::new(\"release-plan\")",
-                height: 218,
+                height: 224,
                 overflow: Overflow::Wide,
             },
             Self::ImageGeneration => StoryMeta {

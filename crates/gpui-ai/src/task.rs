@@ -1,10 +1,11 @@
 //! Live status rows for progressive agent tasks.
 
+use crate::motion::acknowledged_state;
 use crate::stream::{ProgressState, Progressive};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
 use gpui_component::{
@@ -87,8 +88,19 @@ impl Styled for TaskRow {
 }
 
 impl RenderOnce for TaskRow {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // The durable completion and failure marks settle in once, after the
+        // controlled state changes — never on a re-render, and never for the
+        // state the row mounts with.
+        let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
+            acknowledged_state(
+                ElementId::Name(SharedString::from(format!("{}-task-glyph", self.task.id))),
+                ordinal,
+                window,
+                cx,
+            )
+        };
         let indicator = match &self.state {
             ProgressState::Pending => div()
                 .size_2()
@@ -103,10 +115,12 @@ impl RenderOnce for TaskRow {
             ProgressState::Complete => Icon::new(IconName::CircleCheck)
                 .small()
                 .text_color(cx.theme().success)
+                .opacity(acknowledged(window, cx, 2))
                 .into_any_element(),
             ProgressState::Failed(_) => Icon::new(IconName::CircleX)
                 .small()
                 .text_color(cx.theme().danger)
+                .opacity(acknowledged(window, cx, 3))
                 .into_any_element(),
         };
         let failed_reason = match &self.state {
@@ -134,7 +148,18 @@ impl RenderOnce for TaskRow {
             .gap(tokens.spacing.sm)
             .py(tokens.spacing.xs)
             .text_token(tokens.typography.sm)
-            .child(div().flex_none().child(indicator))
+            .child(
+                // A fixed square slot: dot, spinner, check, and cross all
+                // centre in the same box, so a lifecycle change never nudges
+                // the title sideways.
+                div()
+                    .flex_none()
+                    .size(tokens.spacing.lg)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(indicator),
+            )
             .child(
                 div()
                     .flex_1()

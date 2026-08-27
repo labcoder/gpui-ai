@@ -250,26 +250,15 @@ impl ToolCall {
 
     fn status_glyph(&self, window: &mut Window, cx: &mut App) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
-        // The terminal glyphs settle in rather than popping: each state's
-        // acknowledgment is keyed by the state itself, so it plays once on
-        // the transition and never again on a re-render. The very first
-        // glyph a card mounts with is exempt — a first render is not a
-        // transition — which the swap state below remembers.
+        // The terminal glyphs settle in rather than popping, once per state
+        // and never on a re-render; the state a card mounts with is exempt.
         let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
-            let id = ElementId::from(self.invocation.id.clone());
-            let primed = window.use_keyed_state((id.clone(), "glyph-primed"), cx, |_, _| ordinal);
-            if *primed.read(cx) == ordinal {
-                1.0
-            } else {
-                crate::motion::swap_progress(
-                    ElementId::NamedInteger(
-                        SharedString::from(format!("{}-glyph", self.invocation.id)),
-                        ordinal,
-                    ),
-                    window,
-                    cx,
-                )
-            }
+            crate::motion::acknowledged_state(
+                ElementId::Name(SharedString::from(format!("{}-glyph", self.invocation.id))),
+                ordinal,
+                window,
+                cx,
+            )
         };
         match &self.state {
             ProgressState::Running => Spinner::new()

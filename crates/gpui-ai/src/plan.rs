@@ -11,7 +11,7 @@ use crate::{
     control::composed_button,
     cues::{self, Cue},
     handlers::SharedHandler,
-    motion::reveal_staggered,
+    motion::{ArrivalRoster, MotionTokens, acknowledged_state, reveal_progress},
     status::{StatusBadge, StatusTone},
     surface::{card, description, eyebrow, meta, title},
     theme::SemanticStyledExt as _,
@@ -294,14 +294,47 @@ impl RenderOnce for PlanCard {
         let root_id = ElementId::from(self.id.clone());
         let debug_id = self.id.to_string();
 
+        // Steps the card has already shown never re-animate: the roster
+        // persists in keyed window state, the initial plan joins at rest,
+        // and only steps appended to a mounted card settle in — on the
+        // capped cascade, so a long plan accumulates neither delay nor
+        // offscreen work.
+        let motion = MotionTokens::read(cx).clone();
+        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        roster.update(cx, |roster, _| {
+            roster.note(
+                self.steps.iter().map(|step| {
+                    ElementId::Name(SharedString::from(format!("plan-step-{}", step.id)))
+                }),
+                true,
+                &motion,
+            );
+        });
         let mut steps = Vec::with_capacity(total);
         for (index, step) in self.steps.iter().enumerate() {
+            let arrival = roster
+                .read(cx)
+                .delay(&ElementId::Name(SharedString::from(format!(
+                    "plan-step-{}",
+                    step.id
+                ))))
+                .map(|delay| {
+                    reveal_progress(
+                        (root_id.clone(), format!("reveal-{}", step.id)),
+                        delay,
+                        window,
+                        cx,
+                    )
+                });
             steps.push(render_step(
                 &root_id,
                 &plan_id,
                 index,
                 total,
                 step,
+                arrival,
                 handler.clone(),
                 window,
                 cx,
@@ -451,6 +484,7 @@ fn render_step(
     index: usize,
     total: usize,
     step: &PlanStep,
+    arrival: Option<f32>,
     handler: Option<SharedHandler<PlanEvent>>,
     window: &mut Window,
     cx: &mut App,
@@ -468,6 +502,17 @@ fn render_step(
     let is_last = index + 1 == total;
 
     let glyph_size = tokens.spacing.lg;
+    // Terminal marks settle into the fixed glyph ring once, after the
+    // controlled status changes; the status a step mounts with is exempt,
+    // and error paths share the same quick, overshoot-free acknowledgment.
+    let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
+        acknowledged_state(
+            ElementId::Name(SharedString::from(format!("{plan_id}-glyph-{}", step.id))),
+            ordinal,
+            window,
+            cx,
+        )
+    };
     let (glyph, ring, fill): (AnyElement, gpui::Hsla, gpui::Hsla) = match step.status {
         PlanStepStatus::Pending => (
             div()
@@ -488,6 +533,7 @@ fn render_step(
             Icon::new(IconName::Check)
                 .xsmall()
                 .text_color(cx.theme().success)
+                .opacity(acknowledged(window, cx, 2))
                 .into_any_element(),
             cx.theme().success.opacity(0.5),
             cx.theme().success.opacity(0.12),
@@ -496,6 +542,7 @@ fn render_step(
             Icon::new(IconName::CircleX)
                 .xsmall()
                 .text_color(cx.theme().danger)
+                .opacity(acknowledged(window, cx, 3))
                 .into_any_element(),
             cx.theme().danger.opacity(0.5),
             cx.theme().danger.opacity(0.12),
@@ -504,6 +551,7 @@ fn render_step(
             Icon::new(IconName::Dash)
                 .xsmall()
                 .text_color(cx.theme().muted_foreground)
+                .opacity(acknowledged(window, cx, 4))
                 .into_any_element(),
             cx.theme().border,
             cx.theme().muted.opacity(0.5),
@@ -600,19 +648,60 @@ fn render_step(
             .child(body)
             .into_any_element(),
     };
-    reveal_staggered(
-        div().w_full().min_w_0().child(row),
-        (root_id.clone(), format!("reveal-{}", step.id)),
-        index,
-        window,
-        cx,
-    )
-    .into_any_element()
+    let wrapped = div().w_full().min_w_0().child(row);
+    match arrival {
+        // A freshly appended step settles in on its assigned beat; every
+        // other step — the whole initial plan included — renders at rest.
+        Some(progress) => wrapped
+            .opacity(progress)
+            .top(tokens.spacing.xxs * (1.0 - progress))
+            .into_any_element(),
+        None => wrapped.into_any_element(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
+
+    struct PlanProbe {
+        count: usize,
+    }
+
+    impl Render for PlanProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(360.)).h(px(480.)).child(
+                PlanCard::new("probe-plan", "Rollout")
+                    .steps((0..self.count).map(|ix| PlanStep::new(format!("step-{ix}"), "Step"))),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn a_proposed_plan_mounts_at_rest_and_new_steps_settle_in(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| PlanProbe { count: 3 });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        crate::motion::take_reveal_frame_requests();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a plan's initial steps are a proposal to read, not a cascade"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "a step appended to a mounted plan must settle in"
+        );
+    }
 
     #[test]
     fn plan_state_labels_and_tones_follow_the_lifecycle() {

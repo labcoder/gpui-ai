@@ -2,7 +2,6 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
-use crate::motion::swap_progress;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -127,21 +126,14 @@ impl RenderOnce for ToolChip {
         // mounts with is exempt — a first render is not a transition. The
         // chip's label never changes with status, so the indicator is the
         // whole swap.
-        let mount =
-            window.use_keyed_state((ElementId::from(self.id.clone()), "chip-primed"), cx, {
-                let status = self.status;
-                move |_, _| status
-            });
-        let acknowledged = if *mount.read(cx) == self.status || self.status == ToolStatus::Running {
+        let acknowledged = if self.status == ToolStatus::Running {
             // A running chip's signal is its spinner; fading the spinner in
             // would stack two motions on one slot.
             1.0
         } else {
-            swap_progress(
-                ElementId::NamedInteger(
-                    SharedString::from(format!("{}-chip-status", self.id)),
-                    self.status as u64,
-                ),
+            crate::motion::acknowledged_state(
+                ElementId::Name(SharedString::from(format!("{}-chip-status", self.id))),
+                self.status as u64,
                 window,
                 cx,
             )

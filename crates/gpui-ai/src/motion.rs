@@ -743,6 +743,37 @@ pub(crate) fn swap_progress(id: impl Into<ElementId>, window: &mut Window, cx: &
     timed_progress(id, Duration::ZERO, duration, window, cx)
 }
 
+/// One-shot acknowledgment of the state a fixed slot has settled into.
+///
+/// Keyed by the slot plus the state's `ordinal`: the acknowledgment plays
+/// once, at the quick tempo, when the slot first shows a new state — and
+/// never again for that state, so re-renders replay nothing. The state a
+/// slot mounts with is exempt, because a first render is not a transition.
+/// Consumers apply the returned progress as the incoming face's opacity;
+/// running states keep their spinner untouched, since fading an animation
+/// in would stack two motions on one slot.
+pub(crate) fn acknowledged_state(
+    slot: ElementId,
+    ordinal: u64,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    let mounted = window.use_keyed_state((slot.clone(), "acknowledged-mount"), cx, move |_, _| {
+        ordinal
+    });
+    if *mounted.read(cx) == ordinal {
+        return 1.0;
+    }
+    swap_progress(
+        ElementId::NamedInteger(
+            SharedString::from(format!("{slot:?}-acknowledged")),
+            ordinal,
+        ),
+        window,
+        cx,
+    )
+}
+
 /// The shared clock behind [`reveal_progress`] and [`swap_progress`]: `0.0`
 /// at the keyed instant the element first rendered, `1.0` once `duration`
 /// (after `delay`) has passed, eased on the way.
