@@ -674,6 +674,38 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     );
   };
 
+  // Visibility is only the render half of opening a modal. Focus, inertness,
+  // and the keyboard handler are installed as one lifecycle, and later input
+  // must not race any of them on a loaded runner.
+  const drawerSettled = `(() => {
+    const panel = document.getElementById('site-nav-panel');
+    const close = panel?.querySelector('button[data-nav-close]');
+    return Boolean(panel && !panel.hidden && document.activeElement === close &&
+      [...panel.parentElement.children]
+        .filter((child) => child !== panel)
+        .every((child) => child.hasAttribute('inert')));
+  })()`;
+  const drawerClosed = (focus) => `(() => {
+    const panel = document.getElementById('site-nav-panel');
+    return Boolean(panel?.hidden && document.querySelectorAll('[inert]').length === 0 && (${focus}));
+  })()`;
+  const drawerDiagnosis = `(() => {
+    const panel = document.getElementById('site-nav-panel');
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const close = panel?.querySelector('button[data-nav-close]');
+    return {
+      hidden: panel?.hidden ?? null,
+      expanded: toggle?.getAttribute('aria-expanded') ?? null,
+      wide: matchMedia('(min-width: 60rem)').matches,
+      inert: document.querySelectorAll('[inert]').length,
+      focusIsClose: document.activeElement === close,
+      focusIsToggle: document.activeElement === toggle,
+      focusId: document.activeElement?.id ?? null,
+      focusTag: document.activeElement?.tagName ?? null,
+      toggleDisplay: toggle ? getComputedStyle(toggle).display : null,
+    };
+  })()`;
+
   // The drawer, driven the way a keyboard drives it. None of this is visible
   // in the markup: the panel ships hidden and everything below happens after
   // mount, so HTML assertions can only prove the parts exist.
@@ -683,9 +715,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     toggle.focus();
     toggle.click();
   })()`);
-  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+  await waitForValue(cdp, drawerSettled, {
     label: "the drawer to open",
-    describe: GALLERY_DIAGNOSIS,
+    describe: drawerDiagnosis,
     errors,
   });
   const opened = await cdp.evaluate(`(() => {
@@ -749,6 +781,15 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
 
   await cdp.key("Escape", "Escape", 27);
+  await waitForValue(
+    cdp,
+    drawerClosed("document.activeElement?.dataset.navToggle !== undefined"),
+    {
+      label: "Escape to close the drawer and restore focus",
+      describe: drawerDiagnosis,
+      errors,
+    },
+  );
   const closed = await cdp.evaluate(`(() => {
     const panel = document.getElementById('site-nav-panel');
     return {
@@ -765,9 +806,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // The backdrop is pointer-only by design, so prove the pointer path works
   // too — otherwise it is decoration that traps a mouse user.
   await cdp.evaluate("document.querySelector('[data-nav-toggle]').click()");
-  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+  await waitForValue(cdp, drawerSettled, {
     label: "the drawer to reopen for the pointer path",
-    describe: GALLERY_DIAGNOSIS,
+    describe: drawerDiagnosis,
     errors,
   });
   // Dispatched at coordinates, not through the element's own click(): the
@@ -776,11 +817,15 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // Throws unless a real pointer can land on the backdrop itself, which its
   // own centre cannot do — the drawer covers that.
   await cdp.clickAt(".nav-backdrop");
-  await waitForValue(cdp, "document.getElementById('site-nav-panel').hidden", {
-    label: "a backdrop click to close the drawer",
-    describe: GALLERY_DIAGNOSIS,
-    errors,
-  });
+  await waitForValue(
+    cdp,
+    drawerClosed("document.activeElement?.dataset.navToggle !== undefined"),
+    {
+      label: "a backdrop click to close the drawer",
+      describe: drawerDiagnosis,
+      errors,
+    },
+  );
   assert.deepEqual(
     await cdp.evaluate(`(() => ({
       backdropIsButton: Boolean(document.querySelector('button.nav-backdrop')),
@@ -793,9 +838,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // display:none up here, so handing focus back to it would drop focus onto
   // nothing — the page would look fine and the keyboard would be lost.
   await cdp.evaluate("document.querySelector('[data-nav-toggle]').click()");
-  await waitForValue(cdp, "!document.getElementById('site-nav-panel').hidden", {
+  await waitForValue(cdp, drawerSettled, {
     label: "the drawer to open before the resize",
-    describe: GALLERY_DIAGNOSIS,
+    describe: drawerDiagnosis,
     errors,
   });
   await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -804,9 +849,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     deviceScaleFactor: 1,
     mobile: false,
   });
-  await waitForValue(cdp, "document.getElementById('site-nav-panel').hidden", {
+  await waitForValue(cdp, drawerClosed("document.activeElement?.id === 'content'"), {
     label: "the drawer to close when the rail appears",
-    describe: GALLERY_DIAGNOSIS,
+    describe: drawerDiagnosis,
     errors,
   });
   assert.deepEqual(

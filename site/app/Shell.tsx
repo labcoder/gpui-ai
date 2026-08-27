@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { narrow } from "./CatalogPage";
 import { build, themeGroups } from "./data";
 import { href } from "./links";
@@ -17,6 +25,11 @@ const MODES = [
   { id: "light", label: "Light" },
   { id: "dark", label: "Dark" },
 ] as const;
+
+// The site is pre-rendered in Node, where a layout effect is neither useful
+// nor supported. In the browser, modal focus and inertness must change in the
+// same commit as visibility so no frame exposes a half-open dialog.
+const useClientLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * The site's chrome, on every page.
@@ -311,7 +324,7 @@ function Drawer({
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
+  useClientLayoutEffect(() => {
     if (!open) return;
     const opened = panel.current;
     closeButton.current?.focus();
@@ -359,10 +372,30 @@ function Drawer({
       // the browser refuses to move it. The toggle is where the visitor left
       // it, but crossing the desktop breakpoint hides that button, and focus
       // on a display:none element is focus on nothing. The content is the
-      // honest fallback.
+      // honest fallback. Read the media query rather than offsetParent first:
+      // its change event fires before layout necessarily reflects the new
+      // stylesheet, so the toggle can still have a box while becoming hidden.
       const toggle = document.querySelector<HTMLElement>("[data-nav-toggle]");
-      const target = toggle?.offsetParent ? toggle : document.getElementById("content");
+      const desktop = window.matchMedia("(min-width: 60rem)").matches;
+      const target = !desktop && toggle?.offsetParent
+        ? toggle
+        : document.getElementById("content");
       target?.focus();
+
+      // Hiding the focused dialog and changing the responsive layout happen
+      // in the same frame. Chromium can apply its own focus fallback after
+      // this cleanup and choose the newly resized demo iframe, undoing the
+      // handoff above. Reaffirm the desktop destination once that paint has
+      // settled, but only if this same drawer stayed closed and wide.
+      if (desktop) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            if (opened?.hidden && window.matchMedia("(min-width: 60rem)").matches) {
+              document.getElementById("content")?.focus();
+            }
+          });
+        });
+      }
     };
   }, [open, onClose]);
 
