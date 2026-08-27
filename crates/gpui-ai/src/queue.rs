@@ -8,7 +8,7 @@
 
 use crate::{
     handlers::SharedHandler,
-    motion::reveal_staggered,
+    motion::{ArrivalRoster, MotionTokens, reveal_progress},
     surface::{eyebrow, icon_button, meta},
     theme::SemanticStyledExt as _,
 };
@@ -167,8 +167,42 @@ impl RenderOnce for MessageQueue {
             return div().id(root_id).hidden().refine_style(&self.style);
         }
 
+        // Rows the queue has already shown stay at rest; stable IDs queued
+        // onto a mounted surface settle in on the capped cascade, and the
+        // restored initial snapshot joins at rest. Reorders exchange no
+        // motion state — Spike D's measured reorder was reverted because a
+        // layout offset paints one frame at the destination first, so a
+        // moved row simply lands where its controls put it.
+        let motion = MotionTokens::read(cx).clone();
+        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        roster.update(cx, |roster, _| {
+            roster.note(
+                self.items.iter().map(|item| {
+                    ElementId::Name(SharedString::from(format!("queue-arrive-{}", item.id)))
+                }),
+                true,
+                &motion,
+            );
+        });
+
         let mut rows = Vec::with_capacity(count);
         for (index, item) in self.items.iter().enumerate() {
+            let arrival = roster
+                .read(cx)
+                .delay(&ElementId::Name(SharedString::from(format!(
+                    "queue-arrive-{}",
+                    item.id
+                ))))
+                .map(|delay| {
+                    reveal_progress(
+                        ElementId::Name(SharedString::from(format!("queue-settle-{}", item.id))),
+                        delay,
+                        window,
+                        cx,
+                    )
+                });
             rows.push(render_row(
                 &root_id,
                 &debug_id,
@@ -176,8 +210,8 @@ impl RenderOnce for MessageQueue {
                 count,
                 item,
                 self.editable,
+                arrival,
                 handler.clone(),
-                window,
                 cx,
             ));
         }
@@ -232,8 +266,8 @@ fn render_row(
     count: usize,
     item: &QueuedMessage,
     editable: bool,
+    arrival: Option<f32>,
     handler: Option<SharedHandler<QueueEvent>>,
-    window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
@@ -346,19 +380,78 @@ fn render_row(
                 }),
         )
         .child(controls);
-    reveal_staggered(
-        div().w_full().min_w_0().child(row),
-        (root_id.clone(), format!("reveal-{}", item.id)),
-        index,
-        window,
-        cx,
-    )
-    .into_any_element()
+    let row = match arrival {
+        Some(progress) => row
+            .opacity(progress)
+            .top(tokens.spacing.xxs * (1.0 - progress)),
+        None => row,
+    };
+    div().w_full().min_w_0().child(row).into_any_element()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, px};
+
+    struct QueueProbe {
+        count: usize,
+    }
+
+    impl Render for QueueProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(360.))
+                .h(px(320.))
+                .child(
+                    MessageQueue::new("probe-queue").items(
+                        (0..self.count)
+                            .map(|ix| QueuedMessage::new(format!("q-{ix}"), "Queued prompt")),
+                    ),
+                )
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn a_restored_queue_rests_and_a_newly_queued_prompt_settles_in(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| QueueProbe { count: 3 });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a restored queue joins at rest"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "a prompt queued onto a mounted surface must settle in"
+        );
+
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(2));
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+        probe.update(cx, |_, cx| cx.notify());
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a re-render must not replay an acknowledged arrival"
+        );
+    }
 
     #[test]
     fn notes_are_optional() {

@@ -14,7 +14,7 @@
 use crate::{
     control::composed_button,
     handlers::SharedHandler,
-    motion::{Shimmer, reveal_staggered},
+    motion::{ArrivalRoster, MotionTokens, Shimmer, reveal_progress},
     stream::ProgressState,
     surface::icon_button,
     theme::SemanticStyledExt as _,
@@ -652,8 +652,26 @@ impl RenderOnce for AttachmentStrip {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let root_id = self.id.clone();
+
+        // Tiles the strip has already shown stay at rest; a file attached to
+        // a mounted composer settles in on the capped cascade, and a strip
+        // restored with its attachments joins at rest.
+        let motion = MotionTokens::read(cx).clone();
+        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        roster.update(cx, |roster, _| {
+            roster.note(
+                self.items.iter().map(|attachment| {
+                    ElementId::Name(SharedString::from(format!("tile-arrive-{}", attachment.id)))
+                }),
+                true,
+                &motion,
+            );
+        });
+
         let mut tiles = Vec::with_capacity(self.items.len());
-        for (index, attachment) in self.items.iter().enumerate() {
+        for attachment in self.items.iter() {
             let tile_id = ElementId::from((root_id.clone(), format!("tile-{}", attachment.id)));
             let mut preview = AttachmentPreview::new(tile_id, attachment)
                 .removable(self.removable)
@@ -661,13 +679,30 @@ impl RenderOnce for AttachmentStrip {
             if let Some(handler) = self.on_event.clone() {
                 preview = preview.on_shared_event(handler);
             }
-            tiles.push(reveal_staggered(
-                preview,
-                (root_id.clone(), format!("reveal-{}", attachment.id)),
-                index,
-                window,
-                cx,
-            ));
+            let arrival = roster
+                .read(cx)
+                .delay(&ElementId::Name(SharedString::from(format!(
+                    "tile-arrive-{}",
+                    attachment.id
+                ))))
+                .map(|delay| {
+                    reveal_progress(
+                        ElementId::Name(SharedString::from(format!(
+                            "tile-settle-{}",
+                            attachment.id
+                        ))),
+                        delay,
+                        window,
+                        cx,
+                    )
+                });
+            let preview = match arrival {
+                Some(progress) => preview
+                    .opacity(progress)
+                    .top(tokens.spacing.xxs * (1.0 - progress)),
+                None => preview,
+            };
+            tiles.push(preview);
         }
         h_flex()
             .id(self.id)
@@ -685,6 +720,50 @@ impl RenderOnce for AttachmentStrip {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Render, TestAppContext, VisualTestContext, div, px};
+
+    struct StripProbe {
+        count: usize,
+    }
+
+    impl Render for StripProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(360.)).h(px(320.)).child(
+                AttachmentStrip::new("probe-strip").items(
+                    (0..self.count).map(|ix| Attachment::new(format!("a-{ix}"), "notes.md")),
+                ),
+            )
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    #[gpui::test]
+    fn a_restored_strip_rests_and_a_newly_attached_file_settles_in(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| StripProbe { count: 3 });
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a restored strip joins at rest"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "a file attached to a mounted strip must settle in"
+        );
+    }
 
     #[test]
     fn kinds_follow_extensions_case_insensitively() {
