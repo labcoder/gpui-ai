@@ -8,6 +8,7 @@
 //! snapshot.
 
 use crate::{
+    ButtonLabelExt as _,
     control::composed_button,
     cues::{self, Cue},
     handlers::SharedHandler,
@@ -357,7 +358,7 @@ impl RenderOnce for PlanCard {
                                         .primary()
                                         .small()
                                         .accessibility_id(format!("{plan_id}-approve"))
-                                        .label("Approve plan")
+                                        .text_label("Approve plan")
                                         .on_click(move |_: &ClickEvent, window, cx| {
                                             cues::emit(cx, Cue::Decided { approved: true });
                                             approve_handler(
@@ -378,7 +379,7 @@ impl RenderOnce for PlanCard {
                                         .outline()
                                         .small()
                                         .accessibility_id(format!("{plan_id}-reject"))
-                                        .label("Reject")
+                                        .text_label("Reject")
                                         .on_click(move |_: &ClickEvent, window, cx| {
                                             cues::emit(cx, Cue::Decided { approved: false });
                                             reject_handler(
@@ -400,7 +401,7 @@ impl RenderOnce for PlanCard {
                                             .ghost()
                                             .small()
                                             .accessibility_id(format!("{plan_id}-edit"))
-                                            .label("Edit plan")
+                                            .text_label("Edit plan")
                                             .on_click(move |_: &ClickEvent, window, cx| {
                                                 handler(
                                                     &PlanEvent::EditRequested {

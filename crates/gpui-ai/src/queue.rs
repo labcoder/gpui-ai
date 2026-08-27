@@ -7,6 +7,7 @@
 //! keyed by stable ID.
 
 use crate::{
+    ButtonLabelExt as _,
     handlers::SharedHandler,
     motion::{ArrivalRoster, MotionTokens},
     surface::{eyebrow, icon_button, meta},
@@ -218,7 +219,7 @@ impl RenderOnce for MessageQueue {
                         .ghost()
                         .xsmall()
                         .accessibility_id(format!("{debug_id}-clear"))
-                        .label("Clear queue")
+                        .text_label("Clear queue")
                         .on_click(move |_: &ClickEvent, window, cx| {
                             handler(&QueueEvent::Cleared, window, cx)
                         }),

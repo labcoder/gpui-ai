@@ -1,6 +1,7 @@
 //! Message actions and the chat transcript's visual composition.
 
 use super::*;
+use crate::ButtonLabelExt as _;
 
 pub(super) fn chat_frame(id: &SharedString) -> Stateful<gpui::Div> {
     v_flex()
@@ -582,7 +583,7 @@ impl Chat {
                                 LabeledButton::new((base, "edit-save"))
                                     .primary()
                                     .small()
-                                    .label("Save")
+                                    .text_label("Save")
                                     .on_click(cx.listener(|chat, _, window, cx| {
                                         chat.submit_edit(window, cx);
                                     })),

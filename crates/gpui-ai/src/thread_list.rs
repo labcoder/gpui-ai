@@ -16,6 +16,7 @@
 //! inside the row, so opening one never changes a row's height or shifts the
 //! conversations below it, and dismissal plus focus return come from upstream.
 
+use crate::ButtonLabelExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     control::composed_button,
@@ -998,7 +999,7 @@ impl Render for ThreadList {
                                 .outline()
                                 .small()
                                 .icon(IconName::Plus)
-                                .label("New chat")
+                                .text_label("New chat")
                                 .accessibility_id(format!("{}-new", self.id))
                                 .on_click(cx.listener(|_, _, _, cx| {
                                     cx.emit(ThreadListEvent::NewRequested);

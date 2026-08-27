@@ -94,6 +94,10 @@ npm run test:perf      # optimized frame-budget gate
 npm run test:catalog   # whole-catalog scroll, stalls, latency, memory, idle demand
 ```
 
+For label/font changes, `npm run test:typography` checks actual glyph pixels
+with Windows/DirectWrite and a GPU across all bundled themes and rem scales.
+It stays separate from the mock-renderer tests in `npm run check`.
+
 ## Commits and pull requests
 
 - One logical change per commit.

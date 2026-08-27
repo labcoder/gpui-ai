@@ -11,6 +11,7 @@
 //! panel inside the upstream resizable group.
 
 use crate::{
+    ButtonLabelExt as _,
     code_block::CodeBlock,
     handlers::SharedHandler,
     status::{StatusBadge, StatusTone},
@@ -615,7 +616,7 @@ impl RenderOnce for ArtifactPanel {
                                 .outline()
                                 .small()
                                 .accessibility_id(format!("{artifact_id}-{}", action.id))
-                                .label(action.label.clone())
+                                .text_label(action.label.clone())
                                 .disabled(handler.is_none())
                                 .on_click(move |_: &ClickEvent, window, cx| {
                                     if let Some(handler) = &handler {

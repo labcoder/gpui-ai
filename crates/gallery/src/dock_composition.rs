@@ -429,7 +429,7 @@ impl Render for DockCompositionStory {
                             .selected(edge == placement)
                             .when(edge == placement, |button| button.primary())
                             .when(edge != placement, |button| button.outline())
-                            .label(label)
+                            .text_label(label)
                             .on_click(cx.listener(move |story, _, window, cx| {
                                 story.set_placement(edge, window, cx);
                             }))

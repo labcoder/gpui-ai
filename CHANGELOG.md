@@ -35,6 +35,9 @@ revision.
   variable that opens a story by slug.
 - `Orbs::id` supplies stable identity for repeated instances from one call
   site, keeping their visibility and animation state separate.
+- `ButtonLabelExt::text_label` composes theme-aware text into upstream
+  buttons while preserving their sizing, icons, keyboard behavior, and
+  accessible names.
 
 ### Changed
 
@@ -90,6 +93,10 @@ revision.
 
 ### Fixed
 
+- Button labels retain descenders, accents, and ligatures across theme and
+  rem changes. The gallery theme picker and composed action buttons use
+  theme-token leading instead of a clipped one-em label box; padding and
+  button dimensions are unchanged.
 - The web embed no longer takes the host page's focus at boot: the
   gallery's focus gate defers upstream's input focus until the reader
   interacts, which also removes the docs drawer flake it caused.

@@ -25,6 +25,7 @@
 pub mod approval;
 pub mod artifact;
 pub mod attachment;
+mod button_label;
 pub mod chat;
 pub mod chip;
 pub mod code_block;
@@ -66,8 +67,11 @@ pub mod todo_list;
 pub mod tool_call;
 pub mod voice;
 
+pub use button_label::ButtonLabelExt;
+
 /// Convenient single-import surface: `use gpui_ai::prelude::*;`.
 pub mod prelude {
+    pub use crate::ButtonLabelExt;
     pub use crate::approval::{ApprovalCard, ApprovalDecision, ApprovalEvent, ApprovalTone};
     pub use crate::artifact::{
         Artifact, ArtifactAction, ArtifactKind, ArtifactPanel, ArtifactPanelEvent, ArtifactVersion,

@@ -1,5 +1,6 @@
 //! Human-in-the-loop approval gates for agent actions.
 
+use crate::ButtonLabelExt as _;
 use crate::cues::{self, Cue};
 use crate::handlers::SharedHandler;
 use crate::motion::acknowledged_state;
@@ -244,7 +245,7 @@ impl RenderOnce for ApprovalCard {
                                     })
                                     .small()
                                     .accessibility_id(format!("{}-approve", self.id))
-                                    .label(self.approve_label.clone())
+                                    .text_label(self.approve_label.clone())
                                     .on_click(move |_: &ClickEvent, window, cx| {
                                         cues::emit(cx, Cue::Decided { approved: true });
                                         handler(&approve_event, window, cx)
@@ -261,7 +262,7 @@ impl RenderOnce for ApprovalCard {
                                     .outline()
                                     .small()
                                     .accessibility_id(format!("{}-reject", self.id))
-                                    .label(self.reject_label.clone())
+                                    .text_label(self.reject_label.clone())
                                     .on_click(move |_: &ClickEvent, window, cx| {
                                         cues::emit(cx, Cue::Decided { approved: false });
                                         handler(&reject_event, window, cx)
@@ -278,7 +279,7 @@ impl RenderOnce for ApprovalCard {
                                     .ghost()
                                     .small()
                                     .accessibility_id(format!("{}-always", self.id))
-                                    .label("Always allow")
+                                    .text_label("Always allow")
                                     .on_click(move |_: &ClickEvent, window, cx| {
                                         cues::emit(cx, Cue::Decided { approved: true });
                                         handler(&always_event, window, cx)

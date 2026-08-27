@@ -8,6 +8,7 @@
     "prod": "cargo run -p gallery --release",
     "test:perf": "cargo run -p gallery --release --features performance --bin gallery-performance",
     "test:catalog": "cargo run -p gallery --release --features performance --bin gallery-catalog-scan",
+    "test:typography": "node script/test-typography.mjs",
     "build": "cargo build --workspace --release",
     "build:wasm": "node script/run-bash.mjs crates/gallery-web/scripts/build-wasm.sh --release",
     "build:web": "npm --prefix crates/gallery-web/www run build && npm run generate:posters && npm run build:site && npm run generate:og",

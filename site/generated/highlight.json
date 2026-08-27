@@ -7594,7 +7594,7 @@
         ],
         [
           [
-            "                .label("
+            "                .text_label("
           ],
           [
             "\"Reopen artifact\"",
@@ -8738,7 +8738,7 @@
         ],
         [
           [
-            "                .label("
+            "                .text_label("
           ],
           [
             "\"Simulate: transcription finished\"",
@@ -9379,7 +9379,7 @@
         ],
         [
           [
-            "                .label("
+            "                .text_label("
           ],
           [
             "\"Queue the demo prompts again\"",

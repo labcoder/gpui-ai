@@ -10,6 +10,7 @@
 //! Both are controlled: the application owns every invocation as a
 //! [`Progressive<ToolInvocation>`] and decides what each typed event means.
 
+use crate::ButtonLabelExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     code_block::CodeBlock,
@@ -459,7 +460,7 @@ impl RenderOnce for ToolCall {
                                                     .primary()
                                                     .small()
                                                     .accessibility_id(format!("{id}-allow"))
-                                                    .label("Allow")
+                                                    .text_label("Allow")
                                                     .on_click(move |_: &ClickEvent, window, cx| {
                                                         cues::emit(
                                                             cx,
@@ -488,7 +489,7 @@ impl RenderOnce for ToolCall {
                                                     .outline()
                                                     .small()
                                                     .accessibility_id(format!("{id}-deny"))
-                                                    .label("Deny")
+                                                    .text_label("Deny")
                                                     .on_click(move |_: &ClickEvent, window, cx| {
                                                         cues::emit(
                                                             cx,

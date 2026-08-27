@@ -276,7 +276,7 @@ fn story_state_switcher<T: 'static>(
                             Button::new(format!("{slug}-state-{state_slug}"))
                                 .when(is_active, |button| button.primary())
                                 .when(!is_active, |button| button.outline())
-                                .label(*label)
+                                .text_label(*label)
                                 .on_click(move |_, _, cx| {
                                     let _ = owner.update(cx, |story, cx| apply(story, index, cx));
                                 }),
@@ -4787,7 +4787,7 @@ impl Gallery {
                                 Button::new("artifact-reopen")
                                     .outline()
                                     .small()
-                                    .label("Reopen artifact")
+                                    .text_label("Reopen artifact")
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.artifact_open = true;
                                         this.last_artifact_event = Some("Reopened".into());
@@ -4903,7 +4903,7 @@ impl Gallery {
                                 Button::new("voice-finish")
                                     .outline()
                                     .small()
-                                    .label("Simulate: transcription finished")
+                                    .text_label("Simulate: transcription finished")
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.voice_state = VoiceState::Idle;
                                         this.voice_transcript = None;
@@ -4976,7 +4976,7 @@ impl Gallery {
                                 Button::new("queue-refill")
                                     .outline()
                                     .small()
-                                    .label("Queue the demo prompts again")
+                                    .text_label("Queue the demo prompts again")
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.queued = demo_queue();
                                         this.last_queue_event = Some("Refilled".into());
@@ -5784,7 +5784,7 @@ impl Render for Gallery {
                         .child(
                             Button::new("theme")
                                 .outline()
-                                .label(format!("Theme: {}", self.theme.label()))
+                                .text_label(format!("Theme: {}", self.theme.label()))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.theme = this.theme.next();
                                     apply_gallery_theme(this.theme, Some(window), cx);
@@ -8158,7 +8158,7 @@ impl Render for GuidedDemoStory {
                     .child(
                         Button::new("guided-demo-reset")
                             .outline()
-                            .label("Reset")
+                            .text_label("Reset")
                             .on_click(cx.listener(|this, _, window, cx| this.reset(window, cx))),
                     )
                     .child(
