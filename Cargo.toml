@@ -27,9 +27,9 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
     "wayland",
     "runtime_shaders",
 ] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "d5821f270317754f2a311a0bb148ec32cbb0ced4" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "d5821f270317754f2a311a0bb148ec32cbb0ced4" }
-gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "d5821f270317754f2a311a0bb148ec32cbb0ced4" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "9890a77c2d427f05b2512f05ddc6cce84686f9a6" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "9890a77c2d427f05b2512f05ddc6cce84686f9a6" }
+gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "9890a77c2d427f05b2512f05ddc6cce84686f9a6" }
 
 anyhow = "1"
 console_error_panic_hook = "0.1"

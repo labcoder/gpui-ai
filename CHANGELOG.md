@@ -9,6 +9,19 @@ revision.
 
 ## [Unreleased]
 
+### Changed
+
+- gpui-component, its assets, and gpui-base moved together from `d5821f27` to
+  `9890a77c`, and GPUI follows upstream's own lock from `8b1497db` to
+  `f66ed399`. The component range styles markdown tables with the `table_*`
+  theme tokens the vendored themes already carry, clamps `TextView` content
+  with a new `max_lines`, and centers Button, Tab, and Toggle content by
+  default. The GPUI range rewrites web text input around an IME mirror with
+  mobile keyboard handling, adds web image paste and async clipboard reads,
+  and fixes the action profiler's clock on `wasm32` — the defect this
+  project reported and has excluded from web builds since 0.2.0; native
+  performance binaries keep the profiler and now share the safe clock.
+
 ## [0.2.1] - 2026-08-26
 
 ### Added

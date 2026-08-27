@@ -565,7 +565,7 @@ impl StoryId {
                 module: "context_card",
                 api: "ContextCard",
                 usage: "ContextCard::new(\"design-doc\", \"Architecture\")",
-                height: 192,
+                height: 172,
                 overflow: Overflow::Wide,
             },
             Self::Insights => StoryMeta {
