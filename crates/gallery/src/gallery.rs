@@ -184,6 +184,7 @@ fn story_needs_simulation(story: StoryId) -> bool {
     matches!(
         story,
         StoryId::Loading
+            | StoryId::Status
             | StoryId::Tasks
             | StoryId::Thinking
             | StoryId::Search
@@ -292,7 +293,7 @@ fn visible_range_needs_simulation(range: Range<usize>) -> bool {
 
 fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
     match story {
-        StoryId::Loading | StoryId::Tasks => true,
+        StoryId::Loading | StoryId::Status | StoryId::Tasks => true,
         StoryId::Thinking | StoryId::Search | StoryId::ToolCalls => delta.answer_phase_changed(),
         StoryId::ImageGeneration | StoryId::StreamingText | StoryId::Chat => {
             delta.answer_content_changed()
@@ -4224,6 +4225,55 @@ impl Gallery {
                     LoadingState::new()
                         .label("Reasoning about supplier pricing")
                         .elapsed(elapsed)
+                    // snippet:end
+                },
+                cx,
+            ),
+            StoryId::Status => self.section(
+                story,
+                "Status badge",
+                || {
+                    // The pill's whole reason to exist is the moment a
+                    // lifecycle changes, so one badge is driven through it on
+                    // the simulation clock — pending, running, completed,
+                    // failed, around again — swapping inside its fixed slot,
+                    // while the row above holds every tone still for
+                    // comparison.
+                    let phase = (elapsed.as_secs() / 3) % 4;
+                    let driven = match phase {
+                        0 => ProgressState::Pending,
+                        1 => ProgressState::Running,
+                        2 => ProgressState::Complete,
+                        _ => ProgressState::Failed("offline".into()),
+                    };
+                    let tokens = cx.theme().semantic_tokens();
+                    // snippet:start(status)
+                    v_flex()
+                        .gap(tokens.spacing.md)
+                        .child(
+                            h_flex()
+                                .flex_wrap()
+                                .gap(tokens.spacing.sm)
+                                .child(StatusBadge::new("status-neutral", "Queued"))
+                                .child(
+                                    StatusBadge::new("status-info", "Indexing")
+                                        .tone(StatusTone::Info)
+                                        .active(true),
+                                )
+                                .child(
+                                    StatusBadge::new("status-success", "Deployed")
+                                        .tone(StatusTone::Success),
+                                )
+                                .child(
+                                    StatusBadge::new("status-warning", "Needs review")
+                                        .tone(StatusTone::Warning),
+                                )
+                                .child(
+                                    StatusBadge::new("status-danger", "Rolled back")
+                                        .tone(StatusTone::Danger),
+                                ),
+                        )
+                        .child(StatusBadge::for_progress("status-driven", &driven))
                     // snippet:end
                 },
                 cx,

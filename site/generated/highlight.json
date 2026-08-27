@@ -3332,6 +3332,322 @@
         ]
       ]
     },
+    "status": {
+      "default": [
+        [
+          [
+            "v_flex()"
+          ]
+        ],
+        [
+          [
+            "    .gap(tokens.spacing.md)"
+          ]
+        ],
+        [
+          [
+            "    .child("
+          ]
+        ],
+        [
+          [
+            "        h_flex()"
+          ]
+        ],
+        [
+          [
+            "            .flex_wrap()"
+          ]
+        ],
+        [
+          [
+            "            .gap(tokens.spacing.sm)"
+          ]
+        ],
+        [
+          [
+            "            .child("
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status-neutral\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Queued\"",
+            "string"
+          ],
+          [
+            "))"
+          ]
+        ],
+        [
+          [
+            "            .child("
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status-info\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Indexing\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                    .tone("
+          ],
+          [
+            "StatusTone",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Info",
+            "type"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                    .active("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            )"
+          ]
+        ],
+        [
+          [
+            "            .child("
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status-success\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Deployed\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                    .tone("
+          ],
+          [
+            "StatusTone",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Success",
+            "type"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            )"
+          ]
+        ],
+        [
+          [
+            "            .child("
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status-warning\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Needs review\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                    .tone("
+          ],
+          [
+            "StatusTone",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Warning",
+            "type"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            )"
+          ]
+        ],
+        [
+          [
+            "            .child("
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"status-danger\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Rolled back\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "                    .tone("
+          ],
+          [
+            "StatusTone",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Danger",
+            "type"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            ),"
+          ]
+        ],
+        [
+          [
+            "    )"
+          ]
+        ],
+        [
+          [
+            "    .child("
+          ],
+          [
+            "StatusBadge",
+            "type"
+          ],
+          [
+            "::for_progress("
+          ],
+          [
+            "\"status-driven\"",
+            "string"
+          ],
+          [
+            ", &driven))"
+          ]
+        ]
+      ]
+    },
     "tool-chips": {
       "default": [
         [

@@ -37,6 +37,9 @@
     "loading": {
       "default": "LoadingState::new()\n    .label(\"Reasoning about supplier pricing\")\n    .elapsed(elapsed)"
     },
+    "status": {
+      "default": "v_flex()\n    .gap(tokens.spacing.md)\n    .child(\n        h_flex()\n            .flex_wrap()\n            .gap(tokens.spacing.sm)\n            .child(StatusBadge::new(\"status-neutral\", \"Queued\"))\n            .child(\n                StatusBadge::new(\"status-info\", \"Indexing\")\n                    .tone(StatusTone::Info)\n                    .active(true),\n            )\n            .child(\n                StatusBadge::new(\"status-success\", \"Deployed\")\n                    .tone(StatusTone::Success),\n            )\n            .child(\n                StatusBadge::new(\"status-warning\", \"Needs review\")\n                    .tone(StatusTone::Warning),\n            )\n            .child(\n                StatusBadge::new(\"status-danger\", \"Rolled back\")\n                    .tone(StatusTone::Danger),\n            ),\n    )\n    .child(StatusBadge::for_progress(\"status-driven\", &driven))"
+    },
     "tool-chips": {
       "default": "h_flex()\n    .flex_wrap()\n    .gap_2()\n    .child(\n        ToolChip::new(\"chip-1\", \"read pricing.md\").status(ToolStatus::Success),\n    )\n    .child(\n        ToolChip::new(\"chip-2\", \"edit suppliers.rs\")\n            .status(ToolStatus::Running)\n            .detail(\"+12 −3\"),\n    )\n    .child(\n        ToolChip::new(\"chip-3\", \"run cargo test\").status(ToolStatus::Pending),\n    )\n    .child(\n        ToolChip::new(\"chip-4\", \"query prices-db\")\n            .status(ToolStatus::Failed)\n            .detail(\"timeout\"),\n    )"
     },

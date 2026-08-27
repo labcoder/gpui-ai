@@ -645,22 +645,42 @@ pub fn reveal_progress(
     window: &mut Window,
     cx: &mut App,
 ) -> f32 {
-    // Frame demand: the only hand-scheduled effect in the crate, because a
-    // reveal reads a clock rather than a GPUI animation. Active while
-    // `progress < 1.0`; a settled reveal asks for nothing, and reduced
+    let duration = MotionTokens::read(cx).reveal().duration;
+    timed_progress(id, delay, duration, window, cx)
+}
+
+/// Progress of a one-shot status swap keyed by `id`, at the quick role's
+/// tempo — the acknowledgment an icon or label change settles in on.
+pub(crate) fn swap_progress(id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> f32 {
+    let duration = MotionTokens::read(cx).quick();
+    timed_progress(id, Duration::ZERO, duration, window, cx)
+}
+
+/// The shared clock behind [`reveal_progress`] and [`swap_progress`]: `0.0`
+/// at the keyed instant the element first rendered, `1.0` once `duration`
+/// (after `delay`) has passed, eased on the way.
+fn timed_progress(
+    id: impl Into<ElementId>,
+    delay: Duration,
+    duration: Duration,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    // Frame demand: the only hand-scheduled effects in the crate, because
+    // these read a clock rather than a GPUI animation. Active while
+    // `progress < 1.0`; a settled clock asks for nothing, and reduced
     // motion asks for nothing and returns the end state. The audit below
     // counts the requests rather than asserting this in prose.
     if cx.reduce_motion() {
         return 1.0;
     }
-    let spec = MotionTokens::read(cx).reveal();
     let now = cx.background_executor().now();
     let started = *window.use_keyed_state(id, cx, |_, _| now).read(cx);
     let elapsed = now.saturating_duration_since(started);
     let progress = if elapsed <= delay {
         0.0
     } else {
-        (elapsed.saturating_sub(delay).as_secs_f32() / spec.duration.as_secs_f32()).min(1.0)
+        (elapsed.saturating_sub(delay).as_secs_f32() / duration.as_secs_f32()).min(1.0)
     };
     if progress < 1.0 {
         note_reveal_frame_request();

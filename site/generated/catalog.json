@@ -43,6 +43,29 @@
     },
     {
       "sequence": 2,
+      "slug": "status",
+      "title": "Status badge",
+      "compactLabel": "Status badge",
+      "category": "Progress",
+      "summary": "One status pill for every lifecycle, swapping states in a fixed slot.",
+      "source": "crates/gpui-ai/src/status.rs",
+      "api": "StatusBadge",
+      "usage": "StatusBadge::new(\"review\", \"Needs review\")",
+      "height": 84,
+      "windowTitle": "Status badge — gpui-ai",
+      "variants": [],
+      "events": [],
+      "event": null,
+      "limitation": "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.",
+      "behavior": {
+        "ownership": "StatusBadge renders state supplied by the application; it does not own durable work.",
+        "interaction": "This presentation surface adds no component-specific interaction event.",
+        "semantics": "One status pill for every lifecycle, swapping states in a fixed slot.",
+        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+      }
+    },
+    {
+      "sequence": 3,
       "slug": "tool-chips",
       "title": "Tool chips",
       "compactLabel": "Tool chips",
@@ -67,7 +90,7 @@
       }
     },
     {
-      "sequence": 3,
+      "sequence": 4,
       "slug": "tool-calls",
       "title": "Tool calls",
       "compactLabel": "Tool calls",
@@ -93,7 +116,7 @@
       }
     },
     {
-      "sequence": 4,
+      "sequence": 5,
       "slug": "tasks",
       "title": "Task rows",
       "compactLabel": "Task rows",
@@ -116,7 +139,7 @@
       }
     },
     {
-      "sequence": 5,
+      "sequence": 6,
       "slug": "thinking",
       "title": "Thinking",
       "compactLabel": "Thinking",
@@ -141,7 +164,7 @@
       }
     },
     {
-      "sequence": 6,
+      "sequence": 7,
       "slug": "orbs",
       "title": "Orbs",
       "compactLabel": "Orbs",
@@ -164,7 +187,7 @@
       }
     },
     {
-      "sequence": 7,
+      "sequence": 8,
       "slug": "search",
       "title": "Web search",
       "compactLabel": "Web search",
@@ -189,7 +212,7 @@
       }
     },
     {
-      "sequence": 8,
+      "sequence": 9,
       "slug": "todos",
       "title": "To-do list",
       "compactLabel": "To-do list",
@@ -214,7 +237,7 @@
       }
     },
     {
-      "sequence": 9,
+      "sequence": 10,
       "slug": "image-generation",
       "title": "Image generation",
       "compactLabel": "Image generation",
@@ -237,7 +260,7 @@
       }
     },
     {
-      "sequence": 10,
+      "sequence": 11,
       "slug": "streaming-text",
       "title": "Streaming text",
       "compactLabel": "Streaming text",
@@ -262,7 +285,7 @@
       }
     },
     {
-      "sequence": 11,
+      "sequence": 12,
       "slug": "chat",
       "title": "Chat",
       "compactLabel": "Chat",
@@ -296,7 +319,7 @@
       }
     },
     {
-      "sequence": 12,
+      "sequence": 13,
       "slug": "suggestions",
       "title": "Suggestions",
       "compactLabel": "Suggestions",
@@ -321,7 +344,7 @@
       }
     },
     {
-      "sequence": 13,
+      "sequence": 14,
       "slug": "attachments",
       "title": "Attachment previews",
       "compactLabel": "Attachment previews",
@@ -346,7 +369,7 @@
       }
     },
     {
-      "sequence": 14,
+      "sequence": 15,
       "slug": "artifact",
       "title": "Artifact panel",
       "compactLabel": "Artifact panel",
@@ -371,7 +394,7 @@
       }
     },
     {
-      "sequence": 15,
+      "sequence": 16,
       "slug": "context-meter",
       "title": "Context meter",
       "compactLabel": "Context meter",
@@ -394,7 +417,7 @@
       }
     },
     {
-      "sequence": 16,
+      "sequence": 17,
       "slug": "command-search",
       "title": "Command search",
       "compactLabel": "Command search",
@@ -419,7 +442,7 @@
       }
     },
     {
-      "sequence": 17,
+      "sequence": 18,
       "slug": "sidebar-nav",
       "title": "Sidebar navigation",
       "compactLabel": "Sidebar navigation",
@@ -444,7 +467,7 @@
       }
     },
     {
-      "sequence": 18,
+      "sequence": 19,
       "slug": "thread-list",
       "title": "Thread list",
       "compactLabel": "Thread list",
@@ -469,7 +492,7 @@
       }
     },
     {
-      "sequence": 19,
+      "sequence": 20,
       "slug": "fine-tune",
       "title": "Fine-tune card",
       "compactLabel": "Fine-tune card",
@@ -494,7 +517,7 @@
       }
     },
     {
-      "sequence": 20,
+      "sequence": 21,
       "slug": "records-table",
       "title": "Records table",
       "compactLabel": "Records table",
@@ -548,7 +571,7 @@
       }
     },
     {
-      "sequence": 21,
+      "sequence": 22,
       "slug": "diff-table",
       "title": "Diff table",
       "compactLabel": "Diff table",
@@ -602,7 +625,7 @@
       }
     },
     {
-      "sequence": 22,
+      "sequence": 23,
       "slug": "filter-table",
       "title": "Filter table",
       "compactLabel": "Filter table",
@@ -656,7 +679,7 @@
       }
     },
     {
-      "sequence": 23,
+      "sequence": 24,
       "slug": "comparison-table",
       "title": "Comparison table",
       "compactLabel": "Comparison table",
@@ -710,7 +733,7 @@
       }
     },
     {
-      "sequence": 24,
+      "sequence": 25,
       "slug": "code-block",
       "title": "Code block",
       "compactLabel": "Code block",
@@ -733,7 +756,7 @@
       }
     },
     {
-      "sequence": 25,
+      "sequence": 26,
       "slug": "code-diff",
       "title": "Code diff",
       "compactLabel": "Code diff",
@@ -758,7 +781,7 @@
       }
     },
     {
-      "sequence": 26,
+      "sequence": 27,
       "slug": "approval",
       "title": "Approval card",
       "compactLabel": "Approval card",
@@ -783,7 +806,7 @@
       }
     },
     {
-      "sequence": 27,
+      "sequence": 28,
       "slug": "plan",
       "title": "Plan card",
       "compactLabel": "Plan card",
@@ -808,7 +831,7 @@
       }
     },
     {
-      "sequence": 28,
+      "sequence": 29,
       "slug": "recommendation",
       "title": "Recommendation card",
       "compactLabel": "Recommendation card",
@@ -833,7 +856,7 @@
       }
     },
     {
-      "sequence": 29,
+      "sequence": 30,
       "slug": "context",
       "title": "Context cards",
       "compactLabel": "Context cards",
@@ -858,7 +881,7 @@
       }
     },
     {
-      "sequence": 30,
+      "sequence": 31,
       "slug": "insights",
       "title": "Insight card",
       "compactLabel": "Insight card",
@@ -883,7 +906,7 @@
       }
     },
     {
-      "sequence": 31,
+      "sequence": 32,
       "slug": "prompt-bar",
       "title": "Prompt bar",
       "compactLabel": "Prompt bar",
@@ -908,7 +931,7 @@
       }
     },
     {
-      "sequence": 32,
+      "sequence": 33,
       "slug": "voice",
       "title": "Voice controls",
       "compactLabel": "Voice controls",
@@ -933,7 +956,7 @@
       }
     },
     {
-      "sequence": 33,
+      "sequence": 34,
       "slug": "queue",
       "title": "Message queue",
       "compactLabel": "Message queue",
@@ -958,7 +981,7 @@
       }
     },
     {
-      "sequence": 34,
+      "sequence": 35,
       "slug": "selection-actions",
       "title": "Selection actions",
       "compactLabel": "Selection actions",

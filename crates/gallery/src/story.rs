@@ -9,6 +9,8 @@ pub enum StoryId {
     All,
     /// Pixel-grid loading state.
     Loading,
+    /// Lifecycle status pill.
+    Status,
     /// Tool-call chips.
     ToolChips,
     /// Collapsible tool-call cards and groups.
@@ -183,6 +185,7 @@ impl StoryId {
     /// Every individually addressable component story, in catalog order.
     pub const ALL: &'static [Self] = &[
         Self::Loading,
+        Self::Status,
         Self::ToolChips,
         Self::ToolCalls,
         Self::Tasks,
@@ -223,6 +226,7 @@ impl StoryId {
         match self {
             Self::All => "all",
             Self::Loading => "loading",
+            Self::Status => "status",
             Self::ToolChips => "tool-chips",
             Self::ToolCalls => "tool-calls",
             Self::Tasks => "tasks",
@@ -268,6 +272,7 @@ impl StoryId {
         match self {
             Self::All => "All components",
             Self::Loading => "Loading state",
+            Self::Status => "Status badge",
             Self::ToolChips => "Tool chips",
             Self::ToolCalls => "Tool calls",
             Self::Tasks => "Task rows",
@@ -331,6 +336,15 @@ impl StoryId {
                 api: "LoadingState",
                 usage: "LoadingState::new().label(\"Thinking\")",
                 height: 52,
+                overflow: Overflow::Wide,
+            },
+            Self::Status => StoryMeta {
+                category: "Progress",
+                summary: "One status pill for every lifecycle, swapping states in a fixed slot.",
+                module: "status",
+                api: "StatusBadge",
+                usage: "StatusBadge::new(\"review\", \"Needs review\")",
+                height: 84,
                 overflow: Overflow::Wide,
             },
             Self::ToolChips => StoryMeta {
