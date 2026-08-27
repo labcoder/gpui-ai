@@ -99,6 +99,14 @@ fn capture(kind: ProbeKind, cx: &mut TestAppContext) -> CapturedNode {
         .expect("component node should be captured")
 }
 
+/// Advances past the disclosure cross-fade and draws the settled frame.
+fn settle_disclosure(cx: &mut VisualTestContext) {
+    cx.executor()
+        .advance_clock(gpui_ai::motion::MotionTokens::DEFAULT.standard() * 2);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+}
+
 #[gpui::test]
 fn tool_call_exposes_name_summary_and_lifecycle_without_color(cx: &mut TestAppContext) {
     let captured = capture(ProbeKind::Running, cx);
@@ -207,8 +215,11 @@ fn approval_controls_emit_typed_decisions_and_resolve_the_card(cx: &mut TestAppC
         }]
     );
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    // Once decided, the card collapses (nothing needs attention) and the
-    // approval controls leave the tree instead of becoming dead targets.
+    // Once decided, the card collapses (nothing needs attention): the body
+    // cross-fades away rather than vanishing, then leaves the tree with the
+    // approval controls instead of becoming dead targets.
+    assert!(cx.debug_bounds("tool-call-body-send-1").is_some());
+    settle_disclosure(cx);
     assert!(cx.debug_bounds("tool-call-allow-send-1").is_none());
     assert!(cx.debug_bounds("tool-call-body-send-1").is_none());
     assert_eq!(
@@ -280,7 +291,10 @@ fn keyboard_toggle_on_the_group_collapses_its_calls(cx: &mut TestAppContext) {
         }]
     );
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    // Collapsing the group removes its calls from the tree.
+    // Collapsing the group cross-fades its calls away, then removes them
+    // from the tree once the channel settles.
+    assert!(cx.debug_bounds("tool-call-toggle-send-1").is_some());
+    settle_disclosure(cx);
     assert!(cx.debug_bounds("tool-call-toggle-send-1").is_none());
 }
 

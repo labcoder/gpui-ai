@@ -55,7 +55,9 @@ use gpui::{
     ease_in_out, pulsating_between, px, relative,
 };
 use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{ActiveTheme as _, StyledExt as _};
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 /// Width of the travelling shimmer highlight as a fraction of the label
@@ -516,6 +518,91 @@ impl MotionTokens {
 pub(crate) fn install(cx: &mut App) {
     if !cx.has_global::<MotionTokens>() {
         cx.set_global(MotionTokens::DEFAULT);
+    }
+}
+
+/// The open/close channel every animated disclosure in the crate samples.
+///
+/// One retargetable transition from closed (`0.0`) to open (`1.0`) on the
+/// standard role: rapid toggling resumes from the current sample rather than
+/// restarting, content changes leave a settled channel untouched, and
+/// reduced motion snaps to the target — GPUI's transition contract, not
+/// per-component policy. Callers cross-fade their body on the returned
+/// progress (opacity plus a small token-derived lift) and keep it mounted
+/// while `open || progress > 0.0`; they never animate the body's height,
+/// because rich content re-measured per frame is the layout loop the motion
+/// plan forbids.
+///
+/// Frame demand: only while the channel is travelling. Settled open it
+/// requests nothing; settled closed the caller unmounts the body.
+pub(crate) fn disclosure_progress(
+    id: impl Into<gpui_base::motion::TransitionId>,
+    open: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    let standard = MotionTokens::read(cx).standard();
+    transition(
+        id,
+        if open { 1.0f32 } else { 0.0 },
+        Transition::new(standard).ease(ease_out_cubic),
+        window,
+        cx,
+    )
+}
+
+/// Which identities a surface has already shown, and the arrival delay each
+/// fresh one was assigned — the bookkeeping behind a bounded arrival
+/// cascade.
+///
+/// Kept in the owner's keyed window state, so it survives the surface
+/// closing and reopening: an identity acknowledged once is never
+/// acknowledged again. The first roll call is history and joins at rest;
+/// later batches cascade on [`MotionTokens::arrival_stagger`], frozen at
+/// assignment so a following batch cannot re-space a cascade already
+/// playing. A batch the caller marks ineligible — the reader away from the
+/// tail, a disclosure still fading in and owning the acknowledgment — is
+/// marked seen without motion, so nothing retro-animates.
+pub(crate) struct ArrivalRoster {
+    primed: bool,
+    seen: HashSet<ElementId>,
+    delays: HashMap<ElementId, Duration>,
+}
+
+impl ArrivalRoster {
+    pub(crate) fn new() -> Self {
+        Self {
+            primed: false,
+            seen: HashSet::new(),
+            delays: HashMap::new(),
+        }
+    }
+
+    /// Takes the roll call of this render's identities, assigning one
+    /// decelerating cascade to those not seen before when `assign` holds.
+    pub(crate) fn note(
+        &mut self,
+        keys: impl Iterator<Item = ElementId>,
+        assign: bool,
+        tokens: &MotionTokens,
+    ) {
+        let fresh: Vec<ElementId> = keys.filter(|key| !self.seen.contains(key)).collect();
+        let primed = std::mem::replace(&mut self.primed, true);
+        let cascade = primed && assign;
+        let batch = fresh.len();
+        for (position, key) in fresh.into_iter().enumerate() {
+            if cascade {
+                self.delays
+                    .insert(key.clone(), tokens.arrival_stagger(position, batch));
+            }
+            self.seen.insert(key);
+        }
+    }
+
+    /// The arrival delay this identity was assigned, or `None` for one that
+    /// appears at rest.
+    pub(crate) fn delay(&self, key: &ElementId) -> Option<Duration> {
+        self.delays.get(key).copied()
     }
 }
 

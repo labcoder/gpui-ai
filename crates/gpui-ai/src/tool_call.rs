@@ -11,12 +11,11 @@
 //! [`Progressive<ToolInvocation>`] and decides what each typed event means.
 
 use crate::cues::{self, Cue};
-use crate::motion::reveal_staggered;
 use crate::{
     code_block::CodeBlock,
     control::composed_button,
     handlers::{Handler, SharedHandler},
-    motion::{Shimmer, reveal},
+    motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal_progress},
     status::{StatusBadge, StatusTone, progress_label},
     stream::{ProgressState, Progressive},
     surface::{eyebrow, inset, meta},
@@ -249,8 +248,29 @@ impl ToolCall {
         }
     }
 
-    fn status_glyph(&self, cx: &App) -> AnyElement {
+    fn status_glyph(&self, window: &mut Window, cx: &mut App) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
+        // The terminal glyphs settle in rather than popping: each state's
+        // acknowledgment is keyed by the state itself, so it plays once on
+        // the transition and never again on a re-render. The very first
+        // glyph a card mounts with is exempt — a first render is not a
+        // transition — which the swap state below remembers.
+        let acknowledged = |window: &mut Window, cx: &mut App, ordinal: u64| {
+            let id = ElementId::from(self.invocation.id.clone());
+            let primed = window.use_keyed_state((id.clone(), "glyph-primed"), cx, |_, _| ordinal);
+            if *primed.read(cx) == ordinal {
+                1.0
+            } else {
+                crate::motion::swap_progress(
+                    ElementId::NamedInteger(
+                        SharedString::from(format!("{}-glyph", self.invocation.id)),
+                        ordinal,
+                    ),
+                    window,
+                    cx,
+                )
+            }
+        };
         match &self.state {
             ProgressState::Running => Spinner::new()
                 .xsmall()
@@ -259,10 +279,12 @@ impl ToolCall {
             ProgressState::Complete => Icon::new(IconName::CircleCheck)
                 .xsmall()
                 .text_color(cx.theme().success)
+                .opacity(acknowledged(window, cx, 2))
                 .into_any_element(),
             ProgressState::Failed(_) => Icon::new(IconName::CircleX)
                 .xsmall()
                 .text_color(cx.theme().danger)
+                .opacity(acknowledged(window, cx, 3))
                 .into_any_element(),
             ProgressState::Pending => div()
                 .size_1p5()
@@ -286,6 +308,8 @@ impl RenderOnce for ToolCall {
         let open = self.is_open();
         let id = self.invocation.id.clone();
         let root_id = ElementId::from(id.clone());
+        let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
+        let showing = open || disclosure > 0.0;
         let accessibility_label = self.accessibility_label();
         let interactive = self.on_event.is_some();
         let handler = self.on_event.clone();
@@ -316,12 +340,16 @@ impl RenderOnce for ToolCall {
             .items_center()
             .gap(tokens.spacing.sm)
             .child(
+                // A fixed square slot: spinner, check, cross, and the
+                // pending dot all centre in the same box, so a lifecycle
+                // change never nudges the name sideways.
                 div()
                     .flex_none()
-                    .w(tokens.spacing.md)
+                    .size(tokens.spacing.md)
                     .flex()
+                    .items_center()
                     .justify_center()
-                    .child(self.status_glyph(cx)),
+                    .child(self.status_glyph(window, cx)),
             )
             .child(tool_icon.xsmall().text_color(cx.theme().muted_foreground))
             .child(
@@ -352,14 +380,13 @@ impl RenderOnce for ToolCall {
             })
             .child(badge)
             .when(interactive, |this| {
+                // One chevron, rotated by the disclosure channel — the same
+                // sample the body fades on, so the two can never disagree.
                 this.child(
-                    Icon::new(if open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .xsmall()
-                    .text_color(cx.theme().muted_foreground),
+                    Icon::new(IconName::ChevronRight)
+                        .xsmall()
+                        .text_color(cx.theme().muted_foreground)
+                        .rotate(gpui::percentage(0.25 * disclosure)),
                 )
             });
         let header = match handler.clone() {
@@ -532,8 +559,17 @@ impl RenderOnce for ToolCall {
             .rounded(tokens.radius.md)
             .overflow_hidden()
             .child(header)
-            .when(open, |this| {
-                this.child(reveal(body, (root_id, "body"), window, cx))
+            .when(showing, |this| {
+                // Mounted for as long as the cross-fade needs it: a closing
+                // body fades and lifts away, then unmounts when the channel
+                // settles at zero. Semantics do not wait for the fade —
+                // aria_expanded above tracks the controlled state.
+                this.child(
+                    div()
+                        .opacity(disclosure)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .child(body),
+                )
             })
             .refine_style(&self.style)
     }
@@ -667,18 +703,51 @@ impl RenderOnce for ToolGroup {
         let open = self.is_open();
         let title = self.resolved_title();
         let root_id = ElementId::from(self.id.clone());
-        // Calls cascade in when the group opens; the keyed reveal state is
-        // dropped while closed, so every open replays the cascade.
-        let mut calls = Vec::with_capacity(if open { self.children.len() } else { 0 });
-        if open {
+        let motion = MotionTokens::read(cx).clone();
+        let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
+        let showing = open || disclosure > 0.0;
+
+        // Which calls the group has already shown, kept across close and
+        // reopen: an acknowledged call never cascades again, and only calls
+        // that appear while the group rests fully open cascade at all — the
+        // opening fade owns the acknowledgment for everything it reveals.
+        // Keys are positional, which is the honest fallback for a transcript
+        // burst: groups append calls as the agent works, and nothing
+        // reorders inside one.
+        let call_count = self.children.len();
+        let roster = window.use_keyed_state((root_id.clone(), "arrivals"), cx, |_, _| {
+            ArrivalRoster::new()
+        });
+        if showing {
+            roster.update(cx, |roster, _| {
+                roster.note(
+                    (0..call_count).map(|index| {
+                        ElementId::NamedInteger("tool-group-call".into(), index as u64)
+                    }),
+                    disclosure >= 1.0,
+                    &motion,
+                );
+            });
+        }
+        let mut calls = Vec::with_capacity(if showing { call_count } else { 0 });
+        if showing {
             for (index, child) in self.children.into_iter().enumerate() {
-                calls.push(reveal_staggered(
-                    div().w_full().min_w_0().child(child),
-                    (root_id.clone(), format!("call-{index}")),
-                    index,
-                    window,
-                    cx,
-                ));
+                let key = ElementId::NamedInteger("tool-group-call".into(), index as u64);
+                let arrival = roster.read(cx).delay(&key).map(|delay| {
+                    reveal_progress(
+                        (root_id.clone(), format!("call-{index}")),
+                        delay,
+                        window,
+                        cx,
+                    )
+                });
+                let row = div().w_full().min_w_0().child(child);
+                calls.push(match arrival {
+                    Some(progress) => row
+                        .opacity(progress)
+                        .top(tokens.spacing.xxs * (1.0 - progress)),
+                    None => row,
+                });
             }
         }
         let interactive = self.on_event.is_some();
@@ -688,19 +757,23 @@ impl RenderOnce for ToolGroup {
             .text_token(tokens.typography.sm)
             .text_color(cx.theme().muted_foreground)
             .when(interactive, |this| {
+                // One chevron, rotated by the disclosure channel — the same
+                // sample the calls fade on, so the two can never disagree.
                 this.child(
-                    Icon::new(if open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .xsmall(),
+                    Icon::new(IconName::ChevronRight)
+                        .xsmall()
+                        .rotate(gpui::percentage(0.25 * disclosure)),
                 )
             })
             .child(Icon::new(IconName::SquareTerminal).xsmall())
             .child(
+                // The shimmer speaks for work the reader cannot see. Open,
+                // the calls report their own status, so the title rests —
+                // one dominant active-work signal, never two. The title's
+                // text keeps saying "Running…" either way: semantics are
+                // carried by words, not by the highlight.
                 Shimmer::new((root_id.clone(), "title"), title.clone())
-                    .active(self.active)
+                    .active(self.active && !open)
                     .text_token(tokens.typography.sm),
             )
             .when(self.count > 0, |this| {
@@ -746,7 +819,10 @@ impl RenderOnce for ToolGroup {
             .min_w_0()
             .gap(tokens.spacing.xs)
             .child(toggle)
-            .when(open, |this| {
+            .when(showing, |this| {
+                // Mounted for as long as the cross-fade needs it; semantics
+                // do not wait — aria_expanded above tracks the controlled
+                // state.
                 this.child(
                     v_flex()
                         .id((root_id, "calls"))
@@ -763,6 +839,8 @@ impl RenderOnce for ToolGroup {
                         .ml(tokens.spacing.xs)
                         .border_l_1()
                         .border_color(cx.theme().border)
+                        .opacity(disclosure)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure))
                         .children(calls),
                 )
             })
@@ -788,6 +866,126 @@ fn format_elapsed(elapsed: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px, size};
+
+    struct GroupProbe {
+        open: bool,
+        count: usize,
+    }
+
+    impl Render for GroupProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(360.)).h(px(480.)).child(
+                ToolGroup::new("burst")
+                    .count(self.count)
+                    .open(self.open)
+                    .children((0..self.count).map(|index| {
+                        div()
+                            .h(px(20.))
+                            .child(format!("call {index}"))
+                            .into_any_element()
+                    })),
+            )
+        }
+    }
+
+    fn open_group(cx: &mut TestAppContext) -> (Entity<GroupProbe>, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| GroupProbe {
+            open: true,
+            count: 3,
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (probe, cx)
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+
+    /// Advances past the disclosure fade and any arrival reveals.
+    fn settle(cx: &mut VisualTestContext) {
+        cx.executor().advance_clock(Duration::from_secs(2));
+        draw(cx);
+        draw(cx);
+    }
+
+    #[gpui::test]
+    fn a_groups_first_open_and_every_reopen_join_at_rest(cx: &mut TestAppContext) {
+        let (probe, cx) = open_group(cx);
+        settle(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "the opening fade owns the first reveal; calls join at rest"
+        );
+
+        probe.update(cx, |probe, cx| {
+            probe.open = false;
+            cx.notify();
+        });
+        settle(cx);
+        probe.update(cx, |probe, cx| {
+            probe.open = true;
+            cx.notify();
+        });
+        settle(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "an acknowledged call must never cascade again on reopen"
+        );
+    }
+
+    #[gpui::test]
+    fn a_call_appended_while_open_cascades_once(cx: &mut TestAppContext) {
+        let (probe, cx) = open_group(cx);
+        settle(cx);
+        crate::motion::take_reveal_frame_requests();
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "a call appended to a resting group must settle in"
+        );
+
+        settle(cx);
+        crate::motion::take_reveal_frame_requests();
+        probe.update(cx, |_, cx| cx.notify());
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "a re-render must not replay an acknowledged arrival"
+        );
+    }
+
+    #[gpui::test]
+    fn reduced_motion_appends_at_rest(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_reduce_motion(true));
+        let (probe, cx) = open_group(cx);
+        settle(cx);
+        crate::motion::take_reveal_frame_requests();
+
+        probe.update(cx, |probe, cx| {
+            probe.count = 4;
+            cx.notify();
+        });
+        draw(cx);
+        assert_eq!(
+            crate::motion::take_reveal_frame_requests(),
+            0,
+            "reduced motion appends without frames"
+        );
+    }
 
     fn invocation() -> ToolInvocation {
         ToolInvocation::new("read-1", "read_file").summary("pricing.md")

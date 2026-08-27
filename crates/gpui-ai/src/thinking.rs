@@ -10,7 +10,7 @@
 use crate::{
     control::composed_button,
     handlers::Handler,
-    motion::{MotionTokens, Shimmer, reveal, reveal_progress},
+    motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal, reveal_progress},
     stream::{ProgressState, Progressive},
     theme::SemanticStyledExt as _,
 };
@@ -19,8 +19,6 @@ use gpui::{
     RenderOnce, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, StyleRefinement,
     Styled, Window, div, prelude::FluentBuilder as _,
 };
-use gpui_base::animation::ease_out_cubic;
-use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
     text::TextView, v_flex,
@@ -209,21 +207,12 @@ struct LivePreview {
     revision: Option<u64>,
     /// Whether the user was at the tail when the preview last rendered.
     follow: bool,
-    /// Whether the preview has taken its first roll call. The steps present
-    /// then are history and join the seen set without motion; only steps
-    /// whose identity appears later are fresh.
-    primed: bool,
-    /// Every step identity the preview has shown. Keyed by the step's motion
-    /// key, so an identified step stays seen wherever it moves, while an
-    /// unidentified one is only as stable as its position — the documented
-    /// fallback limit.
-    seen: std::collections::HashSet<ElementId>,
-    /// The arrival delay each fresh step was assigned when it first
-    /// appeared. Frozen at assignment: a later batch must not re-space a
-    /// cascade already playing. A fresh step that arrived while the reader
-    /// was away from the tail, or under a body fade that owns the
-    /// acknowledgment, gets no entry and appears at rest.
-    delays: std::collections::HashMap<ElementId, Duration>,
+    /// Which step identities the preview has shown, and what arrival delay
+    /// each fresh one carries. Keyed by the step's motion key, so an
+    /// identified step stays seen wherever it moves, while an unidentified
+    /// one is only as stable as its position — the documented fallback
+    /// limit.
+    arrivals: ArrivalRoster,
 }
 
 impl LivePreview {
@@ -232,9 +221,7 @@ impl LivePreview {
             scroll: ScrollHandle::new(),
             revision: None,
             follow: true,
-            primed: false,
-            seen: std::collections::HashSet::new(),
-            delays: std::collections::HashMap::new(),
+            arrivals: ArrivalRoster::new(),
         }
     }
 
@@ -262,26 +249,17 @@ impl LivePreview {
     fn note_steps(
         &mut self,
         keys: impl Iterator<Item = ElementId>,
-        assign: bool,
+        assign_arrivals: bool,
         tokens: &MotionTokens,
     ) {
-        let fresh: Vec<ElementId> = keys.filter(|key| !self.seen.contains(key)).collect();
-        let primed = std::mem::replace(&mut self.primed, true);
-        let cascade = primed && assign && self.follow;
-        let batch = fresh.len();
-        for (position, key) in fresh.into_iter().enumerate() {
-            if cascade {
-                self.delays
-                    .insert(key.clone(), tokens.arrival_stagger(position, batch));
-            }
-            self.seen.insert(key);
-        }
+        let follow = self.follow;
+        self.arrivals.note(keys, assign_arrivals && follow, tokens);
     }
 
     /// The arrival delay this step identity was assigned, or `None` for one
     /// that appears at rest.
     fn arrival_delay(&self, key: &ElementId) -> Option<Duration> {
-        self.delays.get(key).copied()
+        self.arrivals.delay(key)
     }
 }
 
@@ -338,24 +316,7 @@ impl RenderOnce for Thinking {
         let root_id = ElementId::from(self.id.clone());
         let motion = MotionTokens::read(cx).clone();
 
-        // The disclosure is one retargetable channel from closed to open.
-        // Rapid toggling resumes from the current sample rather than
-        // restarting, streamed content leaves a settled channel untouched,
-        // and reduced motion snaps to the target — GPUI's transition
-        // contract, not per-component policy. The body cross-fades with a
-        // small token-derived lift instead of animating its height: the
-        // trace is rich markdown, and measuring it per frame is the layout
-        // loop the motion plan forbids.
-        //
-        // Frame demand: only while the channel is travelling. Settled open
-        // it requests nothing; settled closed the body unmounts below.
-        let disclosure = transition(
-            (root_id.clone(), "disclosure"),
-            if open { 1.0f32 } else { 0.0 },
-            Transition::new(motion.standard()).ease(ease_out_cubic),
-            window,
-            cx,
-        );
+        let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
         let showing = open || disclosure > 0.0;
 
         // Observed before the steps render, so a batch that arrived this

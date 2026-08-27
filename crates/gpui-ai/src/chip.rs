@@ -2,11 +2,12 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::motion::swap_progress;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, spinner::Spinner};
 use std::rc::Rc;
@@ -111,13 +112,39 @@ impl Styled for ToolChip {
 }
 
 impl RenderOnce for ToolChip {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let status_color = match self.status {
             ToolStatus::Pending => cx.theme().muted_foreground,
             ToolStatus::Running => cx.theme().info,
             ToolStatus::Success => cx.theme().success,
             ToolStatus::Failed => cx.theme().danger,
+        };
+
+        // A status change settles its indicator in rather than popping it:
+        // the acknowledgment is keyed by the status, so it plays once per
+        // transition and never on a re-render, and the status the chip
+        // mounts with is exempt — a first render is not a transition. The
+        // chip's label never changes with status, so the indicator is the
+        // whole swap.
+        let mount =
+            window.use_keyed_state((ElementId::from(self.id.clone()), "chip-primed"), cx, {
+                let status = self.status;
+                move |_, _| status
+            });
+        let acknowledged = if *mount.read(cx) == self.status || self.status == ToolStatus::Running {
+            // A running chip's signal is its spinner; fading the spinner in
+            // would stack two motions on one slot.
+            1.0
+        } else {
+            swap_progress(
+                ElementId::NamedInteger(
+                    SharedString::from(format!("{}-chip-status", self.id)),
+                    self.status as u64,
+                ),
+                window,
+                cx,
+            )
         };
 
         let event = ToolChipEvent::Activated {
@@ -130,17 +157,28 @@ impl RenderOnce for ToolChip {
             .text_token(tokens.typography.xs)
             .font_family(cx.theme().mono_font_family.clone())
             .text_color(cx.theme().foreground)
-            .child(match self.status {
-                ToolStatus::Running => Spinner::new()
-                    .xsmall()
-                    .color(status_color)
-                    .into_any_element(),
-                _ => div()
-                    .size_1p5()
-                    .rounded(tokens.radius.md)
-                    .bg(status_color)
-                    .into_any_element(),
-            })
+            .child(
+                // A fixed square slot: the spinner and the dot centre in the
+                // same box, so running↔settled never nudges the label.
+                div()
+                    .flex_none()
+                    .size(tokens.spacing.md)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(match self.status {
+                        ToolStatus::Running => Spinner::new()
+                            .xsmall()
+                            .color(status_color)
+                            .into_any_element(),
+                        _ => div()
+                            .size_1p5()
+                            .rounded(tokens.radius.md)
+                            .bg(status_color)
+                            .opacity(acknowledged)
+                            .into_any_element(),
+                    }),
+            )
             .child(self.label)
             .when_some(self.detail, |this, detail| {
                 this.child(div().text_color(cx.theme().muted_foreground).child(detail))
@@ -180,6 +218,55 @@ impl RenderOnce for ToolChip {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px, size};
+    use gpui_component::h_flex;
+
+    struct ChipProbe {
+        status: ToolStatus,
+    }
+
+    impl Render for ChipProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(320.)).h(px(80.)).child(
+                h_flex()
+                    .debug_selector(|| "chip-hug".into())
+                    .flex_none()
+                    .child(ToolChip::new("probe-chip", "read_file").status(self.status)),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn chip_width_holds_across_every_status(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|_, _| ChipProbe {
+            status: ToolStatus::Pending,
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let width_at = |cx: &mut VisualTestContext| {
+            cx.debug_bounds("chip-hug")
+                .expect("the chip should render")
+                .size
+                .width
+        };
+        let pending = width_at(cx);
+
+        for status in [ToolStatus::Running, ToolStatus::Success, ToolStatus::Failed] {
+            probe.update(cx, |probe, cx| {
+                probe.status = status;
+                cx.notify();
+            });
+            cx.executor()
+                .advance_clock(crate::motion::MotionTokens::DEFAULT.quick() * 2);
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(
+                width_at(cx),
+                pending,
+                "the indicator slot must hold one width; {status:?} moved it"
+            );
+        }
+    }
 
     #[test]
     fn accessibility_name_carries_status_and_detail() {
