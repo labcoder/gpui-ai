@@ -632,10 +632,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   assert.match(repaint.before.face, /IBM Plex Sans/);
 
   // Every interaction below needs the page hydrated, or it drives inert
-  // markup and reports that nothing happened. The shell writes data-theme on
-  // mount, so the attribute appearing is this site's own signal that its
-  // handlers are attached — and that the theme is applied after render rather
-  // than baked into the pre-render, which is what keeps hydration clean.
+  // markup and reports that nothing happened. The inline head script paints
+  // data-theme before React or the route's deferred code chunk loads, so the
+  // palette is deliberately not a hydration signal. The shell owns an
+  // explicit marker that can only appear after its handlers are attached.
   // Colours cross-fade over 200ms, so a read taken the instant the attribute
   // changes still sees the old palette. Waiting for the class the fade runs
   // under also proves it is added and then taken away again — a transition
@@ -665,7 +665,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
     await waitForValue(
       cdp,
-      `document.documentElement.dataset.theme === ${JSON.stringify(expected)}`,
+      `document.documentElement.dataset.siteHydrated === '' && document.documentElement.dataset.theme === ${JSON.stringify(expected)}`,
       {
         label: `${route} to hydrate and apply its theme`,
         describe: GALLERY_DIAGNOSIS,

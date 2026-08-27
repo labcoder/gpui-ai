@@ -47,7 +47,14 @@ export function Shell({
   // ember-dusk from the inline script, nord-frost from here, then ember-dusk
   // again. Waiting one render lets the store swap in the real value first, in
   // the same pass, so this paints once and with the right answer.
-  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    // The head's inline script paints the theme before this bundle loads, so
+    // data-theme cannot distinguish interactive React from inert pre-rendered
+    // markup. Mark readiness only from an effect: by this point hydration has
+    // attached the shell's event handlers and browser drivers can safely act.
+    document.documentElement.dataset.siteHydrated = "";
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;

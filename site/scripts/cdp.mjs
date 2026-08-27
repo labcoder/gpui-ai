@@ -450,6 +450,7 @@ export async function waitForValue(
 // fallback said.
 export const GALLERY_DIAGNOSIS = `(() => ({
   documentReady: document.readyState,
+  siteHydrated: document.documentElement.dataset.siteHydrated !== undefined,
   hasCanvas: Boolean(document.querySelector('canvas')),
   stillStarting: Boolean(document.querySelector('[data-demo-starting]')),
   fallbackVisible: (() => { const f = document.getElementById('fallback'); return Boolean(f && !f.hidden); })(),
