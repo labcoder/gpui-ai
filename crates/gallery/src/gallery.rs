@@ -3568,6 +3568,14 @@ pub struct Gallery {
 }
 
 impl Gallery {
+    /// Whether the approval story has granted the gate with this stable ID.
+    ///
+    /// Read-only browser inspection: input tests must observe the real decision,
+    /// not infer activation from an incidental change in the story's height.
+    pub fn is_approval_granted(&self, id: &str) -> bool {
+        self.approval_decisions.get(id) == Some(&ApprovalDecision::Approved)
+    }
+
     /// Creates the gallery for one selected story or the complete catalog.
     pub fn new(selected: StoryId, cx: &mut Context<Self>) -> Self {
         Self::new_with_theme(selected, None, cx)
@@ -6041,6 +6049,8 @@ mod tests {
                 gallery
                     .approval_decisions
                     .insert("deploy".into(), super::ApprovalDecision::Approved);
+                assert!(gallery.is_approval_granted("deploy"));
+                assert!(!gallery.is_approval_granted("unknown"));
                 gallery.last_approval_event = Some("decided".into());
             })
         });
@@ -6054,6 +6064,7 @@ mod tests {
             );
             assert_eq!(gallery.tool_group_open, None);
             assert!(gallery.approval_decisions.is_empty());
+            assert!(!gallery.is_approval_granted("deploy"));
             assert_eq!(gallery.last_approval_event, None);
 
             // The page chose these, not the story. Losing them would repaint a

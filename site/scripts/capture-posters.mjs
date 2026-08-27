@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import {
   browserPath,
   closeBrowser,
+  closeServer,
   delay,
   GALLERY_DIAGNOSIS,
   GALLERY_GAVE_UP,
@@ -40,6 +41,7 @@ import {
   settleAll,
   waitForValue,
 } from "./cdp.mjs";
+import { observeBrowser, saveBrowserEvidence } from "./browser-evidence.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -150,7 +152,7 @@ async function fullestFrame(cdp) {
 }
 
 /** Count enough pixels unlike the top-left background to classify the frame. */
-async function visiblePixelsInFrame(cdp, bytes) {
+export async function visiblePixelsInFrame(cdp, bytes) {
   const source = `data:image/webp;base64,${bytes.toString("base64")}`;
   return cdp.evaluate(
     `new Promise((resolve, reject) => {
@@ -215,6 +217,7 @@ export async function capturePosters({ outDir = posterDir, only, log = () => {} 
   try {
     serverHandle = await serve(galleryDir);
     browserHandle = await launchBrowser(path.join(temporaryRoot, "browser"));
+    await observeBrowser(browserHandle);
     const { cdp } = browserHandle;
     await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable")]);
     await mkdir(outDir, { recursive: true });
@@ -244,10 +247,13 @@ export async function capturePosters({ outDir = posterDir, only, log = () => {} 
         log(`${file} — ${(bytes.length / 1024).toFixed(1)} kB`);
       }
     }
+  } catch (error) {
+    await saveBrowserEvidence(browserHandle, "poster-capture").catch((diagnosticError) => console.error(diagnosticError));
+    throw error;
   } finally {
     await settleAll([
       () => closeBrowser(browserHandle),
-      () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
+      () => closeServer(serverHandle),
       () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
     ]);
   }

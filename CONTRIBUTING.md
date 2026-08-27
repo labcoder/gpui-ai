@@ -26,22 +26,36 @@ For the browser gallery you also need a nightly toolchain with the
 `wasm32-unknown-unknown` target and `wasm-bindgen-cli` at the version recorded
 in `.github/workflows/ci.yml`.
 
-[Binaryen](https://github.com/WebAssembly/binaryen) is optional locally and
-pinned in CI. When `wasm-opt` is on your `PATH`, `npm run build:wasm` runs it
-over the release artifact and prints the saving; without it the build says so
-and produces a working but larger binary. Install it if you are making a size
-claim — `npm run report:wasm` numbers from a build that skipped `wasm-opt` are
-not comparable to CI's.
+Install both web workspaces before running their checks:
 
-**`wasm-opt` currently breaks this artifact, so CI does not install binaryen.**
-`wasm-opt -Oz -all` shrinks the gallery by 14% and produces a module no browser
-can instantiate — with Ubuntu's binaryen 108 and equally with a pinned upstream
-132, so it is not version skew. The same build without it passes the release
-browser gate. If you install binaryen locally, `npm run build:wasm` will run
-`wasm-opt` and your artifact will not start; that is expected until the
-incompatibility is understood. See `docs/internal/wasm-baseline.md`, and treat
-a green release browser gate — not a successful build — as the bar for
-re-enabling it.
+```sh
+npm ci --prefix crates/gallery-web/www
+npm ci --prefix site
+npm run setup:web-browser
+```
+
+The browser installer downloads the Chrome for Testing version pinned in
+`script/web-test-config.json` into ignored `target/web-browser/`. Release tests
+verify the running version; they never skip because a browser is missing.
+On Windows the installer grants Chrome's sandbox read/execute access only to
+that downloaded browser directory. It does not disable the sandbox.
+
+Linux additionally needs `xvfb`, `xauth`, `libvulkan1`, and
+`mesa-vulkan-drivers` (install with your distribution's package manager).
+The Linux gate uses SwiftShader WebGPU inside a private virtual display:
+headless Chrome can acknowledge WebGPU work while capturing black frames.
+Windows/macOS use their normal graphics adapter. All profiles must produce
+nonblank canvas pixels; a silent WebGL fallback fails the WebGPU checks.
+On Ubuntu 23.10+ with restricted user namespaces, follow Chromium's
+[sandbox setup guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md).
+CI uses the already-installed Chrome sandbox helper through
+`CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox`; it does not disable
+the browser sandbox or change global AppArmor settings.
+
+`build:wasm` uses the locked dependency graph and **never invokes `wasm-opt`**,
+even if it is on `PATH`. Binaryen 108 and 132 produced non-instantiable gallery
+modules. Local and CI builds use the same bindgen pipeline; re-enabling an
+optimizer requires an explicit, pinned, browser-verified change.
 
 ## The rules that decide whether a change lands
 
@@ -75,10 +89,48 @@ binary). The complete definition of done is in
 Run these before opening a pull request:
 
 ```sh
-npm run check        # fmt, clippy --deny warnings, script tests, Rust tests, rustdoc
-npm run check:site   # site tests
-npm run build:wasm   # anything the web build touches
+npm run check:prepush # native quality gates + web tests + fresh release WASM/browser gate
 ```
+
+`check:prepush` runs `check` followed by `check:web`. Compilation alone is not
+browser evidence. CI uses the same checks, naming compile and browser steps
+separately so failures identify the layer. Pages also tests its built artifact
+before publishing. Regenerate catalog/theme data with `npm run generate` when
+changing those inputs and review the generated diff; CI checks freshness.
+
+For a shorter web-only run or a focused reproduction:
+
+```sh
+npm run check:web                            # host/site tests, rebuild, all release suites
+npm run test:web:browser -- --suite mobile --repeat 3
+```
+
+`test:web:browser` deliberately reuses the existing release artifact. Use it
+only after building the current code; it is not proof that edited Rust/host
+code was tested. Available suites are `catalog`, `lifecycle`, and `mobile`.
+New `site/test/release/*.test.mjs` files join the full gate automatically.
+`--repeat` requires every run to pass; there are no automatic retries.
+
+The gate writes a manifest (commit, dirty state, browser/profile, artifact
+hashes), JUnit results, screenshots, browser errors, and CDP command timings
+under `target/web-evidence/`. CI/Pages upload their own run's evidence even
+when tests fail; it is not restored from the Cargo cache. To compare a system
+browser, use `--system-browser` and optionally `CHROME_PATH`. That diagnostic
+run is not the pinned release profile. `GPUI_AI_WEB_GPU=default` selects the
+platform's normal adapter; Linux defaults to `software` in the release runner.
+
+Mobile coverage uses real touch events at 2x/3x density, verifies the backing
+store, checks an actual approval decision, and exercises edit/blur/re-entry.
+Emulating Safari's missing device-pixel resize API is **not** testing Safari.
+Before releases affecting mobile input, also check a real iPhone/Safari and
+Android/Chrome: keyboard visibility, tap targets, scrolling, and crisp text.
+The software CI profile is a correctness check, not a 120 fps benchmark.
+Theme contrast is enforced for gpui-ai's own presets. Upstream presets are
+shown as published and their contrast findings are reported, not enforced.
+For workflow edits, also run `actionlint` against the changed YAML files.
+In WSL, prefer a checkout on the Linux filesystem: cross-user metadata and
+copy operations on a Windows-mounted checkout can fail independently of the
+tests. Run Chrome as a regular user, not root.
 
 `npm run check` must pass before review. Visual changes need a look in the real
 window across at least three themes including light and dark — reviewing motion

@@ -15,16 +15,43 @@ import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
+import { browserBuild } from "../../script/web-browser.mjs";
+
+export function browserFlags({ gpu = process.env.GPUI_AI_WEB_GPU ?? "default", deviceScaleFactor, platform = process.platform } = {}) {
+  if (!["default", "software"].includes(gpu)) throw new Error(`Unknown GPUI_AI_WEB_GPU: ${gpu}`);
+  if (deviceScaleFactor !== undefined && (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor <= 0)) {
+    throw new Error("deviceScaleFactor must be a positive finite number");
+  }
+  return [
+    // Linux's headless compositor can acknowledge WebGPU draws but capture a
+    // black canvas. The software profile runs headed inside a private Xvfb.
+    ...(gpu === "software" && platform === "linux" ? [] : ["--headless=new"]),
+    // Software rendering is a functional CI profile, never a frame-budget benchmark.
+    // These flags are used only on our local fixtures, not on untrusted websites.
+    ...(gpu === "software" ? [
+      "--enable-unsafe-webgpu", "--use-webgpu-adapter=swiftshader",
+      "--enable-features=Vulkan", "--use-angle=vulkan", "--use-vulkan=swiftshader", "--disable-vulkan-surface",
+    ] : []),
+    ...(deviceScaleFactor === undefined ? [] : [`--force-device-scale-factor=${deviceScaleFactor}`]),
+  ];
+}
+
+let pinnedBrowser;
+if (process.env.GPUI_AI_WEB_SYSTEM_BROWSER !== "1") {
+  try { pinnedBrowser = browserBuild().executable; } catch { /* System browser on unsupported architectures. */ }
+}
 
 export const browserCandidates = process.platform === "win32"
   ? [
       process.env.CHROME_PATH,
+      pinnedBrowser,
       "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
       "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     ]
   : [
       process.env.CHROME_PATH,
+      pinnedBrowser,
       "/usr/bin/google-chrome",
       "/usr/bin/chromium",
       "/usr/bin/chromium-browser",
@@ -48,6 +75,17 @@ export async function settleAll(steps) {
     }
   }
   if (failure) throw failure;
+}
+
+export async function closeServer(handle) {
+  if (!handle) return;
+  await new Promise((resolve, reject) => {
+    handle.server.close((error) => error ? reject(error) : resolve());
+    // A crashed/timed-out renderer can leave an active request behind. Stop
+    // accepting connections first, then close those requests so teardown
+    // cannot hide the original failure behind a hung test process.
+    handle.server.closeAllConnections();
+  });
 }
 
 export async function serve(directory) {
@@ -106,6 +144,7 @@ export class Cdp {
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = new Map();
+    this.commands = [];
     socket.addEventListener("message", ({ data }) => {
       let message;
       try {
@@ -118,6 +157,10 @@ export class Cdp {
         const pending = this.pending.get(message.id);
         this.pending.delete(message.id);
         if (pending) clearTimeout(pending.timer);
+        if (pending) {
+          pending.record.durationMs = Date.now() - pending.record.startedAt;
+          pending.record.error = message.error?.message;
+        }
         if (message.error) pending?.reject(new Error(message.error.message));
         else pending?.resolve(message.result);
         return;
@@ -145,12 +188,17 @@ export class Cdp {
 
   send(method, params = {}, timeoutMs = 5_000) {
     const id = this.nextId++;
+    const record = { method, startedAt: Date.now() };
+    this.commands.push(record);
+    if (this.commands.length > 100) this.commands.shift();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        record.durationMs = Date.now() - record.startedAt;
+        record.error = "timeout";
         reject(new Error(`CDP ${method} timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, record });
       try {
         this.socket.send(JSON.stringify({ id, method, params }));
       } catch (error) {
@@ -187,7 +235,7 @@ export class Cdp {
       { expression, awaitPromise: true, returnByValue: true },
       timeoutMs,
     );
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
     return result.result.value;
   }
 
@@ -282,18 +330,23 @@ const LAUNCHER_HANDOFF_GRACE_MS = 15_000;
 const STDERR_KEPT = 4_000;
 
 export async function launchBrowser(userDataDir, { deviceScaleFactor } = {}) {
-  if (deviceScaleFactor !== undefined && (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor <= 0)) {
-    throw new Error("deviceScaleFactor must be a positive finite number");
-  }
-  const child = spawn(browserPath, [
-    "--headless=new",
-    ...(deviceScaleFactor === undefined ? [] : [`--force-device-scale-factor=${deviceScaleFactor}`]),
+  if (!browserPath) throw new Error("No browser found; run npm run setup:web-browser");
+  if (process.env.CHROME_PATH && !existsSync(process.env.CHROME_PATH)) throw new Error("CHROME_PATH does not exist");
+  const flags = [
+    ...browserFlags({ deviceScaleFactor }),
     "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
     "--no-default-browser-check",
     "about:blank",
-  ], { stdio: ["ignore", "ignore", "pipe"] });
+  ];
+  const virtualDisplay = process.platform === "linux" && process.env.GPUI_AI_WEB_GPU === "software";
+  const child = virtualDisplay
+    ? spawn("xvfb-run", ["-a", "--server-args=-screen 0 1920x1080x24 -nolisten tcp", browserPath, ...flags], {
+        stdio: ["ignore", "ignore", "pipe"], detached: true,
+      })
+    : spawn(browserPath, flags, { stdio: ["ignore", "ignore", "pipe"] });
+  child.browserProcessGroup = virtualDisplay;
 
   // Kept, rather than discarded. A browser that will not start says why — a
   // missing library, a sandbox it cannot enter, a profile it cannot write —
@@ -306,6 +359,10 @@ export async function launchBrowser(userDataDir, { deviceScaleFactor } = {}) {
   });
   let exit;
   let exitedAt = 0;
+  child.once("error", (error) => {
+    exit = `launch error: ${error.message}${virtualDisplay ? "; install xvfb and xauth" : ""}`;
+    exitedAt = Date.now();
+  });
   child.once("exit", (code, signal) => {
     exit = signal ? `signal ${signal}` : `exit code ${code}`;
     exitedAt = Date.now();
@@ -358,7 +415,17 @@ export async function launchBrowser(userDataDir, { deviceScaleFactor } = {}) {
       socket.addEventListener("open", resolve, { once: true });
       socket.addEventListener("error", reject, { once: true });
     });
-    return { child, cdp: new Cdp(socket), socket };
+    const cdp = new Cdp(socket);
+    if (process.env.GPUI_AI_WEB_CPU_RATE) {
+      const rate = Number(process.env.GPUI_AI_WEB_CPU_RATE);
+      if (!Number.isFinite(rate) || rate < 1) throw new Error("GPUI_AI_WEB_CPU_RATE must be at least 1");
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate });
+    }
+    const version = await cdp.send("Browser.getVersion");
+    if (process.env.GPUI_AI_WEB_CHROME_VERSION && version.product.split("/")[1] !== process.env.GPUI_AI_WEB_CHROME_VERSION) {
+      throw new Error(`Browser version mismatch: ${version.product}, expected ${process.env.GPUI_AI_WEB_CHROME_VERSION}`);
+    }
+    return { child, cdp, socket, version, browserPath, flags, virtualDisplay, stderr: () => complaint };
   } catch (error) {
     socket?.close();
     await stopBrowserProcess(child);
@@ -367,22 +434,36 @@ export async function launchBrowser(userDataDir, { deviceScaleFactor } = {}) {
 }
 
 export async function stopBrowserProcess(child) {
-  if (!child || child.exitCode !== null) return;
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolve) => child.once("exit", resolve));
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
     await Promise.race([new Promise((resolve) => killer.once("exit", resolve)), delay(2_000)]);
   } else {
-    child.kill("SIGKILL");
+    // xvfb-run owns both the display and Chrome. Kill its private process
+    // group on a failed close; killing only the wrapper strands both children.
+    try {
+      if (child.browserProcessGroup) process.kill(-child.pid, "SIGKILL");
+      else child.kill("SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
   }
   await Promise.race([exited, delay(2_000)]);
 }
 
 export async function closeBrowser(browserHandle) {
   if (!browserHandle) return;
+  const { child } = browserHandle;
+  const exited = child.exitCode !== null || child.signalCode !== null
+    ? Promise.resolve()
+    : new Promise((resolve) => child.once("exit", resolve));
   await Promise.race([browserHandle.cdp.send("Browser.close"), delay(1_000)]).catch(() => {});
+  // Browser.close acknowledges before the process exits. Give xvfb-run time
+  // to remove its display lock and authority directory on a normal shutdown.
+  await Promise.race([exited, delay(2_000)]);
   browserHandle.socket.close();
-  await stopBrowserProcess(browserHandle.child);
+  await stopBrowserProcess(child);
 }
 
 // Waits for a condition inside the page instead of round-tripping CDP every

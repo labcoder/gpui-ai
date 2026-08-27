@@ -23,7 +23,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { browserPath, closeBrowser, launchBrowser, serve, settleAll, waitForValue } from "./cdp.mjs";
+import { browserPath, closeBrowser, closeServer, launchBrowser, serve, settleAll, waitForValue } from "./cdp.mjs";
+import { observeBrowser, saveBrowserEvidence } from "./browser-evidence.mjs";
 import { CARD } from "./build.mjs";
 import { socialCardName } from "../app/route-path.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
@@ -280,6 +281,7 @@ export async function captureSocialCards({
   try {
     serverHandle = await serve(siteDir);
     browserHandle = await launchBrowser(path.join(temporaryRoot, "browser"));
+    await observeBrowser(browserHandle);
     const { cdp } = browserHandle;
     await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable")]);
     await mkdir(path.join(siteDir, "og"), { recursive: true });
@@ -329,10 +331,13 @@ export async function captureSocialCards({
       written.push({ route: card.path, file, bytes: bytes.length });
       log(`${file} — ${(bytes.length / 1024).toFixed(1)} kB`);
     }
+  } catch (error) {
+    await saveBrowserEvidence(browserHandle, "social-card-capture").catch((diagnosticError) => console.error(diagnosticError));
+    throw error;
   } finally {
     await settleAll([
       () => closeBrowser(browserHandle),
-      () => (serverHandle ? new Promise((resolve) => serverHandle.server.close(resolve)) : undefined),
+      () => closeServer(serverHandle),
       () => rm(path.join(siteDir, "og", `_card-${process.pid}.html`), { force: true }),
       () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
     ]);

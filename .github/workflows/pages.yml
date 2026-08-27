@@ -24,8 +24,16 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GPUI_AI_WEB_GPU: software
+      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
     steps:
       - uses: actions/checkout@v7
+      - name: Set browser evidence paths
+        run: |
+          echo "GPUI_AI_WEB_EVIDENCE_ROOT=$RUNNER_TEMP/gpui-ai-web-evidence" >> "$GITHUB_ENV"
+          echo "GPUI_AI_WEB_ARTIFACTS=$RUNNER_TEMP/gpui-ai-web-evidence/captures" >> "$GITHUB_ENV"
       # Its `base_path` output goes unused — site/vite.config.ts hardcodes
       # `/gpui-ai/`. It is here, and this early, because it fails by name when
       # Pages is not enabled for the repository, instead of letting the whole
@@ -62,6 +70,12 @@ jobs:
       # than publishing a large one.
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Install the pinned test browser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libvulkan1 mesa-vulkan-drivers
+          test -u "$CHROME_DEVEL_SANDBOX"
+          npm run setup:web-browser
       - name: Install web host dependencies
         run: npm ci --prefix crates/gallery-web/www
       - name: Install site dependencies
@@ -87,6 +101,17 @@ jobs:
           npm run build:wasm
           npm run build:web
           npm run report:wasm
+      # Pages runs independently of CI. A successful compile/capture alone
+      # must never authorize publishing a gallery with broken interactions.
+      - name: Test the gallery artifact before publishing it
+        run: npm run test:web:browser
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-browser-evidence
+          path: ${{ runner.temp }}/gpui-ai-web-evidence/
+          retention-days: 7
       - name: Copy the API documentation into the site
         # site/scripts/build.mjs promotes a staging directory onto site/dist by
         # rename, so anything written there beforehand is discarded — this has

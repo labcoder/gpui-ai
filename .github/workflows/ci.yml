@@ -81,8 +81,22 @@ jobs:
   wasm:
     name: WASM gallery
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Functional browser checks use a known Linux WebGPU adapter, not the
+      # runner image's changing graphics defaults. Not a performance profile.
+      GPUI_AI_WEB_GPU: software
+      # Ubuntu restricts user namespaces for downloaded Chrome binaries. Use
+      # the runner's installed sandbox helper, not --no-sandbox or a sysctl.
+      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
     steps:
       - uses: actions/checkout@v7
+      - name: Set browser evidence paths
+        # Runtime runner paths are not available in job-level env expressions.
+        # Keep evidence outside the Cargo cache so old runs cannot be uploaded.
+        run: |
+          echo "GPUI_AI_WEB_EVIDENCE_ROOT=$RUNNER_TEMP/gpui-ai-web-evidence" >> "$GITHUB_ENV"
+          echo "GPUI_AI_WEB_ARTIFACTS=$RUNNER_TEMP/gpui-ai-web-evidence/captures" >> "$GITHUB_ENV"
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: nightly
@@ -103,13 +117,14 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: wasm-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-      # No binaryen step on purpose. `wasm-opt -Oz -all` shrinks the artifact
-      # from 16.9 MB to 14.4 MB and produces a module the browser cannot
-      # instantiate — with Ubuntu's binaryen 108 and equally with a pinned
-      # upstream 132, so it is not version skew. The same artifact without
-      # wasm-opt passes the release browser gate. build-wasm.sh still runs
-      # wasm-opt when it is on PATH, so re-enabling this is one step away once
-      # the incompatibility is understood; see docs/internal/wasm-baseline.md.
+      - name: Install the pinned test browser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libvulkan1 mesa-vulkan-drivers
+          test -u "$CHROME_DEVEL_SANDBOX"
+          npm run setup:web-browser
+      # build-wasm.sh deliberately never runs wasm-opt, locally or here:
+      # Binaryen 108 and 132 both produced non-instantiable artifacts.
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - name: Install web host dependencies
@@ -118,10 +133,16 @@ jobs:
         # check:site typechecks and build:site runs Vite, both from
         # site/node_modules. Without this a clean runner produces no site.
         run: npm ci --prefix site
-      - name: Test the shared gallery artifact
+      - name: Check web host, site, and test harness
         run: |
-          npm run check:web
+          npm --prefix crates/gallery-web/www test
+          npm run check:site
+      - name: Build the release gallery
+        run: |
           npm run build:wasm
+          npm --prefix crates/gallery-web/www run build
+      - name: Test the built release gallery in the pinned browser
+        run: npm run test:web:browser
 
       # Two ways to build the site, differing only in whether the seventy
       # posters and forty-three social cards are rendered. They cost about
@@ -131,20 +152,27 @@ jobs:
       # rendered out of the built site's own stylesheet — so this is two paths
       # rather than one path and an extra step.
       #
-      # Skipped on a push to main because the Pages workflow runs the same
-      # captures on the same commit minutes later, and on a pull request
-      # because nothing deploys from one. Neither is a gap: the release gate
-      # captures two posters and two cards on every run, which is what proves
-      # the machinery, and a story that stopped drawing fails that gate.
+      # Full image generation is skipped on branches/PRs: the release gate
+      # captures representative posters/cards and smoke-tests every story and
+      # declared variant. Tags and Pages additionally render all the images.
       - name: Build the site
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: |
-          npm --prefix crates/gallery-web/www run build
-          npm run build:site
+        run: npm run build:site
 
       - name: Build the site, with every poster and social card
         if: startsWith(github.ref, 'refs/tags/')
-        run: npm run build:web
+        # Reuse the artifact just tested; do not rebuild it after the gate.
+        run: |
+          npm run generate:posters
+          npm run build:site
+          npm run generate:og
 
       - name: Report the WASM size
         run: npm run report:wasm
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-browser-evidence
+          path: ${{ runner.temp }}/gpui-ai-web-evidence/
+          retention-days: 7

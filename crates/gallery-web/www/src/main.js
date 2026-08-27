@@ -434,6 +434,7 @@ async function initEmbed() {
       // tears down a seventeen-megabyte instance to reach a state the story
       // gets back to in one frame.
       reset: () => wasm.reset_story(),
+      isApprovalGranted: (id) => wasm.is_approval_granted(id),
     });
     // Not "ready" yet: `run` returns before the first frame. The host keeps
     // saying "Starting" in the demo window's title bar until there are pixels

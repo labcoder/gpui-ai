@@ -147,6 +147,22 @@ pub fn reset_story() -> bool {
     reset.get()
 }
 
+/// Reads the approval story's decision without dispatching an action.
+#[cfg_attr(target_family = "wasm", wasm_bindgen)]
+pub fn is_approval_granted(id: String) -> bool {
+    let granted = Cell::new(false);
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| {
+                if let Some(gallery) = GALLERY.with(|gallery| gallery.borrow().clone()) {
+                    granted.set(gallery.read(cx).is_approval_granted(&id));
+                }
+            });
+        }
+    });
+    granted.get()
+}
+
 /// The states the running story offers, as slugs, in the order it draws them.
 ///
 /// Five of the thirty-four stories have any: the chat story and the four
