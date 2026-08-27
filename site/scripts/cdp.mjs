@@ -269,6 +269,15 @@ export class Cdp {
  */
 const PORT_READY_TIMEOUT_MS = 60_000;
 
+/**
+ * How long a clean launcher exit may precede the port file. Chromium's
+ * launcher process can hand off to a re-execed browser and exit 0 first; the
+ * real browser then writes `DevToolsActivePort` into the same profile a beat
+ * later (measured ~250ms; the allowance covers a loaded machine). A launch
+ * that truly produced no browser still fails, just this much later.
+ */
+const LAUNCHER_HANDOFF_GRACE_MS = 15_000;
+
 /** How much of Chromium's own complaint to quote when it will not start. */
 const STDERR_KEPT = 4_000;
 
@@ -292,8 +301,10 @@ export async function launchBrowser(userDataDir) {
     complaint = `${complaint}${chunk}`.slice(-STDERR_KEPT);
   });
   let exit;
+  let exitedAt = 0;
   child.once("exit", (code, signal) => {
     exit = signal ? `signal ${signal}` : `exit code ${code}`;
+    exitedAt = Date.now();
   });
 
   const reason = () => {
@@ -323,9 +334,14 @@ export async function launchBrowser(userDataDir) {
       } catch {
         // The file only appears once Chromium has bound its debugging port.
       }
-      // A browser that has exited is never going to write the file, and
-      // waiting the rest of the minute to say so helps nobody.
-      if (exit) break;
+      // A browser that dies is never going to write the file, and waiting
+      // the rest of the minute to say so helps nobody. But a clean exit is
+      // not yet proof there is no browser: Edge's launcher process re-execs
+      // the real browser and exits 0 before the grandchild has written the
+      // port into our profile, so a zero exit gets a bounded grace instead
+      // of an immediate verdict.
+      if (exit && exit !== "exit code 0") break;
+      if (exit && Date.now() - exitedAt > LAUNCHER_HANDOFF_GRACE_MS) break;
       await delay(50);
     }
     if (!port) {
