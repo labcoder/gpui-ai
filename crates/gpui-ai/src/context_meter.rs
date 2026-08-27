@@ -5,12 +5,15 @@
 //! 85%, danger above — and exposes the same numbers semantically so the
 //! level never depends on color alone.
 
+use crate::motion::MotionTokens;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
     Window, div, prelude::FluentBuilder as _, relative,
 };
+use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, hover_card::HoverCard,
     progress::ProgressCircle, v_flex,
@@ -250,11 +253,21 @@ fn breakdown_row(label: &'static str, value: String, cx: &App) -> impl IntoEleme
 }
 
 impl RenderOnce for ContextMeter {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let color = self.tone(cx);
         let percent = self.usage.percent();
-        let fraction = self.usage.fraction();
+        // The drawn geometry retargets from the previous controlled usage at
+        // the standard tempo; the first render starts at the supplied value,
+        // and the numeric readout stays controlled — the number never
+        // counts. Reduced motion snaps through the transition contract.
+        let fraction = transition(
+            (self.id.clone(), "context-fill"),
+            self.usage.fraction(),
+            Transition::new(MotionTokens::read(cx).standard()).ease(ease_out_cubic),
+            window,
+            cx,
+        );
         let summary: SharedString = self.usage.summary().into();
         let percent_text = format!("{percent}%");
         let ratio_text = format!(

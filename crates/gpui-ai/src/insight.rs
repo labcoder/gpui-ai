@@ -2,6 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::motion::{MotionTokens, swap_progress};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -9,6 +10,8 @@ use gpui::{
     Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
+use gpui_base::animation::ease_out_cubic;
+use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, StyledExt as _, chart::LineChart, h_flex, text::TextView, v_flex,
 };
@@ -447,10 +450,37 @@ fn chart_group(
     card_id: &SharedString,
     label: SharedString,
     summary: SharedString,
+    page: usize,
     points: Vec<InsightPoint>,
+    window: &mut Window,
     cx: &mut App,
 ) -> Stateful<Div> {
     let tokens = cx.theme().semantic_tokens();
+    // Drawn points retarget from their previous controlled values at the
+    // standard tempo, keyed by page and label: a value updated in place
+    // morphs, while a page swap presents fresh keys and joins at rest —
+    // two different weeks never cross-morph just because both start on
+    // Monday. Semantics read the controlled values; only drawing follows.
+    let standard = MotionTokens::read(cx).standard();
+    let points = points
+        .into_iter()
+        .map(|point| {
+            let drawn = transition(
+                ElementId::Name(SharedString::from(format!(
+                    "{card_id}-pt-{page}-{}",
+                    point.label
+                ))),
+                point.value as f32,
+                Transition::new(standard).ease(ease_out_cubic),
+                window,
+                cx,
+            );
+            InsightPoint {
+                label: point.label,
+                value: drawn as f64,
+            }
+        })
+        .collect::<Vec<_>>();
     v_flex()
         .id((ElementId::from(card_id.clone()), "chart-group"))
         .role(Role::Group)
@@ -477,8 +507,44 @@ impl Styled for InsightCard {
 }
 
 impl RenderOnce for InsightCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Page travel: the content enters with a quick fade and a few
+        // pixels from the side the navigation came from, keyed by a
+        // generation so revisiting a page replays its entrance while
+        // re-renders replay nothing. Controls stay outside the travel.
+        let page_memory = window.use_keyed_state(
+            (ElementId::from(self.id.clone()), "page-memory"),
+            cx,
+            |_, _| (self.current_page, 0u64, true),
+        );
+        let (previous_page, mut page_generation, mut entering_forward) = *page_memory.read(cx);
+        if previous_page != self.current_page {
+            page_generation = page_generation.wrapping_add(1);
+            entering_forward = self.current_page > previous_page;
+            let stamp = (self.current_page, page_generation, entering_forward);
+            page_memory.update(cx, |memory, _| *memory = stamp);
+        }
+        // Generation zero is the mount: the first page is presented, not
+        // entered.
+        let page_entrance = if page_generation == 0 {
+            1.0
+        } else {
+            swap_progress(
+                ElementId::Name(SharedString::from(format!(
+                    "{}-page-enter-{page_generation}",
+                    self.id
+                ))),
+                window,
+                cx,
+            )
+        };
+        let page_travel = tokens.spacing.xxs * (1.0 - page_entrance);
+        let page_offset = if entering_forward {
+            page_travel
+        } else {
+            -page_travel
+        };
         let page_label = self.page_label();
         let page_text: SharedString = format!("Insights · {page_label}").into();
         let resolved_chart_summary = self.resolved_chart_summary();
@@ -494,8 +560,17 @@ impl RenderOnce for InsightCard {
         let chart = if self.points.is_empty() {
             None
         } else {
-            resolved_chart_summary
-                .map(|summary| chart_group(&card_id, chart_label, summary, self.points, cx))
+            resolved_chart_summary.map(|summary| {
+                chart_group(
+                    &card_id,
+                    chart_label,
+                    summary,
+                    self.current_page,
+                    self.points,
+                    window,
+                    cx,
+                )
+            })
         };
 
         v_flex()
@@ -511,36 +586,43 @@ impl RenderOnce for InsightCard {
             .rounded(tokens.radius.md)
             .child(
                 v_flex()
-                    .gap(tokens.spacing.xs)
+                    .gap(tokens.spacing.md)
+                    .relative()
+                    .left(page_offset)
+                    .opacity(page_entrance)
                     .child(
-                        div()
-                            .text_token(tokens.typography.xs)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(page_text),
+                        v_flex()
+                            .gap(tokens.spacing.xs)
+                            .child(
+                                div()
+                                    .text_token(tokens.typography.xs)
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(page_text),
+                            )
+                            .child(
+                                div()
+                                    .text_token(tokens.typography.lg)
+                                    .text_color(cx.theme().foreground)
+                                    .child(self.title),
+                            ),
                     )
-                    .child(
-                        div()
-                            .text_token(tokens.typography.lg)
-                            .text_color(cx.theme().foreground)
-                            .child(self.title),
-                    ),
+                    .when_some(self.body, |this, body| {
+                        this.child(
+                            TextView::markdown((ElementId::from(card_id.clone()), "body"), body)
+                                .selectable(true),
+                        )
+                    })
+                    .when(!self.metrics.is_empty(), |this| {
+                        this.child(
+                            metrics_group(&card_id, cx).children(
+                                self.metrics
+                                    .into_iter()
+                                    .map(|metric| metric_item(&card_id, metric, cx)),
+                            ),
+                        )
+                    })
+                    .when_some(chart, |this, chart| this.child(chart)),
             )
-            .when_some(self.body, |this, body| {
-                this.child(
-                    TextView::markdown((ElementId::from(card_id.clone()), "body"), body)
-                        .selectable(true),
-                )
-            })
-            .when(!self.metrics.is_empty(), |this| {
-                this.child(
-                    metrics_group(&card_id, cx).children(
-                        self.metrics
-                            .into_iter()
-                            .map(|metric| metric_item(&card_id, metric, cx)),
-                    ),
-                )
-            })
-            .when_some(chart, |this, chart| this.child(chart))
             .when(self.total_pages > 1 || self.follow_up.is_some(), |this| {
                 this.child(
                     h_flex()
@@ -567,6 +649,71 @@ mod tests {
         InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend, chart_group,
         metric_item, metrics_group,
     };
+
+    mod paging_motion {
+        use super::super::{InsightCard, InsightMetric};
+        use gpui::{
+            Context, IntoElement, ParentElement as _, Render, Styled as _, TestAppContext,
+            VisualTestContext, Window, div, px,
+        };
+
+        struct PagedProbe {
+            page: usize,
+        }
+
+        impl Render for PagedProbe {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(420.)).h(px(360.)).child(
+                    InsightCard::new("probe-insight", "Weekly demand")
+                        .page(self.page, 3)
+                        .metrics([InsightMetric::new("mint", "Mint Chip", "$2,377.66")]),
+                )
+            }
+        }
+
+        fn draw(cx: &mut VisualTestContext) {
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+        }
+
+        #[gpui::test]
+        fn a_mounted_page_is_presented_and_navigation_enters(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let (probe, cx) = cx.add_window_view(|_, _| PagedProbe { page: 1 });
+            let cx: &mut VisualTestContext = cx;
+            draw(cx);
+            crate::motion::take_reveal_frame_requests();
+            draw(cx);
+            assert_eq!(
+                crate::motion::take_reveal_frame_requests(),
+                0,
+                "the first page is presented, not entered"
+            );
+
+            probe.update(cx, |probe, cx| {
+                probe.page = 2;
+                cx.notify();
+            });
+            draw(cx);
+            assert!(
+                crate::motion::take_reveal_frame_requests() > 0,
+                "navigating must enter the new page"
+            );
+
+            cx.executor()
+                .advance_clock(std::time::Duration::from_secs(2));
+            draw(cx);
+            crate::motion::take_reveal_frame_requests();
+            probe.update(cx, |probe, cx| {
+                probe.page = 1;
+                cx.notify();
+            });
+            draw(cx);
+            assert!(
+                crate::motion::take_reveal_frame_requests() > 0,
+                "returning to a page replays its entrance"
+            );
+        }
+    }
     use gpui::{
         Element as _, IntoElement as _, Render, RenderOnce as _, Role, TestAppContext, Window,
         accesskit, canvas,
@@ -633,10 +780,12 @@ mod tests {
                             &card_id,
                             "Trend snapshot".into(),
                             "Trend snapshot: Week 1 18, Week 2 24.".into(),
+                            1,
                             vec![
                                 InsightPoint::new("Week 1", 18.0),
                                 InsightPoint::new("Week 2", 24.0),
                             ],
+                            window,
                             cx,
                         )),
                         ChildProbeKind::Previous => capture_element!(
