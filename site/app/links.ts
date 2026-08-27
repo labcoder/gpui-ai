@@ -33,7 +33,7 @@ export function demoSrc(story: string, theme?: string, variant?: string): string
 /**
  * The still frame captured from a story, for a reader who is not running it.
  *
- * By mode, not by theme. There are 45 themes and 35 stories; a poster each
+ * By mode, not by theme. There are 55 themes and 35 stories; a poster each
  * would be 1,575 files rendered on every build to make a placeholder slightly
  * more accurate. `site/scripts/capture-posters.mjs` renders these two, and
  * `Demo` only shows one where its colours cannot contradict what is about to

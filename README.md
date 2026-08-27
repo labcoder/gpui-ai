@@ -117,7 +117,7 @@ Components use `Progressive<T>` and `ProgressState` for streamed work. Stateful 
 
 ## Themes
 
-Every component reads gpui-component theme tokens. The gallery includes 45 themes, and the [themes page](https://labcoder.github.io/gpui-ai/themes/) lets you preview or download each JSON file.
+Every component reads gpui-component theme tokens. The gallery includes 55 themes, and the [themes page](https://labcoder.github.io/gpui-ai/themes/) lets you preview or download each JSON file.
 
 ## Requirements
 

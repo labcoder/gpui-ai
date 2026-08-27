@@ -286,6 +286,26 @@ test("owned source palettes read as authored, before any derivation", async () =
   assert.deepEqual(failures, [], `raw authored pairs fail in ${failures.length} places`);
 });
 
+test("every owned theme has sidecar copy and every sidecar key is an owned theme", async () => {
+  // The sidecar is site-only product copy; the registry JSON beside it stays
+  // the sole source for colors, name, mode, radius, font, and shadow. Both
+  // scanners skip it because it lives in a subdirectory rather than ending
+  // up as a pack: this test pins the one-to-one mapping instead.
+  const owned = path.join(repositoryRoot, "themes", "gpui-ai");
+  const sidecar = JSON.parse(
+    await readFile(path.join(owned, "meta", "descriptions.json"), "utf8"),
+  ).descriptions;
+  const slugs = (await readdir(owned))
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.replace(/\.json$/, ""))
+    .sort();
+  assert.deepEqual(Object.keys(sidecar).sort(), slugs, "sidecar keys must match owned slugs exactly");
+  for (const [slug, copy] of Object.entries(sidecar)) {
+    assert.ok(copy.character?.trim(), `${slug} needs character copy`);
+    assert.ok(copy.use?.trim(), `${slug} needs use copy`);
+  }
+});
+
 test("the upstream group is credited separately from gpui-ai's own themes", async () => {
   const { groups } = JSON.parse(await readFile(path.join(generated, "themes.json"), "utf8"));
   assert.deepEqual(

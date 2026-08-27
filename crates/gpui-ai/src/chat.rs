@@ -925,7 +925,9 @@ impl Chat {
                     if let Some((before, predicted)) = last_step {
                         let to_predicted = (current - predicted).abs();
                         let to_before = (current - before).abs();
-                        if to_predicted > gpui::px(2.) && to_before > gpui::px(2.) {
+                        // Wider than paint rounding, narrower than any step.
+                        let tolerance = gpui::px(2.);
+                        if to_predicted > tolerance && to_before > tolerance {
                             // The reader took the wheel; leave them there.
                             return true;
                         }

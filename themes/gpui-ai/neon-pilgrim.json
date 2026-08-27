@@ -1,0 +1,46 @@
+{
+  "themes": [
+    {
+      "name": "Neon Pilgrim",
+      "mode": "dark",
+      "radius": 4,
+      "radius.lg": 8,
+      "shadow": true,
+      "font.size": 14,
+      "mono_font.size": 13,
+      "colors": {
+        "accent.background": "#123649",
+        "accent.foreground": "#D8FAFF",
+        "background": "#0B0711",
+        "border": "#55305F",
+        "chart.1": "#F43F8C",
+        "chart.2": "#67E8F9",
+        "chart.3": "#A78BFA",
+        "chart.4": "#FBBF24",
+        "chart.5": "#6EE7B7",
+        "danger.background": "#FB7185",
+        "danger.foreground": "#0B0711",
+        "foreground": "#F8EFFF",
+        "info.background": "#67E8F9",
+        "info.foreground": "#0B0711",
+        "input.border": "#7B4C86",
+        "muted.background": "#160E20",
+        "muted.foreground": "#B79CBD",
+        "popover.background": "#130B1C",
+        "popover.foreground": "#F8EFFF",
+        "primary.background": "#F43F8C",
+        "primary.foreground": "#160510",
+        "primary.hover.background": "#f65c9d",
+        "ring": "#67E8F9",
+        "secondary.background": "#1A1026",
+        "secondary.foreground": "#EADDF0",
+        "sidebar.background": "#07040C",
+        "sidebar.border": "#55305F",
+        "success.background": "#6EE7B7",
+        "success.foreground": "#0B0711",
+        "warning.background": "#FBBF24",
+        "warning.foreground": "#0B0711"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "themes": [
+    {
+      "name": "Pocket Voltage",
+      "mode": "dark",
+      "radius": 2,
+      "radius.lg": 4,
+      "shadow": true,
+      "font.size": 14,
+      "mono_font.size": 13,
+      "colors": {
+        "accent.background": "#1E4E9B",
+        "accent.foreground": "#FFFFFF",
+        "background": "#071A3D",
+        "border": "#4470B2",
+        "chart.1": "#FFD12A",
+        "chart.2": "#60A5FA",
+        "chart.3": "#4ADE80",
+        "chart.4": "#F05252",
+        "chart.5": "#C084FC",
+        "danger.background": "#F05252",
+        "danger.foreground": "#071A3D",
+        "foreground": "#F8FAFC",
+        "info.background": "#60A5FA",
+        "info.foreground": "#071A3D",
+        "input.border": "#5682C1",
+        "muted.background": "#102A59",
+        "muted.foreground": "#BBCBE7",
+        "popover.background": "#0B214B",
+        "popover.foreground": "#F8FAFC",
+        "primary.background": "#FFD12A",
+        "primary.foreground": "#172033",
+        "primary.hover.background": "#ffd849",
+        "ring": "#FFE15C",
+        "secondary.background": "#14336B",
+        "secondary.foreground": "#F4F7FB",
+        "sidebar.background": "#061532",
+        "sidebar.border": "#4470B2",
+        "success.background": "#4ADE80",
+        "success.foreground": "#071A3D",
+        "warning.background": "#FFD12A",
+        "warning.foreground": "#071A3D"
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "$comment": "Site-only copy keyed by owned theme slug. Not a registry pack: colors, name, mode, radius, font, and shadow live only in the theme files beside this directory.",
+  "descriptions": {
+    "contrast": {
+      "character": "Maximum-contrast dark theme: pure black surfaces, white text, and a yellow primary that cannot be missed.",
+      "use": "Accessibility-first setups, sunlight, or projector demos where every boundary must shout."
+    },
+    "ember-dusk": {
+      "character": "Warm charcoal with burnt-orange action colors; embers over a dark hearth.",
+      "use": "Long evening sessions where a dark theme should feel warm rather than clinical."
+    },
+    "graphite": {
+      "character": "Square-cornered neutral dark with a pale primary and a single teal focus note.",
+      "use": "Screenshots and docs where the components should read without a palette talking over them."
+    },
+    "midnight-violet": {
+      "character": "Deep indigo surfaces with violet action colors and soft lavender focus.",
+      "use": "A saturated dark look that keeps prose contrast high."
+    },
+    "nord-frost": {
+      "character": "Cool arctic blues on slate; muted aurora status colors.",
+      "use": "Readers who find pure black harsh and want a familiar low-chroma dark palette."
+    },
+    "paper-light": {
+      "character": "Warm paper neutrals with a deep teal primary; quiet and editorial.",
+      "use": "Documentation and reading-heavy surfaces in daylight."
+    },
+    "solstice": {
+      "character": "Cream and apricot light theme with a burnt-orange primary.",
+      "use": "A warm light default that still keeps status colors unmistakable."
+    },
+    "pocket-voltage": {
+      "character": "Saturated royal blue with an electric yellow primary and small red signal notes; crisp, energetic, tight corners.",
+      "use": "Dashboards and demos that should feel quick and playful without losing legibility."
+    },
+    "mako-reactor": {
+      "character": "Near-black bottle green and steel with a luminous green primary; dense, industrial, square.",
+      "use": "Terminal-adjacent tooling where fine borders and glow accents carry the hierarchy."
+    },
+    "silver-key-sky": {
+      "character": "High-key sky blue over pearl white with cool silver borders; airy, optimistic, very round.",
+      "use": "Consumer-facing light surfaces that should feel light-filled rather than flat white."
+    },
+    "neon-pilgrim": {
+      "character": "Ink black with a hot magenta primary and cyan reflections; restrained amber for warnings.",
+      "use": "Night-mode products that want neon character without gradient noise."
+    },
+    "spice-horizon": {
+      "character": "Sand and parchment fields with burnt-spice action colors and a rare deep blue focus ring; shadowless.",
+      "use": "Warm, dry light theme where borders and value steps do the separating."
+    },
+    "moon-prism": {
+      "character": "Pearl and rose with midnight-navy text, lavender accents, and fine gold in charts; generously round.",
+      "use": "Soft light surfaces that stay high-contrast where it counts."
+    },
+    "vector-grid": {
+      "character": "Blue-black canvas with luminous cyan and one ultraviolet accent; geometric, technical, shadowless.",
+      "use": "Data-dense dark tooling with precise one-pixel boundaries."
+    },
+    "forest-spirit": {
+      "character": "Rice paper, moss, and sage with a single vermilion focus note; organic roundness.",
+      "use": "Calm light theme for long reading and review sessions."
+    },
+    "blood-moon-cathedral": {
+      "character": "Wine-black surfaces, oxblood action colors, bone text, and aged gold focus.",
+      "use": "A dramatic dark look that keeps danger and primary reds separable by more than hue."
+    },
+    "sunday-panel": {
+      "character": "Warm newsprint with cobalt actions, a yellow highlight surface, and bold outlines; flat and square.",
+      "use": "Print-flavored light surfaces with strong edges and no gradient softness."
+    }
+  }
+}

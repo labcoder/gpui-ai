@@ -1,0 +1,46 @@
+{
+  "themes": [
+    {
+      "name": "Moon Prism",
+      "mode": "light",
+      "radius": 18,
+      "radius.lg": 24,
+      "shadow": true,
+      "font.size": 14,
+      "mono_font.size": 13,
+      "colors": {
+        "accent.background": "#DFD4FF",
+        "accent.foreground": "#30245D",
+        "background": "#FFF8FC",
+        "border": "#E2BFD4",
+        "chart.1": "#B4236B",
+        "chart.2": "#6D5BD0",
+        "chart.3": "#1D4ED8",
+        "chart.4": "#A16207",
+        "chart.5": "#15803D",
+        "danger.background": "#BE123C",
+        "danger.foreground": "#FFFFFF",
+        "foreground": "#252449",
+        "info.background": "#1D4ED8",
+        "info.foreground": "#FFFFFF",
+        "input.border": "#BC7CA5",
+        "muted.background": "#F7ECF3",
+        "muted.foreground": "#6B5770",
+        "popover.background": "#FFFFFF",
+        "popover.foreground": "#252449",
+        "primary.background": "#B4236B",
+        "primary.foreground": "#FFFFFF",
+        "primary.hover.background": "#9a1e5c",
+        "ring": "#6D5BD0",
+        "secondary.background": "#EEE9FF",
+        "secondary.foreground": "#35305D",
+        "sidebar.background": "#F4EFFB",
+        "sidebar.border": "#E2BFD4",
+        "success.background": "#15803D",
+        "success.foreground": "#FFFFFF",
+        "warning.background": "#A16207",
+        "warning.foreground": "#FFFFFF"
+      }
+    }
+  ]
+}

@@ -92,6 +92,36 @@
   --ai-code-number: #facc15;
 }
 
+/* Blood Moon Cathedral — gpui-ai, dark */
+[data-theme="blood-moon-cathedral"] {
+  color-scheme: dark;
+  --ai-background: #10070A;
+  --ai-foreground: #F8EDF0;
+  --ai-muted: #C7A3AB;
+  --ai-border: #65303D;
+  --ai-surface: #190C11;
+  --ai-primary: #B91C3C;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #3A1521;
+  --ai-danger: #FB7185;
+  --ai-success: #86EFAC;
+  --ai-warning: #FDE047;
+  --ai-info: #7DD3FC;
+  --ai-radius: 2px;
+  --ai-radius-lg: 6px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-muted-text: #c7a3ab;
+  --ai-accent-text: #f8edf0;
+  --ai-code-comment: #c7a3ab;
+  --ai-code-keyword: #fb7185;
+  --ai-code-string: #86efac;
+  --ai-code-type: #7dd3fc;
+  --ai-code-number: #fde047;
+}
+
 /* gpui-ai Contrast — gpui-ai, dark */
 [data-theme="contrast"] {
   color-scheme: dark;
@@ -152,6 +182,36 @@
   --ai-code-number: #facc15;
 }
 
+/* Forest Spirit — gpui-ai, light */
+[data-theme="forest-spirit"] {
+  color-scheme: light;
+  --ai-background: #FAF7EC;
+  --ai-foreground: #253128;
+  --ai-muted: #5E6959;
+  --ai-border: #B9C5AC;
+  --ai-surface: #FFFDF5;
+  --ai-primary: #3F6B45;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #D6E2BE;
+  --ai-danger: #A83228;
+  --ai-success: #3F6B45;
+  --ai-warning: #9A6700;
+  --ai-info: #2563EB;
+  --ai-radius: 12px;
+  --ai-radius-lg: 18px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-muted-text: #5e6959;
+  --ai-accent-text: #253128;
+  --ai-code-comment: #596455;
+  --ai-code-keyword: #a83228;
+  --ai-code-string: #3f6b45;
+  --ai-code-type: #1f54c8;
+  --ai-code-number: #835800;
+}
+
 /* Graphite — gpui-ai, dark */
 [data-theme="graphite"] {
   color-scheme: dark;
@@ -182,6 +242,36 @@
   --ai-code-number: #fbbf24;
 }
 
+/* Mako Reactor — gpui-ai, dark */
+[data-theme="mako-reactor"] {
+  color-scheme: dark;
+  --ai-background: #060D0A;
+  --ai-foreground: #DFFFEA;
+  --ai-muted: #8FBE9F;
+  --ai-border: #2C6C4A;
+  --ai-surface: #0A1510;
+  --ai-primary: #2EE66B;
+  --ai-primary-foreground: #031108;
+  --ai-accent: #123A23;
+  --ai-danger: #FB7185;
+  --ai-success: #4ADE80;
+  --ai-warning: #FACC15;
+  --ai-info: #67E8F9;
+  --ai-radius: 0px;
+  --ai-radius-lg: 2px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: none;
+  --ai-muted-text: #8fbe9f;
+  --ai-accent-text: #dfffea;
+  --ai-code-comment: #8fbe9f;
+  --ai-code-keyword: #fb7185;
+  --ai-code-string: #4ade80;
+  --ai-code-type: #67e8f9;
+  --ai-code-number: #facc15;
+}
+
 /* Midnight Violet — gpui-ai, dark */
 [data-theme="midnight-violet"] {
   color-scheme: dark;
@@ -209,6 +299,66 @@
   --ai-code-keyword: #f54966;
   --ai-code-string: #34d399;
   --ai-code-type: #38bdf8;
+  --ai-code-number: #fbbf24;
+}
+
+/* Moon Prism — gpui-ai, light */
+[data-theme="moon-prism"] {
+  color-scheme: light;
+  --ai-background: #FFF8FC;
+  --ai-foreground: #252449;
+  --ai-muted: #6B5770;
+  --ai-border: #E2BFD4;
+  --ai-surface: #FFFFFF;
+  --ai-primary: #B4236B;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #DFD4FF;
+  --ai-danger: #BE123C;
+  --ai-success: #15803D;
+  --ai-warning: #A16207;
+  --ai-info: #1D4ED8;
+  --ai-radius: 18px;
+  --ai-radius-lg: 24px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-muted-text: #6b5770;
+  --ai-accent-text: #252449;
+  --ai-code-comment: #6b5770;
+  --ai-code-keyword: #b51139;
+  --ai-code-string: #126d34;
+  --ai-code-type: #1d4ed8;
+  --ai-code-number: #895306;
+}
+
+/* Neon Pilgrim — gpui-ai, dark */
+[data-theme="neon-pilgrim"] {
+  color-scheme: dark;
+  --ai-background: #0B0711;
+  --ai-foreground: #F8EFFF;
+  --ai-muted: #B79CBD;
+  --ai-border: #55305F;
+  --ai-surface: #130B1C;
+  --ai-primary: #F43F8C;
+  --ai-primary-foreground: #160510;
+  --ai-accent: #123649;
+  --ai-danger: #FB7185;
+  --ai-success: #6EE7B7;
+  --ai-warning: #FBBF24;
+  --ai-info: #67E8F9;
+  --ai-radius: 4px;
+  --ai-radius-lg: 8px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-muted-text: #b79cbd;
+  --ai-accent-text: #f8efff;
+  --ai-code-comment: #b79cbd;
+  --ai-code-keyword: #fb7185;
+  --ai-code-string: #6ee7b7;
+  --ai-code-type: #67e8f9;
   --ai-code-number: #fbbf24;
 }
 
@@ -272,6 +422,66 @@
   --ai-code-number: #915806;
 }
 
+/* Pocket Voltage — gpui-ai, dark */
+[data-theme="pocket-voltage"] {
+  color-scheme: dark;
+  --ai-background: #071A3D;
+  --ai-foreground: #F8FAFC;
+  --ai-muted: #BBCBE7;
+  --ai-border: #4470B2;
+  --ai-surface: #0B214B;
+  --ai-primary: #FFD12A;
+  --ai-primary-foreground: #172033;
+  --ai-accent: #1E4E9B;
+  --ai-danger: #F05252;
+  --ai-success: #4ADE80;
+  --ai-warning: #FFD12A;
+  --ai-info: #60A5FA;
+  --ai-radius: 2px;
+  --ai-radius-lg: 4px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --ai-muted-text: #bbcbe7;
+  --ai-accent-text: #f8fafc;
+  --ai-code-comment: #bbcbe7;
+  --ai-code-keyword: #f8b1b1;
+  --ai-code-string: #4ade80;
+  --ai-code-type: #a0c9fc;
+  --ai-code-number: #ffd12a;
+}
+
+/* Silver Key Sky — gpui-ai, light */
+[data-theme="silver-key-sky"] {
+  color-scheme: light;
+  --ai-background: #F6F9FF;
+  --ai-foreground: #12233F;
+  --ai-muted: #526078;
+  --ai-border: #BCC9DC;
+  --ai-surface: #FFFFFF;
+  --ai-primary: #1D4ED8;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #DCE8FF;
+  --ai-danger: #BE123C;
+  --ai-success: #15803D;
+  --ai-warning: #A16207;
+  --ai-info: #0369A1;
+  --ai-radius: 14px;
+  --ai-radius-lg: 20px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-muted-text: #526078;
+  --ai-accent-text: #12233f;
+  --ai-code-comment: #526078;
+  --ai-code-keyword: #be123c;
+  --ai-code-string: #137337;
+  --ai-code-type: #0369a1;
+  --ai-code-number: #915806;
+}
+
 /* Solstice — gpui-ai, light */
 [data-theme="solstice"] {
   color-scheme: light;
@@ -300,6 +510,96 @@
   --ai-code-string: #047857;
   --ai-code-type: #0369a1;
   --ai-code-number: #995d07;
+}
+
+/* Spice Horizon — gpui-ai, light */
+[data-theme="spice-horizon"] {
+  color-scheme: light;
+  --ai-background: #FBF2DD;
+  --ai-foreground: #2B2118;
+  --ai-muted: #6F5A3E;
+  --ai-border: #A78648;
+  --ai-surface: #FFF9EC;
+  --ai-primary: #9A3412;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #D9C08A;
+  --ai-danger: #B91C1C;
+  --ai-success: #3F6212;
+  --ai-warning: #92400E;
+  --ai-info: #1D4ED8;
+  --ai-radius: 6px;
+  --ai-radius-lg: 10px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: none;
+  --ai-muted-text: #6f5a3e;
+  --ai-accent-text: #2b2118;
+  --ai-code-comment: #5e4d35;
+  --ai-code-keyword: #9d1818;
+  --ai-code-string: #395810;
+  --ai-code-type: #1942b8;
+  --ai-code-number: #833a0d;
+}
+
+/* Sunday Panel — gpui-ai, light */
+[data-theme="sunday-panel"] {
+  color-scheme: light;
+  --ai-background: #FFFDF4;
+  --ai-foreground: #161D2A;
+  --ai-muted: #5B6170;
+  --ai-border: #7188A8;
+  --ai-surface: #FFFFFF;
+  --ai-primary: #1D4ED8;
+  --ai-primary-foreground: #FFFFFF;
+  --ai-accent: #FFE36E;
+  --ai-danger: #B91C1C;
+  --ai-success: #15803D;
+  --ai-warning: #9A6700;
+  --ai-info: #1D4ED8;
+  --ai-radius: 0px;
+  --ai-radius-lg: 2px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --ai-muted-text: #5b6170;
+  --ai-accent-text: #161d2a;
+  --ai-code-comment: #5b6170;
+  --ai-code-keyword: #b91c1c;
+  --ai-code-string: #137337;
+  --ai-code-type: #1d4ed8;
+  --ai-code-number: #835800;
+}
+
+/* Vector Grid — gpui-ai, dark */
+[data-theme="vector-grid"] {
+  color-scheme: dark;
+  --ai-background: #030B13;
+  --ai-foreground: #DBFCFF;
+  --ai-muted: #86C3CD;
+  --ai-border: #19687D;
+  --ai-surface: #06131D;
+  --ai-primary: #22D3EE;
+  --ai-primary-foreground: #041014;
+  --ai-accent: #2E1065;
+  --ai-danger: #FB7185;
+  --ai-success: #4ADE80;
+  --ai-warning: #FACC15;
+  --ai-info: #38BDF8;
+  --ai-radius: 2px;
+  --ai-radius-lg: 4px;
+  --ai-font-size: 14px;
+  --ai-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --ai-font-mono: "Lilex", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ai-shadow: none;
+  --ai-muted-text: #86c3cd;
+  --ai-accent-text: #dbfcff;
+  --ai-code-comment: #86c3cd;
+  --ai-code-keyword: #fb7185;
+  --ai-code-string: #4ade80;
+  --ai-code-type: #38bdf8;
+  --ai-code-number: #facc15;
 }
 
 /* Adventure — gpui-component, dark */
