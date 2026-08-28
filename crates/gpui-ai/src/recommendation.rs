@@ -20,7 +20,6 @@ pub enum RecommendationEvent {
     },
 }
 use crate::motion::MotionTokens;
-use gpui_base::animation::ease_out_cubic;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _,
@@ -179,7 +178,7 @@ impl RenderOnce for RecommendationCard {
                                                 cx,
                                                 MotionTokens::read(cx).standard(),
                                             ))
-                                            .ease(ease_out_cubic),
+                                            .ease(crate::motion::ease_in_out_quart),
                                             window,
                                             cx,
                                         )))

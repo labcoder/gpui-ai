@@ -962,7 +962,8 @@ impl Chat {
             } else {
                 0.0
             },
-            Transition::new(MotionTokens::read(cx).standard()),
+            Transition::new(MotionTokens::read(cx).standard())
+                .ease(crate::motion::ease_in_out_quart),
             window,
             cx,
         );

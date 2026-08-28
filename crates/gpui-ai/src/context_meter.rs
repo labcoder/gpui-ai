@@ -12,7 +12,6 @@ use gpui::{
     RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
     Window, div, prelude::FluentBuilder as _, relative,
 };
-use gpui_base::animation::ease_out_cubic;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, hover_card::HoverCard,
@@ -269,7 +268,7 @@ impl RenderOnce for ContextMeter {
                 cx,
                 MotionTokens::read(cx).standard(),
             ))
-            .ease(ease_out_cubic),
+            .ease(crate::motion::ease_in_out_quart),
             window,
             cx,
         );

@@ -62,7 +62,29 @@ use gpui::{
     ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
     ease_in_out, pulsating_between, px, relative,
 };
-use gpui_base::animation::ease_out_cubic;
+/// The crate's standard enter/exit curve: quint-class ease-out
+/// (`cubic-bezier(0.23, 1, 0.32, 1)`-equivalent). Leaves at full speed
+/// and spends most of its time settling, which is what makes a quick
+/// duration read as instant. The soft cubic stays available for gentle
+/// hover-class changes; deliberate entrances use this.
+pub(crate) fn ease_out_quint(t: f32) -> f32 {
+    let inverse = 1.0 - t.clamp(0.0, 1.0);
+    1.0 - inverse * inverse * inverse * inverse * inverse
+}
+
+/// Strong ease-in-out (quart-class,
+/// `cubic-bezier(0.77, 0, 0.175, 1)`-equivalent) for something already on
+/// screen travelling between two places — fills retargeting, the jump
+/// drive's glide.
+pub(crate) fn ease_in_out_quart(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        8.0 * t * t * t * t
+    } else {
+        let inverse = 1.0 - t;
+        1.0 - 8.0 * inverse * inverse * inverse * inverse
+    }
+}
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use std::collections::HashMap;
@@ -348,7 +370,7 @@ impl MotionTokens {
         stagger_beat: EnterSpec::REVEAL.stagger,
         stagger_cap: EnterSpec::REVEAL.stagger_cap,
         press: SpringRole::new(Duration::from_millis(140), 1.0),
-        selection: SpringRole::new(Duration::from_millis(220), 0.9),
+        selection: SpringRole::new(Duration::from_millis(220), 1.0),
         disclosure: SpringRole::new(Duration::from_millis(280), 1.0),
         // The response the shipped FilterTable reorder proved in 0.2.x,
         // adopted as the role's value when that reorder became the role's
@@ -394,6 +416,12 @@ impl MotionTokens {
     }
 
     /// Larger bounded panel or success choreography.
+    ///
+    /// Restricted by contract to modal- and sheet-class surfaces and
+    /// explanatory composition: nothing smaller — tooltips, popovers,
+    /// dropdowns, toggles, row state — may bind to it, because 380ms on
+    /// an element the reader is waiting on reads as lag, not weight.
+    /// Popover-class entrances bind to [`quick`](Self::quick).
     pub const fn deliberate(&self) -> Duration {
         self.deliberate
     }
@@ -616,7 +644,7 @@ pub(crate) fn disclosure_progress(
     transition(
         id,
         target,
-        Transition::new(standard).ease(ease_out_cubic),
+        Transition::new(standard).ease(ease_out_quint),
         window,
         cx,
     )
@@ -748,7 +776,7 @@ impl ArrivalRoster {
         }
         note_reveal_frame_request();
         window.request_animation_frame();
-        Some(ease_out_cubic(progress))
+        Some(ease_out_quint(progress))
     }
 
     #[cfg(test)]
@@ -955,7 +983,7 @@ pub(crate) fn acknowledged_state(
         note_reveal_frame_request();
         window.request_animation_frame();
     }
-    ease_out_cubic(progress)
+    ease_out_quint(progress)
 }
 
 struct AcknowledgedState {
@@ -1075,7 +1103,7 @@ fn timed_progress(
         note_reveal_frame_request();
         window.request_animation_frame();
     }
-    ease_out_cubic(progress)
+    ease_out_quint(progress)
 }
 
 #[cfg(test)]

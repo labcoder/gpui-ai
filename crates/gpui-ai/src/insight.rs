@@ -10,7 +10,6 @@ use gpui::{
     Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
-use gpui_base::animation::ease_out_cubic;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, StyledExt as _, chart::LineChart, h_flex, text::TextView, v_flex,
@@ -473,7 +472,7 @@ fn chart_group(
                 ))),
                 point.value as f32,
                 Transition::new(crate::motion::retarget_duration(cx, standard))
-                    .ease(ease_out_cubic),
+                    .ease(crate::motion::ease_in_out_quart),
                 window,
                 cx,
             );

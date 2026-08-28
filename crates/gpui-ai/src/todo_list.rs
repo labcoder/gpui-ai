@@ -9,7 +9,6 @@ use gpui::{
     ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, accesskit, div, prelude::FluentBuilder as _,
 };
-use gpui_base::animation::ease_out_cubic;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
@@ -173,7 +172,7 @@ impl RenderOnce for TodoList {
             (self.id.clone(), "todo-fill"),
             fraction,
             Transition::new(crate::motion::retarget_duration(cx, motion.standard()))
-                .ease(ease_out_cubic),
+                .ease(crate::motion::ease_in_out_quart),
             window,
             cx,
         );
