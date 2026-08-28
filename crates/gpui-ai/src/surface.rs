@@ -260,6 +260,20 @@ pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
         .child(text.into())
 }
 
+/// The trailing unit on a numeric field — "px", "%", "ms".
+///
+/// A bare string handed to an input's suffix inherits the field's own ink
+/// and size, so the unit reads as part of the number. This gives every
+/// unit in the library one quiet voice instead.
+pub(crate) fn field_unit(unit: impl Into<SharedString>, cx: &App) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    div()
+        .flex_none()
+        .text_token(tokens.typography.xs)
+        .text_color(cx.theme().muted_foreground)
+        .child(unit.into())
+}
+
 /// A favicon-style badge: one uppercase initial on a primary tint. Sources,
 /// search results, and attachments share it so provenance scans at a glance.
 pub(crate) fn initial_badge(initial: impl Into<SharedString>, cx: &App) -> Div {

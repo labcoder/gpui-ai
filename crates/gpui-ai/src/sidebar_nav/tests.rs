@@ -270,7 +270,7 @@ impl Render for SemanticsProbe {
                         let control = if row.header {
                             sidebar_section_control(&component_id, row, false, cx)
                         } else {
-                            sidebar_item_control(&component_id, row, false, collapsed, cx)
+                            sidebar_item_control(&component_id, row, false, collapsed, None, cx)
                                 .on_click(|_, _, _| {})
                         }
                         .render(window, cx)
@@ -546,10 +546,11 @@ impl Render for RailSemanticsProbe {
                 let nodes = rows
                     .iter()
                     .map(|row| {
-                        let control = sidebar_item_control(&component_id, row, false, true, cx)
-                            .on_click(|_, _, _| {})
-                            .render(window, cx)
-                            .into_element();
+                        let control =
+                            sidebar_item_control(&component_id, row, false, true, None, cx)
+                                .on_click(|_, _, _| {})
+                                .render(window, cx)
+                                .into_element();
                         let mut node = accesskit::Node::new(Role::Unknown);
                         control.write_a11y_info(&mut node);
                         (control.a11y_role(), node)

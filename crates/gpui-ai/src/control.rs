@@ -127,10 +127,49 @@ pub(crate) fn outlined_control(
     outlined_control_with_label(id, label.clone(), label, window, cx)
 }
 
+/// [`outlined_control_with_label`] with a leading glyph.
+///
+/// The icon joins the control's own padding and gap rather than an
+/// upstream button's, so an icon-and-label control stands in the same
+/// geometry as every other compact control in the library.
+pub(crate) fn outlined_control_with_icon(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
+    icon: impl gpui_component::IconNamed,
+    visible_label: impl Into<SharedString>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Button {
+    let tokens = cx.theme().semantic_tokens();
+    outlined_control_bare(id, accessibility_label, window, cx)
+        .gap(tokens.spacing.xs)
+        .child(gpui_component::Sizable::xsmall(gpui_component::Icon::new(
+            icon,
+        )))
+        .child(div().min_w_0().truncate().child(visible_label.into()))
+}
+
 pub(crate) fn outlined_control_with_label(
     id: impl Into<ElementId>,
     accessibility_label: impl Into<SharedString>,
     visible_label: impl Into<SharedString>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Button {
+    outlined_control_bare(id, accessibility_label, window, cx)
+        // Compact controls are often placed in fixed-width table columns.
+        // Keep their visible label inside the control instead of allowing a
+        // long title to paint over the adjacent column; the full accessible
+        // label remains on the Button.
+        .child(div().min_w_0().truncate().child(visible_label.into()))
+}
+
+/// The compact control frame every outlined control shares, without its
+/// children: one height from the size policy, one radius, one text style,
+/// the interaction ramp, and the disabled recipe.
+fn outlined_control_bare(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
     window: &mut Window,
     cx: &mut App,
 ) -> Button {
@@ -172,11 +211,6 @@ pub(crate) fn outlined_control_with_label(
             })
         })
         .press_release(id, tokens.radius.md, window, cx)
-        // Compact controls are often placed in fixed-width table columns.
-        // Keep their visible label inside the control instead of allowing a
-        // long title to paint over the adjacent column; the full accessible
-        // label remains on the Button.
-        .child(div().min_w_0().truncate().child(visible_label.into()))
 }
 
 #[cfg(test)]

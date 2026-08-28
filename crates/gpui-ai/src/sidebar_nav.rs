@@ -254,6 +254,9 @@ pub struct SidebarNav {
     sections: Arc<[SidebarSection]>,
     active_item: Option<SharedString>,
     collapsed: bool,
+    /// One highlight glides between rows instead of per-row hover fills.
+    /// Default on; [`Self::set_hover_glide`] restores a local hover fill.
+    hover_glide: bool,
     query: SharedString,
     input: Entity<InputState>,
     expanded: HashSet<SharedString>,
@@ -291,6 +294,7 @@ impl SidebarNav {
             sections: Arc::from([]),
             active_item: None,
             collapsed: false,
+            hover_glide: true,
             query: "".into(),
             input,
             expanded: HashSet::new(),
@@ -400,6 +404,15 @@ impl SidebarNav {
     /// Return whether the sidebar is currently collapsed.
     pub fn is_collapsed(&self) -> bool {
         self.collapsed
+    }
+
+    /// Choose between the gliding hover highlight (the default) and a
+    /// local hover fill per row.
+    pub fn set_hover_glide(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.hover_glide != enabled {
+            self.hover_glide = enabled;
+            cx.notify();
+        }
     }
 
     /// Return the latest quick-filter query.
@@ -543,6 +556,16 @@ impl SidebarNav {
     /// Nothing here reads [`SidebarNavPresentation`].
     fn render_content(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let tokens = cx.theme().semantic_tokens();
+        // The rows' own accessibility overlay owns the pointer, so hover is
+        // the crate's to draw: one highlight gliding between rows, exactly
+        // as the thread list and the model picker draw it.
+        let glide = self.hover_glide.then(|| {
+            crate::glide::glide_hover_state(
+                (ElementId::from(self.id.clone()), "row-glide").into(),
+                window,
+                cx,
+            )
+        });
         let new_task_owner = cx.weak_entity();
         let collapse_owner = cx.weak_entity();
         let row_owner = cx.weak_entity();
@@ -632,6 +655,7 @@ impl SidebarNav {
                 )
             });
         let row_list = self.row_list.clone();
+        let row_glide = glide.clone();
         let rows_are_empty = self.rows.is_empty();
 
         let mut content = vec![
@@ -641,60 +665,76 @@ impl SidebarNav {
                 .p(tokens.spacing.sm)
                 .child(header)
                 .into_any_element(),
-            div()
-                .relative()
-                .w_full()
-                .flex_1()
-                .min_h_0()
-                .child(
-                    sidebar_tree_container(&self.id)
-                        // The tree is the single tab stop and holds focus
-                        // for every row, so a row that unmounts while
-                        // scrolled away cannot take the reader's focus
-                        // out of the navigation with it.
-                        .track_focus(&self.tree_focus.clone().tab_index(0).tab_stop(true))
-                        .size_full()
-                        .flex()
-                        .flex_col()
-                        .px(tokens.spacing.sm)
-                        .gap(tokens.spacing.xxs)
-                        .child(
-                            list(row_list.clone(), move |index, window, cx| {
-                                constructed_rows.set(constructed_rows.get() + 1);
-                                rows.get(index)
-                                    .map(|row| {
-                                        render_row(
-                                            row,
-                                            &row_component_id,
+            {
+                let frame = div().relative().w_full().flex_1().min_h_0();
+                match &glide {
+                    Some(state) => crate::glide::glide_frame(frame, state).when_some(
+                        crate::glide::glide_highlight(
+                            (ElementId::from(self.id.clone()), "row-glide").into(),
+                            state,
+                            cx.theme().radius,
+                            "sidebar-nav-glide",
+                            window,
+                            cx,
+                        ),
+                        |frame, highlight| frame.child(highlight),
+                    ),
+                    None => frame,
+                }
+            }
+            .child(
+                sidebar_tree_container(&self.id)
+                    // The tree is the single tab stop and holds focus
+                    // for every row, so a row that unmounts while
+                    // scrolled away cannot take the reader's focus
+                    // out of the navigation with it.
+                    .track_focus(&self.tree_focus.clone().tab_index(0).tab_stop(true))
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .px(tokens.spacing.sm)
+                    .gap(tokens.spacing.xxs)
+                    .child(
+                        list(row_list.clone(), move |index, window, cx| {
+                            constructed_rows.set(constructed_rows.get() + 1);
+                            rows.get(index)
+                                .map(|row| {
+                                    render_row(
+                                        row,
+                                        &render::RowContext {
+                                            component_id: &row_component_id,
                                             collapsed,
-                                            tree_focused && roving_row.as_ref() == Some(&row.id),
-                                            &row_owner,
-                                            window,
-                                            cx,
-                                        )
-                                    })
-                                    .unwrap_or_else(|| div().hidden().into_any_element())
-                            })
-                            .size_full(),
-                        )
-                        .vertical_scrollbar(&row_list)
-                        .on_key_down(move |event, window, cx| {
-                            if event.keystroke.modifiers.modified() {
-                                return;
-                            }
-                            let key = event.keystroke.key.clone();
-                            let handled = key_owner
-                                .update(cx, |nav, cx| nav.navigate(&key, window, cx))
-                                .unwrap_or(false);
-                            if handled {
-                                cx.stop_propagation();
-                            }
-                        }),
-                )
-                // Capture-phase containment wins over an ancestor catalog
-                // list and releases the wheel at either nav edge.
-                .child(list_scroll_mask(&self.row_list))
-                .into_any_element(),
+                                            focused: tree_focused
+                                                && roving_row.as_ref() == Some(&row.id),
+                                            owner: &row_owner,
+                                            glide: row_glide.as_ref(),
+                                        },
+                                        window,
+                                        cx,
+                                    )
+                                })
+                                .unwrap_or_else(|| div().hidden().into_any_element())
+                        })
+                        .size_full(),
+                    )
+                    .vertical_scrollbar(&row_list)
+                    .on_key_down(move |event, window, cx| {
+                        if event.keystroke.modifiers.modified() {
+                            return;
+                        }
+                        let key = event.keystroke.key.clone();
+                        let handled = key_owner
+                            .update(cx, |nav, cx| nav.navigate(&key, window, cx))
+                            .unwrap_or(false);
+                        if handled {
+                            cx.stop_propagation();
+                        }
+                    }),
+            )
+            // Capture-phase containment wins over an ancestor catalog
+            // list and releases the wheel at either nav edge.
+            .child(list_scroll_mask(&self.row_list))
+            .into_any_element(),
         ];
         if rows_are_empty && !collapsed {
             content.push(

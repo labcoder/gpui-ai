@@ -801,7 +801,12 @@ fn named_number_input(
         .border_1()
         .border_color(cx.theme().transparent)
         .focus_visible(|style| style.border_color(cx.theme().ring))
-        .child(Input::new(input).small().role(None::<Role>).suffix(suffix))
+        .child(
+            Input::new(input)
+                .small()
+                .role(None::<Role>)
+                .suffix(crate::surface::field_unit(suffix, cx)),
+        )
 }
 
 fn opacity_slider_control(

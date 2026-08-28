@@ -81,8 +81,10 @@ pub(super) fn sidebar_item_control(
     row: &VisibleRow,
     focused: bool,
     collapsed: bool,
+    glide: Option<&gpui::Entity<crate::glide::GlideHover>>,
     cx: &mut App,
 ) -> gpui_base::Button {
+    let tokens = cx.theme().semantic_tokens();
     let label = row.label.clone();
     let ring = if focused {
         cx.theme().ring
@@ -124,13 +126,35 @@ pub(super) fn sidebar_item_control(
     .border_1()
     .border_color(ring)
     .bg(cx.theme().transparent)
+    // This control blocks pointer input for the whole row — it owns the
+    // tooltip and AccessKit activation — so the presentation beneath it
+    // can never see hover. Hover is therefore this layer's to paint:
+    // through the gliding highlight where the list runs one, and as a
+    // local fill otherwise. Without this the row has no hover at all.
     .block_mouse_except_scroll()
+    .map(|control| match glide {
+        Some(glide) => crate::glide::glide_row(control, row.id.clone(), glide),
+        None => control.hover(|style| style.bg(cx.theme().sidebar_accent.opacity(0.6))),
+    })
     .when(collapsed, |this| {
         let tooltip_label = label.clone();
-        this.when_some(row.icon.clone(), |this, icon| {
-            this.child(Icon::default().path(icon).size_4())
-        })
-        .tooltip(move |window, cx| Tooltip::new(tooltip_label.clone()).build(window, cx))
+        // The rail keeps the expanded row's own icon column: the glyph
+        // stays left-aligned in the same slot it occupied beside a label,
+        // so collapsing moves the labels out without moving the icons.
+        this.flex()
+            .items_center()
+            .justify_start()
+            .px(tokens.spacing.sm)
+            .when_some(row.icon.clone(), |this, icon| {
+                this.child(
+                    crate::surface::leading_glyph_slot(
+                        crate::sizing::SizeTokens::read(cx).slot_md(),
+                        Icon::default().path(icon).size_4(),
+                    )
+                    .flex_none(),
+                )
+            })
+            .tooltip(move |window, cx| Tooltip::new(tooltip_label.clone()).build(window, cx))
     })
     .styles(|styles| styles.disabled(|style| style.text_color(cx.theme().muted_foreground)))
 }
@@ -189,15 +213,34 @@ pub(super) fn sidebar_tree_container(component_id: &SharedString) -> Stateful<Di
 }
 
 /// Renders one flattened row: a section header or an item.
+/// What one row needs that does not come from the row itself.
+pub(super) struct RowContext<'a> {
+    /// The navigation's stable component identity.
+    pub(super) component_id: &'a SharedString,
+    /// Whether the rail is collapsed to icons.
+    pub(super) collapsed: bool,
+    /// Whether this row holds the tree's roving focus.
+    pub(super) focused: bool,
+    /// Where a row's intent travels back to.
+    pub(super) owner: &'a WeakEntity<SidebarNav>,
+    /// The list's hover-glide state, when one highlight is gliding.
+    pub(super) glide: Option<&'a gpui::Entity<crate::glide::GlideHover>>,
+}
+
 pub(super) fn render_row(
     row: &VisibleRow,
-    component_id: &SharedString,
-    collapsed: bool,
-    focused: bool,
-    owner: &WeakEntity<SidebarNav>,
+    context: &RowContext<'_>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let RowContext {
+        component_id,
+        collapsed,
+        focused,
+        owner,
+        glide,
+    } = *context;
+    let (collapsed, focused) = (collapsed, focused);
     if row.header {
         return sidebar_section_control(component_id, row, focused, cx).into_any_element();
     }
@@ -255,7 +298,7 @@ pub(super) fn render_row(
             },
         );
 
-    let control = sidebar_item_control(component_id, row, focused, collapsed, cx)
+    let control = sidebar_item_control(component_id, row, focused, collapsed, glide, cx)
         .debug_selector(move || format!("sidebar-nav-item-{item_debug_id}"))
         .on_click(move |_, window, cx| {
             _ = activate_owner.update(cx, |nav, cx| {
@@ -290,6 +333,12 @@ pub(super) fn render_row(
                 .relative()
                 .flex_1()
                 .min_w_0()
+                // A collapsed rail keeps the expanded row's height, so the
+                // rail's rhythm is the tree's rhythm and icons do not
+                // bunch up when the labels leave.
+                .when(collapsed, |this| {
+                    this.h(crate::sizing::SizeTokens::read(cx).control_lg())
+                })
                 .child(menu_item.render(
                     format!("sidebar-nav-menu.{component_id}.{}", row.id),
                     // SidebarMenuItem owns the pinned presentation. The

@@ -172,13 +172,65 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
     );
 }
 
+/// The row's accessibility overlay blocks pointer input for everything
+/// under it, so the presentation beneath can never see hover: the crate
+/// owes the row a hover of its own. It draws one gliding highlight over
+/// the hovered row — and a row hovered under the pointer must produce
+/// one, at that row's own geometry. Between R1.2 and this test the
+/// sidebar had no hover at all, because the probe that would have caught
+/// it had been re-baselined into a pure layout assertion.
+#[gpui::test]
+fn public_sidebar_nav_paints_hover_for_the_row_under_the_pointer(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (_, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    assert!(
+        cx.debug_bounds("sidebar-nav-glide").is_none(),
+        "nothing is hovered yet, so nothing is highlighted"
+    );
+
+    let overview = cx
+        .debug_bounds("sidebar-nav-item-overview")
+        .expect("expanded row should render through the production tree");
+    cx.simulate_mouse_move(overview.center(), None, Modifiers::default());
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let highlight = cx
+        .debug_bounds("sidebar-nav-glide")
+        .expect("the row under the pointer must be highlighted");
+    // The highlight fills the row inside its border box, so the focus ring
+    // the row draws on that border stays visible around it.
+    let inset = px(1.);
+    assert_eq!(highlight.origin.x, overview.origin.x + inset);
+    assert_eq!(highlight.origin.y, overview.origin.y + inset);
+    assert_eq!(highlight.size.width, overview.size.width - inset * 2.);
+    assert_eq!(highlight.size.height, overview.size.height - inset * 2.);
+
+    // Leaving the rows drops it, the way a per-row hover fill would.
+    let host = cx
+        .debug_bounds("public-sidebar-host")
+        .expect("sidebar host should remain rendered");
+    cx.simulate_mouse_move(
+        point(host.right() + px(20.), host.bottom() + px(20.)),
+        None,
+        Modifiers::default(),
+    );
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        cx.debug_bounds("sidebar-nav-glide").is_none(),
+        "leaving the rows extinguishes the highlight"
+    );
+}
+
 #[gpui::test]
 fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_query(
     cx: &mut TestAppContext,
 ) {
-    // Hover presentation moved into the upstream item's own style hover
-    // (a fill, not a crate-drawn outline), so the observable this guards
-    // is the part the crate still owns: with a stationary pointer, stable
+    // The crate's own accessibility overlay blocks pointer input for the
+    // row, so the crate — not the upstream item — must paint hover; the
+    // companion test below guards that it does. What this one guards is
+    // layout: with a stationary pointer, stable
     // rows keep their exact bounds through snapshot replacement and a
     // programmatic query, and the row under the pointer stays the row the
     // click lands on.

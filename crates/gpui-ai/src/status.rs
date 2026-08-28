@@ -214,15 +214,28 @@ impl StatusBadge {
 
     /// Creates a badge describing a progressive lifecycle state.
     ///
-    /// Lifecycle badges reserve the width of the widest lifecycle label, so
-    /// pending→running→completed/failed never moves the layout around the
-    /// pill — the fixed slot the status swap animates inside.
+    /// The badge is as wide as the word it says, like every other chip in
+    /// the library: a pill padded out to some other label's width leaves
+    /// its own text adrift, which is what the 0.4.0 feel review saw in
+    /// "Failed" sitting in a "Completed"-sized pill. Callers who need the
+    /// lifecycle to hold one width — a badge with layout to its right that
+    /// must not shuffle — ask for it with
+    /// [`reserve_lifecycle_width`](Self::reserve_lifecycle_width).
     pub fn for_progress(id: impl Into<ElementId>, state: &ProgressState) -> Self {
-        let mut badge = Self::new(id, progress_label(state))
+        Self::new(id, progress_label(state))
             .tone(StatusTone::from_progress(state))
-            .active(matches!(state, ProgressState::Running));
-        badge.reserve_lifecycle_width = true;
-        badge
+            .active(matches!(state, ProgressState::Running))
+    }
+
+    /// Holds the width of the widest lifecycle label, so
+    /// pending→running→completed/failed never moves what sits beside it.
+    ///
+    /// Only for a badge with layout to its right: a trailing badge grows
+    /// into its own margin and needs no reservation. The label centres in
+    /// the reserved slot rather than hugging its leading edge.
+    pub fn reserve_lifecycle_width(mut self, reserve: bool) -> Self {
+        self.reserve_lifecycle_width = reserve;
+        self
     }
 
     /// Sets the badge tone.
@@ -297,7 +310,9 @@ impl RenderOnce for StatusBadge {
 
         // The indicator slot is fixed — sized for the spinner, centering the
         // smaller dot — so running↔settled never nudges the label sideways.
+        let indicator_debug = format!("status-badge-indicator-{}", self.label);
         let indicator = div()
+            .debug_selector(move || indicator_debug.clone())
             .flex_none()
             .size(tokens.spacing.md)
             .flex()
@@ -316,6 +331,7 @@ impl RenderOnce for StatusBadge {
 
         let label_slot = v_flex()
             .relative()
+            .items_center()
             .when(self.reserve_lifecycle_width, |slot| {
                 // Zero-height ghosts of every lifecycle label make the slot
                 // as wide as the widest one, in whatever face and rem scale
@@ -330,7 +346,14 @@ impl RenderOnce for StatusBadge {
                         .child(*label)
                 }))
             })
-            .child(div().opacity(progress).top(entry).child(self.label.clone()))
+            .child({
+                let label_debug = format!("status-badge-label-{}", self.label);
+                div()
+                    .debug_selector(move || label_debug.clone())
+                    .opacity(progress)
+                    .top(entry)
+                    .child(self.label.clone())
+            })
             .when_some(outgoing, |slot, (label, tone)| {
                 // The outgoing face drifts down as it fades, layered over
                 // the slot so it never contributes width of its own.

@@ -167,7 +167,14 @@ impl RenderOnce for Suggestions {
                                 window,
                                 cx,
                             )
-                            .child(div().child(item.label))
+                            .child({
+                                let label_debug = item.id.to_string();
+                                div()
+                                    .debug_selector(move || {
+                                        format!("suggestion-label-{label_debug}")
+                                    })
+                                    .child(item.label)
+                            })
                             .on_click(move |_: &ClickEvent, window, cx| {
                                 cues::emit(cx, Cue::SuggestionSelected);
                                 handler(&event, window, cx)

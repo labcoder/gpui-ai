@@ -16,7 +16,6 @@
 //! inside the row, so opening one never changes a row's height or shifts the
 //! conversations below it, and dismissal plus focus return come from upstream.
 
-use crate::ButtonLabelExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     control::composed_button,
@@ -32,9 +31,7 @@ use gpui::{
     div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _,
-    button::Button,
-    h_flex,
+    ActiveTheme as _, IconName, h_flex,
     input::{Input, InputEvent, InputState},
     menu::{PopupMenu, PopupMenuItem},
     popover::Popover,
@@ -290,6 +287,19 @@ struct RowRenderer {
     construction: ThreadConstructionCounts,
 }
 
+/// The inset every rectangle in the list shares — the new-chat control,
+/// the search field, and each row — measured from the panel's edge.
+fn row_gutter(cx: &App) -> gpui::Pixels {
+    cx.theme().semantic_tokens().spacing.sm
+}
+
+/// The inset from a row's own edge to its text. Section labels stand
+/// inside the same gutter and add it too, so headings and row titles
+/// share one left edge.
+fn row_text_inset(cx: &App) -> gpui::Pixels {
+    cx.theme().semantic_tokens().spacing.xs
+}
+
 impl RowRenderer {
     fn render(&self, row: &ThreadRow, window: &mut Window, cx: &mut App) -> AnyElement {
         #[cfg(test)]
@@ -307,10 +317,16 @@ impl RowRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
+        // A section label sits on the same left edge as the row titles it
+        // names: both stand inside the list's gutter and add the row's own
+        // text inset.
+        let header_debug = format!("thread-section-{section_id}");
+        let header_debug_label = format!("thread-section-label-{section_id}");
         let section_id =
             ElementId::from((ElementId::from(self.component.clone()), section_id.clone()));
         div()
             .id((section_id, "header"))
+            .debug_selector(move || header_debug.clone())
             // Flattening costs the containment a nested group would give, so
             // the header keeps an accessible node of its own: the boundary is
             // still announced, it just no longer wraps its options.
@@ -318,10 +334,17 @@ impl RowRenderer {
             .aria_label(label.clone())
             .w_full()
             .min_w_0()
-            .px(tokens.spacing.sm)
+            .border_1()
+            .border_color(cx.theme().transparent)
+            .px(row_text_inset(cx))
             .pt(tokens.spacing.sm)
             .pb(tokens.spacing.xxs)
-            .child(eyebrow(label.clone(), cx))
+            .child({
+                let label_debug = header_debug_label.clone();
+                div()
+                    .debug_selector(move || label_debug.clone())
+                    .child(eyebrow(label.clone(), cx))
+            })
             .into_any_element()
     }
 
@@ -397,12 +420,21 @@ impl RowRenderer {
             .when(selected, |row| {
                 row.bg(cx.theme().list_active.opacity(acknowledged))
             })
+            // One rect is the row: selection fills it, the keyboard ring
+            // outlines it, and the hover highlight covers it — trailing
+            // actions included. A ring around the label alone stopped
+            // before the ellipsis and made focus look unlike selection.
+            .border_1()
+            .border_color(if focused {
+                cx.theme().ring
+            } else {
+                cx.theme().transparent
+            })
             .w_full()
             .min_w_0()
             .flex()
             .items_center()
             .gap(tokens.spacing.xxs)
-            .mx(tokens.spacing.xs)
             .mb(tokens.spacing.xxs)
             .pr(tokens.spacing.xxs)
             .child(
@@ -420,28 +452,24 @@ impl RowRenderer {
                     .tab_stop(false)
                     .flex_1()
                     .min_w_0()
-                    .px(tokens.spacing.xs)
+                    .justify_start()
+                    .px(row_text_inset(cx))
                     .py(tokens.spacing.xs)
-                    .rounded(tokens.radius.sm)
-                    .border_1()
-                    .border_color(if focused {
-                        cx.theme().ring
-                    } else {
-                        cx.theme().transparent
-                    })
-                    .focus_visible(|style| style.border_color(cx.theme().ring))
                     .child(
                         v_flex()
+                            .w_full()
                             .min_w_0()
                             .items_start()
-                            .child(
+                            .child({
+                                let title_debug = item.id.to_string();
                                 div()
+                                    .debug_selector(move || format!("thread-title-{title_debug}"))
                                     .w_full()
                                     .truncate()
                                     .text_token(tokens.typography.sm)
                                     .text_color(cx.theme().foreground)
-                                    .child(item.title.clone()),
-                            )
+                                    .child(item.title.clone())
+                            })
                             .when_some(item.subtitle.clone(), |this, subtitle| {
                                 this.child(
                                     div()
@@ -1047,18 +1075,22 @@ impl Render for ThreadList {
                 h_flex()
                     .w_full()
                     .items_center()
+                    .px(row_gutter(cx))
                     .gap(tokens.spacing.xs)
                     .child(
                         div().debug_selector(|| "thread-list-new".into()).child(
-                            Button::new((root_id.clone(), "new"))
-                                .outline()
-                                .small()
-                                .icon(IconName::Plus)
-                                .text_label("New chat")
-                                .accessibility_id(format!("{}-new", self.id))
-                                .on_click(cx.listener(|_, _, _, cx| {
-                                    cx.emit(ThreadListEvent::NewRequested);
-                                })),
+                            crate::control::outlined_control_with_icon(
+                                (root_id.clone(), "new"),
+                                "New chat",
+                                IconName::Plus,
+                                "New chat",
+                                window,
+                                cx,
+                            )
+                            .accessibility_id(format!("{}-new", self.id))
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                cx.emit(ThreadListEvent::NewRequested);
+                            })),
                         ),
                     )
                     .child(div().flex_1())
@@ -1088,9 +1120,10 @@ impl Render for ThreadList {
                     .debug_selector(|| "thread-list-search".into())
                     .w_full()
                     .items_center()
-                    .px(tokens.spacing.xs)
+                    .px(row_gutter(cx))
                     .child(
                         div()
+                            .debug_selector(|| "thread-list-field".into())
                             .flex_1()
                             .min_w_0()
                             .child(Input::new(&self.input).prefix(IconName::Search)),
@@ -1136,6 +1169,10 @@ impl Render for ThreadList {
                         .id((root_id.clone(), "list"))
                         .role(Role::ListBox)
                         .aria_label("Conversation list")
+                        // The gutter every row stands on. A virtual list
+                        // positions its items itself, so the inset is the
+                        // scroll region's, not each row's.
+                        .px(row_gutter(cx))
                         .track_focus(&self.list_focus)
                         .tab_stop(true)
                         .on_key_down(cx.listener(Self::on_key_down))
@@ -1332,6 +1369,70 @@ mod tests {
             .collect()
     }
 
+    /// Every rectangle in the list stands on one left edge, and every
+    /// label — row titles and the section names above them — stands on
+    /// one more. The feel review found four edges here instead of two.
+    #[gpui::test]
+    fn the_list_stands_on_one_left_edge(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(glide_sections(), cx));
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        let new_chat = bounds_of(cx, "thread-list-new".to_owned()).expect("new chat renders");
+        let field = bounds_of(cx, "thread-list-field".to_owned()).expect("search renders");
+        let row = bounds_of(cx, "thread-row-one".to_owned()).expect("a row renders");
+        assert_eq!(
+            (new_chat.left(), row.left()),
+            (field.left(), field.left()),
+            "the control, the field, and the rows share one gutter"
+        );
+
+        let header = bounds_of(cx, "thread-section-label-recent".to_owned())
+            .expect("the section label renders");
+        let title = bounds_of(cx, "thread-title-one".to_owned()).expect("a row title renders");
+        assert_eq!(
+            header.left(),
+            title.left(),
+            "a section label and the titles it names share one text edge"
+        );
+    }
+
+    /// Selection, keyboard focus, and hover all describe the same
+    /// rectangle. A ring drawn around the label alone stopped short of the
+    /// row's trailing actions and made focus look unlike selection.
+    #[gpui::test]
+    fn selection_focus_and_hover_describe_one_row_rect(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| {
+                threads.set_sections(glide_sections(), cx);
+                threads.set_active(Some(SharedString::from("one")), cx);
+            });
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        let row = bounds_of(cx, "thread-row-one".to_owned()).expect("the row renders");
+        let select = bounds_of(cx, "thread-one".to_owned()).expect("the select control renders");
+        assert!(
+            row.right() > select.right(),
+            "the row rect reaches past its label into the trailing actions:              row {row:?}, label {select:?}"
+        );
+
+        cx.simulate_mouse_move(row.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let highlight =
+            bounds_of(cx, "thread-list-glide".to_owned()).expect("hovering highlights the row");
+        assert_eq!(
+            highlight.size.width,
+            row.size.width - px(2.),
+            "the hover highlight covers the row inside its own border"
+        );
+    }
+
     fn glide_sections() -> Vec<ThreadSection> {
         vec![ThreadSection::new("recent", "Recent").items([
             ThreadItem::new("one", "One"),
@@ -1364,16 +1465,19 @@ mod tests {
         let highlight = bounds_of(cx, "thread-list-glide".to_owned())
             .expect("hovering a row mounts the highlight");
         assert_eq!(
-            highlight, row_one,
-            "a fresh hover seats the highlight on its row instantly"
+            highlight.size.height,
+            row_one.size.height - px(2.),
+            "a fresh hover seats the highlight on its row, inside its border"
         );
+        assert_eq!(highlight.origin.y, row_one.origin.y + px(1.));
 
         let row_three = bounds_of(cx, "thread-row-three".to_owned()).expect("row three renders");
         cx.simulate_mouse_move(row_three.center(), None, Modifiers::default());
         cx.update(|window, cx| window.draw(cx).clear(cx));
         let start = bounds_of(cx, "thread-list-glide".to_owned()).expect("highlight persists");
         assert_eq!(
-            start, row_one,
+            start.origin.y,
+            row_one.origin.y + px(1.),
             "the glide departs from the previously hovered row"
         );
 
@@ -1391,7 +1495,8 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         let settled = bounds_of(cx, "thread-list-glide".to_owned()).expect("highlight persists");
         assert_eq!(
-            settled, row_three,
+            settled.origin.y,
+            row_three.origin.y + px(1.),
             "the highlight arrives on the hovered row"
         );
 
@@ -1399,7 +1504,7 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert_eq!(
             bounds_of(cx, "thread-list-glide".to_owned()),
-            Some(row_three),
+            Some(settled),
             "a settled highlight holds its row"
         );
     }
@@ -1430,9 +1535,11 @@ mod tests {
         let row_three = bounds_of(cx, "thread-row-three".to_owned()).expect("row three renders");
         cx.simulate_mouse_move(row_three.center(), None, Modifiers::default());
         cx.update(|window, cx| window.draw(cx).clear(cx));
+        let snapped = bounds_of(cx, "thread-list-glide".to_owned())
+            .expect("a reduced preference still highlights the hovered row");
         assert_eq!(
-            bounds_of(cx, "thread-list-glide".to_owned()),
-            Some(row_three),
+            snapped.origin.y,
+            row_three.origin.y + px(1.),
             "a reduced preference snaps the highlight to the hovered row"
         );
     }
