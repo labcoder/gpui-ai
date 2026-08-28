@@ -431,7 +431,7 @@ impl RowRenderer {
                         });
                     }),
             )
-            .child(self.render_actions_menu(item, item_id, cx))
+            .child(self.render_actions_menu(item, item_id, window, cx))
             .into_any_element()
     }
 
@@ -445,6 +445,7 @@ impl RowRenderer {
         &self,
         item: &ThreadItem,
         item_id: ElementId,
+        window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -461,6 +462,7 @@ impl RowRenderer {
                 (item_id, "more"),
                 IconName::Ellipsis,
                 format!("More actions for {}", item.title),
+                window,
                 cx,
             )
             .debug_selector(move || format!("thread-more-{more_debug_id}"))
@@ -1020,6 +1022,7 @@ impl Render for ThreadList {
                             } else {
                                 "Show archived conversations"
                             },
+                            window,
                             cx,
                         )
                         .debug_selector(|| "thread-list-archived-toggle".into())
@@ -1111,7 +1114,7 @@ mod tests {
     }
 
     impl Render for ThreadActionsMenuProbe {
-        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let activations = self.activations.clone();
             div().tab_group().child(ThreadActionsMenu {
                 id: "keyboard-actions".into(),
@@ -1119,6 +1122,7 @@ mod tests {
                     "keyboard-actions-trigger",
                     IconName::Ellipsis,
                     "More actions",
+                    window,
                     cx,
                 )
                 .track_focus(&self.trigger_focus)

@@ -210,6 +210,7 @@ impl RenderOnce for MessageQueue {
                 self.editable,
                 arrival,
                 handler.clone(),
+                window,
                 cx,
             ));
         }
@@ -266,6 +267,7 @@ fn render_row(
     editable: bool,
     arrival: Option<f32>,
     handler: Option<SharedHandler<QueueEvent>>,
+    window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
@@ -273,15 +275,15 @@ fn render_row(
     let debug_id = format!("{queue_debug}-{}", item.id);
     let label: SharedString = format!("Queued {} of {count}: {}", index + 1, item.text).into();
 
-    let control = |suffix: &'static str,
-                   icon: IconName,
-                   name: String,
-                   enabled: bool,
-                   event: QueueEvent,
-                   cx: &mut App| {
+    let mut control = |suffix: &'static str,
+                       icon: IconName,
+                       name: String,
+                       enabled: bool,
+                       event: QueueEvent,
+                       cx: &mut App| {
         let handler = handler.clone();
         let selector = format!("queue-{suffix}-{debug_id}");
-        icon_button((row_id.clone(), suffix), icon, name, cx)
+        icon_button((row_id.clone(), suffix), icon, name, window, cx)
             .disabled(!enabled || handler.is_none())
             .debug_selector(move || selector.clone())
             .on_click(move |_: &ClickEvent, window, cx| {

@@ -110,6 +110,41 @@ struct Exception {
 /// Every raw `px(...)` the library is allowed to construct outside tests.
 const EXCEPTIONS: &[Exception] = &[
     Exception {
+        file: "sizing.rs",
+        expression: "px(24.)",
+        context: "control_sm",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control heights; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(28.)",
+        context: "control_md",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control heights; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(32.)",
+        context: "control_lg",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control heights; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(16.)",
+        context: "slot_sm",
+        category: Category::ThemeDefinition,
+        rationale: "the glyph slots default to the text line-heights they seat glyphs beside",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(20.)",
+        context: "slot_md",
+        category: Category::ThemeDefinition,
+        rationale: "the glyph slots default to the text line-heights they seat glyphs beside",
+    },
+    Exception {
         file: "chat.rs",
         expression: "px(256.)",
         context: "",

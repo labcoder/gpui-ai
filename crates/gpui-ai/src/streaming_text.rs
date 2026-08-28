@@ -524,11 +524,12 @@ fn citation_companion_link(
 fn follow_up_button(
     follow_up: FollowUp,
     handler: Option<SharedHandler<StreamingTextEvent>>,
+    window: &mut Window,
     cx: &mut App,
 ) -> Button {
     let debug_id = follow_up.id.to_string();
     let event = follow_up.selected_event();
-    outlined_control(follow_up.id.clone(), follow_up.label, cx)
+    outlined_control(follow_up.id.clone(), follow_up.label, window, cx)
         .debug_selector(move || format!("streaming-follow-up-{debug_id}"))
         .accessibility_id(format!("follow-up-{}", follow_up.id))
         .when_some(handler, |this, handler| {
@@ -1002,11 +1003,9 @@ impl RenderOnce for StreamingText {
                         .aria_label("Follow-up suggestions")
                         .flex_wrap()
                         .gap(tokens.spacing.xs)
-                        .children(
-                            self.follow_ups
-                                .into_iter()
-                                .map(|follow_up| follow_up_button(follow_up, handler.clone(), cx)),
-                        ),
+                        .children(self.follow_ups.into_iter().map(|follow_up| {
+                            follow_up_button(follow_up, handler.clone(), window, cx)
+                        })),
                 )
             })
             .refine_style(&self.style)
@@ -1677,6 +1676,7 @@ mod tests {
                     let element = follow_up_button(
                         FollowUp::new("compare", "Compare suppliers"),
                         Some(Rc::new(|_, _, _| {})),
+                        window,
                         cx,
                     )
                     .render(window, cx)

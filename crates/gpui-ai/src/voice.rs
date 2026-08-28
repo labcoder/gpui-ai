@@ -136,7 +136,7 @@ impl Styled for VoiceControls {
 }
 
 impl RenderOnce for VoiceControls {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let root_id = ElementId::from(self.id.clone());
         let debug_id = self.id.to_string();
@@ -185,6 +185,7 @@ impl RenderOnce for VoiceControls {
                 (root_id.clone(), "dictate"),
                 dictate_name,
                 dictate_label,
+                window,
                 cx,
             )
             .debug_selector(move || format!("voice-dictate-{dictate_debug}"))
@@ -210,6 +211,7 @@ impl RenderOnce for VoiceControls {
                 (root_id.clone(), "cancel"),
                 IconName::Close,
                 "Cancel dictation",
+                window,
                 cx,
             )
             .debug_selector(move || format!("voice-cancel-{cancel_debug}"))

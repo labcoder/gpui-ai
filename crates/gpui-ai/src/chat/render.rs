@@ -42,6 +42,7 @@ pub(super) fn message_frame(chat_id: &SharedString, message: &ChatMessage) -> St
 pub(super) fn retry_button(
     chat_id: &SharedString,
     message_id: &SharedString,
+    window: &mut Window,
     cx: &mut App,
 ) -> Button {
     let debug_id = message_id.to_string();
@@ -51,6 +52,7 @@ pub(super) fn retry_button(
             "retry",
         ),
         "Retry message",
+        window,
         cx,
     )
     .debug_selector(move || format!("chat-retry-{debug_id}"))
@@ -59,10 +61,16 @@ pub(super) fn retry_button(
 pub(super) fn jump_to_latest_button(
     chat_id: &SharedString,
     label: SharedString,
+    window: &mut Window,
     cx: &mut App,
 ) -> Button {
-    outlined_control((ElementId::from(chat_id.clone()), "jump-latest"), label, cx)
-        .debug_selector(|| "chat-jump-latest".into())
+    outlined_control(
+        (ElementId::from(chat_id.clone()), "jump-latest"),
+        label,
+        window,
+        cx,
+    )
+    .debug_selector(|| "chat-jump-latest".into())
 }
 
 impl Chat {
@@ -199,6 +207,7 @@ impl Chat {
                         IconName::Copy
                     },
                     if copied { "Copied" } else { "Copy message" },
+                    window,
                     cx,
                 )
                 .debug_selector(move || format!("chat-action-copy-{debug_id}"))
@@ -222,6 +231,7 @@ impl Chat {
                         (base_id.clone(), "regenerate"),
                         IconName::Redo,
                         "Regenerate response",
+                        window,
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-regenerate-{debug_id}"))
@@ -240,6 +250,7 @@ impl Chat {
                         (base_id.clone(), "edit"),
                         IconName::Replace,
                         "Edit message",
+                        window,
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-edit-{debug_id}"))
@@ -262,6 +273,7 @@ impl Chat {
                         } else {
                             "Mark helpful"
                         },
+                        window,
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-helpful-{up_debug_id}"))
@@ -282,6 +294,7 @@ impl Chat {
                         } else {
                             "Mark not helpful"
                         },
+                        window,
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-unhelpful-{down_debug_id}"))
@@ -399,7 +412,7 @@ impl Chat {
             .as_ref()
             .filter(|session| session.message_id == message_id)
         {
-            Some(session) => self.render_editor(&message_id, session.editor.clone(), cx),
+            Some(session) => self.render_editor(&message_id, session.editor.clone(), window, cx),
             None => content,
         };
         let attachments = (!message.attachments.is_empty()).then(|| {
@@ -512,7 +525,7 @@ impl Chat {
                 .justify_between()
                 .gap(tokens.spacing.sm)
                 .child(heading)
-                .child(self.render_branch_nav(&message_id, position, cx))
+                .child(self.render_branch_nav(&message_id, position, window, cx))
                 .into_any_element(),
             None => heading.into_any_element(),
         };
@@ -522,13 +535,11 @@ impl Chat {
                 .children(attachments)
                 .child(content)
                 .when(retryable_failure, |this| {
-                    this.child(
-                        retry_button(&self.id, &message_id, cx).on_click(cx.listener(
-                            move |chat, _, _, cx| {
-                                chat.retry(message_id.clone(), cx);
-                            },
-                        )),
-                    )
+                    this.child(retry_button(&self.id, &message_id, window, cx).on_click(
+                        cx.listener(move |chat, _, _, cx| {
+                            chat.retry(message_id.clone(), cx);
+                        }),
+                    ))
                 })
                 .children(actions),
         );
@@ -542,6 +553,7 @@ impl Chat {
         &self,
         message_id: &SharedString,
         editor: Entity<TextareaState>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
@@ -569,6 +581,7 @@ impl Chat {
                             (base.clone(), "edit-cancel"),
                             "Cancel edit",
                             "Cancel",
+                            window,
                             cx,
                         )
                         .debug_selector(move || format!("chat-edit-cancel-{cancel_debug_id}"))
@@ -597,6 +610,7 @@ impl Chat {
         &self,
         message_id: &SharedString,
         position: BranchPosition,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
@@ -620,6 +634,7 @@ impl Chat {
                     (base.clone(), "branch-prev"),
                     IconName::ChevronLeft,
                     "Previous version",
+                    window,
                     cx,
                 )
                 .disabled(position.index == 0)
@@ -642,6 +657,7 @@ impl Chat {
                     (base, "branch-next"),
                     IconName::ChevronRight,
                     "Next version",
+                    window,
                     cx,
                 )
                 .disabled(position.index + 1 >= position.count)

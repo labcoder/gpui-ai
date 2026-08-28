@@ -551,7 +551,7 @@ impl Focusable for DiffTable {
 }
 
 impl Render for DiffTable {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let selected = self.selected_row_id.as_ref().and_then(|selected| {
             self.rows
                 .content()
@@ -608,6 +608,7 @@ impl Render for DiffTable {
                                         &self.id,
                                         &row,
                                         DiffProposalAction::Accept,
+                                        window,
                                         cx,
                                     )
                                     .on_click({
@@ -628,6 +629,7 @@ impl Render for DiffTable {
                                         &self.id,
                                         &row,
                                         DiffProposalAction::Reject,
+                                        window,
                                         cx,
                                     )
                                     .on_click(
@@ -767,6 +769,7 @@ fn proposal_action_control(
     table_id: &str,
     row: &DiffRow,
     action: DiffProposalAction,
+    window: &mut Window,
     cx: &mut App,
 ) -> gpui_base::Button {
     let (kind, verb, decided_label, decided) = match action {
@@ -792,7 +795,7 @@ fn proposal_action_control(
         format!("{verb} {}", row.label)
     };
     let debug_id = scoped_diff_id(kind, table_id, &row.id);
-    outlined_control_with_label(debug_id.clone(), accessibility_label, verb, cx)
+    outlined_control_with_label(debug_id.clone(), accessibility_label, verb, window, cx)
         .debug_selector(move || debug_id.to_string())
         .disabled(disabled)
 }
@@ -988,6 +991,7 @@ mod tests {
                             "cleanup",
                             &pending,
                             DiffProposalAction::Accept,
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {}),
@@ -995,6 +999,7 @@ mod tests {
                             "cleanup",
                             &pending,
                             DiffProposalAction::Reject,
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {}),
@@ -1002,6 +1007,7 @@ mod tests {
                             "cleanup",
                             &accepted,
                             DiffProposalAction::Accept,
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {}),
@@ -1009,6 +1015,7 @@ mod tests {
                             "cleanup",
                             &rejected,
                             DiffProposalAction::Reject,
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {}),

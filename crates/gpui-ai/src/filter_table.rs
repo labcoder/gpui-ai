@@ -507,7 +507,7 @@ impl Focusable for FilterTable {
 }
 
 impl Render for FilterTable {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let result_label: SharedString = format!("{} results", self.rows.content().len()).into();
         let owner = cx.weak_entity();
@@ -542,7 +542,7 @@ impl Render for FilterTable {
                                 let handler_owner = owner.clone();
                                 let is_focused =
                                     self.focused_filter_id.as_ref() == Some(&filter.id);
-                                filter_control(&self.id, filter, cx)
+                                filter_control(&self.id, filter, window, cx)
                                     .tab_stop(is_focused)
                                     .when(is_focused, |button| {
                                         button.track_focus(&self.filter_focus)
@@ -597,7 +597,12 @@ fn filter_results_frame(table_id: &str, result_label: SharedString) -> Stateful<
         .aria_label(result_label)
 }
 
-fn filter_control(table_id: &str, filter: &FilterDefinition, cx: &mut App) -> gpui_base::Button {
+fn filter_control(
+    table_id: &str,
+    filter: &FilterDefinition,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui_base::Button {
     let visible_label = format!("{} {}", filter.label, filter.count);
     let state = if filter.active { "active" } else { "inactive" };
     let accessibility_label = if filter.disabled {
@@ -606,20 +611,26 @@ fn filter_control(table_id: &str, filter: &FilterDefinition, cx: &mut App) -> gp
         format!("{visible_label}, {state}")
     };
     let debug_id = scoped_filter_id("filter", table_id, &filter.id);
-    outlined_control_with_label(debug_id.clone(), accessibility_label, visible_label, cx)
-        .debug_selector(move || debug_id.to_string())
-        .aria_toggled(if filter.active {
-            accesskit::Toggled::True
-        } else {
-            accesskit::Toggled::False
-        })
-        .disabled(filter.disabled)
-        .when(filter.active, |button| {
-            button
-                .bg(cx.theme().primary.opacity(0.12))
-                .border_color(cx.theme().primary)
-                .text_color(cx.theme().primary)
-        })
+    outlined_control_with_label(
+        debug_id.clone(),
+        accessibility_label,
+        visible_label,
+        window,
+        cx,
+    )
+    .debug_selector(move || debug_id.to_string())
+    .aria_toggled(if filter.active {
+        accesskit::Toggled::True
+    } else {
+        accesskit::Toggled::False
+    })
+    .disabled(filter.disabled)
+    .when(filter.active, |button| {
+        button
+            .bg(cx.theme().primary.opacity(0.12))
+            .border_color(cx.theme().primary)
+            .text_color(cx.theme().primary)
+    })
 }
 
 fn scoped_filter_id(kind: &str, table_id: &str, item_id: &str) -> SharedString {
@@ -647,6 +658,7 @@ mod tests {
                         filter_control(
                             "tasks",
                             &FilterDefinition::new("todo", "To do", 2).active(true),
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {})
@@ -655,6 +667,7 @@ mod tests {
                         filter_control(
                             "tasks",
                             &FilterDefinition::new("blocked", "Blocked", 0).disabled(true),
+                            window,
                             cx,
                         )
                         .on_click(|_, _, _| {})

@@ -381,7 +381,7 @@ impl Styled for AttachmentPreview {
 }
 
 impl RenderOnce for AttachmentPreview {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let attachment = self.attachment;
         let debug_id = attachment.id.to_string();
@@ -486,6 +486,7 @@ impl RenderOnce for AttachmentPreview {
                                 (self.id.clone(), "remove"),
                                 IconName::Close,
                                 format!("Remove {}", attachment.name),
+                                window,
                                 cx,
                             )
                             .debug_selector(move || format!("attachment-remove-{remove_debug_id}"))

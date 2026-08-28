@@ -145,10 +145,13 @@ impl Render for ChatControlA11yProbe {
         canvas(
             move |_, window, cx| {
                 let button = match kind {
-                    ChatControlKind::Retry => retry_button(&"chat".into(), &"retry-me".into(), cx),
+                    ChatControlKind::Retry => {
+                        retry_button(&"chat".into(), &"retry-me".into(), window, cx)
+                    }
                     ChatControlKind::Jump => jump_to_latest_button(
                         &"chat".into(),
                         "Jump to latest, 2 unread messages".into(),
+                        window,
                         cx,
                     ),
                 };

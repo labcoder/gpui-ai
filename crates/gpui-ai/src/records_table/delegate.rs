@@ -272,14 +272,19 @@ impl TableDelegate for RecordsDelegate {
             if let Some(row) = row {
                 let owner = self.owner.clone();
                 let row_id = row.id.clone();
-                let activation =
-                    record_activation_button(&self.component_id, &self.activation_label, row, cx)
-                        .on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |table, cx| {
-                                table.request_activation(row_id.clone(), cx);
-                            });
-                            cx.stop_propagation();
-                        });
+                let activation = record_activation_button(
+                    &self.component_id,
+                    &self.activation_label,
+                    row,
+                    window,
+                    cx,
+                )
+                .on_click(move |_, _, cx| {
+                    let _ = owner.update(cx, |table, cx| {
+                        table.request_activation(row_id.clone(), cx);
+                    });
+                    cx.stop_propagation();
+                });
                 div()
                     .size_full()
                     .flex()
@@ -427,6 +432,7 @@ pub(super) fn record_activation_button(
     component_id: &str,
     activation_label: &str,
     row: &RecordRow,
+    window: &mut Window,
     cx: &mut App,
 ) -> gpui_base::Button {
     let debug_id = scoped_records_id("activate", component_id, &row.id);
@@ -435,10 +441,16 @@ pub(super) fn record_activation_button(
     } else {
         format!("{activation_label} {}", row.label)
     };
-    outlined_control_with_label(debug_id.clone(), label, activation_label.to_owned(), cx)
-        .debug_selector(move || debug_id.clone())
-        .flex_none()
-        .disabled(row.disabled)
+    outlined_control_with_label(
+        debug_id.clone(),
+        label,
+        activation_label.to_owned(),
+        window,
+        cx,
+    )
+    .debug_selector(move || debug_id.clone())
+    .flex_none()
+    .disabled(row.disabled)
 }
 
 pub(super) fn records_state_frame(

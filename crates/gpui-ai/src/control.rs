@@ -1,8 +1,9 @@
+use crate::motion::press_release_progress;
 use crate::sizing::SizeTokens;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ElementId, InteractiveElement as _, MouseButton, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, div,
+    StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
 use gpui_component::ActiveTheme as _;
@@ -11,27 +12,105 @@ pub(crate) fn composed_button(
     id: impl Into<ElementId>,
     accessibility_label: impl Into<SharedString>,
 ) -> Button {
-    Button::new(id).accessibility_label(accessibility_label)
+    // Every composed control is a pointer target; the affordance is part
+    // of the family, not a per-component choice.
+    Button::new(id)
+        .accessibility_label(accessibility_label)
+        .cursor_pointer()
+}
+
+/// The pressed-state half of the interaction ramp, shared by every
+/// composed control family.
+///
+/// Pressing responds on pointer-down through the caller's `active` style —
+/// instantly, as a direct manipulation must. This extension stages only
+/// the way back out: on release, a tint overlay starts at the pressed
+/// color and decays over the press spring's response, so the control eases
+/// back to rest instead of snapping. The overlay sits under the label
+/// (apply this before adding label children), takes the control's own
+/// radius, and paints nothing once settled. Reduced motion resolves the
+/// decay instantly through the shared clock.
+pub(crate) trait PressReleaseExt: Sized {
+    fn press_release(
+        self,
+        key: ElementId,
+        radius: gpui::Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self;
+}
+
+impl PressReleaseExt for Button {
+    fn press_release(
+        self,
+        key: ElementId,
+        radius: gpui::Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
+        let pressed = window.use_keyed_state((key.clone(), "pressed"), cx, |_, _| false);
+        let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
+        let fade = {
+            let generation = *generation.read(cx);
+            if generation == 0 {
+                0.0
+            } else {
+                let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
+                1.0 - press_release_progress(clock, window, cx)
+            }
+        };
+        let arm = pressed.clone();
+        let release = move |window: &mut gpui::Window, cx: &mut App| {
+            let was_pressed = *arm.read(cx);
+            if was_pressed {
+                arm.update(cx, |pressed, _| *pressed = false);
+                generation.update(cx, |generation, _| *generation += 1);
+                window.refresh();
+            }
+        };
+        let release_out = release.clone();
+        self.on_mouse_down(MouseButton::Left, {
+            let pressed = pressed.clone();
+            move |_, _, cx| pressed.update(cx, |pressed, _| *pressed = true)
+        })
+        .on_mouse_up(MouseButton::Left, move |_, window, cx| release(window, cx))
+        .on_mouse_up_out(MouseButton::Left, move |_, window, cx| {
+            release_out(window, cx)
+        })
+        .when(fade > 0.004, |this| {
+            this.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(radius)
+                    .bg(cx.theme().button_active)
+                    .opacity(fade),
+            )
+        })
+    }
 }
 
 pub(crate) fn outlined_control(
     id: impl Into<ElementId>,
     accessibility_label: impl Into<SharedString>,
+    window: &mut Window,
     cx: &mut App,
 ) -> Button {
     let label = accessibility_label.into();
-    outlined_control_with_label(id, label.clone(), label, cx)
+    outlined_control_with_label(id, label.clone(), label, window, cx)
 }
 
 pub(crate) fn outlined_control_with_label(
     id: impl Into<ElementId>,
     accessibility_label: impl Into<SharedString>,
     visible_label: impl Into<SharedString>,
+    window: &mut Window,
     cx: &mut App,
 ) -> Button {
     let tokens = cx.theme().semantic_tokens();
     let sizes = SizeTokens::read(cx);
-    composed_button(id, accessibility_label)
+    let id = id.into();
+    composed_button(id.clone(), accessibility_label)
         .on_mouse_down(MouseButton::Left, |_, window, cx| {
             window.prevent_default();
             gpui_base::GlobalState::suppress_text_selection(cx);
@@ -54,6 +133,18 @@ pub(crate) fn outlined_control_with_label(
         .hover(|style| style.bg(cx.theme().button_hover))
         .active(|style| style.bg(cx.theme().button_active))
         .focus_visible(|style| style.border_color(cx.theme().ring))
+        // A control that cannot be pressed says so: muted label, softened
+        // border, and no tint ramp. Defined once, so a disabled row action
+        // stops rendering exactly like an enabled one.
+        .styles(|styles| {
+            styles.disabled(|style| {
+                style
+                    .text_color(cx.theme().muted_foreground)
+                    .border_color(cx.theme().border.opacity(0.5))
+                    .bg(cx.theme().transparent)
+            })
+        })
+        .press_release(id, tokens.radius.md, window, cx)
         // Compact controls are often placed in fixed-width table columns.
         // Keep their visible label inside the control instead of allowing a
         // long title to paint over the adjacent column; the full accessible
@@ -81,13 +172,13 @@ mod tests {
         struct MetricsProbe;
 
         impl Render for MetricsProbe {
-            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
                 div().w(px(420.)).h(px(160.)).child(
                     h_flex()
                         .items_start()
                         .gap(px(8.))
                         .child(
-                            outlined_control("metrics-outlined", "Open", cx)
+                            outlined_control("metrics-outlined", "Open", window, cx)
                                 .debug_selector(|| "metrics-outlined".into()),
                         )
                         .child(
@@ -95,6 +186,7 @@ mod tests {
                                 "metrics-icon",
                                 gpui_component::IconName::Search,
                                 "Search",
+                                window,
                                 cx,
                             )
                             .debug_selector(|| "metrics-icon".into()),
@@ -134,6 +226,46 @@ mod tests {
                 icon.size.width,
                 sizes.control_sm(),
                 "icon buttons are square"
+            );
+        }
+
+        /// Pressing responds instantly through the active style; only the
+        /// way back out is staged. A click therefore leaves a decaying
+        /// tint that asks for frames until the press spring settles, and a
+        /// settled control asks for nothing.
+        #[gpui::test]
+        fn a_released_press_fades_out_and_settles(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let (_, cx) = cx.add_window_view(|_, _| MetricsProbe);
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            crate::motion::take_reveal_frame_requests();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(
+                crate::motion::take_reveal_frame_requests(),
+                0,
+                "an untouched control is settled"
+            );
+
+            let bounds = cx
+                .debug_bounds("metrics-outlined")
+                .expect("the control should render");
+            cx.simulate_click(bounds.center(), gpui::Modifiers::default());
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert!(
+                crate::motion::take_reveal_frame_requests() > 0,
+                "a released press must decay across frames"
+            );
+
+            cx.executor()
+                .advance_clock(std::time::Duration::from_secs(1));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            crate::motion::take_reveal_frame_requests();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(
+                crate::motion::take_reveal_frame_requests(),
+                0,
+                "the decay must settle and stop asking for frames"
             );
         }
 

@@ -1052,15 +1052,15 @@ impl Render for RecordsControlProbe {
                     .on_click(|_, _, _| {})
                     .render(window, cx)
                     .into_element(),
-                    record_activation_button("suppliers", "Open", &enabled, cx)
+                    record_activation_button("suppliers", "Open", &enabled, window, cx)
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element(),
-                    record_activation_button("suppliers", "Open", &disabled, cx)
+                    record_activation_button("suppliers", "Open", &disabled, window, cx)
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element(),
-                    record_activation_button("diff", "Review", &enabled, cx)
+                    record_activation_button("diff", "Review", &enabled, window, cx)
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element(),

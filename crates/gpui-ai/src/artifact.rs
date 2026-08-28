@@ -404,6 +404,7 @@ impl RenderOnce for ArtifactPanel {
                         (root_id.clone(), "version-prev"),
                         IconName::ChevronLeft,
                         "Previous version",
+                        window,
                         cx,
                     )
                     .disabled(prev.is_none() || prev_handler.is_none())
@@ -427,6 +428,7 @@ impl RenderOnce for ArtifactPanel {
                         (root_id.clone(), "version-next"),
                         IconName::ChevronRight,
                         "Next version",
+                        window,
                         cx,
                     )
                     .disabled(next.is_none() || next_handler.is_none())
@@ -452,6 +454,7 @@ impl RenderOnce for ArtifactPanel {
                 (root_id.clone(), "close"),
                 IconName::Close,
                 "Close artifact",
+                window,
                 cx,
             )
             .debug_selector(move || format!("artifact-close-{close_debug}"))

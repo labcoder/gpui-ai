@@ -810,6 +810,21 @@ pub fn reveal_progress(
     timed_progress(id, delay, duration, window, cx)
 }
 
+/// One-shot decay clock for a released press, over the press spring's
+/// response. Runs 0→1 from the first frame its key exists; callers paint
+/// the press tint at `1.0 - progress`, so a fresh key replays the release
+/// once and re-renders replay nothing. Pressing itself never rides this —
+/// the pressed style applies on pointer-down, instantly, and only the way
+/// back out is staged.
+pub(crate) fn press_release_progress(
+    id: impl Into<ElementId>,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    let response = MotionTokens::read(cx).press_spring().response();
+    timed_progress(id, Duration::ZERO, response, window, cx)
+}
+
 /// Progress of a one-shot status swap keyed by `id`, at the quick role's
 /// tempo — the acknowledgment an icon or label change settles in on.
 pub(crate) fn swap_progress(id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> f32 {

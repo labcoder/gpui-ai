@@ -1173,7 +1173,7 @@ impl Render for Chat {
             )
             .when(show_jump, |this| {
                 this.child(
-                    jump_to_latest_button(&self.id, jump_label, cx)
+                    jump_to_latest_button(&self.id, jump_label, window, cx)
                         .on_click(cx.listener(|chat, _, _, cx| chat.scroll_to_latest(cx))),
                 )
             })

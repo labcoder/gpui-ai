@@ -5,7 +5,7 @@
 //! component builds from them so radii, spacing, weights, and hover treatment
 //! stay identical across the library — and change in one place.
 
-use crate::control::composed_button;
+use crate::control::{PressReleaseExt as _, composed_button};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -135,10 +135,12 @@ pub(crate) fn icon_button(
     id: impl Into<ElementId>,
     icon: impl IconNamed,
     accessibility_label: impl Into<SharedString>,
-    cx: &App,
+    window: &mut gpui::Window,
+    cx: &mut App,
 ) -> Button {
     let tokens = cx.theme().semantic_tokens();
-    composed_button(id, accessibility_label)
+    let id = id.into();
+    composed_button(id.clone(), accessibility_label)
         .flex()
         .flex_none()
         .items_center()
@@ -155,5 +157,6 @@ pub(crate) fn icon_button(
         })
         .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
         .focus_visible(|style| style.border_color(cx.theme().ring))
+        .press_release(id, tokens.radius.sm, window, cx)
         .child(Icon::new(icon).xsmall())
 }

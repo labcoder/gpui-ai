@@ -773,6 +773,7 @@ fn comparison_item_header_frame(
 fn comparison_item_control(
     table_id: &str,
     item: &ComparisonItem,
+    window: &mut Window,
     cx: &mut App,
 ) -> gpui_base::Button {
     let debug_id: SharedString = format!("comparison-item-control:{table_id}:{}", item.id).into();
@@ -780,6 +781,7 @@ fn comparison_item_control(
         debug_id.clone(),
         format!("Select {}", item.label),
         item.label.clone(),
+        window,
         cx,
     )
     .debug_selector(move || debug_id.to_string())
@@ -1153,26 +1155,28 @@ impl Render for ComparisonTable {
                                                     )
                                                 })
                                                 .child(
-                                                    comparison_item_control(&self.id, item, cx)
-                                                        .w_full()
-                                                        .tab_stop(focused)
-                                                        .when(focused, |button| {
-                                                            button.track_focus(&self.focus_handle)
-                                                        })
-                                                        .on_click(move |_, window, cx| {
-                                                            let _ = handler_owner.update(
-                                                                cx,
-                                                                |table, cx| {
-                                                                    table.focus_item(
-                                                                        &item_id, window, cx,
-                                                                    );
-                                                                    table.request_selection(
-                                                                        item_id.clone(),
-                                                                        cx,
-                                                                    );
-                                                                },
-                                                            );
-                                                        }),
+                                                    comparison_item_control(
+                                                        &self.id, item, window, cx,
+                                                    )
+                                                    .w_full()
+                                                    .tab_stop(focused)
+                                                    .when(focused, |button| {
+                                                        button.track_focus(&self.focus_handle)
+                                                    })
+                                                    .on_click(move |_, window, cx| {
+                                                        let _ = handler_owner.update(
+                                                            cx,
+                                                            |table, cx| {
+                                                                table.focus_item(
+                                                                    &item_id, window, cx,
+                                                                );
+                                                                table.request_selection(
+                                                                    item_id.clone(),
+                                                                    cx,
+                                                                );
+                                                            },
+                                                        );
+                                                    }),
                                                 )
                                                 .when_some(
                                                     item.description.clone(),
@@ -1278,7 +1282,7 @@ mod tests {
                         .state(ComparisonItemState::Highlighted);
                     let header =
                         comparison_item_header_frame("plans", &business, true).into_element();
-                    let enabled_control = comparison_item_control("plans", &business, cx)
+                    let enabled_control = comparison_item_control("plans", &business, window, cx)
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element();
@@ -1286,6 +1290,7 @@ mod tests {
                         "plans",
                         &ComparisonItem::new("legacy", "Legacy")
                             .state(ComparisonItemState::Disabled),
+                        window,
                         cx,
                     )
                     .on_click(|_, _, _| {})

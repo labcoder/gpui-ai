@@ -940,7 +940,7 @@ fn numeric_field(
 }
 
 impl Render for FineTuneCard {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let root_id = self.id.clone();
         let selected_typeface = self
@@ -1135,6 +1135,7 @@ impl Render for FineTuneCard {
                                     outlined_control(
                                         (gpui::ElementId::from(self.id.clone()), "clear-accent"),
                                         "Remove accent color",
+                                        window,
                                         cx,
                                     )
                                     .debug_selector(|| "fine-tune-clear-accent".to_owned())
@@ -1157,6 +1158,7 @@ impl Render for FineTuneCard {
                         outlined_control(
                             (gpui::ElementId::from(self.id.clone()), "reset"),
                             "Reset fine-tune values",
+                            window,
                             cx,
                         )
                         .debug_selector(|| "fine-tune-reset".to_owned())
@@ -1170,6 +1172,7 @@ impl Render for FineTuneCard {
                         outlined_control(
                             (gpui::ElementId::from(self.id.clone()), "apply"),
                             "Apply fine-tune values",
+                            window,
                             cx,
                         )
                         .debug_selector(|| "fine-tune-apply".to_owned())

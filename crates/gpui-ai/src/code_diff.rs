@@ -549,6 +549,7 @@ impl RenderOnce for CodeDiff {
                 } else {
                     "Expand diff"
                 },
+                window,
                 cx,
             )
             .debug_selector(move || format!("code-diff-toggle-{toggle_debug}"))
