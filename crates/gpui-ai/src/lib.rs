@@ -54,6 +54,7 @@ pub mod scrolling;
 pub mod search_results;
 pub mod selection_actions;
 pub mod sidebar_nav;
+pub mod sizing;
 pub mod status;
 pub mod stream;
 pub mod streaming_text;
@@ -137,6 +138,7 @@ pub mod prelude {
     pub use crate::sidebar_nav::{
         SidebarNav, SidebarNavEvent, SidebarNavItem, SidebarNavPresentation, SidebarSection,
     };
+    pub use crate::sizing::SizeTokens;
     pub use crate::status::{StatusBadge, StatusTone};
     pub use crate::stream::{ProgressState, Progressive, StreamedContent};
     pub use crate::streaming_text::{
@@ -177,5 +179,6 @@ pub fn init(cx: &mut App) {
     // application already chose one, so either order of init and
     // customization lands on the application's values.
     motion::install(cx);
+    sizing::install(cx);
     records_table::init(cx);
 }

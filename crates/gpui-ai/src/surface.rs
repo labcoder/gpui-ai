@@ -124,7 +124,7 @@ pub(crate) fn icon_button(
         .flex_none()
         .items_center()
         .justify_center()
-        .size(tokens.spacing.xl)
+        .size(crate::sizing::SizeTokens::read(cx).control_sm())
         .rounded(tokens.radius.sm)
         .border_1()
         .border_color(cx.theme().transparent)

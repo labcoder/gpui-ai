@@ -1,3 +1,4 @@
+use crate::sizing::SizeTokens;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ElementId, InteractiveElement as _, MouseButton, ParentElement as _, SharedString,
@@ -29,6 +30,7 @@ pub(crate) fn outlined_control_with_label(
     cx: &mut App,
 ) -> Button {
     let tokens = cx.theme().semantic_tokens();
+    let sizes = SizeTokens::read(cx);
     composed_button(id, accessibility_label)
         .on_mouse_down(MouseButton::Left, |_, window, cx| {
             window.prevent_default();
@@ -38,11 +40,11 @@ pub(crate) fn outlined_control_with_label(
         .items_center()
         .justify_center()
         // Compact pill geometry shared by every small control in the
-        // library — filter chips, row CTAs, toggles. One height, one radius,
-        // one text style so controls look like one family next to tables.
-        .min_h(tokens.spacing.lg)
+        // library — filter chips, row CTAs, toggles. One height from the
+        // size policy, one radius, one text style, so controls look like
+        // one family next to tables.
+        .h(sizes.control_sm())
         .px(tokens.spacing.sm)
-        .py(tokens.spacing.xxs)
         .border_1()
         .border_color(cx.theme().border)
         .rounded(tokens.radius.md)
@@ -67,6 +69,91 @@ mod tests {
         accesskit, canvas,
     };
     use std::sync::{Arc, Mutex};
+
+    mod control_metrics {
+        use super::super::*;
+        use crate::sizing::SizeTokens;
+        use gpui::{
+            Context, IntoElement, Render, TestAppContext, VisualTestContext, Window, div, px,
+        };
+        use gpui_component::h_flex;
+
+        struct MetricsProbe;
+
+        impl Render for MetricsProbe {
+            fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(420.)).h(px(160.)).child(
+                    h_flex()
+                        .items_start()
+                        .gap(px(8.))
+                        .child(
+                            outlined_control("metrics-outlined", "Open", cx)
+                                .debug_selector(|| "metrics-outlined".into()),
+                        )
+                        .child(
+                            crate::surface::icon_button(
+                                "metrics-icon",
+                                gpui_component::IconName::Search,
+                                "Search",
+                                cx,
+                            )
+                            .debug_selector(|| "metrics-icon".into()),
+                        ),
+                )
+            }
+        }
+
+        /// Every composed control resolves its height through the size
+        /// policy — the six coincidental heights the 0.4.0 audit found
+        /// cannot come back without failing here.
+        #[gpui::test]
+        fn composed_controls_take_their_heights_from_the_size_policy(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let (_, cx) = cx.add_window_view(|_, _| MetricsProbe);
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            let sizes = cx.update(|_, cx| *SizeTokens::read(cx));
+            let outlined = cx
+                .debug_bounds("metrics-outlined")
+                .expect("the outlined control should render");
+            assert_eq!(
+                outlined.size.height,
+                sizes.control_sm(),
+                "outlined_control must stand exactly control_sm tall"
+            );
+            let icon = cx
+                .debug_bounds("metrics-icon")
+                .expect("the icon button should render");
+            assert_eq!(
+                icon.size.height,
+                sizes.control_sm(),
+                "icon buttons are control_sm"
+            );
+            assert_eq!(
+                icon.size.width,
+                sizes.control_sm(),
+                "icon buttons are square"
+            );
+        }
+
+        /// The policy is a policy: replacing it before init moves every
+        /// composed control, which is the customization contract.
+        #[gpui::test]
+        fn a_replaced_size_policy_moves_the_composed_controls(cx: &mut TestAppContext) {
+            cx.update(|cx| {
+                SizeTokens::default().with_control_sm(px(30.)).set(cx);
+                crate::init(cx);
+            });
+            let (_, cx) = cx.add_window_view(|_, _| MetricsProbe);
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let outlined = cx
+                .debug_bounds("metrics-outlined")
+                .expect("the outlined control should render");
+            assert_eq!(outlined.size.height, px(30.));
+        }
+    }
 
     type CapturedNode = Arc<Mutex<Option<(Option<Role>, accesskit::Node)>>>;
 

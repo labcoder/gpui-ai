@@ -136,7 +136,7 @@ pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
 /// finished answer, not the composer the demo opens on. The
 /// `the_hero_height_matches_what_the_settled_demo_measures` test fails when
 /// the script changes shape and this number does not.
-pub const HERO_HEIGHT: u32 = 706;
+pub const HERO_HEIGHT: u32 = 702;
 
 /// Which way a story's content outgrows the frame it is shown in.
 ///

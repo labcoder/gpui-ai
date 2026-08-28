@@ -33,8 +33,10 @@ pub(super) fn nav_control(
         .items_center()
         .justify_center()
         .gap(tokens.spacing.xs)
+        // Header controls rail with the filter input beside them, so they
+        // take the input's own height tier from the size policy.
+        .h(crate::sizing::SizeTokens::read(cx).control_lg())
         .px(tokens.spacing.sm)
-        .py(tokens.spacing.xs)
         .rounded(tokens.radius.sm)
         .border_1()
         .border_color(cx.theme().sidebar_border)
