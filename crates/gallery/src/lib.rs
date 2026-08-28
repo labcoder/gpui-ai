@@ -8,6 +8,10 @@ mod motion_lab;
 pub mod performance;
 mod sim;
 mod story;
+mod usage;
+
+#[cfg(test)]
+include!(concat!(env!("OUT_DIR"), "/readme_contracts.rs"));
 
 pub use gallery::{
     Gallery, GalleryChrome, GalleryTheme, active_variant_index, apply_gallery_theme, init,

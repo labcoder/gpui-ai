@@ -61,7 +61,8 @@ pub enum SearchResultsEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// SearchResults::new("search-1", "gpui wasm support")
 ///     .results([
 ///         SearchResult::new("gallery", "GPUI Component — Web Gallery")
@@ -69,7 +70,7 @@ pub enum SearchResultsEvent {
 ///         SearchResult::new("gpui-web", "zed-industries/zed: crates/gpui_web")
 ///             .domain("github.com"),
 ///     ])
-///     .on_event(cx.listener(|this, event: &SearchResultsEvent, _, cx| { /* open result */ }))
+///     .on_event(|event, _, _| { /* open result */ });
 /// ```
 #[derive(IntoElement)]
 pub struct SearchResults {

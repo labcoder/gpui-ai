@@ -29,10 +29,11 @@ pub enum ToolStatus {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// ToolChip::new("edit-1", "edit main.rs")
 ///     .status(ToolStatus::Running)
-///     .detail("+12 −3")
+///     .detail("+12 −3");
 /// ```
 #[derive(IntoElement)]
 pub struct ToolChip {

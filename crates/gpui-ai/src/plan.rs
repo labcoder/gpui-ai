@@ -185,7 +185,8 @@ pub enum PlanEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// PlanCard::new("rollout", "Switch bulk orders to Alpenrose")
 ///     .description("Three steps; the last one sends email.")
 ///     .steps([
@@ -194,7 +195,7 @@ pub enum PlanEvent {
 ///         PlanStep::new("send", "Send confirmations").detail("Emails 3 suppliers"),
 ///     ])
 ///     .editable(true)
-///     .on_event(|event, _, _| { /* PlanEvent::Approved { id } … */ })
+///     .on_event(|event, _, _| { /* PlanEvent::Approved { id } … */ });
 /// ```
 #[derive(IntoElement)]
 pub struct PlanCard {

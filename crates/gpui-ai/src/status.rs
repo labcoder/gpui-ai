@@ -72,9 +72,12 @@ pub fn progress_label(state: &ProgressState) -> &'static str {
 ///
 /// # Example
 ///
-/// ```ignore
-/// StatusBadge::for_progress("call-status", task.state())
-/// StatusBadge::new("review", "Needs review").tone(StatusTone::Warning)
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(task: Progressive<()>) {
+/// StatusBadge::for_progress("call-status", task.state());
+/// StatusBadge::new("review", "Needs review").tone(StatusTone::Warning);
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct StatusBadge {

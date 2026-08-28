@@ -359,11 +359,15 @@ fn prompt_control_shell(
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let prompt = cx.new(|cx| PromptBar::new("assistant-prompt", window, cx));
 /// prompt.update(cx, |prompt, cx| {
 ///     prompt.set_models([PromptModel::new("fast", "Fast")], cx);
 /// });
+/// # }
 /// ```
 pub struct PromptBar {
     id: SharedString,

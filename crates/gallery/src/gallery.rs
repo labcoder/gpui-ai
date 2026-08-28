@@ -6087,29 +6087,44 @@ mod tests {
         cx.update(super::init);
         let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::Chat, cx));
         let cx: &mut VisualTestContext = cx;
+        let ember = GalleryTheme::from_slug("ember-dusk").expect("ember-dusk is bundled");
         cx.update(|_, cx| {
             gallery.update(cx, |gallery, cx| {
-                gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+                gallery.set_chrome(super::GalleryChrome::Embedded, cx);
+                gallery.set_theme_preset(ember, cx);
             })
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
-        let key_of =
-            |cx: &mut VisualTestContext| gallery.read_with(cx, |gallery, _| gallery.generation);
-        let before = key_of(cx);
-
+        let edit = |cx: &mut VisualTestContext, replacement: Option<&str>| {
+            let editor = cx
+                .debug_bounds("prompt-bar-editor")
+                .expect("retained prompt editor");
+            cx.simulate_click(editor.center(), Modifiers::default());
+            cx.simulate_keystrokes("ctrl-a");
+            if let Some(text) = replacement {
+                cx.simulate_input(text);
+                cx.simulate_keystrokes("ctrl-a");
+            }
+            cx.simulate_keystrokes("ctrl-c");
+            cx.update(|_, cx| cx.read_from_clipboard().and_then(|item| item.text()))
+        };
+        assert_eq!(
+            edit(cx, Some("A reader's unsent draft")).as_deref(),
+            Some("A reader's unsent draft")
+        );
         cx.update(|_, cx| gallery.update(cx, |gallery, cx| gallery.reset_story(cx)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        assert_ne!(
-            key_of(cx),
-            before,
-            "a reset that reused the key would hand back the same chat, still holding \
-             everything the reader had done to it"
+        assert_eq!(
+            edit(cx, None).as_deref(),
+            Some("Ask a follow-up about suppliers"),
+            "reset must replace the retained editor, not just reset the gallery's own fields"
         );
-        // And the story still draws afterwards, which is what says the new key
-        // built a story rather than losing one.
-        assert!(cx.debug_bounds("story-chat").is_some());
+        gallery.read_with(cx, |gallery, _| {
+            assert_eq!(gallery.selected, StoryId::Chat);
+            assert_eq!(gallery.theme, ember);
+            assert_eq!(gallery.chrome, super::GalleryChrome::Embedded);
+        });
     }
 
     /// A theme that says nothing about type size must not inherit the last one's.
@@ -7632,30 +7647,33 @@ mod tests {
     #[gpui::test]
     fn the_guided_demo_names_its_stage_for_assistive_technology(cx: &mut TestAppContext) {
         cx.update(super::init);
-        let (_story, cx) = cx.add_window_view(GuidedDemoStory::new);
+        let (story, cx) = cx.add_window_view(GuidedDemoStory::new);
         let cx: &mut VisualTestContext = cx;
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-
-        let idle = cx.debug_bounds("guided-demo").is_some();
-        assert!(idle, "the hero must render before anything is sent");
-
-        // Every stage has a distinct, human name rather than a code.
-        let mut labels = Vec::new();
-        for stage in [
-            GuidedStage::Idle,
-            GuidedStage::Tools,
-            GuidedStage::Reasoning,
-            GuidedStage::Replying,
-            GuidedStage::Settled,
+        for (stage, expected) in [
+            (
+                GuidedStage::Idle,
+                "Ready — send the question to run the demo",
+            ),
+            (GuidedStage::Tools, "Running tools"),
+            (GuidedStage::Reasoning, "Reasoning"),
+            (GuidedStage::Replying, "Writing the reply"),
+            (GuidedStage::Settled, "Answer complete"),
         ] {
-            let label = stage.label();
-            assert!(!label.is_empty(), "{stage:?} has no accessible name");
-            labels.push(label);
+            let (role, node) = cx.update(|_, cx| {
+                story.update(cx, |story, cx| {
+                    story.stage = stage;
+                    cx.notify();
+                    let element = story.status_element(cx).into_element();
+                    let mut node = accesskit::Node::new(Role::Unknown);
+                    element.write_a11y_info(&mut node);
+                    (element.a11y_role(), node)
+                })
+            });
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert!(cx.debug_bounds("guided-demo-status").is_some());
+            assert_eq!(role, Some(Role::Status));
+            assert_eq!(node.label(), Some(expected));
         }
-        let mut unique = labels.clone();
-        unique.sort_unstable();
-        unique.dedup();
-        assert_eq!(unique.len(), labels.len(), "stage names must be distinct");
     }
 
     /// A theme that changes the base type size changes what a story measures.
@@ -7708,6 +7726,69 @@ mod tests {
         );
     }
 
+    /// The exhaustive sampler shared by catalog measurement and the transient-height
+    /// regression. Never replace its maximum with the settled/final frame.
+    fn measure_height_frames(
+        cx: &mut VisualTestContext,
+        selector: &'static str,
+        ticks: usize,
+    ) -> u32 {
+        let mut maximum = 0;
+        for tick in 0..=ticks {
+            if tick > 0 {
+                cx.executor().advance_clock(super::sim::TICK_INTERVAL);
+                cx.run_until_parked();
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+            }
+            let height = cx
+                .debug_bounds(selector)
+                .expect("a measurable story frame")
+                .size
+                .height;
+            maximum = maximum.max(f32::from(height).ceil() as u32);
+        }
+        maximum
+    }
+
+    #[gpui::test]
+    fn height_sampler_keeps_a_transient_spike_not_just_the_settled_frame(cx: &mut TestAppContext) {
+        use gpui::{InteractiveElement as _, ParentElement as _, Styled as _};
+        struct Transient {
+            height: gpui::Pixels,
+            _task: gpui::Task<()>,
+        }
+        impl Render for Transient {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+                gpui::div()
+                    .debug_selector(|| "transient-height".into())
+                    .w(px(100.))
+                    .h(self.height)
+                    .child("A transient expanded state")
+            }
+        }
+        let (probe, cx) = cx.add_window_view(|_, cx: &mut Context<Transient>| {
+            let task = cx.spawn(async move |this, cx| {
+                for height in [240., 20.] {
+                    cx.background_executor()
+                        .timer(super::sim::TICK_INTERVAL)
+                        .await;
+                    this.update(cx, |this, cx| {
+                        this.height = px(height);
+                        cx.notify();
+                    })
+                    .expect("live probe");
+                }
+            });
+            Transient {
+                height: px(20.),
+                _task: task,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(measure_height_frames(cx, "transient-height", 4), 240);
+        assert_eq!(probe.read_with(cx, |probe, _| probe.height), px(20.));
+    }
+
     /// The declared heights must be what the stories actually measure.
     ///
     /// The website centres each story in a frame sized from this number, so a
@@ -7719,6 +7800,7 @@ mod tests {
         let mut wrong = Vec::new();
 
         for story in StoryId::ALL {
+            let started = std::time::Instant::now();
             let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(*story, cx));
             let cx: &mut VisualTestContext = cx;
             cx.update(|_, cx| {
@@ -7738,31 +7820,34 @@ mod tests {
 
             let selector: &'static str =
                 Box::leak(format!("story-{}", story.slug()).into_boxed_str());
-            let height_now = |cx: &mut VisualTestContext| {
-                cx.debug_bounds(selector)
-                    .map(|bounds| f32::from(bounds.size.height).ceil() as u32)
-                    .unwrap_or_else(|| panic!("{} did not render a measurable frame", story.slug()))
+            // Keep every intermediate frame, including rest/restart and wrap thresholds.
+            let ticks = if super::story_needs_simulation(*story) {
+                super::MEASURE_TICKS
+            } else {
+                0
             };
-
-            // The simulation starts with empty streams, so measuring only the
-            // first frame sizes a search story to its "searching" state and
-            // clips the results that arrive a second later. Run the streams to
-            // completion and keep the tallest state the story passes through.
-            // Only the stories the simulation actually feeds need ticking; the
-            // rest are static, and ticking all of them costs minutes.
-            let mut measured = height_now(cx);
-            if super::story_needs_simulation(*story) {
-                for _ in 0..super::MEASURE_TICKS {
-                    cx.executor().advance_clock(super::sim::TICK_INTERVAL);
-                    cx.run_until_parked();
-                    cx.update(|window, cx| window.draw(cx).clear(cx));
-                    measured = measured.max(height_now(cx));
-                }
-            }
+            let measured = measure_height_frames(cx, selector, ticks);
             let declared = story
                 .meta()
                 .expect("component stories carry metadata")
                 .height;
+
+            // Window-owned roots otherwise keep every earlier simulation alive while
+            // the shared executor advances for later stories.
+            let retired = gallery.downgrade();
+            drop(gallery);
+            cx.update(|window, _| window.remove_window());
+            cx.run_until_parked();
+            assert!(
+                retired.upgrade().is_none(),
+                "the previous story and its owned task must be disposed"
+            );
+            println!(
+                "height-sample {}: max={measured}px draws={} elapsed_ms={}",
+                story.slug(),
+                ticks + 1,
+                started.elapsed().as_millis()
+            );
 
             // A pixel of rounding drift is not worth a failing build.
             if measured.abs_diff(declared) > 2 {
@@ -7917,6 +8002,17 @@ struct GuidedDemoStory {
 }
 
 impl GuidedDemoStory {
+    fn status_element(&self, cx: &App) -> gpui::Stateful<gpui::Div> {
+        div()
+            .id("guided-demo-status")
+            .debug_selector(|| "guided-demo-status".into())
+            .role(Role::Status)
+            .aria_label(self.stage.label())
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(self.stage.label())
+    }
+
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let prompt = cx.new(|cx| PromptBar::new("guided-demo-prompt", window, cx));
         prompt.update(cx, |prompt, cx| {
@@ -8172,15 +8268,7 @@ impl Render for GuidedDemoStory {
                             .text_label("Reset")
                             .on_click(cx.listener(|this, _, window, cx| this.reset(window, cx))),
                     )
-                    .child(
-                        div()
-                            .id("guided-demo-status")
-                            .role(Role::Status)
-                            .aria_label(self.stage.label())
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(self.stage.label()),
-                    ),
+                    .child(self.status_element(cx)),
             )
     }
 }

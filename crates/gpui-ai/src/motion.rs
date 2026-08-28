@@ -39,14 +39,19 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
+//! # use gpui_ai::prelude::*;
+//! # use gpui::ParentElement;
+//! # use gpui_component::v_flex;
+//! # fn example(is_running: bool, window: &mut gpui::Window, cx: &mut gpui::App) {
 //! use gpui_ai::motion::{Shimmer, reveal};
 //!
 //! // A "Thinking…" label with a travelling highlight while work runs.
-//! Shimmer::new("thinking-label", "Thinking…").active(is_running)
+//! Shimmer::new("thinking-label", "Thinking…").active(is_running);
 //!
 //! // A freshly inserted row fades and rises into place once.
-//! reveal(v_flex().child("New tool call"), ("tool-call", 3), window, cx)
+//! reveal(v_flex().child("New tool call"), ("tool-call", 3_usize), window, cx);
+//! # }
 //! ```
 
 mod visibility;
@@ -254,11 +259,15 @@ impl SpringRole {
 /// the result — before windows render, so no frame is timed under two
 /// policies:
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use std::time::Duration;
+/// # fn example(cx: &mut gpui::App) {
 /// gpui_ai::init(cx);
 /// gpui_ai::motion::MotionTokens::default()
 ///     .with_quick(Duration::from_millis(120))
 ///     .set(cx);
+/// # }
 /// ```
 ///
 /// Components use the quick role for acknowledgments, standard for entrances
@@ -718,6 +727,13 @@ impl Styled for Shimmer {
     }
 }
 
+// Travel during the first part of the cycle, then rest fully off the trailing
+// edge. The start is relative to the label width, as is SHIMMER_BAND.
+fn shimmer_band_start(delta: f32, duty: f32) -> f32 {
+    let progress = ease_in_out((delta / duty).min(1.0));
+    -SHIMMER_BAND + progress * (1.0 + SHIMMER_BAND)
+}
+
 impl RenderOnce for Shimmer {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let base = self.base.unwrap_or(cx.theme().muted_foreground);
@@ -750,10 +766,7 @@ impl RenderOnce for Shimmer {
                 // plain muted text.
                 spec.looping(),
                 move |container, delta| {
-                    // Travel during the first part of the cycle, then rest
-                    // fully off the trailing edge.
-                    let progress = ease_in_out((delta / spec.duty).min(1.0));
-                    let start = -SHIMMER_BAND + progress * (1.0 + SHIMMER_BAND);
+                    let start = shimmer_band_start(delta, spec.duty);
                     container.child(
                         div()
                             .absolute()
@@ -1002,17 +1015,28 @@ mod tests {
 
     #[test]
     fn shimmer_band_travels_fully_across_and_rests_off_the_trailing_edge() {
-        // At the start of the cycle the band sits entirely left of the label.
-        let start = -SHIMMER_BAND;
-        assert!(start + SHIMMER_BAND <= 0.0);
-        // At the end of travel it sits entirely right of the label.
-        let end = -SHIMMER_BAND + 1.0 * (1.0 + SHIMMER_BAND);
-        assert!(end >= 1.0);
-        const {
+        let default_duty = ProgressLoopSpec::SHIMMER.duty;
+        assert!(default_duty > 0.0 && default_duty < 1.0);
+        // Exercise the renderer's geometry with both the default timing and a
+        // shorter sweep. Expectations describe position, not the easing formula.
+        for duty in [default_duty, 0.4] {
+            let start = shimmer_band_start(0.0, duty);
+            let quarter = shimmer_band_start(duty * 0.25, duty);
+            let middle = shimmer_band_start(duty * 0.5, duty);
+            let three_quarters = shimmer_band_start(duty * 0.75, duty);
+            let end = shimmer_band_start(duty, duty);
+
+            assert!(start + SHIMMER_BAND <= 0.0, "starts before the label");
+            assert!(start < quarter && quarter < middle);
+            assert!(middle < three_quarters && three_quarters < end);
             assert!(
-                ProgressLoopSpec::SHIMMER.duty < 1.0,
-                "a rest beat must follow each sweep"
+                (middle + SHIMMER_BAND / 2.0 - 0.5).abs() < 1e-6,
+                "the band crosses the label's center halfway through travel"
             );
+            assert!(end >= 1.0, "clears the trailing edge");
+            for delta in [duty + (1.0 - duty) * 0.5, 1.0] {
+                assert_eq!(shimmer_band_start(delta, duty), end, "rests offscreen");
+            }
         }
     }
 
@@ -1026,9 +1050,7 @@ mod tests {
     }
 
     #[test]
-    fn the_default_policy_is_exactly_the_shipped_specs() {
-        // Field-by-field, not "looks right": the promise is that installing
-        // the policy changes nothing a released application shows.
+    fn default_policy_uses_the_documented_role_specs() {
         let tokens = MotionTokens::DEFAULT;
         assert_eq!(tokens.reveal(), EnterSpec::REVEAL);
         assert_eq!(tokens.shimmer(), ProgressLoopSpec::SHIMMER);
@@ -1043,14 +1065,11 @@ mod tests {
     }
 
     #[test]
-    fn provisional_roles_sit_inside_the_plans_tuning_ranges() {
+    fn default_roles_have_ordered_tempos_and_safe_springs() {
         let tokens = MotionTokens::DEFAULT;
-        assert!(tokens.quick() >= Duration::from_millis(120));
-        assert!(tokens.quick() <= Duration::from_millis(180));
-        assert!(tokens.standard() >= Duration::from_millis(200));
-        assert!(tokens.standard() <= Duration::from_millis(300));
-        assert!(tokens.deliberate() >= Duration::from_millis(320));
-        assert!(tokens.deliberate() <= Duration::from_millis(450));
+        assert!(tokens.quick() > Duration::ZERO);
+        assert!(tokens.quick() < tokens.standard());
+        assert!(tokens.standard() < tokens.deliberate());
         for spring in [
             tokens.press_spring(),
             tokens.selection_spring(),

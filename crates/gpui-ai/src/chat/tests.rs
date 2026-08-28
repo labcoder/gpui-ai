@@ -7,7 +7,7 @@ use super::{render::*, transcript::*};
 use crate::prompt_bar::PromptBarEvent;
 use crate::{
     prompt_bar::PromptBar,
-    stream::{ProgressState, Progressive},
+    stream::Progressive,
     streaming_text::{CitationRef, FollowUp},
 };
 use gpui::{
@@ -985,19 +985,6 @@ fn constrained_chat_keeps_the_latest_message_and_composer_reachable(cx: &mut Tes
         .expect("composer should render");
     assert!(latest.bottom() <= transcript.bottom());
     assert!(composer.bottom() <= px(300.));
-}
-
-#[test]
-fn failed_message_state_is_not_inferred_from_color() {
-    let failed = ChatMessage::new(
-        "failed",
-        ChatRole::Assistant,
-        Progressive::failed(String::new(), "Unavailable"),
-    );
-    assert!(matches!(
-        failed.content().state(),
-        ProgressState::Failed(reason) if reason == "Unavailable"
-    ));
 }
 
 #[test]

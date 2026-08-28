@@ -717,8 +717,10 @@ impl SourceRef {
 ///
 /// # Example
 ///
-/// ```ignore
-/// StreamingText::new("answer", &self.answer)
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(answer: StreamedContent) {
+/// StreamingText::new("answer", &answer)
 ///     .citations([
 ///         CitationRef::new("pricing", "Pricing report", "Open pricing report", "app://pricing"),
 ///     ])
@@ -727,9 +729,10 @@ impl SourceRef {
 ///         FollowUp::new("delivery", "Compare delivery times"),
 ///         FollowUp::new("history", "Show price history"),
 ///     ])
-///     .on_event(cx.listener(|this, event: &StreamingTextEvent, _, cx| {
+///     .on_event(|event, _, _| {
 ///         // Route citation destinations or start follow-up work in the application.
-///     }))
+///     });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct StreamingText {

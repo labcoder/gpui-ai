@@ -25,9 +25,29 @@ fn unknown_story_preserves_the_requested_slug() {
 }
 
 #[test]
-fn prompt_bar_has_a_stable_consumer_route() {
-    let story = StoryId::from_str("prompt-bar").expect("prompt bar route should be registered");
-
-    assert_eq!(story.slug(), "prompt-bar");
-    assert_eq!(story.title(), "Prompt bar");
+fn published_consumer_routes_keep_their_slugs_and_titles() {
+    // Literal expectations protect published URLs; deriving them from slug()
+    // would only test round-tripping, which is covered separately above.
+    for (story, slug, title) in [
+        (StoryId::PromptBar, "prompt-bar", "Prompt bar"),
+        (StoryId::CommandSearch, "command-search", "Command search"),
+        (StoryId::SidebarNav, "sidebar-nav", "Sidebar navigation"),
+        (StoryId::FineTune, "fine-tune", "Fine-tune card"),
+        (StoryId::RecordsTable, "records-table", "Records table"),
+        (StoryId::DiffTable, "diff-table", "Diff table"),
+        (StoryId::FilterTable, "filter-table", "Filter table"),
+        (
+            StoryId::ComparisonTable,
+            "comparison-table",
+            "Comparison table",
+        ),
+    ] {
+        assert_eq!(story.slug(), slug, "{story:?}");
+        assert_eq!(story.title(), title, "{story:?}");
+        assert_eq!(StoryId::from_str(slug), Ok(story));
+        assert!(
+            StoryId::ALL.contains(&story),
+            "{slug} remains in the catalog"
+        );
+    }
 }

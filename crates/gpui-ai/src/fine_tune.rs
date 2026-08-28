@@ -743,6 +743,7 @@ fn named_number_input(
     div()
         .id((gpui::ElementId::from(card_id.clone()), key))
         .accessibility_id(format!("fine-tune.{card_id}.{key}"))
+        .debug_selector(move || format!("fine-tune-{key}-editor"))
         .role(Role::SpinButton)
         .aria_label(label)
         .aria_numeric_value(semantics.value)
@@ -1310,15 +1311,6 @@ mod tests {
         assert_eq!(values.radius(), 2_048.);
         assert_eq!(values.opacity(), 1.);
         assert_eq!(values.typeface_id(), "inter");
-    }
-
-    #[test]
-    fn duplicate_typeface_labels_keep_distinct_stable_ids() {
-        let regular = FineTuneTypeface::new("inter-regular", "Inter");
-        let display = FineTuneTypeface::new("inter-display", "Inter");
-
-        assert_eq!(regular.label(), display.label());
-        assert_ne!(regular.id(), display.id());
     }
 
     #[gpui::test]

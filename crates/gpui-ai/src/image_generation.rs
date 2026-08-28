@@ -18,11 +18,15 @@ use gpui_component::{ActiveTheme as _, Icon, IconName, StyledExt as _, h_flex, v
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::{img, Styled};
+/// # fn example(generation_progress: f32) {
 /// ImageGeneration::new("gen-1")
 ///     .label("A lighthouse at dusk, oil on canvas")
-///     .progress(self.generation_progress)
-///     .image(img("out/lighthouse.png").size_full())
+///     .progress(generation_progress)
+///     .image(img("out/lighthouse.png").size_full());
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct ImageGeneration {

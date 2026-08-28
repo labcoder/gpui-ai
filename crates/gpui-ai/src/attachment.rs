@@ -316,10 +316,13 @@ pub enum AttachmentEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(attachment: Attachment) {
 /// AttachmentPreview::new("pricing", &attachment)
 ///     .removable(true)
-///     .on_event(|event, _, _| { /* AttachmentEvent::Removed { id } */ })
+///     .on_event(|event, _, _| { /* AttachmentEvent::Removed { id } */ });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct AttachmentPreview {
@@ -578,10 +581,13 @@ fn tile_frame<E: Styled>(element: E, compact: bool, failed: bool, cx: &App) -> E
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(message_attachments: Vec<Attachment>) {
 /// AttachmentStrip::new("message-files")
 ///     .items(message_attachments.iter().cloned())
-///     .on_event(|event, _, _| { /* AttachmentEvent::Opened { id } */ })
+///     .on_event(|event, _, _| { /* AttachmentEvent::Opened { id } */ });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct AttachmentStrip {

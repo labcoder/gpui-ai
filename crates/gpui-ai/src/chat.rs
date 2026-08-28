@@ -547,7 +547,11 @@ pub enum ChatEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # use std::sync::Arc;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let prompt = cx.new(|cx| PromptBar::new("conversation-prompt", window, cx));
 /// let chat = cx.new(|cx| Chat::new("conversation", prompt, window, cx));
 /// chat.update(cx, |chat, cx| {
@@ -561,6 +565,7 @@ pub enum ChatEvent {
 ///         cx,
 ///     );
 /// });
+/// # }
 /// ```
 pub struct Chat {
     id: SharedString,

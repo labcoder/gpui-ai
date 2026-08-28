@@ -24,10 +24,12 @@ const COLS: usize = 3;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
+/// # use std::time::Duration;
 /// LoadingState::new()
 ///     .label("Reasoning about your request")
-///     .elapsed(Duration::from_secs(7))
+///     .elapsed(Duration::from_secs(7));
 /// ```
 #[derive(IntoElement)]
 pub struct LoadingState {

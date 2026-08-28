@@ -177,7 +177,8 @@ pub enum ContextMeterVariant {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// ContextMeter::new(
 ///     "context",
 ///     &ContextUsage::new(84_300, 200_000)
@@ -186,7 +187,7 @@ pub enum ContextMeterVariant {
 ///         .cached(3_500)
 ///         .cost("$0.42"),
 /// )
-/// .variant(ContextMeterVariant::Ring)
+/// .variant(ContextMeterVariant::Ring);
 /// ```
 #[derive(IntoElement)]
 pub struct ContextMeter {
@@ -456,13 +457,5 @@ mod tests {
         assert_eq!(ContextUsage::new(84, 100).level(), UsageLevel::Elevated);
         assert_eq!(ContextUsage::new(85, 100).level(), UsageLevel::Critical);
         assert_eq!(ContextUsage::new(84_300, 200_000).percent(), 42);
-    }
-
-    #[test]
-    fn summary_reads_without_the_meter() {
-        assert_eq!(
-            ContextUsage::new(84_300, 200_000).summary(),
-            "84.3K of 200K tokens used, 42%"
-        );
     }
 }

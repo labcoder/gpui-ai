@@ -242,7 +242,10 @@ fn upstream_item(search_id: &SharedString, item: &CommandSearchItem) -> CommandI
 /// This entity owns one upstream [`CommandState`], which remains the sole owner
 /// of native text editing, focus, filtering, navigation, and virtual-list state.
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let search = cx.new(|cx| CommandSearch::new("workspace-search", window, cx));
 /// search.update(cx, |search, cx| {
 ///     search.set_items(
@@ -252,6 +255,7 @@ fn upstream_item(search_id: &SharedString, item: &CommandSearchItem) -> CommandI
 ///         cx,
 ///     );
 /// });
+/// # }
 /// ```
 pub struct CommandSearch {
     id: SharedString,

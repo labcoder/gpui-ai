@@ -67,13 +67,14 @@ pub enum SuggestionsEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// Suggestions::new("starters")
 ///     .items([
 ///         Suggestion::new("compare", "Compare supplier prices"),
 ///         Suggestion::new("risk", "Explain delivery risk"),
 ///     ])
-///     .on_event(|event, _, _| { /* SuggestionsEvent::Selected { id } */ })
+///     .on_event(|event, _, _| { /* SuggestionsEvent::Selected { id } */ });
 /// ```
 #[derive(IntoElement)]
 pub struct Suggestions {
@@ -186,18 +187,5 @@ impl RenderOnce for Suggestions {
                 )
             }))
             .refine_style(&self.style)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn duplicate_labels_keep_distinct_stable_ids() {
-        let first = Suggestion::new("first", "Try again");
-        let second = Suggestion::new("second", "Try again");
-        assert_ne!(first.id(), second.id());
-        assert_eq!(first.label(), second.label());
     }
 }

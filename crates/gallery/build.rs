@@ -41,6 +41,7 @@ struct Preset {
 
 fn main() {
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    compile_readme_contracts(Path::new(&manifest));
     let themes = Path::new(&manifest)
         .parent()
         .and_then(Path::parent)
@@ -162,4 +163,36 @@ fn main() {
 
     let out = Path::new(&env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("themes.rs");
     fs::write(&out, generated).expect("the generated theme table must be writable");
+}
+
+/// Compile the README's declared component kinds against the public prelude.
+/// Markdown is the input here; no Rust source layout or spelling is inspected.
+fn compile_readme_contracts(manifest: &Path) {
+    let readme = manifest.join("../../README.md");
+    println!("cargo:rerun-if-changed={}", readme.display());
+    let source = fs::read_to_string(readme).expect("the workspace README must be readable");
+    let mut generated = String::from(
+        "#[test]\nfn readme_component_kinds_compile() {\n\
+         fn stateless<T: gpui::RenderOnce>() {}\n\
+         fn entity<T: gpui::Render>() {}\n",
+    );
+    let mut rows = 0;
+    for line in source.lines().filter(|line| line.starts_with("| [")) {
+        let cells: Vec<_> = line.split('|').map(str::trim).collect();
+        let kind = cells.get(2).copied().unwrap_or_default();
+        if !matches!(kind, "stateless" | "entity") {
+            continue;
+        }
+        rows += 1;
+        for name in cells[1].split('`').skip(1).step_by(2) {
+            assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+            writeln!(generated, "{kind}::<gpui_ai::prelude::{name}>();")
+                .expect("writing to a String");
+        }
+    }
+    writeln!(generated, "assert_eq!({rows}, StoryId::ALL.len());\n}}")
+        .expect("writing to a String");
+    let out =
+        Path::new(&env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("readme_contracts.rs");
+    fs::write(out, generated).expect("the README compiler probes must be writable");
 }

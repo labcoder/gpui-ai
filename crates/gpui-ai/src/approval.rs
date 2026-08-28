@@ -59,13 +59,15 @@ pub enum ApprovalTone {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// ApprovalCard::new("gate-1", "Send order confirmation to 3 suppliers?")
 ///     .description("Emails will go out immediately and cannot be recalled.")
 ///     .on_event(|event, _, _| match event {
 ///         ApprovalEvent::Approved { .. } => { /* proceed */ }
+///         ApprovalEvent::ApprovedAlways { .. } => { /* remember approval and proceed */ }
 ///         ApprovalEvent::Rejected { .. } => { /* cancel */ }
-///     })
+///     });
 /// ```
 #[derive(IntoElement)]
 pub struct ApprovalCard {

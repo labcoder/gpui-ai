@@ -211,7 +211,8 @@ impl InsightControl {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// InsightCard::new("demand", "Demand changed")
 ///     .body("Mint Chip softened while Vanilla strengthened.")
 ///     .page(1, 3)

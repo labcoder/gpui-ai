@@ -613,7 +613,10 @@ impl RenderOnce for ThreadActionsMenu {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let threads = cx.new(|cx| ThreadList::new("threads", window, cx));
 /// threads.update(cx, |threads, cx| {
 ///     threads.set_sections(
@@ -624,6 +627,7 @@ impl RenderOnce for ThreadActionsMenu {
 ///     );
 ///     threads.set_active(Some("t-1"), cx);
 /// });
+/// # }
 /// ```
 pub struct ThreadList {
     id: SharedString,

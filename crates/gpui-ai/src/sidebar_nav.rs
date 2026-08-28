@@ -234,7 +234,10 @@ pub enum SidebarNavPresentation {
 /// expansion, focus, and scroll interaction state. Selection is emitted as a
 /// typed stable ID and never changes the consumer-controlled active item.
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let nav = cx.new(|cx| SidebarNav::new("workspace-nav", window, cx));
 /// nav.update(cx, |nav, cx| {
 ///     nav.set_sections([
@@ -245,6 +248,7 @@ pub enum SidebarNavPresentation {
 ///     ], cx);
 ///     nav.set_active_item("orders", cx);
 /// });
+/// # }
 /// ```
 pub struct SidebarNav {
     id: SharedString,
@@ -305,11 +309,15 @@ impl SidebarNav {
     /// Set how the shell is drawn (default:
     /// [`SidebarNavPresentation::Standalone`]).
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use gpui_ai::prelude::*;
+    /// # use gpui::AppContext;
+    /// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
     /// let nav = cx.new(|cx| {
     ///     SidebarNav::new("docked-nav", window, cx)
     ///         .with_presentation(SidebarNavPresentation::Embedded)
     /// });
+    /// # }
     /// ```
     pub fn with_presentation(mut self, presentation: SidebarNavPresentation) -> Self {
         self.presentation = presentation;

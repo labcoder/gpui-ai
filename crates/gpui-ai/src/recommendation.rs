@@ -33,12 +33,13 @@ use gpui_component::{
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// RecommendationCard::new("rec-1", "Switch supplier to Alpenrose Dairy")
 ///     .description("Lower unit cost at equal volume; delivery risk unchanged.")
 ///     .confidence(0.87)
 ///     .alternatives(["Keep current supplier", "Split volume 60/40"])
-///     .on_event(|event, _, _| { /* apply the stable event id */ })
+///     .on_event(|event, _, _| { /* apply the stable event id */ });
 /// ```
 #[derive(IntoElement)]
 pub struct RecommendationCard {

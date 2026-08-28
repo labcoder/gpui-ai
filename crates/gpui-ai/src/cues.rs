@@ -5,15 +5,17 @@
 //! that matter (a reply arriving, a response settling, text copied, a
 //! prompt submitted, …) and an application can observe them in one place:
 //!
-//! ```ignore
+//! ```no_run
+//! # fn example(cx: &mut gpui::App, play: fn(&str)) {
 //! use gpui_ai::cues::{self, Cue};
 //!
-//! let _cues = cues::observe(cx, |cue, _cx| match cue {
+//! let _cues = cues::observe(cx, move |cue, _cx| match cue {
 //!     Cue::ResponseSettled { .. } => play("chime"),
 //!     Cue::Copied => play("tick"),
 //!     _ => {}
 //! });
 //! // Keep `_cues` alive for as long as the sounds should play.
+//! # }
 //! ```
 //!
 //! Cues are hints, never state: every cue corresponds to a typed component

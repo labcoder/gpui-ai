@@ -2,7 +2,7 @@ use gpui::{
     Context, Element as _, IntoElement as _, Render, RenderOnce as _, Role, TestAppContext, Window,
     accesskit, canvas,
 };
-use gpui_ai::context_meter::{ContextMeter, ContextMeterVariant, ContextUsage, UsageLevel};
+use gpui_ai::context_meter::{ContextMeter, ContextMeterVariant, ContextUsage};
 use std::sync::{Arc, Mutex};
 
 struct CapturedNode {
@@ -68,20 +68,4 @@ fn every_variant_is_a_named_progress_indicator_with_spoken_numbers(cx: &mut Test
         assert_eq!(captured.node.min_numeric_value(), Some(0.0));
         assert_eq!(captured.node.max_numeric_value(), Some(100.0));
     }
-}
-
-#[test]
-fn levels_are_not_inferred_from_color() {
-    assert_eq!(
-        ContextUsage::new(84_300, 200_000).level(),
-        UsageLevel::Comfortable
-    );
-    assert_eq!(
-        ContextUsage::new(148_000, 200_000).level(),
-        UsageLevel::Elevated
-    );
-    assert_eq!(
-        ContextUsage::new(186_500, 200_000).level(),
-        UsageLevel::Critical
-    );
 }

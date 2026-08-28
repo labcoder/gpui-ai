@@ -89,14 +89,15 @@ pub enum TodoListEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// TodoList::new("plan")
 ///     .title("Refactor plan")
 ///     .items([
 ///         TodoItem::new("read", "Read existing schema").done(),
 ///         TodoItem::new("write", "Write migration").status(TodoStatus::Active),
 ///         TodoItem::new("test", "Run test suite"),
-///     ])
+///     ]);
 /// ```
 #[derive(IntoElement)]
 pub struct TodoList {

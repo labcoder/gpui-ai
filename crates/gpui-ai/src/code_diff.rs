@@ -455,11 +455,14 @@ pub enum CodeDiffEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(patch: &str) {
 /// let file = DiffFile::from_unified(patch).remove(0);
 /// CodeDiff::new("patch", &file)
 ///     .reviewable(true)
-///     .on_event(|event, _, _| { /* CodeDiffEvent::HunkAccepted { path, hunk } */ })
+///     .on_event(|event, _, _| { /* CodeDiffEvent::HunkAccepted { path, hunk } */ });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct CodeDiff {

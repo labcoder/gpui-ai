@@ -19,9 +19,10 @@ use gpui_component::{
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// CodeBlock::new("example", "fn main() {\n    println!(\"hi\");\n}")
-///     .language("rust")
+///     .language("rust");
 /// ```
 #[derive(IntoElement)]
 pub struct CodeBlock {

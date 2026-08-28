@@ -76,11 +76,12 @@ pub enum VoiceEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// VoiceControls::new("voice", VoiceState::Listening { level: 0.6 })
 ///     .transcript("compare the three suppl…")
 ///     .speakable(true)
-///     .on_event(|event, _, _| { /* VoiceEvent::DictationStopped … */ })
+///     .on_event(|event, _, _| { /* VoiceEvent::DictationStopped … */ });
 /// ```
 #[derive(IntoElement)]
 pub struct VoiceControls {

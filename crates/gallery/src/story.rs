@@ -334,7 +334,7 @@ impl StoryId {
                 summary: "A token-driven pixel field for work whose duration is not yet known.",
                 module: "loading",
                 api: "LoadingState",
-                usage: "LoadingState::new().label(\"Thinking\")",
+                usage: crate::usage::LOADING_STATE,
                 height: 52,
                 overflow: Overflow::Wide,
             },
@@ -343,7 +343,7 @@ impl StoryId {
                 summary: "One status pill for every lifecycle, swapping states in a fixed slot.",
                 module: "status",
                 api: "StatusBadge",
-                usage: "StatusBadge::new(\"review\", \"Needs review\")",
+                usage: crate::usage::STATUS_BADGE,
                 height: 84,
                 overflow: Overflow::Wide,
             },
@@ -352,7 +352,7 @@ impl StoryId {
                 summary: "Compact, typed status for tool calls without hiding their lifecycle.",
                 module: "chip",
                 api: "ToolChip",
-                usage: "ToolChip::new(\"edit\", \"edit main.rs\")",
+                usage: crate::usage::TOOL_CHIP,
                 height: 84,
                 overflow: Overflow::Wide,
             },
@@ -361,7 +361,7 @@ impl StoryId {
                 summary: "Collapsible tool-call cards with input, output, approval, and a shimmering group.",
                 module: "tool_call",
                 api: "ToolCall",
-                usage: "ToolCall::new(&call_progress)",
+                usage: crate::usage::TOOL_CALL,
                 height: 640,
                 overflow: Overflow::Vertical,
             },
@@ -370,7 +370,7 @@ impl StoryId {
                 summary: "Progressive task rows with stable identity and readable state.",
                 module: "task",
                 api: "TaskRow",
-                usage: "TaskRow::new(&task_progress)",
+                usage: crate::usage::TASK_ROW,
                 height: 144,
                 overflow: Overflow::Wide,
             },
@@ -379,7 +379,7 @@ impl StoryId {
                 summary: "Expandable reasoning traces in structured step and prose forms.",
                 module: "thinking",
                 api: "Thinking",
-                usage: "Thinking::new(\"reasoning\", &trace_progress)",
+                usage: crate::usage::THINKING,
                 height: 306,
                 overflow: Overflow::Wide,
             },
@@ -388,7 +388,7 @@ impl StoryId {
                 summary: "A reduced-motion-aware ambient signal for background AI activity.",
                 module: "orbs",
                 api: "Orbs",
-                usage: "Orbs::new()",
+                usage: crate::usage::ORBS,
                 height: 195,
                 overflow: Overflow::Wide,
             },
@@ -397,7 +397,7 @@ impl StoryId {
                 summary: "Search results with readable citations, metadata, and progressive state.",
                 module: "search_results",
                 api: "SearchResults",
-                usage: "SearchResults::new(\"research\", \"GPUI components\")",
+                usage: crate::usage::SEARCH_RESULTS,
                 height: 151,
                 overflow: Overflow::Wide,
             },
@@ -406,7 +406,7 @@ impl StoryId {
                 summary: "A stable-ID checklist for plans that change while an agent works.",
                 module: "todo_list",
                 api: "TodoList",
-                usage: "TodoList::new(\"release-plan\")",
+                usage: crate::usage::TODO_LIST,
                 height: 224,
                 overflow: Overflow::Wide,
             },
@@ -415,7 +415,7 @@ impl StoryId {
                 summary: "Image generation progress, preview, and error states in one frame.",
                 module: "image_generation",
                 api: "ImageGeneration",
-                usage: "ImageGeneration::new(\"hero-art\").progress(0.64)",
+                usage: crate::usage::IMAGE_GENERATION,
                 height: 212,
                 overflow: Overflow::Wide,
             },
@@ -424,7 +424,7 @@ impl StoryId {
                 summary: "Selectable streaming Markdown with citations, sources, and follow-ups.",
                 module: "streaming_text",
                 api: "StreamingText",
-                usage: "StreamingText::new(\"answer\", &content)",
+                usage: crate::usage::STREAMING_TEXT,
                 height: 426,
                 overflow: Overflow::Vertical,
             },
@@ -433,7 +433,7 @@ impl StoryId {
                 summary: "A virtualized controlled conversation with tail-follow, unread behavior, in-place edit, and branch versions.",
                 module: "chat",
                 api: "Chat",
-                usage: "Chat::new(\"conversation\", prompt, window, cx)",
+                usage: crate::usage::CHAT,
                 height: 615,
                 overflow: Overflow::Vertical,
             },
@@ -442,7 +442,7 @@ impl StoryId {
                 summary: "Starter and follow-up prompt chips that ripple in and report stable IDs.",
                 module: "suggestions",
                 api: "Suggestions",
-                usage: "Suggestions::new(\"starters\")",
+                usage: crate::usage::SUGGESTIONS,
                 height: 128,
                 overflow: Overflow::Wide,
             },
@@ -451,7 +451,7 @@ impl StoryId {
                 summary: "Composer and message attachments with thumbnails, kinds, upload state, and typed open or remove events.",
                 module: "attachment",
                 api: "AttachmentStrip",
-                usage: "AttachmentStrip::new(\"files\").items(attachments)",
+                usage: crate::usage::ATTACHMENT_STRIP,
                 height: 486,
                 overflow: Overflow::Vertical,
             },
@@ -460,7 +460,7 @@ impl StoryId {
                 summary: "A side panel for generated documents and code with preview and source views, versions, actions, and streaming state.",
                 module: "artifact",
                 api: "ArtifactPanel",
-                usage: "ArtifactPanel::new(\"doc\", &artifact)",
+                usage: crate::usage::ARTIFACT_PANEL,
                 height: 504,
                 overflow: Overflow::Vertical,
             },
@@ -469,7 +469,7 @@ impl StoryId {
                 summary: "Context-window usage as a ring, bar, or text with severity tones and a breakdown.",
                 module: "context_meter",
                 api: "ContextMeter",
-                usage: "ContextMeter::new(\"context\", &usage)",
+                usage: crate::usage::CONTEXT_METER,
                 height: 120,
                 overflow: Overflow::Wide,
             },
@@ -478,7 +478,7 @@ impl StoryId {
                 summary: "Keyboard-first command discovery backed by stable application IDs.",
                 module: "command_search",
                 api: "CommandSearch",
-                usage: "CommandSearch::new(\"commands\", window, cx)",
+                usage: crate::usage::COMMAND_SEARCH,
                 height: 494,
                 overflow: Overflow::Vertical,
             },
@@ -487,7 +487,7 @@ impl StoryId {
                 summary: "Filterable, accessible navigation for growing AI workspaces.",
                 module: "sidebar_nav",
                 api: "SidebarNav",
-                usage: "SidebarNav::new(\"workspace-nav\", window, cx)",
+                usage: crate::usage::SIDEBAR_NAV,
                 height: 284,
                 overflow: Overflow::Wide,
             },
@@ -496,7 +496,7 @@ impl StoryId {
                 summary: "A grouped conversation list with search, archived threads, and typed row actions.",
                 module: "thread_list",
                 api: "ThreadList",
-                usage: "ThreadList::new(\"threads\", window, cx)",
+                usage: crate::usage::THREAD_LIST,
                 height: 436,
                 overflow: Overflow::Vertical,
             },
@@ -505,7 +505,7 @@ impl StoryId {
                 summary: "A controlled property inspector for precise model and design settings.",
                 module: "fine_tune",
                 api: "FineTuneCard",
-                usage: "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
+                usage: crate::usage::FINE_TUNE_CARD,
                 height: 990,
                 overflow: Overflow::Vertical,
             },
@@ -514,7 +514,7 @@ impl StoryId {
                 summary: "A controlled virtualized records grid for large, changing datasets.",
                 module: "records_table",
                 api: "RecordsTable",
-                usage: "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
+                usage: crate::usage::RECORDS_TABLE,
                 height: 288,
                 overflow: Overflow::Wide,
             },
@@ -523,7 +523,7 @@ impl StoryId {
                 summary: "A virtualized before-and-after proposal grid with explicit change state.",
                 module: "diff_table",
                 api: "DiffTable",
-                usage: "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
+                usage: crate::usage::DIFF_TABLE,
                 height: 288,
                 overflow: Overflow::Wide,
             },
@@ -532,7 +532,7 @@ impl StoryId {
                 summary: "A controlled task grid with typed filters and stable-row reorder motion.",
                 module: "filter_table",
                 api: "FilterTable",
-                usage: "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
+                usage: crate::usage::FILTER_TABLE,
                 height: 288,
                 overflow: Overflow::Wide,
             },
@@ -541,7 +541,7 @@ impl StoryId {
                 summary: "A bounded feature matrix with semantic values and sticky context.",
                 module: "comparison_table",
                 api: "ComparisonTable",
-                usage: "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
+                usage: crate::usage::COMPARISON_TABLE,
                 height: 432,
                 overflow: Overflow::Wide,
             },
@@ -550,7 +550,7 @@ impl StoryId {
                 summary: "Selectable code with language context and progressive reveal.",
                 module: "code_block",
                 api: "CodeBlock",
-                usage: "CodeBlock::new(\"patch\", source).language(\"rust\")",
+                usage: crate::usage::CODE_BLOCK,
                 height: 223,
                 overflow: Overflow::Wide,
             },
@@ -559,7 +559,7 @@ impl StoryId {
                 summary: "A unified patch with line gutters, change tints, per-hunk accept or reject, and a copyable source.",
                 module: "code_diff",
                 api: "CodeDiff",
-                usage: "CodeDiff::new(\"patch\", &file).reviewable(true)",
+                usage: crate::usage::CODE_DIFF,
                 height: 461,
                 overflow: Overflow::Vertical,
             },
@@ -568,7 +568,7 @@ impl StoryId {
                 summary: "An explicit, keyboard-operable human gate with destructive and always-allow variants and resolved states.",
                 module: "approval",
                 api: "ApprovalCard",
-                usage: "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
+                usage: crate::usage::APPROVAL_CARD,
                 height: 449,
                 overflow: Overflow::Wide,
             },
@@ -577,7 +577,7 @@ impl StoryId {
                 summary: "An agent's proposed steps with typed per-step status, approve or reject while proposed, and resolved states.",
                 module: "plan",
                 api: "PlanCard",
-                usage: "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
+                usage: crate::usage::PLAN_CARD,
                 height: 402,
                 overflow: Overflow::Vertical,
             },
@@ -586,7 +586,7 @@ impl StoryId {
                 summary: "A focused recommendation with rationale and typed actions.",
                 module: "recommendation",
                 api: "RecommendationCard",
-                usage: "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
+                usage: crate::usage::RECOMMENDATION_CARD,
                 height: 262,
                 overflow: Overflow::Wide,
             },
@@ -595,7 +595,7 @@ impl StoryId {
                 summary: "Compact source context that preserves provenance and readable detail.",
                 module: "context_card",
                 api: "ContextCard",
-                usage: "ContextCard::new(\"design-doc\", \"Architecture\")",
+                usage: crate::usage::CONTEXT_CARD,
                 height: 172,
                 overflow: Overflow::Wide,
             },
@@ -604,7 +604,7 @@ impl StoryId {
                 summary: "Paged analytical findings with chart-ready, semantic values.",
                 module: "insight",
                 api: "InsightCard",
-                usage: "InsightCard::new(\"retention\", \"Retention improved\")",
+                usage: crate::usage::INSIGHT_CARD,
                 height: 452,
                 overflow: Overflow::Wide,
             },
@@ -613,7 +613,7 @@ impl StoryId {
                 summary: "A hybrid-controlled composer with mentions, commands, models, and attachments.",
                 module: "prompt_bar",
                 api: "PromptBar",
-                usage: "PromptBar::new(\"agent-prompt\", window, cx)",
+                usage: crate::usage::PROMPT_BAR,
                 height: 592,
                 overflow: Overflow::Vertical,
             },
@@ -622,7 +622,7 @@ impl StoryId {
                 summary: "Dictate and speak controls with a live level meter and interim transcript, as typed intent.",
                 module: "voice",
                 api: "VoiceControls",
-                usage: "VoiceControls::new(\"voice\", VoiceState::Idle)",
+                usage: crate::usage::VOICE_CONTROLS,
                 height: 90,
                 overflow: Overflow::Wide,
             },
@@ -631,7 +631,7 @@ impl StoryId {
                 summary: "Prompts waiting while the agent runs, with reorder, edit, send-now, remove, and clear by stable ID.",
                 module: "queue",
                 api: "MessageQueue",
-                usage: "MessageQueue::new(\"queue\").items(queued)",
+                usage: crate::usage::MESSAGE_QUEUE,
                 height: 240,
                 overflow: Overflow::Wide,
             },
@@ -640,7 +640,7 @@ impl StoryId {
                 summary: "Ask, explain, and rewrite actions anchored to selected Markdown.",
                 module: "selection_actions",
                 api: "SelectionActions",
-                usage: "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
+                usage: crate::usage::SELECTION_ACTIONS,
                 height: 288,
                 overflow: Overflow::Wide,
             },
@@ -718,17 +718,6 @@ mod tests {
     use super::StoryId;
 
     #[test]
-    fn command_search_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::CommandSearch.slug(), "command-search");
-        assert_eq!(StoryId::CommandSearch.title(), "Command search");
-        assert_eq!(
-            "command-search".parse::<StoryId>(),
-            Ok(StoryId::CommandSearch)
-        );
-        assert!(StoryId::ALL.contains(&StoryId::CommandSearch));
-    }
-
-    #[test]
     fn dock_composition_is_addressable_but_not_a_catalog_component() {
         assert_eq!(StoryId::DockComposition.slug(), "dock-composition");
         assert_eq!(StoryId::DockComposition.title(), "Dock composition");
@@ -753,74 +742,6 @@ mod tests {
         assert!(!StoryId::ALL.contains(&StoryId::MotionLab));
         assert!(StoryId::MotionLab.meta().is_none());
         assert!(StoryId::MotionLab.variants().is_empty());
-    }
-
-    #[test]
-    fn sidebar_navigation_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::SidebarNav.slug(), "sidebar-nav");
-        assert_eq!(StoryId::SidebarNav.title(), "Sidebar navigation");
-        assert_eq!("sidebar-nav".parse::<StoryId>(), Ok(StoryId::SidebarNav));
-        assert!(StoryId::ALL.contains(&StoryId::SidebarNav));
-    }
-
-    #[test]
-    fn fine_tune_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::FineTune.slug(), "fine-tune");
-        assert_eq!(StoryId::FineTune.title(), "Fine-tune card");
-        assert_eq!("fine-tune".parse::<StoryId>(), Ok(StoryId::FineTune));
-        assert!(StoryId::ALL.contains(&StoryId::FineTune));
-    }
-
-    #[test]
-    fn records_table_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::RecordsTable.slug(), "records-table");
-        assert_eq!(StoryId::RecordsTable.title(), "Records table");
-        assert_eq!(
-            "records-table".parse::<StoryId>(),
-            Ok(StoryId::RecordsTable)
-        );
-        assert!(StoryId::ALL.contains(&StoryId::RecordsTable));
-    }
-
-    #[test]
-    fn diff_table_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::DiffTable.slug(), "diff-table");
-        assert_eq!(StoryId::DiffTable.title(), "Diff table");
-        assert_eq!("diff-table".parse::<StoryId>(), Ok(StoryId::DiffTable));
-        assert!(StoryId::ALL.contains(&StoryId::DiffTable));
-    }
-
-    #[test]
-    fn filter_table_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::FilterTable.slug(), "filter-table");
-        assert_eq!(StoryId::FilterTable.title(), "Filter table");
-        assert_eq!("filter-table".parse::<StoryId>(), Ok(StoryId::FilterTable));
-        assert!(StoryId::ALL.contains(&StoryId::FilterTable));
-    }
-
-    #[test]
-    fn comparison_table_has_a_stable_gallery_route() {
-        assert_eq!(StoryId::ComparisonTable.slug(), "comparison-table");
-        assert_eq!(StoryId::ComparisonTable.title(), "Comparison table");
-        assert_eq!(
-            "comparison-table".parse::<StoryId>(),
-            Ok(StoryId::ComparisonTable)
-        );
-        assert!(StoryId::ALL.contains(&StoryId::ComparisonTable));
-    }
-
-    /// Reads a library source file relative to the workspace root.
-    fn library_source(module: &str) -> String {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("the gallery crate lives two directories below the workspace root")
-            .join("crates")
-            .join("gpui-ai")
-            .join("src")
-            .join(format!("{module}.rs"));
-        std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()))
     }
 
     #[test]
@@ -852,50 +773,6 @@ mod tests {
             StoryId::All.meta().is_none(),
             "the whole-catalog view is not a component"
         );
-    }
-
-    #[test]
-    fn every_usage_snippet_constructs_its_own_type_from_the_prelude() {
-        for story in StoryId::ALL {
-            let meta = story.meta().expect("component stories carry metadata");
-            assert!(
-                meta.usage.contains(&format!("{}::new", meta.api)),
-                "{} must show {}::new, not {}",
-                story.slug(),
-                meta.api,
-                meta.usage
-            );
-            assert!(
-                !meta.usage.contains("px("),
-                "{} must not need raw pixels to construct",
-                story.slug()
-            );
-        }
-    }
-
-    #[test]
-    fn every_story_names_a_public_type_that_exists() {
-        for story in StoryId::ALL {
-            let meta = story.meta().expect("component stories carry metadata");
-            let source = library_source(meta.module);
-            assert!(
-                source.contains(&format!("pub struct {}", meta.api)),
-                "{} declares no pub struct {}",
-                meta.module,
-                meta.api
-            );
-            assert!(
-                source.contains(&format!("impl {} {{", meta.api)),
-                "{} has no inherent impl for {}",
-                meta.module,
-                meta.api
-            );
-            assert!(
-                source.contains("pub fn new"),
-                "{} exposes no constructor",
-                meta.module
-            );
-        }
     }
 
     #[test]
@@ -931,23 +808,5 @@ mod tests {
             "the table stories share one switcher"
         );
         assert!(StoryId::Loading.variants().is_empty());
-    }
-
-    #[test]
-    fn catalog_slugs_and_sequence_are_stable_and_unique() {
-        let mut slugs: Vec<&str> = StoryId::ALL.iter().map(|story| story.slug()).collect();
-        let total = slugs.len();
-        slugs.sort_unstable();
-        slugs.dedup();
-        assert_eq!(slugs.len(), total, "story slugs must be unique");
-
-        for story in StoryId::ALL {
-            assert_eq!(
-                story.slug().parse::<StoryId>(),
-                Ok(*story),
-                "{} must round-trip through its slug",
-                story.slug()
-            );
-        }
     }
 }

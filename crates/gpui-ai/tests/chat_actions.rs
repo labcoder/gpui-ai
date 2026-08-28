@@ -29,8 +29,8 @@ impl Probe {
                     ChatWelcome::new("What should we look into?")
                         .description("Pick a starter or write your own.")
                         .suggestions([
-                            Suggestion::new("compare", "Compare supplier prices"),
-                            Suggestion::new("risk", "Explain delivery risk"),
+                            Suggestion::new("compare", "Try again"),
+                            Suggestion::new("risk", "Try again"),
                         ]),
                 ),
                 cx,
@@ -121,11 +121,28 @@ fn empty_conversation_shows_the_welcome_and_suggestions_emit_stable_ids(cx: &mut
     let (_, events, cx) = harness(cx);
     assert!(cx.debug_bounds("chat-welcome").is_some());
     click(cx, "suggestion-compare");
+    click(cx, "suggestion-risk");
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let keystroke = gpui::Keystroke::parse("enter").expect("test key");
+    cx.simulate_event(gpui::KeyDownEvent {
+        keystroke: keystroke.clone(),
+        is_held: false,
+        prefer_character_input: false,
+    });
+    cx.simulate_event(gpui::KeyUpEvent { keystroke });
     assert_eq!(
         events.borrow().as_slice(),
-        &[ChatEvent::SuggestionSelected {
-            suggestion_id: "compare".into()
-        }]
+        &[
+            ChatEvent::SuggestionSelected {
+                suggestion_id: "compare".into()
+            },
+            ChatEvent::SuggestionSelected {
+                suggestion_id: "risk".into()
+            },
+            ChatEvent::SuggestionSelected {
+                suggestion_id: "risk".into()
+            },
+        ]
     );
 }
 

@@ -145,10 +145,12 @@ fn perimeter_len() -> usize {
 ///
 /// # Example
 ///
-/// ```ignore
-/// Orbs::new()                                  // default variant, 40px
-/// Orbs::new().variant(OrbVariant::Comet)       // comet choreography
-/// Orbs::new().diameter(px(64.))                // larger
+/// ```
+/// # use gpui_ai::prelude::*;
+/// # use gpui::px;
+/// Orbs::new();                                  // default variant, 40px
+/// Orbs::new().variant(OrbVariant::Comet);       // comet choreography
+/// Orbs::new().diameter(px(64.));                // larger
 /// ```
 #[derive(IntoElement)]
 pub struct Orbs {

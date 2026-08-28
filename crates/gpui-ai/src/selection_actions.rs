@@ -253,7 +253,10 @@ fn defer_selection_settle(
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::AppContext;
+/// # fn example(window: &mut gpui::Window, cx: &mut gpui::App) {
 /// let selection = cx.new(|cx| {
 ///     SelectionActions::new("answer", "Select part of this answer", window, cx)
 /// });
@@ -263,6 +266,7 @@ fn defer_selection_settle(
 ///         SelectionAction::new("explain", "Explain"),
 ///     ], cx);
 /// });
+/// # }
 /// ```
 pub struct SelectionActions {
     id: SharedString,

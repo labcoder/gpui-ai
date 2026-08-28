@@ -175,7 +175,8 @@ pub enum ToolCallEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// let call = Progressive::complete(
 ///     ToolInvocation::new("read-1", "read_file")
 ///         .summary("pricing.md")
@@ -186,7 +187,7 @@ pub enum ToolCallEvent {
 ///     ToolCallEvent::Approved { id } => { /* run it */ }
 ///     ToolCallEvent::Rejected { id } => { /* skip it */ }
 ///     ToolCallEvent::Toggled { id, open } => { /* persist `open` */ }
-/// })
+/// });
 /// ```
 #[derive(IntoElement)]
 pub struct ToolCall {
@@ -588,11 +589,15 @@ pub enum ToolGroupEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # use gpui::ParentElement;
+/// # fn example(calls: Vec<Progressive<ToolInvocation>>) {
 /// ToolGroup::new("burst-1")
 ///     .count(3)
 ///     .active(true)
-///     .children(calls.iter().map(ToolCall::new))
+///     .children(calls.iter().map(ToolCall::new));
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct ToolGroup {

@@ -17,11 +17,12 @@ use std::rc::Rc;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
 /// ContextCard::new("ctx-1", "pricing.md")
 ///     .snippet("Enterprise plans include SSO and a dedicated…")
 ///     .relevance(0.92)
-///     .on_event(|event, _, _| { /* open the stable event id */ })
+///     .on_event(|event, _, _| { /* open the stable event id */ });
 /// ```
 #[derive(IntoElement)]
 pub struct ContextCard {

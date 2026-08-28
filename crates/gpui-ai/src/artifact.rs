@@ -296,11 +296,14 @@ pub enum ArtifactPanelEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(artifact: Artifact) {
 /// ArtifactPanel::new("doc", &artifact)
 ///     .view(ArtifactView::Preview)
 ///     .actions([ArtifactAction::new("open", "Open in editor")])
-///     .on_event(|event, _, _| { /* ArtifactPanelEvent::Closed { id } … */ })
+///     .on_event(|event, _, _| { /* ArtifactPanelEvent::Closed { id } … */ });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct ArtifactPanel {

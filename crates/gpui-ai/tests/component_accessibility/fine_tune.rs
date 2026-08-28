@@ -146,15 +146,61 @@ fn public_fine_tune_reset_and_apply_emit_stable_card_identity(cx: &mut TestAppCo
     );
 }
 
-#[test]
-fn fine_tune_presentation_uses_theme_typography_tokens() {
-    let source = include_str!("../../src/fine_tune.rs");
-    let fixed_gpui_text_helper = [".text_", "sm()"].concat();
+#[gpui::test]
+fn fine_tune_presentation_uses_theme_typography_tokens(cx: &mut TestAppContext) {
+    use gpui_component::ActiveTheme as _;
+    cx.update(gpui_ai::init);
+    let (_, cx) = cx.add_window_view(PublicFineTuneProbe::new);
+    for rem in [12., 24.] {
+        cx.update(|window, cx| {
+            window.set_rem_size(px(rem));
+            window.draw(cx).clear(cx);
+        });
+        let field = cx
+            .debug_bounds("fine-tune-width-input")
+            .expect("Width field");
+        let editor = cx
+            .debug_bounds("fine-tune-width-editor")
+            .expect("Width editor");
+        let (line_height, gap) = cx.update(|_, cx| {
+            let tokens = cx.theme().semantic_tokens();
+            (tokens.typography.sm.line_height, tokens.spacing.xs)
+        });
+        assert_eq!(
+            field.size.height - editor.size.height - gap,
+            line_height,
+            "the label must keep its full token line box at rem={rem}"
+        );
+    }
+}
 
-    assert!(
-        !source.contains(&fixed_gpui_text_helper),
-        "Fine-tune type styles must resolve through semantic theme tokens"
-    );
+#[gpui::test]
+fn identical_typeface_labels_activate_the_selected_stable_id(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (probe, cx) = cx.add_window_view(PublicFineTuneProbe::new);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let trigger = cx
+        .debug_bounds("fine-tune-typeface")
+        .expect("typeface trigger");
+    cx.simulate_click(trigger.center(), Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_keystrokes("down down enter");
+    assert!(matches!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().last().cloned()),
+        Some(FineTuneEvent::TypefaceChanged { id, typeface_id })
+            if id == "public-fine-tune" && typeface_id == "inter-display"
+    ));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_click(trigger.center(), Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.simulate_keystrokes("down enter");
+    assert!(matches!(
+        probe.read_with(cx, |probe, _| probe.events.borrow().last().cloned()),
+        Some(FineTuneEvent::TypefaceChanged { id, typeface_id })
+            if id == "public-fine-tune" && typeface_id == "inter-regular"
+    ));
 }
 
 #[gpui::test]

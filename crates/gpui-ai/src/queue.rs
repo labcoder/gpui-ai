@@ -101,11 +101,14 @@ pub enum QueueEvent {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gpui_ai::prelude::*;
+/// # fn example(queued: Vec<QueuedMessage>) {
 /// MessageQueue::new("queue")
 ///     .items(queued.iter().cloned())
 ///     .editable(true)
-///     .on_event(|event, _, _| { /* QueueEvent::SentNow { id } … */ })
+///     .on_event(|event, _, _| { /* QueueEvent::SentNow { id } … */ });
+/// # }
 /// ```
 #[derive(IntoElement)]
 pub struct MessageQueue {

@@ -55,13 +55,15 @@ impl TaskSnapshot {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// # use gpui_ai::prelude::*;
+/// # use std::time::Duration;
 /// let task = Progressive::running(
 ///     TaskSnapshot::new("index", "Index repository")
 ///         .detail("3,214 files")
 ///         .elapsed(Duration::from_secs(12)),
 /// );
-/// TaskRow::new(&task)
+/// TaskRow::new(&task);
 /// ```
 #[derive(IntoElement)]
 pub struct TaskRow {
