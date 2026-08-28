@@ -316,3 +316,51 @@ fn constrained_card_keeps_its_output_reachable(cx: &mut TestAppContext) {
     assert!(body.right() <= card.right() + px(1.));
     assert!(body.bottom() <= card.bottom() + px(1.));
 }
+
+/// The failure glyph rides a first-line slot: however far the reason
+/// wraps, the triangle stays centered on the first text line instead of
+/// floating against the block. The slot's own geometry is the proof — its
+/// box is exactly one line tall and shares the row's top edge with the
+/// text, so its center and the first line's center coincide by
+/// construction.
+#[gpui::test]
+fn the_failure_glyph_holds_to_the_first_line_of_a_wrapping_reason(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    struct WrapProbe;
+    impl Render for WrapProbe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+            // Narrow enough that the long reason must wrap.
+            gpui::div().w(gpui::px(260.)).h(gpui::px(300.)).child(ToolCall::new(
+                &Progressive::failed(
+                    invocation(),
+                    "Connection timed out after 2s while waiting for the prices replica;                      the pool retried twice before giving up on the read",
+                ),
+            ))
+        }
+    }
+    let (_, cx) = cx.add_window_view(|_, _| WrapProbe);
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let slot = cx
+        .debug_bounds("tool-call-failure-glyph")
+        .expect("the failure glyph slot should render");
+    let reason = cx
+        .debug_bounds("tool-call-failure-reason")
+        .expect("the failure reason should render");
+    let expected = cx.update(|_, cx| gpui_ai::sizing::SizeTokens::read(cx).slot_md());
+    assert_eq!(
+        slot.size.height, expected,
+        "the slot is exactly one text line tall"
+    );
+    assert_eq!(
+        slot.top(),
+        reason.top(),
+        "items_start keeps the slot on the first line"
+    );
+    assert!(
+        reason.size.height > expected,
+        "the probe must actually wrap ({:?} tall)",
+        reason.size.height
+    );
+}

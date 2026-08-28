@@ -8,8 +8,8 @@
 use crate::control::composed_button;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, Div, ElementId, FontWeight, InteractiveElement as _, ParentElement as _, SharedString,
-    Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
 };
 use gpui_base::Button;
 use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, v_flex};
@@ -33,6 +33,25 @@ pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
 /// A compact inset panel placed *inside* a card (payloads, code, previews).
 /// Uses the muted surface and the medium radius so it nests without a
 /// second full-card frame.
+/// Seats a glyph beside wrappable text, centered on the text's first line.
+///
+/// The slot is a fixed square box whose side equals the first line's
+/// line-height (the size policy's slot tokens name the two the crate
+/// uses), so the row itself stays `items_start` and the glyph holds to
+/// the first line however far the text wraps. Centering a bare glyph
+/// against a whole text block is the misalignment class the 0.4.0 audit
+/// found across eight components; a row that can wrap composes this
+/// instead.
+pub(crate) fn leading_glyph_slot(slot: Pixels, glyph: impl IntoElement) -> Div {
+    div()
+        .flex_none()
+        .size(slot)
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(glyph)
+}
+
 pub(crate) fn inset(cx: &App) -> Div {
     let tokens = cx.theme().semantic_tokens();
     div()

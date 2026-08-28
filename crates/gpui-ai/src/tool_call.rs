@@ -17,9 +17,10 @@ use crate::{
     control::composed_button,
     handlers::{Handler, SharedHandler},
     motion::{Shimmer, disclosure_progress},
+    sizing::SizeTokens,
     status::{StatusBadge, StatusTone, progress_label},
     stream::{ProgressState, Progressive},
-    surface::{eyebrow, inset, meta},
+    surface::{eyebrow, inset, leading_glyph_slot, meta},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
@@ -527,14 +528,28 @@ impl RenderOnce for ToolCall {
                 )
             })
             .when_some(failure.clone(), |this, reason| {
+                // The glyph rides a first-line slot: the row stays
+                // items_start, so however far the reason wraps, the
+                // triangle holds centered on the first line.
                 this.child(
                     h_flex()
                         .items_start()
-                        .gap(tokens.spacing.xs)
+                        .gap(tokens.spacing.sm)
                         .text_token(tokens.typography.sm)
                         .text_color(cx.theme().danger)
-                        .child(Icon::new(IconName::TriangleAlert).xsmall().flex_none())
-                        .child(reason),
+                        .child(
+                            leading_glyph_slot(
+                                SizeTokens::read(cx).slot_md(),
+                                Icon::new(IconName::TriangleAlert).small(),
+                            )
+                            .debug_selector(|| "tool-call-failure-glyph".into()),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .debug_selector(|| "tool-call-failure-reason".into())
+                                .child(reason),
+                        ),
                 )
             });
 
