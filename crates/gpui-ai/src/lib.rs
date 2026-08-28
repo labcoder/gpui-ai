@@ -127,7 +127,8 @@ pub mod prelude {
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
     pub use crate::records_table::{
         RecordCell, RecordCellKind, RecordColumn, RecordColumnAlignment, RecordRow,
-        RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent,
+        RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent, RowActionPlacement,
+        RowActionVisibility,
     };
     pub use crate::scrolling::{
         AUTOSCROLL_FULL_SPEED_DISTANCE_PX, Autoscroll, LINE_HEIGHT_PX,

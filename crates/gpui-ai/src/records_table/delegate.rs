@@ -28,8 +28,9 @@ use crate::{
 
 use super::{
     RecordCell, RecordCellKind, RecordCellProvider, RecordColumn, RecordColumnAlignment, RecordRow,
-    RecordSortDirection, RecordStatusTone, RecordsTable, escape_markdown_text, records_state_glyph,
-    records_state_text, reorder::RowReorderState, scoped_records_id,
+    RecordSortDirection, RecordStatusTone, RecordsTable, RowActionPlacement, RowActionVisibility,
+    escape_markdown_text, records_state_glyph, records_state_text, reorder::RowReorderState,
+    scoped_records_id,
 };
 
 #[derive(Clone)]
@@ -44,6 +45,8 @@ pub(super) struct RecordsDelegate {
     pub(super) sort_direction: Option<RecordSortDirection>,
     pub(super) activation_label: SharedString,
     pub(super) row_reorder: RowReorderState,
+    pub(super) row_action_visibility: RowActionVisibility,
+    pub(super) row_action_placement: RowActionPlacement,
     /// The rem the owning table last resolved, so a rem-scaled column width
     /// lands in the same type scale as the text inside it. Upstream caches
     /// column widths in pixels, so this only reaches layout through a refresh.
@@ -67,6 +70,8 @@ impl RecordsDelegate {
             sort_direction: None,
             activation_label: "Open".into(),
             row_reorder: RowReorderState::default(),
+            row_action_visibility: RowActionVisibility::default(),
+            row_action_placement: RowActionPlacement::default(),
             rem_size,
         }
     }
@@ -285,14 +290,36 @@ impl TableDelegate for RecordsDelegate {
                     });
                     cx.stop_propagation();
                 });
-                div()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(div().flex_1().min_w_0().overflow_hidden().child(content))
-                    .child(activation)
-                    .into_any_element()
+                let activation = match self.row_action_visibility {
+                    RowActionVisibility::Always => activation,
+                    // Revealed by the row's hover group, and by the
+                    // control's own keyboard focus, so tab reaches a
+                    // visible control regardless of the pointer.
+                    RowActionVisibility::OnHover => activation
+                        .opacity(0.)
+                        .group_hover(row_hover_group(&self.component_id, &row.id), |style| {
+                            style.opacity(1.)
+                        })
+                        .focus_visible(|style| style.opacity(1.)),
+                };
+                match self.row_action_placement {
+                    RowActionPlacement::End => div()
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(div().flex_1().min_w_0().overflow_hidden().child(content))
+                        .child(activation)
+                        .into_any_element(),
+                    RowActionPlacement::Inline => div()
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .gap(cx.theme().semantic_tokens().spacing.sm)
+                        .child(div().min_w_0().overflow_hidden().child(content))
+                        .child(activation)
+                        .into_any_element(),
+                }
             } else {
                 content
             }
@@ -477,6 +504,10 @@ pub(super) fn records_state_frame(
         .child(records_state_text(&scoped_id, role, label))
 }
 
+pub(super) fn row_hover_group(component_id: &str, row_id: &str) -> SharedString {
+    SharedString::from(format!("records-row-group:{component_id}:{row_id}"))
+}
+
 pub(super) fn record_row_frame(
     component_id: &str,
     row: &RecordRow,
@@ -484,9 +515,11 @@ pub(super) fn record_row_frame(
 ) -> Stateful<Div> {
     let debug_row_id = row.id.clone();
     let component_id = SharedString::from(component_id);
+    let hover_group = row_hover_group(&component_id, &row.id);
     div()
         .id(scoped_records_id("row", &component_id, &row.id))
         .debug_selector(move || scoped_records_id("row", &component_id, &debug_row_id))
+        .group(hover_group)
         .role(Role::Row)
         .aria_label(row.label.clone())
         .aria_selected(selected)

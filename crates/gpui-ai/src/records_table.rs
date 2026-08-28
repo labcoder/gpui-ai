@@ -57,6 +57,35 @@ pub enum RecordSortDirection {
     Descending,
 }
 
+/// When a row's activation control is visible.
+///
+/// The default reveals it on the row's hover — and always on the
+/// control's own keyboard focus, so reachability never depends on the
+/// pointer. `Always` keeps it painted for consumers whose rows are
+/// action-first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RowActionVisibility {
+    /// Painted on every row, all the time.
+    Always,
+    /// Revealed by row hover and by the control's keyboard focus.
+    #[default]
+    OnHover,
+}
+
+/// Where a row's activation control sits in its cell.
+///
+/// The default aligns it to the trailing edge, so the actions rail down
+/// the column; `Inline` keeps it beside the content for rows whose
+/// action reads as part of the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RowActionPlacement {
+    /// Immediately after the cell's content.
+    Inline,
+    /// Right-aligned at the trailing edge of the cell.
+    #[default]
+    End,
+}
+
 /// Horizontal alignment for one records column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RecordColumnAlignment {
@@ -610,6 +639,30 @@ impl RecordsTable {
             table,
             _table_subscription: table_subscription,
         }
+    }
+
+    /// Sets when every row's activation control is visible.
+    pub fn set_row_action_visibility(
+        &mut self,
+        visibility: RowActionVisibility,
+        cx: &mut Context<Self>,
+    ) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().row_action_visibility = visibility;
+            cx.notify();
+        });
+    }
+
+    /// Sets where every row's activation control sits in its cell.
+    pub fn set_row_action_placement(
+        &mut self,
+        placement: RowActionPlacement,
+        cx: &mut Context<Self>,
+    ) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().row_action_placement = placement;
+            cx.notify();
+        });
     }
 
     /// Replaces the visible and accessible verb used by row activation controls.

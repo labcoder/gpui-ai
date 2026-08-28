@@ -702,3 +702,53 @@ fn disabled_records_reject_pointer_keyboard_and_activation_intent(cx: &mut TestA
         "disabled rows must reject every interaction path"
     );
 }
+
+/// The activation control rails at the trailing edge by default and
+/// moves beside the content when a consumer chooses inline — the
+/// placement half of the row-action affordance. Visibility's hover
+/// reveal is opacity-only, so the control keeps its bounds (and its
+/// keyboard reachability) either way.
+#[gpui::test]
+fn row_actions_default_to_the_trailing_edge_and_inline_is_a_choice(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (table, cx) = cx.add_window_view(|window, cx| {
+        RecordsTable::new("suppliers", "Supplier records", window, cx)
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_columns(
+                [RecordColumn::new("company", "Company").width_in_rems(20.)],
+                window,
+                cx,
+            );
+            table.set_records(
+                Progressive::complete(Arc::from([RecordRow::new("alpine", "Alpine Churn")
+                    .cells([RecordCell::new("company", "Alpine Churn")])])),
+                window,
+                cx,
+            );
+        });
+        window.draw(cx).clear(cx);
+    });
+
+    let end = cx
+        .debug_bounds("records-activate-9:suppliersalpine")
+        .expect("the activation control renders under the hover default");
+
+    cx.update(|window, cx| {
+        table.update(cx, |table, cx| {
+            table.set_row_action_placement(gpui_ai::prelude::RowActionPlacement::Inline, cx);
+        });
+        window.draw(cx).clear(cx);
+    });
+    let inline = cx
+        .debug_bounds("records-activate-9:suppliersalpine")
+        .expect("the inline control still renders");
+    assert!(
+        inline.left() < end.left(),
+        "inline must sit beside the content, before the trailing edge: {:?} vs {:?}",
+        inline.left(),
+        end.left()
+    );
+}
