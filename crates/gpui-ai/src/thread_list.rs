@@ -1369,30 +1369,6 @@ mod tests {
             .collect()
     }
 
-    /// Diagnostic: report where row titles actually land.
-    #[gpui::test]
-    fn diag_title_edges(cx: &mut TestAppContext) {
-        let (threads, cx) = measured_list(cx);
-        cx.update(|_, cx| {
-            threads.update(cx, |threads, cx| {
-                threads.set_sections(
-                    vec![ThreadSection::new("recent", "Recent").items([
-                        ThreadItem::new("one", "Supplier pricing review").subtitle("2 min ago"),
-                        ThreadItem::new("two", "Q2 margin"),
-                    ])],
-                    cx,
-                )
-            });
-        });
-        let _ = redraw(&threads, cx);
-        let _ = redraw(&threads, cx);
-        for id in ["one", "two"] {
-            let row = bounds_of(cx, format!("thread-row-{id}"));
-            let title = bounds_of(cx, format!("thread-title-{id}"));
-            eprintln!("DIAG {id}: row={row:?} title={title:?}");
-        }
-    }
-
     /// Every rectangle in the list stands on one left edge, and every
     /// label — row titles and the section names above them — stands on
     /// one more. The feel review found four edges here instead of two.
