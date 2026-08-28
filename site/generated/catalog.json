@@ -294,7 +294,7 @@
       "source": "crates/gpui-ai/src/chat.rs",
       "api": "Chat",
       "usage": "Chat::new(\"conversation\", prompt, window, cx)",
-      "height": 615,
+      "height": 595,
       "windowTitle": "Chat — gpui-ai",
       "variants": [
         {
@@ -501,7 +501,7 @@
       "source": "crates/gpui-ai/src/fine_tune.rs",
       "api": "FineTuneCard",
       "usage": "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
-      "height": 990,
+      "height": 738,
       "windowTitle": "Fine-tune card — gpui-ai",
       "variants": [],
       "events": [

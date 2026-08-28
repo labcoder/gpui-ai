@@ -154,6 +154,35 @@ pub enum Overflow {
     Wide,
 }
 
+/// How much horizontal room a story needs to be judged fairly.
+///
+/// Most components are specimens: a chip, a badge, a card, read beside
+/// prose at the width prose is read at. Some are working surfaces — a data
+/// grid, a transcript, a navigation pane — and at a prose column's width
+/// they are squeezed rather than shown, which invites the reader to judge
+/// the squeeze instead of the component.
+///
+/// Both widths sit inside the website's own demo column, so a story is
+/// measured at the width it will be drawn at and the reserved height stays
+/// honest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoryWidth {
+    /// The prose column a specimen is read in.
+    Column,
+    /// The full demo column, for surfaces that carry a layout.
+    Wide,
+}
+
+impl StoryWidth {
+    /// The frame's maximum width in pixels.
+    pub const fn max_width(self) -> f32 {
+        match self {
+            Self::Column => 640.,
+            Self::Wide => 900.,
+        }
+    }
+}
+
 /// Catalog metadata for one component story, exported to the website.
 ///
 /// This is the single source for the component index: the site is generated
@@ -179,6 +208,8 @@ pub struct StoryMeta {
     pub height: u32,
     /// Which way this story's content outgrows its frame.
     pub overflow: Overflow,
+    /// How much horizontal room the story needs to be judged fairly.
+    pub width: StoryWidth,
 }
 
 impl StoryId {
@@ -336,6 +367,7 @@ impl StoryId {
                 api: "LoadingState",
                 usage: crate::usage::LOADING_STATE,
                 height: 52,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Status => StoryMeta {
@@ -345,6 +377,7 @@ impl StoryId {
                 api: "StatusBadge",
                 usage: crate::usage::STATUS_BADGE,
                 height: 84,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::ToolChips => StoryMeta {
@@ -354,6 +387,7 @@ impl StoryId {
                 api: "ToolChip",
                 usage: crate::usage::TOOL_CHIP,
                 height: 84,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::ToolCalls => StoryMeta {
@@ -363,6 +397,7 @@ impl StoryId {
                 api: "ToolCall",
                 usage: crate::usage::TOOL_CALL,
                 height: 650,
+                width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
             Self::Tasks => StoryMeta {
@@ -372,6 +407,7 @@ impl StoryId {
                 api: "TaskRow",
                 usage: crate::usage::TASK_ROW,
                 height: 144,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Thinking => StoryMeta {
@@ -381,6 +417,7 @@ impl StoryId {
                 api: "Thinking",
                 usage: crate::usage::THINKING,
                 height: 306,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Orbs => StoryMeta {
@@ -390,6 +427,7 @@ impl StoryId {
                 api: "Orbs",
                 usage: crate::usage::ORBS,
                 height: 195,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Search => StoryMeta {
@@ -399,6 +437,7 @@ impl StoryId {
                 api: "SearchResults",
                 usage: crate::usage::SEARCH_RESULTS,
                 height: 161,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Todos => StoryMeta {
@@ -408,6 +447,7 @@ impl StoryId {
                 api: "TodoList",
                 usage: crate::usage::TODO_LIST,
                 height: 234,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::ImageGeneration => StoryMeta {
@@ -417,6 +457,7 @@ impl StoryId {
                 api: "ImageGeneration",
                 usage: crate::usage::IMAGE_GENERATION,
                 height: 212,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::StreamingText => StoryMeta {
@@ -426,6 +467,7 @@ impl StoryId {
                 api: "StreamingText",
                 usage: crate::usage::STREAMING_TEXT,
                 height: 426,
+                width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
             Self::Chat => StoryMeta {
@@ -434,7 +476,8 @@ impl StoryId {
                 module: "chat",
                 api: "Chat",
                 usage: crate::usage::CHAT,
-                height: 615,
+                height: 595,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::Suggestions => StoryMeta {
@@ -444,6 +487,7 @@ impl StoryId {
                 api: "Suggestions",
                 usage: crate::usage::SUGGESTIONS,
                 height: 132,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Attachments => StoryMeta {
@@ -453,6 +497,7 @@ impl StoryId {
                 api: "AttachmentStrip",
                 usage: crate::usage::ATTACHMENT_STRIP,
                 height: 486,
+                width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
             Self::Artifact => StoryMeta {
@@ -462,6 +507,7 @@ impl StoryId {
                 api: "ArtifactPanel",
                 usage: crate::usage::ARTIFACT_PANEL,
                 height: 504,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::ContextMeter => StoryMeta {
@@ -471,6 +517,7 @@ impl StoryId {
                 api: "ContextMeter",
                 usage: crate::usage::CONTEXT_METER,
                 height: 120,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::CommandSearch => StoryMeta {
@@ -480,6 +527,7 @@ impl StoryId {
                 api: "CommandSearch",
                 usage: crate::usage::COMMAND_SEARCH,
                 height: 494,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::SidebarNav => StoryMeta {
@@ -489,6 +537,7 @@ impl StoryId {
                 api: "SidebarNav",
                 usage: crate::usage::SIDEBAR_NAV,
                 height: 284,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Wide,
             },
             Self::ThreadList => StoryMeta {
@@ -498,6 +547,7 @@ impl StoryId {
                 api: "ThreadList",
                 usage: crate::usage::THREAD_LIST,
                 height: 436,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::FineTune => StoryMeta {
@@ -506,7 +556,8 @@ impl StoryId {
                 module: "fine_tune",
                 api: "FineTuneCard",
                 usage: crate::usage::FINE_TUNE_CARD,
-                height: 990,
+                height: 738,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::RecordsTable => StoryMeta {
@@ -516,6 +567,7 @@ impl StoryId {
                 api: "RecordsTable",
                 usage: crate::usage::RECORDS_TABLE,
                 height: 288,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Wide,
             },
             Self::DiffTable => StoryMeta {
@@ -525,6 +577,7 @@ impl StoryId {
                 api: "DiffTable",
                 usage: crate::usage::DIFF_TABLE,
                 height: 288,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Wide,
             },
             Self::FilterTable => StoryMeta {
@@ -534,6 +587,7 @@ impl StoryId {
                 api: "FilterTable",
                 usage: crate::usage::FILTER_TABLE,
                 height: 288,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Wide,
             },
             Self::ComparisonTable => StoryMeta {
@@ -543,6 +597,7 @@ impl StoryId {
                 api: "ComparisonTable",
                 usage: crate::usage::COMPARISON_TABLE,
                 height: 432,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Wide,
             },
             Self::CodeBlock => StoryMeta {
@@ -552,6 +607,7 @@ impl StoryId {
                 api: "CodeBlock",
                 usage: crate::usage::CODE_BLOCK,
                 height: 223,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::CodeDiff => StoryMeta {
@@ -561,6 +617,7 @@ impl StoryId {
                 api: "CodeDiff",
                 usage: crate::usage::CODE_DIFF,
                 height: 469,
+                width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
             Self::Approval => StoryMeta {
@@ -570,6 +627,7 @@ impl StoryId {
                 api: "ApprovalCard",
                 usage: crate::usage::APPROVAL_CARD,
                 height: 449,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Plan => StoryMeta {
@@ -579,6 +637,7 @@ impl StoryId {
                 api: "PlanCard",
                 usage: crate::usage::PLAN_CARD,
                 height: 402,
+                width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
             Self::Recommendation => StoryMeta {
@@ -588,6 +647,7 @@ impl StoryId {
                 api: "RecommendationCard",
                 usage: crate::usage::RECOMMENDATION_CARD,
                 height: 262,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Context => StoryMeta {
@@ -597,6 +657,7 @@ impl StoryId {
                 api: "ContextCard",
                 usage: crate::usage::CONTEXT_CARD,
                 height: 216,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Insights => StoryMeta {
@@ -606,6 +667,7 @@ impl StoryId {
                 api: "InsightCard",
                 usage: crate::usage::INSIGHT_CARD,
                 height: 452,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::PromptBar => StoryMeta {
@@ -615,6 +677,7 @@ impl StoryId {
                 api: "PromptBar",
                 usage: crate::usage::PROMPT_BAR,
                 height: 592,
+                width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
             Self::Voice => StoryMeta {
@@ -624,6 +687,7 @@ impl StoryId {
                 api: "VoiceControls",
                 usage: crate::usage::VOICE_CONTROLS,
                 height: 90,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::Queue => StoryMeta {
@@ -633,6 +697,7 @@ impl StoryId {
                 api: "MessageQueue",
                 usage: crate::usage::MESSAGE_QUEUE,
                 height: 238,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
             Self::SelectionActions => StoryMeta {
@@ -642,6 +707,7 @@ impl StoryId {
                 api: "SelectionActions",
                 usage: crate::usage::SELECTION_ACTIONS,
                 height: 288,
+                width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
         })

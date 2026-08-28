@@ -4247,11 +4247,17 @@ impl Gallery {
         let frame = story_frame(story, self.selected == StoryId::All)
             .debug_selector(move || format!("story-{}", story.slug()))
             .w_full()
-            .max_w(px(640.))
-            // Ordinary specimens mirror the website's demo column. The dock
-            // composition is an internal application-layout diagnostic: if it
-            // inherits that narrow cap, its chat and artifact panes collapse
-            // while most of a desktop viewport sits unused.
+            // A specimen is read at a prose column's width; a surface that
+            // carries a layout — a grid, a transcript, a navigation pane —
+            // takes the whole demo column, because at a prose width it is
+            // squeezed rather than shown. Both sit inside the website's own
+            // demo column, so a story is drawn at the width it was measured
+            // at. The dock composition is an internal application-layout
+            // diagnostic and outgrows even that.
+            .max_w(px(story
+                .meta()
+                .map_or(crate::story::StoryWidth::Column, |meta| meta.width)
+                .max_width()))
             .when(story == StoryId::DockComposition, |frame| {
                 frame.max_w(px(1200.))
             })
