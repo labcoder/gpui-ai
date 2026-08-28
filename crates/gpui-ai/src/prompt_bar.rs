@@ -1054,7 +1054,7 @@ impl Render for PromptBar {
                     ),
             )
             .when(self.model_menu_open, |this| {
-                this.child(self.render_model_picker(&root_id, cx))
+                this.child(self.render_model_picker(&root_id, window, cx))
             })
     }
 }

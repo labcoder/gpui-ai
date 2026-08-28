@@ -199,7 +199,7 @@ impl Render for ModelOptionProbe {
                 )
                 .role(Role::ListBoxOption)
                 .on_click(|_, _, _| {});
-                let element = apply_model_option_state(option, true, true, 2, 4, cx)
+                let element = apply_model_option_state(option, true, true, 2, 4, None, cx)
                     .render(window, cx)
                     .into_element();
                 let role = element.a11y_role();

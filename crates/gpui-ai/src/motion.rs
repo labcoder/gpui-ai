@@ -327,6 +327,7 @@ pub struct MotionTokens {
     preference: MotionPreference,
     instant: Duration,
     quick: Duration,
+    hover_glide: Duration,
     standard: Duration,
     deliberate: Duration,
     stagger_beat: Duration,
@@ -365,6 +366,8 @@ impl MotionTokens {
         preference: MotionPreference::Full,
         instant: Duration::ZERO,
         quick: Duration::from_millis(150),
+        // Bench-tuned: 150ms read as lag behind the pointer; 100ms tracks.
+        hover_glide: Duration::from_millis(100),
         standard: EnterSpec::REVEAL.duration,
         deliberate: Duration::from_millis(380),
         stagger_beat: EnterSpec::REVEAL.stagger,
@@ -407,6 +410,14 @@ impl MotionTokens {
     /// Icon or label swap, copy acknowledgement, close.
     pub const fn quick(&self) -> Duration {
         self.quick
+    }
+
+    /// One hover highlight gliding between uniform rows, chasing the
+    /// pointer on the strong ease-out. Faster than [`quick`](Self::quick)
+    /// because the highlight follows input rather than acknowledging it;
+    /// any reduced preference snaps the highlight instead.
+    pub const fn hover_glide(&self) -> Duration {
+        self.hover_glide
     }
 
     /// Selected indicator, compact disclosure, progress retarget — and the
@@ -484,6 +495,12 @@ impl MotionTokens {
     /// Replaces the [`quick`](Self::quick) duration.
     pub const fn with_quick(mut self, duration: Duration) -> Self {
         self.quick = duration;
+        self
+    }
+
+    /// Replaces the [`hover_glide`](Self::hover_glide) duration.
+    pub const fn with_hover_glide(mut self, duration: Duration) -> Self {
+        self.hover_glide = duration;
         self
     }
 

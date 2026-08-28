@@ -39,6 +39,7 @@ pub mod cues;
 pub mod diff_table;
 pub mod filter_table;
 pub mod fine_tune;
+mod glide;
 pub mod image_generation;
 pub mod insight;
 pub mod loading;

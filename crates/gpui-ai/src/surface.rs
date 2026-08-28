@@ -166,6 +166,29 @@ where
     }
 }
 
+/// [`selection_surface`] for rows whose hover is the gliding highlight:
+/// the same radius rule and selected fill, but no per-row hover paint —
+/// the one highlight element is the hover.
+pub(crate) fn selection_surface_glide<E>(
+    row: E,
+    selected: bool,
+    container_radius: Pixels,
+    inset: Pixels,
+    cx: &App,
+) -> E
+where
+    E: gpui::Styled + gpui::InteractiveElement,
+{
+    let tokens = cx.theme().semantic_tokens();
+    let radius = nested_radius(container_radius, inset, tokens.radius.sm);
+    let row = row.rounded(radius);
+    if selected {
+        row.bg(cx.theme().list_active)
+    } else {
+        row
+    }
+}
+
 /// Seats a glyph beside wrappable text, centered on the text's first line.
 ///
 /// The slot is a fixed square box whose side equals the first line's

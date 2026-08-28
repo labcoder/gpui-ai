@@ -283,6 +283,9 @@ struct RowRenderer {
     active: Option<SharedString>,
     focused: Option<SharedString>,
     visible_threads: usize,
+    /// The list's glide-hover state when the gliding highlight is on;
+    /// rows feed it their bounds and hover instead of painting hover.
+    glide: Option<gpui::Entity<crate::glide::GlideHover>>,
     #[cfg(test)]
     construction: ThreadConstructionCounts,
 }
@@ -361,13 +364,32 @@ impl RowRenderer {
         // list's panel, hover covering everything inside it, and the
         // acknowledged fade playing on the fill. The select control keeps
         // the semantics and the keyboard focus ring; it paints nothing.
-        let surface = crate::surface::selection_surface(
-            div().id((item_id.clone(), "row")),
-            selected,
-            tokens.radius.lg,
-            tokens.spacing.xs,
-            cx,
-        );
+        // With the gliding highlight on, the row paints no hover of its
+        // own and reports its geometry and hover to the shared state.
+        let row_debug_id = item.id.to_string();
+        let base = div()
+            .id((item_id.clone(), "row"))
+            .debug_selector(move || format!("thread-row-{row_debug_id}"));
+        let surface = match &self.glide {
+            Some(glide) => crate::glide::glide_row(
+                crate::surface::selection_surface_glide(
+                    base,
+                    selected,
+                    tokens.radius.lg,
+                    tokens.spacing.xs,
+                    cx,
+                ),
+                item.id.clone(),
+                glide,
+            ),
+            None => crate::surface::selection_surface(
+                base,
+                selected,
+                tokens.radius.lg,
+                tokens.spacing.xs,
+                cx,
+            ),
+        };
         surface
             // The acknowledged fade plays on the fill alone — the row's
             // content never dims — by re-stating the selected background
@@ -661,6 +683,9 @@ pub struct ThreadList {
     /// The listbox's single tab stop; options are not focusable themselves.
     list_focus: FocusHandle,
     list_state: ListState,
+    /// One highlight glides between rows instead of per-row hover fills.
+    /// Default on; [`Self::set_hover_glide`] restores per-row hover.
+    hover_glide: bool,
     /// Rem size the retained row heights were measured against.
     resolved_layout: ResolvedLayoutKey,
     #[cfg(test)]
@@ -669,6 +694,15 @@ pub struct ThreadList {
 }
 
 impl ThreadList {
+    /// Chooses between the gliding hover highlight (the default) and
+    /// classic per-row hover fills.
+    pub fn set_hover_glide(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.hover_glide != enabled {
+            self.hover_glide = enabled;
+            cx.notify();
+        }
+    }
+
     /// Creates an empty list around a native search input.
     pub fn new(id: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search conversations"));
@@ -692,6 +726,7 @@ impl ThreadList {
             focused_thread: None,
             list_focus: cx.focus_handle(),
             list_state: ListState::new(0, ListAlignment::Top, Pixels::ZERO),
+            hover_glide: true,
             resolved_layout: ResolvedLayoutKey::default(),
             #[cfg(test)]
             construction: ThreadConstructionCounts::default(),
@@ -984,6 +1019,9 @@ impl Render for ThreadList {
             None
         };
         let rows = self.rows.clone();
+        let glide = self
+            .hover_glide
+            .then(|| crate::glide::glide_hover_state(root_id.clone(), window, cx));
         let renderer = RowRenderer {
             component: self.id.clone(),
             owner: cx.weak_entity(),
@@ -991,6 +1029,7 @@ impl Render for ThreadList {
             active: self.active.clone(),
             focused: self.focused_thread.clone(),
             visible_threads: self.visible_threads,
+            glide: glide.clone(),
             #[cfg(test)]
             construction: self.construction.clone(),
         };
@@ -1061,51 +1100,73 @@ impl Render for ThreadList {
                 // The outer frame owns the flex constraint; the virtual list
                 // fills it, so a long snapshot scrolls a window of rows
                 // instead of growing the pane or building the whole document.
-                div()
-                    .id((root_id.clone(), "list-frame"))
-                    .debug_selector(|| "thread-list-scroll".into())
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .w_full()
-                    .overflow_hidden()
-                    .vertical_scrollbar(&list_state)
-                    .child(
-                        div()
-                            .id((root_id.clone(), "list"))
-                            .role(Role::ListBox)
-                            .aria_label("Conversation list")
-                            .track_focus(&self.list_focus)
-                            .tab_stop(true)
-                            .on_key_down(cx.listener(Self::on_key_down))
-                            .size_full()
-                            .min_h_0()
-                            .when(!rows.is_empty(), |this| {
-                                this.child(
-                                    list(list_state, move |index, window, cx| {
-                                        rows.get(index)
-                                            .map(|row| renderer.render(row, window, cx))
-                                            .unwrap_or_else(|| div().hidden().into_any_element())
-                                    })
-                                    .size_full(),
-                                )
-                            })
-                            .when_some(empty_message, |this, message| {
-                                this.child(
-                                    div()
-                                        .id((root_id, "empty"))
-                                        .debug_selector(|| "thread-list-empty".into())
-                                        .role(Role::Status)
-                                        .aria_label(message.clone())
-                                        .child(crate::surface::empty_state(
-                                            IconName::Inbox,
-                                            message.clone(),
-                                            Some("Start a chat to see it here".into()),
-                                            cx,
-                                        )),
-                                )
-                            }),
-                    ),
+                {
+                    let frame = div()
+                        .id((root_id.clone(), "list-frame"))
+                        .debug_selector(|| "thread-list-scroll".into())
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .w_full()
+                        .overflow_hidden()
+                        .vertical_scrollbar(&list_state);
+                    // The gliding highlight paints beneath the rows; the
+                    // frame's bounds anchor its coordinates.
+                    match &glide {
+                        Some(glide) => crate::glide::glide_frame(frame, glide).when_some(
+                            crate::glide::glide_highlight(
+                                root_id.clone(),
+                                glide,
+                                crate::surface::nested_radius(
+                                    tokens.radius.lg,
+                                    tokens.spacing.xs,
+                                    tokens.radius.sm,
+                                ),
+                                "thread-list-glide",
+                                window,
+                                cx,
+                            ),
+                            |frame, highlight| frame.child(highlight),
+                        ),
+                        None => frame,
+                    }
+                }
+                .child(
+                    div()
+                        .id((root_id.clone(), "list"))
+                        .role(Role::ListBox)
+                        .aria_label("Conversation list")
+                        .track_focus(&self.list_focus)
+                        .tab_stop(true)
+                        .on_key_down(cx.listener(Self::on_key_down))
+                        .size_full()
+                        .min_h_0()
+                        .when(!rows.is_empty(), |this| {
+                            this.child(
+                                list(list_state, move |index, window, cx| {
+                                    rows.get(index)
+                                        .map(|row| renderer.render(row, window, cx))
+                                        .unwrap_or_else(|| div().hidden().into_any_element())
+                                })
+                                .size_full(),
+                            )
+                        })
+                        .when_some(empty_message, |this, message| {
+                            this.child(
+                                div()
+                                    .id((root_id, "empty"))
+                                    .debug_selector(|| "thread-list-empty".into())
+                                    .role(Role::Status)
+                                    .aria_label(message.clone())
+                                    .child(crate::surface::empty_state(
+                                        IconName::Inbox,
+                                        message.clone(),
+                                        Some("Start a chat to see it here".into()),
+                                        cx,
+                                    )),
+                            )
+                        }),
+                ),
             )
     }
 }
@@ -1269,6 +1330,132 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    fn glide_sections() -> Vec<ThreadSection> {
+        vec![ThreadSection::new("recent", "Recent").items([
+            ThreadItem::new("one", "One"),
+            ThreadItem::new("two", "Two"),
+            ThreadItem::new("three", "Three"),
+        ])]
+    }
+
+    /// The lag probe: a fresh hover seats the highlight on its row with no
+    /// glide from stale geometry, the next hover departs from the previous
+    /// row and travels between the two, and the highlight arrives exactly
+    /// on the hovered row once the glide tempo has elapsed.
+    #[gpui::test]
+    fn glide_highlight_appears_on_hover_and_chases_the_next_row(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(glide_sections(), cx));
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        assert!(
+            bounds_of(cx, "thread-list-glide".to_owned()).is_none(),
+            "no highlight before anything is hovered"
+        );
+
+        let row_one = bounds_of(cx, "thread-row-one".to_owned()).expect("row one renders");
+        cx.simulate_mouse_move(row_one.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let highlight = bounds_of(cx, "thread-list-glide".to_owned())
+            .expect("hovering a row mounts the highlight");
+        assert_eq!(
+            highlight, row_one,
+            "a fresh hover seats the highlight on its row instantly"
+        );
+
+        let row_three = bounds_of(cx, "thread-row-three".to_owned()).expect("row three renders");
+        cx.simulate_mouse_move(row_three.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let start = bounds_of(cx, "thread-list-glide".to_owned()).expect("highlight persists");
+        assert_eq!(
+            start, row_one,
+            "the glide departs from the previously hovered row"
+        );
+
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let moving = bounds_of(cx, "thread-list-glide".to_owned()).expect("highlight persists");
+        assert!(
+            moving.top() > row_one.top() && moving.top() < row_three.top(),
+            "mid-glide the highlight sits between the rows: {moving:?}"
+        );
+
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(1));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let settled = bounds_of(cx, "thread-list-glide".to_owned()).expect("highlight persists");
+        assert_eq!(
+            settled, row_three,
+            "the highlight arrives on the hovered row"
+        );
+
+        // Settled means settled: nothing moves on further draws.
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            bounds_of(cx, "thread-list-glide".to_owned()),
+            Some(row_three),
+            "a settled highlight holds its row"
+        );
+    }
+
+    /// Any reduced preference snaps the highlight between rows: the move
+    /// lands on the very next draw with no clock advanced.
+    #[gpui::test]
+    fn glide_snaps_between_rows_under_a_reduced_preference(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            crate::motion::MotionTokens::default()
+                .with_preference(crate::motion::MotionPreference::Crossfade)
+                .set(cx);
+            crate::init(cx);
+        });
+        let (threads, cx) =
+            cx.add_window_view(|window, cx| ThreadList::new("measured", window, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(MEASURED_VIEWPORT.0), px(MEASURED_VIEWPORT.1)));
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(glide_sections(), cx));
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        let row_one = bounds_of(cx, "thread-row-one".to_owned()).expect("row one renders");
+        cx.simulate_mouse_move(row_one.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let row_three = bounds_of(cx, "thread-row-three".to_owned()).expect("row three renders");
+        cx.simulate_mouse_move(row_three.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            bounds_of(cx, "thread-list-glide".to_owned()),
+            Some(row_three),
+            "a reduced preference snaps the highlight to the hovered row"
+        );
+    }
+
+    /// Per-row hover is the builder escape: with the glide disabled the
+    /// highlight never mounts.
+    #[gpui::test]
+    fn disabling_the_glide_restores_per_row_hover(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| {
+                threads.set_sections(glide_sections(), cx);
+                threads.set_hover_glide(false, cx);
+            });
+        });
+        let _ = redraw(&threads, cx);
+        let row_one = bounds_of(cx, "thread-row-one".to_owned()).expect("row one renders");
+        cx.simulate_mouse_move(row_one.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            bounds_of(cx, "thread-list-glide".to_owned()).is_none(),
+            "no gliding highlight when the builder disables it"
+        );
     }
 
     fn measured_list(cx: &mut TestAppContext) -> (Entity<ThreadList>, &mut VisualTestContext) {

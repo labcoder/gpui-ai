@@ -92,12 +92,14 @@ pub(super) fn apply_model_option_state(
     active: bool,
     position: usize,
     set_size: usize,
+    glide: Option<(&SharedString, &gpui::Entity<crate::glide::GlideHover>)>,
     cx: &App,
 ) -> Button {
     // The keyboard cursor rides the shared selection surface: the
     // list-active fill at the nesting-rule radius against the popup's
-    // frame, hover keeping its delta. `selected` stays the semantic
-    // choice (checkmark + aria), `active` the visual cursor.
+    // frame. `selected` stays the semantic choice (checkmark + aria),
+    // `active` the visual cursor. With the gliding highlight on, hover
+    // is the one highlight element and rows paint none of their own.
     let tokens = cx.theme().semantic_tokens();
     let button = button
         .selected(selected)
@@ -106,7 +108,26 @@ pub(super) fn apply_model_option_state(
         .aria_size_of_set(set_size)
         .active(|style| style.bg(cx.theme().list_active))
         .when(active, |button| button.aria_active_descendant());
-    crate::surface::selection_surface(button, active, cx.theme().radius, tokens.spacing.xs, cx)
+    match glide {
+        Some((key, state)) => crate::glide::glide_row(
+            crate::surface::selection_surface_glide(
+                button,
+                active,
+                cx.theme().radius,
+                tokens.spacing.xs,
+                cx,
+            ),
+            key.clone(),
+            state,
+        ),
+        None => crate::surface::selection_surface(
+            button,
+            active,
+            cx.theme().radius,
+            tokens.spacing.xs,
+            cx,
+        ),
+    }
 }
 
 /// Models grouped by provider in first-appearance order; ungrouped models
@@ -242,9 +263,15 @@ impl PromptBar {
     pub(super) fn render_model_picker(
         &self,
         root_id: &SharedString,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
+        let glide = crate::glide::glide_hover_state(
+            (gpui::ElementId::from(root_id.clone()), "model-glide").into(),
+            window,
+            cx,
+        );
         let model_count = self.models.len();
         let mut model_ix = 0;
         let mut model_options = Vec::new();
@@ -313,13 +340,21 @@ impl PromptBar {
                 .role(Role::ListBoxOption)
                 .disabled(model.disabled);
                 model_options.push(
-                    apply_model_option_state(option, selected, active, model_ix, model_count, cx)
-                        .w_full()
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.active_model = Some(model_id.clone());
-                            this.confirm_active_model(window, cx);
-                        }))
-                        .into_any_element(),
+                    apply_model_option_state(
+                        option,
+                        selected,
+                        active,
+                        model_ix,
+                        model_count,
+                        Some((&model.id, &glide)),
+                        cx,
+                    )
+                    .w_full()
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.active_model = Some(model_id.clone());
+                        this.confirm_active_model(window, cx);
+                    }))
+                    .into_any_element(),
                 );
             }
         }
@@ -335,10 +370,27 @@ impl PromptBar {
         .overflow_y_scrollbar()
         .p(tokens.spacing.xs)
         .popover_style(cx)
+        .relative()
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {
             this.close_model_menu(window, cx);
-        }))
-        .children(model_options);
+        }));
+        let surface = crate::glide::glide_frame(surface, &glide)
+            .when_some(
+                crate::glide::glide_highlight(
+                    (gpui::ElementId::from(root_id.clone()), "model-glide").into(),
+                    &glide,
+                    crate::surface::nested_radius(
+                        cx.theme().radius,
+                        tokens.spacing.xs,
+                        tokens.radius.sm,
+                    ),
+                    "prompt-bar-model-glide",
+                    window,
+                    cx,
+                ),
+                |surface, highlight| surface.child(highlight),
+            )
+            .children(model_options);
 
         deferred(
             Positioner::side(self.model_trigger_bounds)

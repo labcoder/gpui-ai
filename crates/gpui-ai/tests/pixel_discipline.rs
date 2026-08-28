@@ -110,6 +110,34 @@ struct Exception {
 /// Every raw `px(...)` the library is allowed to construct outside tests.
 const EXCEPTIONS: &[Exception] = &[
     Exception {
+        file: "glide.rs",
+        expression: "px(x)",
+        context: ".left(px(x))",
+        category: Category::MeasuredGeometry,
+        rationale: "the glide highlight repositions to transition samples of captured row bounds",
+    },
+    Exception {
+        file: "glide.rs",
+        expression: "px(y)",
+        context: ".top(px(y))",
+        category: Category::MeasuredGeometry,
+        rationale: "the glide highlight repositions to transition samples of captured row bounds",
+    },
+    Exception {
+        file: "glide.rs",
+        expression: "px(w)",
+        context: ".w(px(w))",
+        category: Category::MeasuredGeometry,
+        rationale: "the glide highlight sizes to transition samples of captured row bounds",
+    },
+    Exception {
+        file: "glide.rs",
+        expression: "px(h)",
+        context: ".h(px(h))",
+        category: Category::MeasuredGeometry,
+        rationale: "the glide highlight sizes to transition samples of captured row bounds",
+    },
+    Exception {
         file: "sizing.rs",
         expression: "px(24.)",
         context: "control_sm",
