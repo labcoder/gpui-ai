@@ -17,8 +17,8 @@
 use std::collections::HashMap;
 
 use gpui::{
-    App, Bounds, Div, ElementId, Entity, InteractiveElement as _, Pixels,
-    SharedString, StatefulInteractiveElement, Styled as _, Window, div, px,
+    App, Bounds, Div, ElementId, Entity, InteractiveElement as _, Pixels, SharedString,
+    StatefulInteractiveElement, Styled as _, Window, div, px,
 };
 use gpui_base::ElementExt as _;
 use gpui_base::motion::{Transition, transition};

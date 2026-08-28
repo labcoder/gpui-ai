@@ -325,8 +325,16 @@ pub(crate) fn icon_button(
                     .text_color(cx.theme().accent_foreground)
             })
         })
-        .press_release(id, tokens.radius.sm, window, cx)
-        .child(Icon::new(icon).xsmall())
+        .press_release(id.clone(), tokens.radius.sm, window, cx)
+        .child(Icon::new(icon).xsmall().transform({
+            // The glyph compresses while pressed and eases back on the
+            // same release clock as the tint — SVG transforms are free,
+            // so the compression costs no extra frames.
+            let (pressed, fade) = crate::control::press_release_state(&id, window, cx);
+            let intensity = if pressed { 1.0 } else { fade };
+            let scale = 1.0 - 0.03 * intensity;
+            gpui::Transformation::scale(gpui::size(scale, scale))
+        }))
 }
 
 #[cfg(test)]

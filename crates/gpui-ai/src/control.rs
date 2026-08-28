@@ -40,6 +40,30 @@ pub(crate) trait PressReleaseExt: Sized {
     ) -> Self;
 }
 
+/// The pressed flag and release-decay sample of one control's press ramp.
+///
+/// Reads the same keyed state [`PressReleaseExt::press_release`] installs,
+/// so a control can derive extra pressed presentation — the icon-button
+/// glyph compression — from the identical clock, adding no frame demand
+/// of its own.
+pub(crate) fn press_release_state(
+    key: &ElementId,
+    window: &mut Window,
+    cx: &mut App,
+) -> (bool, f32) {
+    let pressed = window.use_keyed_state((key.clone(), "pressed"), cx, |_, _| false);
+    let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
+    let pressed = *pressed.read(cx);
+    let generation = *generation.read(cx);
+    let fade = if generation == 0 {
+        0.0
+    } else {
+        let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
+        1.0 - press_release_progress(clock, window, cx)
+    };
+    (pressed, fade)
+}
+
 impl PressReleaseExt for Button {
     fn press_release(
         self,
@@ -71,7 +95,10 @@ impl PressReleaseExt for Button {
         let release_out = release.clone();
         self.on_mouse_down(MouseButton::Left, {
             let pressed = pressed.clone();
-            move |_, _, cx| pressed.update(cx, |pressed, _| *pressed = true)
+            move |_, window, cx| {
+                pressed.update(cx, |pressed, _| *pressed = true);
+                window.refresh();
+            }
         })
         .on_mouse_up(MouseButton::Left, move |_, window, cx| release(window, cx))
         .on_mouse_up_out(MouseButton::Left, move |_, window, cx| {
@@ -267,6 +294,71 @@ mod tests {
                 0,
                 "the decay must settle and stop asking for frames"
             );
+        }
+
+        struct PressStateProbe {
+            captured: std::rc::Rc<std::cell::Cell<(bool, f32)>>,
+        }
+
+        impl Render for PressStateProbe {
+            fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+                let key = gpui::ElementId::from("metrics-icon");
+                self.captured.set(press_release_state(&key, window, cx));
+                div().w(px(420.)).h(px(160.)).child(
+                    crate::surface::icon_button(
+                        "metrics-icon",
+                        gpui_component::IconName::Search,
+                        "Search",
+                        window,
+                        cx,
+                    )
+                    .debug_selector(|| "metrics-icon".into()),
+                )
+            }
+        }
+
+        /// The shared press state feeds pressed presentation beyond the
+        /// tint — the icon-button glyph compression rides it — so it must
+        /// report the press on its frame and decay to rest after release.
+        #[gpui::test]
+        fn press_release_state_reports_the_press_and_its_decay(cx: &mut TestAppContext) {
+            cx.update(crate::init);
+            let captured = std::rc::Rc::new(std::cell::Cell::new((false, 0.0)));
+            let probe = captured.clone();
+            let (_, cx) = cx.add_window_view(move |_, _| PressStateProbe { captured: probe });
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert_eq!(captured.get(), (false, 0.0), "untouched controls rest");
+
+            let bounds = cx
+                .debug_bounds("metrics-icon")
+                .expect("the icon button should render");
+            cx.simulate_mouse_down(
+                bounds.center(),
+                gpui::MouseButton::Left,
+                gpui::Modifiers::default(),
+            );
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            assert!(
+                captured.get().0,
+                "the press must register on the press frame"
+            );
+
+            cx.simulate_mouse_up(
+                bounds.center(),
+                gpui::MouseButton::Left,
+                gpui::Modifiers::default(),
+            );
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let (pressed, fade) = captured.get();
+            assert!(!pressed, "release clears the press");
+            assert!(fade > 0.0, "the decay starts at the release");
+
+            cx.executor()
+                .advance_clock(std::time::Duration::from_secs(1));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let (_, fade) = captured.get();
+            assert!(fade < 0.004, "the decay settles to rest: {fade}");
         }
 
         /// The policy is a policy: replacing it before init moves every
