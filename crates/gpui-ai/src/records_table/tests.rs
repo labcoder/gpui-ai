@@ -1046,7 +1046,7 @@ impl Render for RecordsControlProbe {
                         "strength",
                         "Status".into(),
                         ", descending",
-                        "↓",
+                        IconName::ChevronDown,
                         cx,
                     )
                     .on_click(|_, _, _| {})

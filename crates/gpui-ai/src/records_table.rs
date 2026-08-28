@@ -101,6 +101,9 @@ pub enum RecordColumnAlignment {
 /// Visual structure of one record cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RecordCellKind {
+    /// A change from one value to another: a tone glyph beside the struck
+    /// previous value, an arrow, and the new value.
+    Change,
     /// Ordinary readable text.
     #[default]
     Text,
@@ -302,6 +305,7 @@ pub struct RecordCell {
     kind: RecordCellKind,
     tags: Arc<[SharedString]>,
     status_tone: Option<RecordStatusTone>,
+    change_before: Option<SharedString>,
 }
 
 impl RecordCell {
@@ -313,6 +317,7 @@ impl RecordCell {
             kind: RecordCellKind::Text,
             tags: Arc::from([]),
             status_tone: None,
+            change_before: None,
         }
     }
 
@@ -333,6 +338,52 @@ impl RecordCell {
             kind: RecordCellKind::Tags,
             tags,
             status_tone: None,
+            change_before: None,
+        }
+    }
+
+    /// Creates a cell describing a change from one value to another.
+    ///
+    /// The change kind is carried by the tone glyph, with the struck
+    /// previous value, an arrow, and the new value as one readable run —
+    /// never a prose prefix that wraps and clips. An addition passes no
+    /// `before`, a removal no `after`; the accessible value reads as a
+    /// sentence either way.
+    pub fn change(
+        column_id: impl Into<SharedString>,
+        before: Option<SharedString>,
+        after: Option<SharedString>,
+        tone: RecordStatusTone,
+    ) -> Self {
+        Self {
+            column_id: column_id.into(),
+            value: after.unwrap_or_default(),
+            kind: RecordCellKind::Change,
+            tags: Arc::from([]),
+            status_tone: Some(tone),
+            change_before: before,
+        }
+    }
+
+    /// The previous value of a change cell, when the change kept one.
+    pub fn change_before(&self) -> Option<&SharedString> {
+        self.change_before.as_ref()
+    }
+
+    /// The value assistive technology reads for this cell.
+    ///
+    /// A change cell reads as a sentence — "was A, now B" — instead of
+    /// leaking its visual arrow and strikethrough.
+    pub fn accessible_value(&self) -> SharedString {
+        match (&self.kind, &self.change_before) {
+            (RecordCellKind::Change, Some(before)) if self.value.is_empty() => {
+                format!("removed {before}").into()
+            }
+            (RecordCellKind::Change, Some(before)) => {
+                format!("was {before}, now {}", self.value).into()
+            }
+            (RecordCellKind::Change, None) => format!("added {}", self.value).into(),
+            _ => self.value.clone(),
         }
     }
 
@@ -348,6 +399,7 @@ impl RecordCell {
             kind: RecordCellKind::Status,
             tags: Arc::from([]),
             status_tone: Some(tone),
+            change_before: None,
         }
     }
 
@@ -480,6 +532,7 @@ pub(crate) fn escape_markdown_text(value: &str) -> String {
                 | '.'
                 | '!'
                 | '|'
+                | '~'
         ) {
             escaped.push('\\');
         }

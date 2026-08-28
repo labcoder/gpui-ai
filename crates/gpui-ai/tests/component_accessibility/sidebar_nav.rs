@@ -176,6 +176,12 @@ fn public_sidebar_nav_filters_recursively_and_routes_duplicate_labels_by_stable_
 fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_query(
     cx: &mut TestAppContext,
 ) {
+    // Hover presentation moved into the upstream item's own style hover
+    // (a fill, not a crate-drawn outline), so the observable this guards
+    // is the part the crate still owns: with a stationary pointer, stable
+    // rows keep their exact bounds through snapshot replacement and a
+    // programmatic query, and the row under the pointer stays the row the
+    // click lands on.
     cx.update(gpui_ai::init);
     let (probe, cx) = cx.add_window_view(PublicSidebarNavProbe::new);
     let cx: &mut VisualTestContext = cx;
@@ -184,34 +190,14 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
     let overview = cx
         .debug_bounds("sidebar-nav-item-overview")
         .expect("expanded row should render through the production tree");
-    let idle_overview_hover = cx
-        .debug_bounds("sidebar-nav-hover-overview")
-        .expect("expanded row should retain a stable native hover layer");
-    assert!(idle_overview_hover.size.width < overview.size.width / 2.);
-
     cx.simulate_mouse_move(overview.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let hover = cx
-        .debug_bounds("sidebar-nav-hover-overview")
-        .expect("expanded row should render its theme-token hover layer");
-    assert!(hover.left() >= overview.left() && hover.right() <= overview.right());
-    assert!(hover.size.width > overview.size.width / 2.);
 
     let orders = cx
         .debug_bounds("sidebar-nav-item-orders")
         .expect("second expanded row should render");
     cx.simulate_mouse_move(orders.center(), None, Modifiers::default());
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    assert_eq!(
-        cx.debug_bounds("sidebar-nav-hover-overview"),
-        Some(idle_overview_hover),
-        "moving directly to Orders should restore Overview's idle hover width"
-    );
-    let orders_hover = cx
-        .debug_bounds("sidebar-nav-hover-orders")
-        .expect("hover presentation should transfer between stable rows");
-    assert!(orders_hover.left() >= orders.left() && orders_hover.right() <= orders.right());
-    assert!(orders_hover.size.width > orders.size.width / 2.);
 
     let nav = probe.read_with(cx, |probe, _| probe.nav.clone());
     let mut replacement = sidebar_sections();
@@ -225,11 +211,6 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
         Some(orders),
         "stable replacement should leave Orders under the stationary pointer"
     );
-    assert_eq!(
-        cx.debug_bounds("sidebar-nav-hover-orders"),
-        Some(orders_hover),
-        "stable replacement should retain native hover without a pointer move"
-    );
 
     cx.update(|window, cx| {
         nav.update(cx, |nav, cx| nav.set_query("workspace", window, cx));
@@ -239,11 +220,6 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
         cx.debug_bounds("sidebar-nav-item-orders"),
         Some(orders),
         "section-label filtering should preserve the hovered row layout"
-    );
-    assert_eq!(
-        cx.debug_bounds("sidebar-nav-hover-orders"),
-        Some(orders_hover),
-        "programmatic query should retain native hover without a pointer move"
     );
 
     cx.simulate_click(orders.center(), Modifiers::default());
@@ -261,6 +237,8 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
         ]
     );
 
+    // Leaving the host entirely still leaves the layout untouched: hover
+    // is style state, never structure.
     let host = cx
         .debug_bounds("public-sidebar-host")
         .expect("sidebar host should remain rendered");
@@ -270,10 +248,11 @@ fn public_sidebar_nav_native_hover_survives_stationary_pointer_replacement_and_q
         Modifiers::default(),
     );
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let exited = cx
-        .debug_bounds("sidebar-nav-hover-orders")
-        .expect("native hover outline remains mounted after exit");
-    assert!(exited.size.width < orders_hover.size.width);
+    assert_eq!(
+        cx.debug_bounds("sidebar-nav-item-orders"),
+        Some(orders),
+        "pointer exit must not restructure the rows"
+    );
 }
 
 #[gpui::test]

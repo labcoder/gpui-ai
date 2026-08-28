@@ -345,9 +345,15 @@ impl DiffTable {
         cx: &mut Context<Self>,
     ) {
         let columns = columns.into_iter().collect::<Vec<_>>();
+        // The injected columns carry authored widths: the upstream default
+        // (100px) truncated "Pending" into "Pending dec…".
         let mut record_columns = vec![
-            RecordColumn::new(self.review_column_id.clone(), "Review").fixed(true),
-            RecordColumn::new(self.decision_column_id.clone(), "Decision").fixed(true),
+            RecordColumn::new(self.review_column_id.clone(), "Review")
+                .fixed(true)
+                .width_in_rems(6.5),
+            RecordColumn::new(self.decision_column_id.clone(), "Decision")
+                .fixed(true)
+                .width_in_rems(8.),
         ];
         record_columns.extend(columns.iter().cloned());
         if !record_columns_have_unique_ids(&record_columns) {
@@ -715,29 +721,35 @@ fn diff_record_row(row: &DiffRow, decision_column_id: &SharedString) -> RecordRo
 }
 
 fn diff_record_cell(cell: &DiffCell) -> RecordCell {
-    let (value, tone) = match cell.change_kind {
-        DiffChangeKind::Added => (
-            format!("Added: {}", cell.after.as_deref().unwrap_or_default()),
+    // Change semantics travel as data — the records renderer draws the
+    // tone glyph, the struck previous value, and the new one — and an
+    // unchanged cell is simply its value: the prose prefixes that wrapped
+    // and clipped ("Changed: Classic → Seasonal") are gone, and three
+    // quiet rows no longer shout "Unchanged" four times each.
+    match cell.change_kind {
+        DiffChangeKind::Added => RecordCell::change(
+            cell.column_id.clone(),
+            None,
+            cell.after.clone(),
             RecordStatusTone::Positive,
         ),
-        DiffChangeKind::Removed => (
-            format!("Removed: {}", cell.before.as_deref().unwrap_or_default()),
+        DiffChangeKind::Removed => RecordCell::change(
+            cell.column_id.clone(),
+            cell.before.clone(),
+            None,
             RecordStatusTone::Critical,
         ),
-        DiffChangeKind::Changed => (
-            format!(
-                "Changed: {} → {}",
-                cell.before.as_deref().unwrap_or_default(),
-                cell.after.as_deref().unwrap_or_default()
-            ),
+        DiffChangeKind::Changed => RecordCell::change(
+            cell.column_id.clone(),
+            cell.before.clone(),
+            cell.after.clone(),
             RecordStatusTone::Caution,
         ),
-        DiffChangeKind::Unchanged => (
-            format!("Unchanged: {}", cell.after.as_deref().unwrap_or_default()),
-            RecordStatusTone::Neutral,
+        DiffChangeKind::Unchanged => RecordCell::new(
+            cell.column_id.clone(),
+            cell.after.clone().unwrap_or_default(),
         ),
-    };
-    RecordCell::status(cell.column_id.clone(), value, tone)
+    }
 }
 
 fn change_kind_label(kind: DiffChangeKind) -> &'static str {
@@ -751,7 +763,7 @@ fn change_kind_label(kind: DiffChangeKind) -> &'static str {
 
 fn proposal_state_label(state: DiffProposalState) -> &'static str {
     match state {
-        DiffProposalState::Pending => "Pending decision",
+        DiffProposalState::Pending => "Pending",
         DiffProposalState::Accepted => "Accepted",
         DiffProposalState::Rejected => "Rejected",
     }
@@ -815,38 +827,37 @@ mod tests {
 
     #[test]
     fn diff_projection_keeps_change_state_in_readable_cell_values() {
-        for (cell, expected, tone) in [
+        // Change semantics are data, not prose: the accessible value reads
+        // as a sentence, the tone carries the kind, and an unchanged cell
+        // is simply its value with no tone at all.
+        for (cell, accessible, tone) in [
             (
                 DiffCell::added("value", "Pistachio"),
-                "Added: Pistachio",
-                RecordStatusTone::Positive,
+                "added Pistachio",
+                Some(RecordStatusTone::Positive),
             ),
             (
                 DiffCell::removed("value", "Bubblegum"),
-                "Removed: Bubblegum",
-                RecordStatusTone::Critical,
+                "removed Bubblegum",
+                Some(RecordStatusTone::Critical),
             ),
             (
                 DiffCell::changed("value", "Mint Chip", "Pistachio"),
-                "Changed: Mint Chip → Pistachio",
-                RecordStatusTone::Caution,
+                "was Mint Chip, now Pistachio",
+                Some(RecordStatusTone::Caution),
             ),
-            (
-                DiffCell::unchanged("value", "Classic"),
-                "Unchanged: Classic",
-                RecordStatusTone::Neutral,
-            ),
+            (DiffCell::unchanged("value", "Classic"), "Classic", None),
         ] {
             let projected = diff_record_cell(&cell);
-            assert_eq!(projected.value(), expected);
-            assert_eq!(projected.status_tone(), Some(tone));
+            assert_eq!(projected.accessible_value().as_ref(), accessible);
+            assert_eq!(projected.status_tone(), tone);
         }
 
         let decision_column_id: SharedString = "decision".into();
         for (state, expected, tone) in [
             (
                 DiffProposalState::Pending,
-                "Pending decision",
+                "Pending",
                 RecordStatusTone::Caution,
             ),
             (

@@ -6,6 +6,7 @@
 //! stay identical across the library — and change in one place.
 
 use crate::control::{PressReleaseExt as _, composed_button};
+use crate::motion::VisibleAnimationExt as _;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -31,9 +32,55 @@ pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
         .rounded(tokens.radius.lg)
 }
 
-/// A compact inset panel placed *inside* a card (payloads, code, previews).
-/// Uses the muted surface and the medium radius so it nests without a
-/// second full-card frame.
+/// Loading rows that mirror the layout they stand in for: quiet muted
+/// blocks in the coming shape, breathing on one shared clock so a whole
+/// skeleton costs a single scheduled animation. Column widths vary
+/// deterministically so the placeholder reads as content, not stripes.
+/// A reduced motion preference holds the pulse at its middle; the caller
+/// keeps the progress semantics (role and label) on its own frame.
+pub(crate) fn skeleton_rows(
+    id: impl Into<ElementId>,
+    rows: usize,
+    columns: usize,
+    cx: &App,
+) -> impl IntoElement {
+    let tokens = cx.theme().semantic_tokens();
+    let block = cx.theme().muted;
+    let gap = tokens.spacing.lg;
+    let row_gap = tokens.spacing.sm;
+    let radius = tokens.radius.sm;
+    let full = crate::motion::motion_is_full(cx);
+    let spec = crate::motion::MotionTokens::read(cx).breathing();
+    v_flex().w_full().gap(row_gap).with_visible_animation(
+        id,
+        spec.looping_synced(),
+        move |body, delta| {
+            let delta = if full { delta } else { 0.5 };
+            // A triangle wave keeps the pulse symmetric; the band is
+            // narrow so the skeleton stays quiet.
+            let wave = (delta * 2.0 - 1.0).abs();
+            let pulse = 0.55 + 0.3 * wave;
+            body.opacity(pulse).children((0..rows).map(|row| {
+                gpui::div()
+                    .flex()
+                    .w_full()
+                    .items_center()
+                    .gap(gap)
+                    .children((0..columns).map(move |column| {
+                        let fraction = 0.5 + 0.4 * (((row * 7 + column * 3) % 5) as f32 / 4.0);
+                        gpui::div().flex_1().child(
+                            gpui::div()
+                                .h(gpui::rems(0.75))
+                                .w(gpui::relative(fraction))
+                                .rounded(radius)
+                                .bg(block),
+                        )
+                    }))
+            }))
+        },
+    )
+}
+
 /// The hairline a structural divider is drawn in: the border color at
 /// reduced alpha, so a rule inside a bordered container separates
 /// without competing with the frame, on any theme.
@@ -138,6 +185,9 @@ pub(crate) fn leading_glyph_slot(slot: Pixels, glyph: impl IntoElement) -> Div {
         .child(glyph)
 }
 
+/// A compact inset panel placed *inside* a card (payloads, code, previews).
+/// Uses the muted surface and the medium radius so it nests without a
+/// second full-card frame.
 pub(crate) fn inset(cx: &App) -> Div {
     let tokens = cx.theme().semantic_tokens();
     div()

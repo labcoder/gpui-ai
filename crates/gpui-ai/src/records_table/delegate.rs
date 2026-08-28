@@ -15,7 +15,7 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Size,
+    ActiveTheme as _, Icon, IconName, Sizable as _, Size,
     table::{Column, TableDelegate, TableState},
     text::TextView,
 };
@@ -127,11 +127,15 @@ impl TableDelegate for RecordsDelegate {
             };
             let owner = self.owner.clone();
             let pointer_row_id = row.id.clone();
+            // The divider between rows is a hairline, not a full border:
+            // this style refines over the upstream row border, so the
+            // color stated here wins.
             return record_row_frame(
                 &self.component_id,
                 row,
                 self.selected_row_id.as_ref() == Some(&row.id),
             )
+            .border_color(crate::surface::hairline(cx))
             .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                 let _ = owner.update(cx, |table, _| {
                     table.pending_pointer_row_id = Some(pointer_row_id.clone());
@@ -147,7 +151,8 @@ impl TableDelegate for RecordsDelegate {
             &self.component_id,
             &row,
             self.selected_row_id.as_ref() == Some(&row.id),
-        );
+        )
+        .border_color(crate::surface::hairline(cx));
         let row_frame = match self
             .row_reorder
             .sample(&self.component_id, &row.id, window, cx)
@@ -186,14 +191,14 @@ impl TableDelegate for RecordsDelegate {
         } else {
             ", unsorted"
         };
-        let sort_marker = if self.sort_column_id.as_ref() == Some(&id) {
+        let sort_icon = if self.sort_column_id.as_ref() == Some(&id) {
             match self.sort_direction {
-                Some(RecordSortDirection::Ascending) => "↑",
-                Some(RecordSortDirection::Descending) => "↓",
-                None => "↕",
+                Some(RecordSortDirection::Ascending) => IconName::ChevronUp,
+                Some(RecordSortDirection::Descending) => IconName::ChevronDown,
+                None => IconName::ChevronsUpDown,
             }
         } else {
-            "↕"
+            IconName::ChevronsUpDown
         };
         let owner = self.owner.clone();
         let sort_column_id = id.clone();
@@ -203,7 +208,7 @@ impl TableDelegate for RecordsDelegate {
                 &id,
                 label.clone(),
                 sort_description,
-                sort_marker,
+                sort_icon,
                 cx,
             )
             .on_click(move |_, _, cx| {
@@ -217,6 +222,10 @@ impl TableDelegate for RecordsDelegate {
         };
 
         let debug_column_id = id.clone();
+        // Headers lead the data instead of receding behind it: extra-small
+        // semibold in the foreground color — the muted, body-sized fallback
+        // the upstream theme supplies made every header grayer than its
+        // cells. The accessible name stays the authored label.
         div()
             .id(scoped_records_id("column", &self.component_id, &id))
             .debug_selector({
@@ -224,6 +233,9 @@ impl TableDelegate for RecordsDelegate {
                 move || scoped_records_id("column", &component_id, &debug_column_id)
             })
             .size_full()
+            .text_token(cx.theme().semantic_tokens().typography.xs)
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(cx.theme().foreground)
             .role(Role::ColumnHeader)
             .aria_label(label.clone())
             .when_some(
@@ -269,10 +281,25 @@ impl TableDelegate for RecordsDelegate {
         let identity = format!("{}:{row_id}{column_id}", row_id.len());
         let scoped_identity = scoped_records_id("cell", &self.component_id, &identity);
 
+        let numeric = column.is_some_and(|column| column.alignment == RecordColumnAlignment::Right);
         let content = cell
             .as_ref()
             .map(|cell| record_cell_content(&scoped_identity, cell, window, cx))
             .unwrap_or_else(|| div().into_any_element());
+        // A right-aligned column holds magnitudes: tabular figures keep the
+        // digits on a shared grid so columns of numbers rail instead of
+        // jittering with each glyph's natural width.
+        let content = if numeric {
+            div()
+                .font_features(gpui::FontFeatures(std::sync::Arc::new(vec![(
+                    "tnum".into(),
+                    1,
+                )])))
+                .child(content)
+                .into_any_element()
+        } else {
+            content
+        };
         let content = if col_ix == 0 {
             if let Some(row) = row {
                 let owner = self.owner.clone();
@@ -359,6 +386,12 @@ impl TableDelegate for RecordsDelegate {
         _: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> impl gpui::IntoElement {
+        // The skeleton mirrors the table it stands in for — one quiet
+        // block per configured column, three coming rows — so nothing
+        // shifts when the data lands. The frame keeps the progress
+        // semantics; the shimmer label is gone with the layout jump.
+        let columns = self.columns.len().max(3);
+        let tokens = cx.theme().semantic_tokens();
         records_state_frame(
             &self.component_id,
             "records-loading",
@@ -366,6 +399,17 @@ impl TableDelegate for RecordsDelegate {
             "Loading records".into(),
         )
         .text_color(cx.theme().muted_foreground)
+        .child(
+            div()
+                .w_full()
+                .px(tokens.spacing.md)
+                .child(crate::surface::skeleton_rows(
+                    scoped_records_id("skeleton", &self.component_id, "loading"),
+                    3,
+                    columns,
+                    cx,
+                )),
+        )
     }
 
     fn loading(&self, _: &App) -> bool {
@@ -437,7 +481,7 @@ pub(super) fn record_sort_button(
     column_id: &str,
     label: SharedString,
     sort_description: &str,
-    sort_marker: &'static str,
+    sort_icon: IconName,
     cx: &mut App,
 ) -> gpui_base::Button {
     let debug_id = scoped_records_id("sort", component_id, column_id);
@@ -447,12 +491,17 @@ pub(super) fn record_sort_button(
     )
     .size_full()
     .justify_between()
+    .gap(cx.theme().semantic_tokens().spacing.xs)
     .border_1()
     .border_color(cx.theme().transparent)
     .focus_visible(|style| style.border_color(cx.theme().ring))
     .debug_selector(move || debug_id.clone())
     .child(label)
-    .child(sort_marker)
+    .child(
+        Icon::new(sort_icon)
+            .xsmall()
+            .text_color(cx.theme().muted_foreground),
+    )
 }
 
 pub(super) fn record_activation_button(
@@ -547,7 +596,7 @@ pub(super) fn record_cell_accessible_value(
     col_ix: usize,
     activation_label: &str,
 ) -> SharedString {
-    cell.map(|cell| cell.value.clone())
+    cell.map(|cell| cell.accessible_value())
         .or_else(|| {
             (col_ix == 0).then(|| {
                 row.map(|row| format!("{activation_label} {}", row.label))
@@ -577,23 +626,76 @@ fn record_cell_content(
             .flex_wrap()
             .gap(tokens.spacing.xxs)
             .children(cell.tags.iter().enumerate().map(|(index, tag)| {
-                div()
-                    .px(tokens.spacing.xs)
-                    .py(tokens.spacing.xxs)
-                    .rounded(tokens.radius.full)
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .bg(cx.theme().secondary)
-                    .text_token(tokens.typography.xs)
-                    .child(
-                        TextView::markdown(
-                            format!("records-tag-{identity}-{index}"),
-                            escape_markdown_text(tag.as_ref()),
-                        )
-                        .selectable(true),
+                crate::status::chip_frame(
+                    cx.theme().muted_foreground,
+                    crate::status::ChipStrength::Neutral,
+                    cx,
+                )
+                .px(tokens.spacing.xs)
+                .child(
+                    TextView::markdown(
+                        format!("records-tag-{identity}-{index}"),
+                        escape_markdown_text(tag.as_ref()),
                     )
+                    .selectable(true),
+                )
             }))
             .into_any_element(),
+        RecordCellKind::Change => {
+            let tone = match cell.status_tone.unwrap_or(RecordStatusTone::Neutral) {
+                RecordStatusTone::Positive => cx.theme().success,
+                RecordStatusTone::Neutral => cx.theme().muted_foreground,
+                RecordStatusTone::Caution => cx.theme().warning,
+                RecordStatusTone::Critical => cx.theme().danger,
+            };
+            let before = cell.change_before().cloned();
+            let after = cell.value().to_owned();
+            let mut source = String::new();
+            if let Some(before) = before.as_ref() {
+                source.push_str("~~");
+                source.push_str(&escape_markdown_text(before.as_ref()));
+                source.push_str("~~");
+            }
+            if before.is_some() && !after.is_empty() {
+                source.push_str(" → ");
+            }
+            if !after.is_empty() {
+                source.push_str(&escape_markdown_text(&after));
+            }
+            // The struck previous value, the arrow, and the new value live in
+            // ONE selectable text view that spans the cell, with the tone dot
+            // drawn over its leading padding. Window text selection treats
+            // every selectable view as a participant, and a drag whose ends
+            // resolve to two different participants on the same row re-ranks
+            // them every frame — an endless invalidation loop. One full-width
+            // participant keeps any in-cell drag anchored to itself.
+            div()
+                .relative()
+                .w_full()
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .top_0()
+                        .bottom_0()
+                        .flex()
+                        .items_center()
+                        .child(
+                            div()
+                                .flex_none()
+                                .size(tokens.spacing.xs)
+                                .rounded(tokens.radius.full)
+                                .bg(tone),
+                        ),
+                )
+                .child(
+                    TextView::markdown(format!("records-change-{identity}"), source)
+                        .selectable(true)
+                        .w_full()
+                        .pl(tokens.spacing.xs + tokens.spacing.xs),
+                )
+                .into_any_element()
+        }
         RecordCellKind::Status => {
             let tone = match cell.status_tone.unwrap_or(RecordStatusTone::Neutral) {
                 RecordStatusTone::Positive => cx.theme().success,
