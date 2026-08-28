@@ -1,6 +1,5 @@
 //! Live status rows for progressive agent tasks.
 
-use crate::motion::acknowledged_state;
 use crate::stream::{ProgressState, Progressive};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -8,9 +7,7 @@ use gpui::{
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
-};
+use gpui_component::{ActiveTheme as _, StyledExt as _, h_flex};
 use std::time::Duration;
 
 /// The typed content rendered by a [`TaskRow`].
@@ -92,43 +89,17 @@ impl Styled for TaskRow {
 impl RenderOnce for TaskRow {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
-        // The durable completion and failure marks settle in once, after the
-        // controlled state changes — never on a re-render, and never for the
+        // The shared lifecycle glyph: durable marks settle in once through
+        // its acknowledgment, never on a re-render, and never for the
         // state the row mounts with.
-        let ordinal = match self.state {
-            ProgressState::Pending => 0,
-            ProgressState::Running => 1,
-            ProgressState::Complete => 2,
-            ProgressState::Failed(_) => 3,
-        };
-        let acknowledged = acknowledged_state(
+        let indicator = crate::status::progress_glyph(
+            &self.state,
             ElementId::from((ElementId::from(self.task.id.clone()), "task-glyph")),
-            ordinal,
+            crate::sizing::SizeTokens::read(cx).slot_md(),
             window,
             cx,
-        );
-        let indicator = match &self.state {
-            ProgressState::Pending => div()
-                .size_2()
-                .rounded(tokens.radius.full)
-                .border_1()
-                .border_color(cx.theme().muted_foreground)
-                .into_any_element(),
-            ProgressState::Running => Spinner::new()
-                .small()
-                .color(cx.theme().info)
-                .into_any_element(),
-            ProgressState::Complete => Icon::new(IconName::CircleCheck)
-                .small()
-                .text_color(cx.theme().success)
-                .opacity(acknowledged)
-                .into_any_element(),
-            ProgressState::Failed(_) => Icon::new(IconName::CircleX)
-                .small()
-                .text_color(cx.theme().danger)
-                .opacity(acknowledged)
-                .into_any_element(),
-        };
+        )
+        .into_any_element();
         let failed_reason = match &self.state {
             ProgressState::Failed(reason) => Some(reason.clone()),
             _ => None,

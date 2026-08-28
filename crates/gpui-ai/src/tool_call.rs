@@ -32,7 +32,6 @@ use gpui_component::{
     ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    spinner::Spinner,
     text::TextView,
     v_flex,
 };
@@ -252,43 +251,16 @@ impl ToolCall {
     }
 
     fn status_glyph(&self, window: &mut Window, cx: &mut App) -> AnyElement {
-        let tokens = cx.theme().semantic_tokens();
         // The terminal glyphs settle in rather than popping, once per state
         // and never on a re-render; the state a card mounts with is exempt.
-        let ordinal = match self.state {
-            ProgressState::Pending => 0,
-            ProgressState::Running => 1,
-            ProgressState::Complete => 2,
-            ProgressState::Failed(_) => 3,
-        };
-        let acknowledged = crate::motion::acknowledged_state(
+        crate::status::progress_glyph(
+            &self.state,
             ElementId::from((ElementId::from(self.invocation.id.clone()), "glyph")),
-            ordinal,
+            crate::sizing::SizeTokens::read(cx).slot_sm(),
             window,
             cx,
-        );
-        match &self.state {
-            ProgressState::Running => Spinner::new()
-                .xsmall()
-                .color(cx.theme().info)
-                .into_any_element(),
-            ProgressState::Complete => Icon::new(IconName::CircleCheck)
-                .xsmall()
-                .text_color(cx.theme().success)
-                .opacity(acknowledged)
-                .into_any_element(),
-            ProgressState::Failed(_) => Icon::new(IconName::CircleX)
-                .xsmall()
-                .text_color(cx.theme().danger)
-                .opacity(acknowledged)
-                .into_any_element(),
-            ProgressState::Pending => div()
-                .size_1p5()
-                .rounded(tokens.radius.full)
-                .border_1()
-                .border_color(cx.theme().muted_foreground)
-                .into_any_element(),
-        }
+        )
+        .into_any_element()
     }
 }
 

@@ -10,12 +10,12 @@ use crate::motion::swap_progress;
 use crate::stream::ProgressState;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _, rems,
+    AnyElement, App, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, spinner::Spinner, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, spinner::Spinner, v_flex,
 };
 
 /// The meaning a status carries, independent of any one component.
@@ -55,6 +55,102 @@ impl StatusTone {
             ProgressState::Failed(_) => Self::Danger,
         }
     }
+}
+
+/// How strongly a chip speaks.
+///
+/// The three strengths are the whole chip vocabulary: a neutral inset
+/// pill for plain values, the tinted status chip — solid status-color
+/// text on the same hue at 12% alpha, borderless — for lifecycle and
+/// tags, and a solid chip reserved for counts and emphasis. Public
+/// because tables and rows expose the choice as a builder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChipStrength {
+    /// Inset pill: secondary surface, muted ink.
+    Neutral,
+    /// Solid status-color text on the same hue at low alpha. The default.
+    #[default]
+    Tinted,
+    /// The color as fill; the page background punches the label out.
+    Solid,
+}
+
+/// The chip surface all three strengths share: extra-small medium-weight
+/// text, chip paddings, full radius, and no border — a tinted pill inside
+/// a bordered row never doubles its lines.
+pub(crate) fn chip_frame(color: Hsla, strength: ChipStrength, cx: &App) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    let (background, foreground) = match strength {
+        ChipStrength::Neutral => (cx.theme().secondary, cx.theme().muted_foreground),
+        ChipStrength::Tinted => (color.opacity(0.12), color),
+        ChipStrength::Solid => (color, cx.theme().background),
+    };
+    div()
+        .flex_none()
+        .px(tokens.spacing.sm)
+        .py(tokens.spacing.xxs)
+        .rounded(tokens.radius.full)
+        .bg(background)
+        .text_token(tokens.typography.xs)
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(foreground)
+}
+
+/// One lifecycle glyph for the whole library, seated in a slot from the
+/// size policy: hollow dot pending, spinner running, check complete,
+/// cross failed. Settled faces fade in once through the shared
+/// acknowledgment (the state a surface mounts with is exempt); the
+/// spinner stays untouched, since fading an animation in would stack two
+/// motions on one slot. Glyph weight follows the slot — the medium slot
+/// seats small icons, anything tighter seats extra-small — so the same
+/// lifecycle reads identically across cards, rows, and tables.
+pub(crate) fn progress_glyph(
+    state: &ProgressState,
+    ack_slot: ElementId,
+    slot: Pixels,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    let ordinal = match state {
+        ProgressState::Pending => 0,
+        ProgressState::Running => 1,
+        ProgressState::Complete => 2,
+        ProgressState::Failed(_) => 3,
+    };
+    let acknowledged = crate::motion::acknowledged_state(ack_slot, ordinal, window, cx);
+    let roomy = slot >= crate::sizing::SizeTokens::read(cx).slot_md();
+    let glyph: AnyElement = match state {
+        ProgressState::Pending => div()
+            .when(roomy, |dot| dot.size_2())
+            .when(!roomy, |dot| dot.size_1p5())
+            .rounded(tokens.radius.full)
+            .border_1()
+            .border_color(cx.theme().muted_foreground)
+            .into_any_element(),
+        ProgressState::Running => {
+            let spinner = Spinner::new().color(cx.theme().info);
+            if roomy {
+                spinner.small()
+            } else {
+                spinner.xsmall()
+            }
+            .into_any_element()
+        }
+        ProgressState::Complete => {
+            let icon = Icon::new(IconName::CircleCheck).text_color(cx.theme().success);
+            if roomy { icon.small() } else { icon.xsmall() }
+                .opacity(acknowledged)
+                .into_any_element()
+        }
+        ProgressState::Failed(_) => {
+            let icon = Icon::new(IconName::CircleX).text_color(cx.theme().danger);
+            if roomy { icon.small() } else { icon.xsmall() }
+                .opacity(acknowledged)
+                .into_any_element()
+        }
+    };
+    crate::surface::leading_glyph_slot(slot, glyph)
 }
 
 /// Human-readable label for a progressive lifecycle state.
@@ -249,20 +345,13 @@ impl RenderOnce for StatusBadge {
                 )
             });
 
-        h_flex()
+        chip_frame(color, ChipStrength::Tinted, cx)
             .id(self.id)
             .role(Role::Status)
             .aria_label(self.label.clone())
-            .flex_none()
+            .flex()
             .items_center()
             .gap(tokens.spacing.xs)
-            .px(tokens.spacing.sm)
-            .py(tokens.spacing.xxs)
-            .rounded(tokens.radius.full)
-            .bg(color.opacity(0.12))
-            .text_token(tokens.typography.xs)
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(color)
             .child(indicator)
             .child(label_slot)
             .refine_style(&self.style)
@@ -278,6 +367,7 @@ const LIFECYCLE_LABELS: [&str; 4] = ["Pending", "Running", "Completed", "Failed"
 mod tests {
     use super::*;
     use gpui::{Context, Entity, Render, TestAppContext, VisualTestContext, px};
+    use gpui_component::h_flex;
 
     struct BadgeProbe {
         state: ProgressState,
