@@ -83,17 +83,11 @@ pub(super) fn sidebar_item_control(
     collapsed: bool,
     cx: &mut App,
 ) -> gpui_base::Button {
-    let tokens = cx.theme().semantic_tokens();
     let label = row.label.clone();
     let ring = if focused {
         cx.theme().ring
     } else {
         cx.theme().transparent
-    };
-    let selected_border = if focused {
-        cx.theme().ring
-    } else {
-        cx.theme().sidebar_border
     };
     gpui_base::Button::new((
         ElementId::from((ElementId::from(component_id.clone()), row.id.clone())),
@@ -126,7 +120,7 @@ pub(super) fn sidebar_item_control(
     .absolute()
     .inset_0()
     .size_full()
-    .rounded(tokens.radius.sm)
+    .rounded(cx.theme().radius)
     .border_1()
     .border_color(ring)
     .bg(cx.theme().transparent)
@@ -138,15 +132,7 @@ pub(super) fn sidebar_item_control(
         })
         .tooltip(move |window, cx| Tooltip::new(tooltip_label.clone()).build(window, cx))
     })
-    .styles(|styles| {
-        styles
-            .selected(|style| {
-                style
-                    .bg(cx.theme().sidebar_accent)
-                    .border_color(selected_border)
-            })
-            .disabled(|style| style.text_color(cx.theme().muted_foreground))
-    })
+    .styles(|styles| styles.disabled(|style| style.text_color(cx.theme().muted_foreground)))
 }
 
 /// The accessible control for one section header row.
@@ -221,13 +207,6 @@ pub(super) fn render_row(
     let active = row.active;
     let has_children = row.has_children;
     let expanded = row.expanded;
-    let hover_group: SharedString =
-        format!("sidebar-nav-hover-group.{component_id}.{}", row.id).into();
-    let hover_element_id = (
-        ElementId::from((ElementId::from(component_id.clone()), row.id.clone())),
-        "hover",
-    );
-    let hover_debug_id = row.id.clone();
     let item_debug_id = row.id.clone();
     let active_debug_id = row.id.clone();
     let activate_id = row.id.clone();
@@ -238,8 +217,11 @@ pub(super) fn render_row(
         .collapsed(collapsed)
         .disable(row.disabled)
         .when(!collapsed, |this| {
+            // Row icons draw at 16px beside the 14px labels — the icon
+            // scale the size principles set — instead of inheriting the
+            // label's own font size.
             this.when_some(row.icon.clone(), |this, icon| {
-                this.icon(Icon::default().path(icon))
+                this.icon(Icon::default().path(icon).size_4())
             })
         })
         .when(
@@ -250,14 +232,13 @@ pub(super) fn render_row(
                         .gap(cx.theme().semantic_tokens().spacing.xs)
                         .when_some(badge.clone(), |this, badge| {
                             this.child(
-                                div()
-                                    .px(cx.theme().semantic_tokens().spacing.xs)
-                                    .py(cx.theme().semantic_tokens().spacing.xxs)
-                                    .rounded(cx.theme().semantic_tokens().radius.full)
-                                    .border_1()
-                                    .border_color(cx.theme().sidebar_border)
-                                    .text_token(cx.theme().semantic_tokens().typography.xs)
-                                    .child(badge),
+                                crate::status::chip_frame(
+                                    cx.theme().muted_foreground,
+                                    crate::status::ChipStrength::Neutral,
+                                    cx,
+                                )
+                                .px(cx.theme().semantic_tokens().spacing.xs)
+                                .child(badge),
                             )
                         })
                         .when(active, |this| {
@@ -276,26 +257,6 @@ pub(super) fn render_row(
 
     let control = sidebar_item_control(component_id, row, focused, collapsed, cx)
         .debug_selector(move || format!("sidebar-nav-item-{item_debug_id}"))
-        .when(!collapsed && !row.disabled && !active, |this| {
-            this.group(hover_group.clone()).child(
-                div()
-                    .id(hover_element_id)
-                    .debug_selector(move || format!("sidebar-nav-hover-{hover_debug_id}"))
-                    .absolute()
-                    .top_0()
-                    .bottom_0()
-                    .left_0()
-                    .w_0()
-                    .rounded(tokens.radius.sm)
-                    .border_1()
-                    .border_color(cx.theme().transparent)
-                    .group_hover(hover_group, |style| {
-                        style
-                            .w_full()
-                            .border_color(cx.theme().sidebar_accent_foreground)
-                    }),
-            )
-        })
         .on_click(move |_, window, cx| {
             _ = activate_owner.update(cx, |nav, cx| {
                 nav.activate_item(activate_id.clone(), window, cx)
@@ -322,7 +283,7 @@ pub(super) fn render_row(
                 .flex_none()
                 .w(tokens.spacing.md)
                 .border_l_1()
-                .border_color(cx.theme().sidebar_border)
+                .border_color(cx.theme().sidebar_border.opacity(0.6))
         }))
         .child(
             div()
