@@ -1950,18 +1950,18 @@ fn records_story_columns() -> Vec<RecordColumn> {
         RecordColumn::new("supplier", "Supplier")
             .sortable(true)
             .fixed(true)
-            .width(px(186.)),
+            .width(px(240.)),
         RecordColumn::new("region", "Region")
             .sortable(true)
-            .width(px(92.)),
-        RecordColumn::new("products", "Products").width(px(140.)),
+            .width(px(130.)),
+        RecordColumn::new("products", "Products").width(px(200.)),
         RecordColumn::new("unit_cost", "Unit cost")
             .sortable(true)
             .alignment(RecordColumnAlignment::Right)
-            .width(px(88.)),
+            .width(px(110.)),
         RecordColumn::new("status", "Status")
             .sortable(true)
-            .width(px(82.)),
+            .width(px(140.)),
     ]
 }
 // snippet:end
@@ -2300,11 +2300,11 @@ impl Render for RecordsTableStory {
 fn diff_story_columns() -> Vec<DiffColumn> {
     vec![
         DiffColumn::new("flavor", "Flavor")
-            .width(px(150.))
+            .width(px(220.))
             .fixed(true)
             .sortable(true),
         DiffColumn::new("category", "Category")
-            .width(px(200.))
+            .width(px(380.))
             .sortable(true),
     ]
 }
@@ -2657,15 +2657,15 @@ impl Render for DiffTableStory {
 fn filter_story_columns() -> [FilterColumn; 4] {
     [
         FilterColumn::new("task", "Task name")
-            .width(px(190.))
+            .width(px(280.))
             .fixed(true),
         FilterColumn::new("date", "Date")
-            .width(px(118.))
+            .width(px(150.))
             .sortable(true),
         FilterColumn::new("status", "Status")
-            .width(px(110.))
+            .width(px(150.))
             .sortable(true),
-        FilterColumn::new("advisor", "Advisor").width(px(170.)),
+        FilterColumn::new("advisor", "Advisor").width(px(240.)),
     ]
 }
 // snippet:end
