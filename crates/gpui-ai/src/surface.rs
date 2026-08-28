@@ -243,6 +243,15 @@ pub(crate) fn icon_button(
         })
         .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
         .focus_visible(|style| style.border_color(cx.theme().ring))
+        // A toggle that reports selected also shows it: the accent fill
+        // stays while selected, so state stops being invisible.
+        .styles(|styles| {
+            styles.selected(|style| {
+                style
+                    .bg(cx.theme().accent)
+                    .text_color(cx.theme().accent_foreground)
+            })
+        })
         .press_release(id, tokens.radius.sm, window, cx)
         .child(Icon::new(icon).xsmall())
 }

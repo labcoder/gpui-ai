@@ -32,7 +32,7 @@ use gpui::{
     div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _,
+    ActiveTheme as _, IconName, Sizable as _,
     button::Button,
     h_flex,
     input::{Input, InputEvent, InputState},
@@ -356,14 +356,33 @@ impl RowRenderer {
         let select_id = item.id.clone();
         let owner = self.owner.clone();
 
-        h_flex()
-            .id((item_id.clone(), "row"))
+        // The whole row — trailing actions included — is one selection
+        // surface: an inset fill at the nesting-rule radius against the
+        // list's panel, hover covering everything inside it, and the
+        // acknowledged fade playing on the fill. The select control keeps
+        // the semantics and the keyboard focus ring; it paints nothing.
+        let surface = crate::surface::selection_surface(
+            div().id((item_id.clone(), "row")),
+            selected,
+            tokens.radius.lg,
+            tokens.spacing.xs,
+            cx,
+        );
+        surface
+            // The acknowledged fade plays on the fill alone — the row's
+            // content never dims — by re-stating the selected background
+            // at the acknowledgment's alpha over the surface's own.
+            .when(selected, |row| {
+                row.bg(cx.theme().list_active.opacity(acknowledged))
+            })
             .w_full()
             .min_w_0()
+            .flex()
             .items_center()
             .gap(tokens.spacing.xxs)
-            .px(tokens.spacing.xxs)
-            .pb(tokens.spacing.xxs)
+            .mx(tokens.spacing.xs)
+            .mb(tokens.spacing.xxs)
+            .pr(tokens.spacing.xxs)
             .child(
                 composed_button((item_id.clone(), "select"), accessibility_label)
                     .debug_selector(move || format!("thread-{debug_id}"))
@@ -379,24 +398,15 @@ impl RowRenderer {
                     .tab_stop(false)
                     .flex_1()
                     .min_w_0()
-                    .px(tokens.spacing.sm)
+                    .px(tokens.spacing.xs)
                     .py(tokens.spacing.xs)
-                    .rounded(tokens.radius.md)
-                    .border_l_2()
+                    .rounded(tokens.radius.sm)
+                    .border_1()
                     .border_color(if focused {
                         cx.theme().ring
-                    } else if selected {
-                        cx.theme().primary.opacity(acknowledged)
                     } else {
                         cx.theme().transparent
                     })
-                    .bg(if selected {
-                        cx.theme().accent.opacity(acknowledged)
-                    } else {
-                        cx.theme().transparent
-                    })
-                    .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                    .active(|style| style.bg(cx.theme().accent))
                     .focus_visible(|style| style.border_color(cx.theme().ring))
                     .child(
                         v_flex()
@@ -1039,14 +1049,13 @@ impl Render for ThreadList {
                     .debug_selector(|| "thread-list-search".into())
                     .w_full()
                     .items_center()
-                    .gap(tokens.spacing.xs)
                     .px(tokens.spacing.xs)
                     .child(
-                        Icon::new(IconName::Search)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    )
-                    .child(div().flex_1().min_w_0().child(Input::new(&self.input))),
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(Input::new(&self.input).prefix(IconName::Search)),
+                    ),
             )
             .child(
                 // The outer frame owns the flex constraint; the virtual list
