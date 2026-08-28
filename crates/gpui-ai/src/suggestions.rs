@@ -145,8 +145,11 @@ impl RenderOnce for Suggestions {
                             })
                             .flex()
                             .items_center()
+                            // Chip geometry from the size policy: prompt
+                            // pills stand a medium control tall, so they
+                            // rhyme with the composer's own controls.
+                            .h(crate::sizing::SizeTokens::read(cx).control_md())
                             .px(tokens.spacing.md)
-                            .py(tokens.spacing.xs)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(tokens.radius.full)
@@ -175,8 +178,10 @@ impl RenderOnce for Suggestions {
                         .id(chip_id)
                         .role(Role::ListItem)
                         .aria_label(item.label.clone())
+                        .flex()
+                        .items_center()
+                        .h(crate::sizing::SizeTokens::read(cx).control_md())
                         .px(tokens.spacing.md)
-                        .py(tokens.spacing.xs)
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(tokens.radius.full)

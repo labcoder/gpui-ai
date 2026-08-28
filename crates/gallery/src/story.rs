@@ -443,7 +443,7 @@ impl StoryId {
                 module: "suggestions",
                 api: "Suggestions",
                 usage: crate::usage::SUGGESTIONS,
-                height: 128,
+                height: 124,
                 overflow: Overflow::Wide,
             },
             Self::Attachments => StoryMeta {

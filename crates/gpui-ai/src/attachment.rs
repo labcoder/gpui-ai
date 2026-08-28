@@ -22,7 +22,7 @@ use crate::{
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, Image, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement as _, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _, rems,
+    StyleRefinement, Styled, StyledImage as _, Window, div, img, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
@@ -389,7 +389,11 @@ impl RenderOnce for AttachmentPreview {
         let summary = attachment.summary();
         let failed = matches!(attachment.state, ProgressState::Failed(_));
         let running = attachment.state == ProgressState::Running;
-        let leading_size = if self.compact { rems(1.25) } else { rems(2.5) };
+        // The compact tile seats its glyph in the medium slot; the full
+        // tile doubles it for a thumbnail. Derived from the size policy so
+        // a resized slot scale moves the tiles with every other glyph box.
+        let slot = crate::sizing::SizeTokens::read(cx).slot_md();
+        let leading_size = if self.compact { slot } else { slot * 2. };
 
         // Thumbnail when we have one; otherwise the kind glyph on a quiet tint.
         let leading = match (&attachment.thumbnail, running) {

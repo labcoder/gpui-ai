@@ -170,7 +170,7 @@ impl RenderOnce for SearchResults {
             .child(
                 h_flex()
                     .items_center()
-                    .gap(tokens.spacing.xs)
+                    .gap(tokens.spacing.sm)
                     .px(tokens.spacing.md)
                     .py(tokens.spacing.xs)
                     .text_token(tokens.typography.xs)

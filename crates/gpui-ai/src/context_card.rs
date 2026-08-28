@@ -101,7 +101,7 @@ impl RenderOnce for ContextCard {
             .child(
                 h_flex()
                     .items_center()
-                    .gap(tokens.spacing.xs)
+                    .gap(tokens.spacing.sm)
                     .child(
                         Icon::new(IconName::File)
                             .xsmall()

@@ -39,14 +39,21 @@ pub struct ImageGeneration {
     image: Option<AnyElement>,
 }
 
+/// Default frame width: a 3:2 media box that fits a chat column.
+/// Both dimensions are builder-overridable per instance.
+const DEFAULT_FRAME_WIDTH: gpui::Pixels = px(240.);
+
+/// Default frame height for the 3:2 media box.
+const DEFAULT_FRAME_HEIGHT: gpui::Pixels = px(160.);
+
 impl ImageGeneration {
     /// Creates a 240×160 frame at zero progress.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
-            width: px(240.),
-            height: px(160.),
+            width: DEFAULT_FRAME_WIDTH,
+            height: DEFAULT_FRAME_HEIGHT,
             progress: 0.0,
             label: None,
             image: None,

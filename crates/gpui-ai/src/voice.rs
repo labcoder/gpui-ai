@@ -172,7 +172,7 @@ impl RenderOnce for VoiceControls {
             VoiceState::Transcribing => Spinner::new().xsmall().into_any_element(),
             VoiceState::Idle | VoiceState::Speaking => div()
                 .flex_none()
-                .size(rems(0.5))
+                .size_2()
                 .rounded(tokens.radius.full)
                 .bg(cx.theme().muted_foreground.opacity(0.6))
                 .into_any_element(),

@@ -21,7 +21,7 @@ use crate::{
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, Rems, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
@@ -35,6 +35,14 @@ use std::rc::Rc;
 
 /// Line height shared by the gutter and the code so rows stay aligned.
 const LINE_HEIGHT: Rems = Rems(1.5);
+
+/// Width of one line-number gutter column: four digits of the mono
+/// extra-small size, right-aligned, in the type's own unit so the gutter
+/// scales with the code beside it.
+const NUMBER_GUTTER_WIDTH: Rems = Rems(2.25);
+
+/// Width of the +/- sign column between the numbers and the code.
+const SIGN_GUTTER_WIDTH: Rems = Rems(0.75);
 
 /// Whether a line was kept, added, or removed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -822,19 +830,19 @@ fn render_hunk(
                 .gap(tokens.spacing.xs)
                 .child(
                     div()
-                        .w(rems(2.25))
+                        .w(NUMBER_GUTTER_WIDTH)
                         .text_right()
                         .child(line.old_number.map_or(String::new(), |n| n.to_string())),
                 )
                 .child(
                     div()
-                        .w(rems(2.25))
+                        .w(NUMBER_GUTTER_WIDTH)
                         .text_right()
                         .child(line.new_number.map_or(String::new(), |n| n.to_string())),
                 )
                 .child(
                     div()
-                        .w(rems(0.75))
+                        .w(SIGN_GUTTER_WIDTH)
                         .text_center()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(sign_color)

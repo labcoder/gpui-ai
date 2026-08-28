@@ -717,7 +717,7 @@ impl RenderOnce for ToolGroup {
         let interactive = self.on_event.is_some();
         let header = h_flex()
             .items_center()
-            .gap(tokens.spacing.xs)
+            .gap(tokens.spacing.sm)
             .text_token(tokens.typography.sm)
             .text_color(cx.theme().muted_foreground)
             .when(interactive, |this| {
