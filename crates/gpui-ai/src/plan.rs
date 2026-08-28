@@ -648,7 +648,7 @@ fn render_step(
         // other step — the whole initial plan included — renders at rest.
         Some(progress) => wrapped
             .opacity(progress)
-            .top(tokens.spacing.xxs * (1.0 - progress))
+            .top(tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx))
             .into_any_element(),
         None => wrapped.into_any_element(),
     }

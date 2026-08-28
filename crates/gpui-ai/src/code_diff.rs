@@ -532,6 +532,8 @@ impl RenderOnce for CodeDiff {
         let root_id = self.id.clone();
         let disclosure =
             disclosure_progress((root_id.clone(), "disclosure"), self.open, window, cx);
+        let disclosure_opacity =
+            crate::motion::disclosure_fade((root_id.clone(), "disclosure"), self.open, window, cx);
         let showing = self.open;
 
         let toggle = handler.clone().map(|handler| {
@@ -647,8 +649,8 @@ impl RenderOnce for CodeDiff {
                     div()
                         .w_full()
                         .min_w_0()
-                        .opacity(disclosure)
-                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .opacity(disclosure_opacity)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure) * crate::motion::travel(cx))
                         .children(hunks),
                 )
             })

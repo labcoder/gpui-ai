@@ -196,8 +196,8 @@ impl RenderOnce for StatusBadge {
         if progress >= 1.0 && outgoing.is_some() {
             swap.update(cx, |swap, _| swap.outgoing = None);
         }
-        let exit = tokens.spacing.xxs * progress;
-        let entry = tokens.spacing.xxs * (1.0 - progress);
+        let exit = tokens.spacing.xxs * progress * crate::motion::travel(cx);
+        let entry = tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx);
 
         // The indicator slot is fixed — sized for the spinner, centering the
         // smaller dot — so running↔settled never nudges the label sideways.
@@ -382,17 +382,36 @@ mod tests {
     }
 
     #[gpui::test]
-    fn reduced_motion_swaps_without_frames(cx: &mut TestAppContext) {
+    fn reduced_motion_swaps_crossfade_and_snap_is_instant(cx: &mut TestAppContext) {
+        // The OS flag resolves to crossfade: the swap's opacity fade runs
+        // at the quick tempo and settles quiet.
         cx.update(|cx| cx.set_reduce_motion(true));
         let (probe, cx) = open(cx);
         crate::motion::take_reveal_frame_requests();
 
         set_state(&probe, cx, ProgressState::Failed("offline".into()));
         draw(cx);
+        assert!(
+            crate::motion::take_reveal_frame_requests() > 0,
+            "the crossfade swap runs"
+        );
+        settle_swap(cx);
+        crate::motion::take_reveal_frame_requests();
+        draw(cx);
+        assert_eq!(crate::motion::take_reveal_frame_requests(), 0);
+
+        // The snap preference is the true zero.
+        cx.update(|_, cx| {
+            crate::motion::MotionTokens::default()
+                .with_preference(crate::motion::MotionPreference::Snap)
+                .set(cx)
+        });
+        set_state(&probe, cx, ProgressState::Complete);
+        draw(cx);
         assert_eq!(
             crate::motion::take_reveal_frame_requests(),
             0,
-            "reduced motion resolves the swap instantly"
+            "snap resolves the swap instantly"
         );
     }
 

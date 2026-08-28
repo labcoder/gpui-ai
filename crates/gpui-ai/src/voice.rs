@@ -324,6 +324,7 @@ fn signal_field(id: ElementId, level: f32, cx: &App) -> impl IntoElement {
     let level = level.clamp(0.0, 1.0);
     let gap = tokens.spacing.xxs;
     let radius = tokens.radius.full;
+    let full = crate::motion::motion_is_full(cx);
     const WEIGHTS: [f32; 6] = [0.35, 0.65, 1.0, 0.85, 0.55, 0.3];
     h_flex()
         .flex_none()
@@ -338,6 +339,7 @@ fn signal_field(id: ElementId, level: f32, cx: &App) -> impl IntoElement {
             // epoch, so a field remounted mid-session rejoins the beat.
             MotionTokens::read(cx).breathing().looping_synced(),
             move |field, delta| {
+                let delta = if full { delta } else { 0.0 };
                 field.children(WEIGHTS.iter().enumerate().map(|(index, weight)| {
                     let phase = index as f32 / WEIGHTS.len() as f32;
                     let wave = ((delta - phase).rem_euclid(1.0) * 2.0 - 1.0).abs();

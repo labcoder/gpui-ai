@@ -89,6 +89,7 @@ impl Styled for ImageGeneration {
 
 impl RenderOnce for ImageGeneration {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let full = crate::motion::motion_is_full(cx);
         let tokens = cx.theme().semantic_tokens();
         let generating = self.progress < 1.0;
         let veil_height = self.height * (1.0 - self.progress);
@@ -139,7 +140,8 @@ impl RenderOnce for ImageGeneration {
                                     // frame demands nothing. Reduced motion
                                     // holds delta at 0 — a fully opaque icon.
                                     MotionTokens::read(cx).image_pulse().looping(),
-                                    |this, delta| {
+                                    move |this, delta| {
+                                        let delta = if full { delta } else { 0.0 };
                                         let wave = (delta * 2.0 - 1.0).abs();
                                         this.opacity(0.35 + 0.65 * wave)
                                     },

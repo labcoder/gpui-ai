@@ -265,7 +265,11 @@ impl RenderOnce for ContextMeter {
         let fraction = transition(
             (self.id.clone(), "context-fill"),
             self.usage.fraction(),
-            Transition::new(MotionTokens::read(cx).standard()).ease(ease_out_cubic),
+            Transition::new(crate::motion::retarget_duration(
+                cx,
+                MotionTokens::read(cx).standard(),
+            ))
+            .ease(ease_out_cubic),
             window,
             cx,
         );

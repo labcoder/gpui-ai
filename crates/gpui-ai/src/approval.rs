@@ -213,7 +213,7 @@ impl RenderOnce for ApprovalCard {
                 .items_center()
                 .gap(tokens.spacing.sm)
                 .opacity(settled)
-                .top(tokens.spacing.xxs * (1.0 - settled))
+                .top(tokens.spacing.xxs * (1.0 - settled) * crate::motion::travel(cx))
                 .child(
                     div()
                         .debug_selector(move || format!("approval-decision-{decision_debug}"))

@@ -472,7 +472,8 @@ fn chart_group(
                     point.label
                 ))),
                 point.value as f32,
-                Transition::new(standard).ease(ease_out_cubic),
+                Transition::new(crate::motion::retarget_duration(cx, standard))
+                    .ease(ease_out_cubic),
                 window,
                 cx,
             );
@@ -540,7 +541,7 @@ impl RenderOnce for InsightCard {
                 cx,
             )
         };
-        let page_travel = tokens.spacing.xxs * (1.0 - page_entrance);
+        let page_travel = tokens.spacing.xxs * (1.0 - page_entrance) * crate::motion::travel(cx);
         let page_offset = if entering_forward {
             page_travel
         } else {

@@ -84,6 +84,7 @@ impl RenderOnce for LoadingState {
         let sweep = MotionTokens::read(cx).grid_sweep();
         let cell_gap = tokens.spacing.xxs;
         let cell_size = tokens.spacing.xs;
+        let full = crate::motion::motion_is_full(cx);
         let cell_radius = tokens.spacing.xxs;
 
         // One clock for the whole grid: the root animation samples a single
@@ -102,6 +103,7 @@ impl RenderOnce for LoadingState {
                 // delta at 0, leaving a static diagonal gradient across the grid.
                 sweep.looping_synced(),
                 move |grid, delta| {
+                    let delta = if full { delta } else { 0.0 };
                     grid.children((0..ROWS).map(|row| {
                         h_flex().gap(cell_gap).children((0..COLS).map(move |col| {
                             // Each cell's pulse is phase-shifted along the

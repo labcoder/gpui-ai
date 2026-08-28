@@ -172,7 +172,8 @@ impl RenderOnce for TodoList {
         let fill = transition(
             (self.id.clone(), "todo-fill"),
             fraction,
-            Transition::new(motion.standard()).ease(ease_out_cubic),
+            Transition::new(crate::motion::retarget_duration(cx, motion.standard()))
+                .ease(ease_out_cubic),
             window,
             cx,
         );
@@ -320,7 +321,7 @@ impl RenderOnce for TodoList {
                 let row = match arrival {
                     Some(progress) => row
                         .opacity(progress)
-                        .top(tokens.spacing.xxs * (1.0 - progress)),
+                        .top(tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx)),
                     None => row,
                 };
 

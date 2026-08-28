@@ -383,7 +383,7 @@ fn render_row(
     let row = match arrival {
         Some(progress) => row
             .opacity(progress)
-            .top(tokens.spacing.xxs * (1.0 - progress)),
+            .top(tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx)),
         None => row,
     };
     div().w_full().min_w_0().child(row).into_any_element()

@@ -784,7 +784,7 @@ impl RecordsTable {
                     .filter_map(|row_id| accepted_rows_by_id.position(row_id))
                     .min()
             });
-        let reorder_motion = if row_reorder_enabled && !cx.reduce_motion() {
+        let reorder_motion = if row_reorder_enabled && crate::motion::motion_is_full(cx) {
             let old_visible_start = old_visible_range.start;
             let visible_len = old_visible_range.len().max(visible_row_ids.len()).max(1);
             let new_visible_start = anchor_row_ix

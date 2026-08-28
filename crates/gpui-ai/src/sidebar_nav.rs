@@ -469,10 +469,16 @@ impl Render for SidebarNav {
             window,
             cx,
         );
+        let expansion_fade = crate::motion::disclosure_fade(
+            (ElementId::from(self.id.clone()), "expanse"),
+            !self.collapsed,
+            window,
+            cx,
+        );
         let settle = if self.collapsed {
-            1.0 - expansion
+            1.0 - expansion_fade
         } else {
-            expansion
+            expansion_fade
         };
         self.render_shell(expansion, cx).child(
             div()

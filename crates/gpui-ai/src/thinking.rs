@@ -320,6 +320,8 @@ impl RenderOnce for Thinking {
         let motion = MotionTokens::read(cx).clone();
 
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
+        let disclosure_opacity =
+            crate::motion::disclosure_fade((root_id.clone(), "disclosure"), open, window, cx);
         let showing = open;
 
         // Observed before the steps render, so a batch that arrived this
@@ -475,7 +477,7 @@ impl RenderOnce for Thinking {
                     })
                     .when_some(arrival, |this, progress| {
                         this.opacity(progress)
-                            .top(tokens.spacing.xxs * (1.0 - progress))
+                            .top(tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx))
                     })
             }))
             .when_some(failed.clone(), |this, reason| {
@@ -525,8 +527,8 @@ impl RenderOnce for Thinking {
                 // immediately, including its selectable text and controls.
                 this.child(
                     div()
-                        .opacity(disclosure)
-                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .opacity(disclosure_opacity)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure) * crate::motion::travel(cx))
                         .child(body),
                 )
             })

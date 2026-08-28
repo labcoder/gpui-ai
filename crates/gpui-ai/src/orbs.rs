@@ -222,6 +222,7 @@ struct LatticeDot {
 impl RenderOnce for Orbs {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let full = crate::motion::motion_is_full(cx);
         let lattice = MotionTokens::read(cx).orb_lattice();
         let scale = self.diameter.as_f32() / STAGE;
         let dot = px(4.2 * scale);
@@ -286,6 +287,7 @@ impl RenderOnce for Orbs {
                 // frame, not nine identical dots.
                 lattice.looping_synced(),
                 move |stage, delta| {
+                    let delta = if full { delta } else { 0.0 };
                     stage.children(dots.iter().map(|spec| {
                         let phase = (delta + spec.seeded_phase) % 1.0;
                         // Eased triangle: 0→1→0 across the cycle so each dot

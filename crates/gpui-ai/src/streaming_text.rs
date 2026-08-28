@@ -984,7 +984,7 @@ impl RenderOnce for StreamingText {
                     h_flex()
                         .id((root_id.clone(), "sources"))
                         .opacity(settled_in)
-                        .top(tokens.spacing.xxs * (1.0 - settled_in))
+                        .top(tokens.spacing.xxs * (1.0 - settled_in) * crate::motion::travel(cx))
                         .role(Role::List)
                         .aria_label("Sources")
                         .flex_wrap()

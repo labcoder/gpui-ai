@@ -527,7 +527,7 @@ impl SelectionActions {
         let toolbar = ToolbarEntrance {
             child: div().opacity(entrance).child(toolbar).into_any_element(),
             anchor_y: anchor.y,
-            travel: tokens.spacing.xxs * (1.0 - entrance),
+            travel: tokens.spacing.xxs * (1.0 - entrance) * crate::motion::travel(cx),
         };
 
         selection_toolbar_positioner(anchor, Placement::Bottom, toolbar, cx)

@@ -697,7 +697,7 @@ impl RenderOnce for AttachmentStrip {
             let preview = match arrival {
                 Some(progress) => preview
                     .opacity(progress)
-                    .top(tokens.spacing.xxs * (1.0 - progress)),
+                    .top(tokens.spacing.xxs * (1.0 - progress) * crate::motion::travel(cx)),
                 None => preview,
             };
             tiles.push(preview);

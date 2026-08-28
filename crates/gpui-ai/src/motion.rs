@@ -220,6 +220,28 @@ fn repeating_synced(period: Duration) -> Animation {
     Animation::new(period).repeat_synced()
 }
 
+/// How much of the described motion actually runs.
+///
+/// Resolution follows the crate's customization order: this default → the
+/// application's installed policy → per-surface overrides where a
+/// component exposes one. The OS reduce-motion signal composes with the
+/// policy and can only restrict: under reduce motion the effective
+/// preference is at least [`Crossfade`](Self::Crossfade), never less —
+/// the policy may choose [`Snap`](Self::Snap), but nothing wins motion
+/// back from the OS signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum MotionPreference {
+    /// Everything the policy describes: travel, springs, and loops.
+    #[default]
+    Full,
+    /// Comprehension-aiding opacity only, at the quick tempo: no travel,
+    /// no springs, no stagger delays, and no repeating loops beyond
+    /// progress indication.
+    Crossfade,
+    /// State changes land in one frame.
+    Snap,
+}
+
 /// A spring's feel, as the pair the ecosystem tunes springs by: the response
 /// period and the damping ratio.
 ///
@@ -280,6 +302,7 @@ impl SpringRole {
 /// feel, never whether travel happens for someone who asked for stillness.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MotionTokens {
+    preference: MotionPreference,
     instant: Duration,
     quick: Duration,
     standard: Duration,
@@ -317,6 +340,7 @@ const STAGGER_TOTAL_CAP: Duration = Duration::from_millis(220);
 impl MotionTokens {
     /// The crate's default duration, spring, and repeating-effect policy.
     pub const DEFAULT: Self = Self {
+        preference: MotionPreference::Full,
         instant: Duration::ZERO,
         quick: Duration::from_millis(150),
         standard: EnterSpec::REVEAL.duration,
@@ -398,6 +422,30 @@ impl MotionTokens {
     }
 
     // -- Builders ----------------------------------------------------------
+
+    /// The policy's own motion preference, before the OS signal composes.
+    pub const fn preference(&self) -> MotionPreference {
+        self.preference
+    }
+
+    /// The preference actually in effect: the policy's, floored at
+    /// [`MotionPreference::Crossfade`] while the OS asks for reduced
+    /// motion. Every clock, spring, and loop in the crate resolves
+    /// through this.
+    pub fn effective_preference(cx: &App) -> MotionPreference {
+        let policy = Self::read(cx).preference;
+        if cx.reduce_motion() {
+            policy.max(MotionPreference::Crossfade)
+        } else {
+            policy
+        }
+    }
+
+    /// Replaces the [`preference`](Self::preference).
+    pub const fn with_preference(mut self, preference: MotionPreference) -> Self {
+        self.preference = preference;
+        self
+    }
 
     /// Replaces the [`instant`](Self::instant) duration.
     pub const fn with_instant(mut self, duration: Duration) -> Self {
@@ -558,14 +606,47 @@ pub(crate) fn disclosure_progress(
     window: &mut Window,
     cx: &mut App,
 ) -> f32 {
+    let target = if open { 1.0f32 } else { 0.0 };
+    if !motion_is_full(cx) {
+        // Geometry is travel: a reduced preference lands the surface in
+        // one frame and leaves the fade to `disclosure_fade`.
+        return target;
+    }
     let standard = MotionTokens::read(cx).standard();
     transition(
         id,
-        if open { 1.0f32 } else { 0.0 },
+        target,
         Transition::new(standard).ease(ease_out_cubic),
         window,
         cx,
     )
+}
+
+/// The opacity half of a disclosure: identical to
+/// [`disclosure_progress`] under full motion (same transition key, so the
+/// two never disagree), a quick crossfade on its own clock under the
+/// crossfade preference — the upstream transition would snap it whenever
+/// the OS flag is set — and the target under snap.
+pub(crate) fn disclosure_fade(
+    id: impl Into<gpui_base::motion::TransitionId>,
+    open: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    let target = if open { 1.0f32 } else { 0.0 };
+    match MotionTokens::effective_preference(cx) {
+        MotionPreference::Snap => target,
+        MotionPreference::Crossfade => {
+            let id = id.into();
+            crossfade_toward(
+                ElementId::Name(format!("{id:?}-disclosure-fade").into()),
+                target,
+                window,
+                cx,
+            )
+        }
+        MotionPreference::Full => disclosure_progress(id, open, window, cx),
+    }
 }
 
 /// Arrival bookkeeping for one owner. History starts at rest; later batches
@@ -661,7 +742,7 @@ impl ArrivalRoster {
             .delays
             .get(key)?
             .progress(cx.background_executor().now());
-        if cx.reduce_motion() || progress >= 1.0 {
+        if MotionTokens::effective_preference(cx) == MotionPreference::Snap || progress >= 1.0 {
             self.delays.remove(key);
             return None;
         }
@@ -738,7 +819,7 @@ impl RenderOnce for Shimmer {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let base = self.base.unwrap_or(cx.theme().muted_foreground);
         let highlight = self.highlight.unwrap_or(cx.theme().foreground);
-        if !self.active {
+        if !self.active || !motion_is_full(cx) {
             return div()
                 .whitespace_nowrap()
                 .text_color(base)
@@ -847,7 +928,8 @@ pub(crate) fn acknowledged_state(
 ) -> f32 {
     let now = cx.background_executor().now();
     let duration = MotionTokens::read(cx).quick();
-    let reduced = cx.reduce_motion() || duration.is_zero();
+    let reduced =
+        MotionTokens::effective_preference(cx) == MotionPreference::Snap || duration.is_zero();
     let state =
         window.use_keyed_state((slot, "acknowledged-state"), cx, |_, _| AcknowledgedState {
             ordinal,
@@ -881,6 +963,83 @@ struct AcknowledgedState {
     started_at: Option<Instant>,
 }
 
+/// `1.0` while travel is allowed, `0.0` under crossfade and snap.
+///
+/// Multiplied into every offset a progress value drives, so the same
+/// sample fades under a reduced preference instead of travelling — the
+/// "gentler, not zero" reading both review standards prescribe.
+pub(crate) fn travel(cx: &App) -> f32 {
+    if MotionTokens::effective_preference(cx) == MotionPreference::Full {
+        1.0
+    } else {
+        0.0
+    }
+}
+
+/// Whether springs, reorders, drives, and decorative loops may run at
+/// all. Progress indication (an indeterminate spinner) is exempt from
+/// crossfade by contract and follows only snap and the OS signal.
+pub(crate) fn motion_is_full(cx: &App) -> bool {
+    MotionTokens::effective_preference(cx) == MotionPreference::Full
+}
+
+/// The duration a geometry retarget (fills, widths, disclosure travel)
+/// actually animates over: unchanged under full motion, zero otherwise —
+/// geometry is travel, and gpui_base's transition snaps on a zero
+/// duration.
+pub(crate) fn retarget_duration(cx: &App, duration: Duration) -> Duration {
+    if motion_is_full(cx) {
+        duration
+    } else {
+        Duration::ZERO
+    }
+}
+
+/// A crossfade's own retargeting clock: steps `value` toward `target` at
+/// the quick tempo, carrying the current value through interruptions.
+///
+/// The upstream transition facility snaps whenever the OS asks for
+/// reduced motion — correct for travel, wrong for the opacity fades the
+/// crossfade preference exists to keep. This clock ignores the OS flag
+/// on purpose; callers reach it only through a preference match that has
+/// already resolved to crossfade.
+fn crossfade_toward(
+    id: impl Into<ElementId>,
+    target: f32,
+    window: &mut Window,
+    cx: &mut App,
+) -> f32 {
+    let quick = MotionTokens::read(cx)
+        .quick()
+        .as_secs_f32()
+        .max(f32::EPSILON);
+    let now = cx.background_executor().now();
+    let state = window.use_keyed_state((id.into(), "crossfade"), cx, |_, _| CrossfadeState {
+        value: target,
+        at: now,
+    });
+    let value = state.update(cx, |state, _| {
+        let step = now.saturating_duration_since(state.at).as_secs_f32() / quick;
+        state.at = now;
+        state.value = if state.value < target {
+            (state.value + step).min(target)
+        } else {
+            (state.value - step).max(target)
+        };
+        state.value
+    });
+    if (value - target).abs() > f32::EPSILON {
+        note_reveal_frame_request();
+        window.request_animation_frame();
+    }
+    value
+}
+
+struct CrossfadeState {
+    value: f32,
+    at: Instant,
+}
+
 /// The shared clock behind [`reveal_progress`] and [`swap_progress`]: `0.0`
 /// at the keyed instant the element first rendered, `1.0` once `duration`
 /// (after `delay`) has passed, eased on the way.
@@ -893,12 +1052,17 @@ fn timed_progress(
 ) -> f32 {
     // Frame demand: the only hand-scheduled effects in the crate, because
     // these read a clock rather than a GPUI animation. Active while
-    // `progress < 1.0`; a settled clock asks for nothing, and reduced
-    // motion asks for nothing and returns the end state. The audit below
-    // counts the requests rather than asserting this in prose.
-    if cx.reduce_motion() {
-        return 1.0;
-    }
+    // `progress < 1.0`; a settled clock asks for nothing. Snap returns
+    // the end state; crossfade keeps the fade — clamped to the quick
+    // tempo, stagger delay dropped — because a one-shot opacity change is
+    // exactly the comprehension aid a reduced preference retains.
+    let (delay, duration) = match MotionTokens::effective_preference(cx) {
+        MotionPreference::Snap => return 1.0,
+        MotionPreference::Crossfade => {
+            (Duration::ZERO, duration.min(MotionTokens::read(cx).quick()))
+        }
+        MotionPreference::Full => (delay, duration),
+    };
     let now = cx.background_executor().now();
     let started = *window.use_keyed_state(id, cx, |_, _| now).read(cx);
     let elapsed = now.saturating_duration_since(started);
@@ -951,7 +1115,11 @@ pub fn reveal<E>(element: E, id: impl Into<ElementId>, window: &mut Window, cx: 
 where
     E: Styled,
 {
-    apply_reveal(element, reveal_progress(id, Duration::ZERO, window, cx))
+    apply_reveal(
+        element,
+        reveal_progress(id, Duration::ZERO, window, cx),
+        travel(cx),
+    )
 }
 
 /// Like [`reveal`], but item `index` waits `index` stagger beats before it
@@ -967,7 +1135,7 @@ where
     E: Styled,
 {
     let delay = MotionTokens::read(cx).reveal().stagger_delay(index);
-    apply_reveal(element, reveal_progress(id, delay, window, cx))
+    apply_reveal(element, reveal_progress(id, delay, window, cx), travel(cx))
 }
 
 /// Reveal travel from rest, in pixels.
@@ -977,10 +1145,10 @@ where
 /// distance stays a named local rather than an inline field access.
 const REVEAL_RISE: f32 = EnterSpec::REVEAL.rise;
 
-fn apply_reveal<E: Styled>(element: E, progress: f32) -> E {
+fn apply_reveal<E: Styled>(element: E, progress: f32, travel: f32) -> E {
     element
         .opacity(progress)
-        .top(px(REVEAL_RISE * (1.0 - progress)))
+        .top(px(REVEAL_RISE * (1.0 - progress) * travel))
 }
 
 /// Slowly breathes an element's opacity — for indicators that mean "still
@@ -1199,14 +1367,36 @@ mod tests {
             assert_eq!(draw(cx), 0, "unchanged snapshots stay settled");
         }
 
+        // The OS flag resolves to the crossfade preference: the
+        // acknowledgment still fades — comprehension-aiding opacity is
+        // kept — and settles at the quick tempo.
         cx.update(|_, cx| cx.set_reduce_motion(true));
         probe.update(cx, |probe, cx| {
             probe.ordinal = 2;
             cx.notify();
         });
-        assert_eq!(draw(cx), 0);
+        assert!(draw(cx) > 0, "the crossfade acknowledgment runs");
+        cx.executor().advance_clock(MotionTokens::DEFAULT.quick());
+        draw(cx);
         assert_eq!(sample.get(), 1.0);
-        cx.update(|_, cx| cx.set_reduce_motion(false));
+        assert_eq!(draw(cx), 0, "and settles");
+
+        // The snap preference is the true zero: end state, no frames.
+        cx.update(|_, cx| {
+            MotionTokens::default()
+                .with_preference(MotionPreference::Snap)
+                .set(cx)
+        });
+        probe.update(cx, |probe, cx| {
+            probe.ordinal = 3;
+            cx.notify();
+        });
+        assert_eq!(draw(cx), 0, "snap acknowledges in one frame");
+        assert_eq!(sample.get(), 1.0);
+        cx.update(|_, cx| {
+            MotionTokens::default().set(cx);
+            cx.set_reduce_motion(false);
+        });
         assert_eq!(
             draw(cx),
             0,
@@ -1429,10 +1619,32 @@ mod tests {
     }
 
     #[gpui::test]
-    fn reduced_motion_requests_no_frames_and_returns_the_end_state(cx: &mut TestAppContext) {
+    fn reduced_motion_crossfades_at_the_quick_tempo(cx: &mut TestAppContext) {
+        // The OS flag no longer hard-snaps: it resolves to the crossfade
+        // preference, which keeps the opacity fade — clamped to the quick
+        // tempo, travel zeroed by `travel` — and settles quiet.
         let (progress, cx) = reveal_probe(true, cx);
 
-        assert_eq!(draw(cx), 0, "a reduced-motion reveal must not animate");
+        assert!(draw(cx) > 0, "the crossfade fade is live");
+        assert!(progress.get() < 1.0);
+        cx.update(|_, cx| assert_eq!(travel(cx), 0.0, "travel is zero under the flag"));
+
+        cx.executor().advance_clock(MotionTokens::DEFAULT.quick());
+        draw(cx);
+        assert_eq!(progress.get(), 1.0);
+        assert_eq!(draw(cx), 0, "a settled crossfade asks for nothing");
+    }
+
+    #[gpui::test]
+    fn the_snap_preference_returns_the_end_state_without_frames(cx: &mut TestAppContext) {
+        let (progress, cx) = reveal_probe(false, cx);
+        cx.update(|_, cx| {
+            MotionTokens::default()
+                .with_preference(MotionPreference::Snap)
+                .set(cx)
+        });
+
+        assert_eq!(draw(cx), 0, "snap must not animate");
         assert_eq!(progress.get(), 1.0);
 
         cx.executor().advance_clock(EnterSpec::REVEAL.duration);
@@ -1475,14 +1687,36 @@ mod tests {
 
     #[gpui::test]
     fn no_policy_value_can_override_reduced_motion(cx: &mut TestAppContext) {
+        // The OS signal floors the effective preference at crossfade: a
+        // ten-second policy still settles at the quick tempo with zero
+        // travel, and a policy asking for full motion cannot win it back.
         let (progress, cx) = reveal_probe(true, cx);
         cx.update(|_, cx| {
             MotionTokens::default()
                 .with_standard(Duration::from_secs(10))
+                .with_preference(MotionPreference::Full)
                 .set(cx);
+            assert_eq!(
+                MotionTokens::effective_preference(cx),
+                MotionPreference::Crossfade,
+                "full cannot outrank the OS signal"
+            );
+            assert_eq!(travel(cx), 0.0);
         });
 
-        assert_eq!(draw(cx), 0, "reduced motion outranks any policy");
-        assert_eq!(progress.get(), 1.0, "and still resolves to the end state");
+        cx.executor().advance_clock(MotionTokens::DEFAULT.quick());
+        draw(cx);
+        assert_eq!(progress.get(), 1.0, "settled at quick, not at ten seconds");
+
+        // The policy may restrict further than the signal, never less.
+        cx.update(|_, cx| {
+            MotionTokens::default()
+                .with_preference(MotionPreference::Snap)
+                .set(cx);
+            assert_eq!(
+                MotionTokens::effective_preference(cx),
+                MotionPreference::Snap
+            );
+        });
     }
 }

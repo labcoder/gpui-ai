@@ -348,6 +348,29 @@ impl Render for MotionLabStory {
                         cx.notify();
                     })),
             )
+            .child({
+                // The preference the policy is resolving to right now,
+                // OS signal composed — cycling it exercises the same
+                // switch an application would ship.
+                use gpui_ai::motion::{MotionPreference, MotionTokens};
+                let preference = MotionTokens::read(cx).preference();
+                let effective = MotionTokens::effective_preference(cx);
+                let next = match preference {
+                    MotionPreference::Full => MotionPreference::Crossfade,
+                    MotionPreference::Crossfade => MotionPreference::Snap,
+                    MotionPreference::Snap => MotionPreference::Full,
+                };
+                Button::new("lab-motion-preference")
+                    .outline()
+                    .label(format!(
+                        "Preference: {preference:?} (effective {effective:?})"
+                    ))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        let tokens = MotionTokens::read(cx).clone();
+                        tokens.with_preference(next).set(cx);
+                        cx.notify();
+                    }))
+            })
             .child(
                 Button::new("lab-rem-down")
                     .outline()

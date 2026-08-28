@@ -181,7 +181,7 @@ const EXCEPTIONS: &[Exception] = &[
     },
     Exception {
         file: "motion.rs",
-        expression: "px(REVEAL_RISE * (1.0 - progress))",
+        expression: "px(REVEAL_RISE * (1.0 - progress) * travel)",
         context: "",
         category: Category::AnimationDisplacement,
         rationale: "reveal rise is travel from rest, interpolated to zero at the end of the curve",

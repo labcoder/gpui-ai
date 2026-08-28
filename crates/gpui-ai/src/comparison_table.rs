@@ -1007,6 +1007,10 @@ impl Render for ComparisonTable {
                                         .gap(tokens.spacing.sm)
                                         .items_center()
                                         .when(spinner, |row| {
+                                            let spin =
+                                                crate::motion::MotionTokens::effective_preference(
+                                                    cx,
+                                                ) != crate::motion::MotionPreference::Snap;
                                             // The animated element must be the direct
                                             // child; wrap the rotating icon in a
                                             // fixed-size slot so layout stays stable.
@@ -1025,7 +1029,9 @@ impl Render for ComparisonTable {
                                                             MotionTokens::read(cx)
                                                                 .status_spinner()
                                                                 .looping(),
-                                                            |this, delta| {
+                                                            move |this, delta| {
+                                                                let delta =
+                                                                    if spin { delta } else { 0.0 };
                                                                 this.rotate(gpui::percentage(delta))
                                                             },
                                                         )

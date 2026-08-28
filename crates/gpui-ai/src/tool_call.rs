@@ -305,6 +305,8 @@ impl RenderOnce for ToolCall {
         let id = self.invocation.id.clone();
         let root_id = ElementId::from(id.clone());
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
+        let disclosure_opacity =
+            crate::motion::disclosure_fade((root_id.clone(), "disclosure"), open, window, cx);
         // Opacity does not make descendants inert. Close the interaction tree
         // immediately; the header alone retains the closing transition.
         let showing = open;
@@ -576,8 +578,8 @@ impl RenderOnce for ToolCall {
                 // immediately so input and semantics match aria_expanded.
                 this.child(
                     div()
-                        .opacity(disclosure)
-                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .opacity(disclosure_opacity)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure) * crate::motion::travel(cx))
                         .child(body),
                 )
             })
@@ -718,6 +720,8 @@ impl RenderOnce for ToolGroup {
         let title = self.resolved_title();
         let root_id = ElementId::from(self.id.clone());
         let disclosure = disclosure_progress((root_id.clone(), "disclosure"), open, window, cx);
+        let disclosure_opacity =
+            crate::motion::disclosure_fade((root_id.clone(), "disclosure"), open, window, cx);
         let showing = open;
 
         // ParentElement accepts opaque children without domain identity.
@@ -817,8 +821,8 @@ impl RenderOnce for ToolGroup {
                         .ml(tokens.spacing.xs)
                         .border_l_1()
                         .border_color(cx.theme().border)
-                        .opacity(disclosure)
-                        .top(tokens.spacing.xxs * (1.0 - disclosure))
+                        .opacity(disclosure_opacity)
+                        .top(tokens.spacing.xxs * (1.0 - disclosure) * crate::motion::travel(cx))
                         .children(calls),
                 )
             })

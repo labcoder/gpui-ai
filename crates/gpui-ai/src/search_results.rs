@@ -242,9 +242,11 @@ impl RenderOnce for SearchResults {
                                 });
 
                             let row = match arrival {
-                                Some(progress) => row
-                                    .opacity(progress)
-                                    .top(tokens.spacing.xxs * (1.0 - progress)),
+                                Some(progress) => row.opacity(progress).top(
+                                    tokens.spacing.xxs
+                                        * (1.0 - progress)
+                                        * crate::motion::travel(cx),
+                                ),
                                 None => row,
                             };
 

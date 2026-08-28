@@ -892,7 +892,10 @@ impl Chat {
         // reduced motion, or with nothing measured to travel through, the
         // jump snaps exactly as it always did.
         let viewport = self.list_state.viewport_bounds().size.height;
-        if cx.reduce_motion() || viewport <= gpui::px(0.) || self.messages.is_empty() {
+        if !crate::motion::motion_is_full(cx)
+            || viewport <= gpui::px(0.)
+            || self.messages.is_empty()
+        {
             self.jump_drive = None;
             self.list_state.set_follow_mode(FollowMode::Tail);
             self.list_state.scroll_to_end();
@@ -954,7 +957,7 @@ impl Chat {
         // frame, and every deferred write is guarded by this drive's identity.
         let progress = transition(
             ElementId::Name(format!("{}-jump-{}", self.id, drive.generation).into()),
-            if drive.primed || cx.reduce_motion() {
+            if drive.primed || !crate::motion::motion_is_full(cx) {
                 1.0_f32
             } else {
                 0.0
@@ -970,7 +973,7 @@ impl Chat {
             {
                 return;
             }
-            if progress >= 1.0 || cx.reduce_motion() {
+            if progress >= 1.0 || !crate::motion::motion_is_full(cx) {
                 chat.jump_drive = None;
                 chat.list_state.set_follow_mode(FollowMode::Tail);
                 chat.list_state.scroll_to_end();
