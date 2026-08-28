@@ -14,7 +14,7 @@ use crate::ButtonLabelExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     code_block::CodeBlock,
-    control::composed_button,
+    control::{PressReleaseExt as _, composed_button},
     handlers::{Handler, SharedHandler},
     motion::{Shimmer, disclosure_progress},
     sizing::SizeTokens,
@@ -374,9 +374,17 @@ impl RenderOnce for ToolCall {
                     .w_full()
                     .px(tokens.spacing.md)
                     .py(tokens.spacing.sm)
+                    .border_1()
+                    .border_color(cx.theme().transparent)
                     .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                     .active(|style| style.bg(cx.theme().accent))
-                    .focus_visible(|style| style.bg(cx.theme().accent))
+                    .focus_visible(|style| style.border_color(cx.theme().ring))
+                    .press_release(
+                        ElementId::from((root_id.clone(), "toggle")),
+                        gpui::Pixels::ZERO,
+                        window,
+                        cx,
+                    )
                     .child(header)
                     .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                     .into_any_element()
@@ -756,10 +764,18 @@ impl RenderOnce for ToolGroup {
                     .aria_expanded(open)
                     .px(tokens.spacing.xs)
                     .py(tokens.spacing.xxs)
-                    .rounded(tokens.radius.sm)
-                    .hover(|style| style.bg(cx.theme().accent))
-                    .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
-                    .focus_visible(|style| style.bg(cx.theme().accent))
+                    .border_1()
+                    .border_color(cx.theme().transparent)
+                    .rounded(tokens.radius.md)
+                    .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                    .active(|style| style.bg(cx.theme().accent))
+                    .focus_visible(|style| style.border_color(cx.theme().ring))
+                    .press_release(
+                        ElementId::from((root_id.clone(), "toggle")),
+                        tokens.radius.md,
+                        window,
+                        cx,
+                    )
                     .child(header)
                     .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                     .into_any_element()

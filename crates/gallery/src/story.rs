@@ -362,7 +362,7 @@ impl StoryId {
                 module: "tool_call",
                 api: "ToolCall",
                 usage: crate::usage::TOOL_CALL,
-                height: 640,
+                height: 650,
                 overflow: Overflow::Vertical,
             },
             Self::Tasks => StoryMeta {

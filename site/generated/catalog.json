@@ -99,7 +99,7 @@
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
       "usage": "ToolCall::new(&call_progress)",
-      "height": 640,
+      "height": 650,
       "windowTitle": "Tool calls — gpui-ai",
       "variants": [],
       "events": [
