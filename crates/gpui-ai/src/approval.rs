@@ -1,6 +1,7 @@
 //! Human-in-the-loop approval gates for agent actions.
 
 use crate::ButtonLabelExt as _;
+use crate::control::ControlMetricsExt as _;
 use crate::cues::{self, Cue};
 use crate::handlers::SharedHandler;
 use crate::motion::acknowledged_state;
@@ -252,6 +253,7 @@ impl RenderOnce for ApprovalCard {
                                         }
                                     })
                                     .small()
+                                    .control_metrics(cx)
                                     .accessibility_id(format!("{}-approve", self.id))
                                     .text_label(self.approve_label.clone())
                                     .on_click(move |_: &ClickEvent, window, cx| {
@@ -269,6 +271,7 @@ impl RenderOnce for ApprovalCard {
                                 Button::new(format!("{}-reject", self.id))
                                     .outline()
                                     .small()
+                                    .control_metrics(cx)
                                     .accessibility_id(format!("{}-reject", self.id))
                                     .text_label(self.reject_label.clone())
                                     .on_click(move |_: &ClickEvent, window, cx| {
@@ -286,6 +289,7 @@ impl RenderOnce for ApprovalCard {
                                 Button::new(format!("{}-always", self.id))
                                     .ghost()
                                     .small()
+                                    .control_metrics(cx)
                                     .accessibility_id(format!("{}-always", self.id))
                                     .text_label("Always allow")
                                     .on_click(move |_: &ClickEvent, window, cx| {

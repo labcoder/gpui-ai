@@ -11,6 +11,7 @@
 //! selectable text view; the gutter and change tints are laid out beside it
 //! on the same rem-based line height so numbers and lines stay aligned.
 
+use crate::control::ControlMetricsExt as _;
 use crate::motion::{acknowledged_state, disclosure_progress};
 use crate::{
     handlers::SharedHandler,
@@ -734,6 +735,7 @@ fn render_hunk(
                                 Button::new((hunk_id.clone(), "reject"))
                                     .outline()
                                     .xsmall()
+                                    .control_metrics(cx)
                                     .accessibility_id(format!("{path}-reject-{index}"))
                                     .label("Reject")
                                     .on_click(move |_: &ClickEvent, window, cx| {
@@ -755,6 +757,7 @@ fn render_hunk(
                                 Button::new((hunk_id.clone(), "accept"))
                                     .primary()
                                     .xsmall()
+                                    .control_metrics(cx)
                                     .accessibility_id(format!("{path}-accept-{index}"))
                                     .label("Accept")
                                     .on_click(move |_: &ClickEvent, window, cx| {

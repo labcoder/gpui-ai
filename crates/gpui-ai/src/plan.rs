@@ -7,6 +7,7 @@
 //! the application owns execution and feeds statuses back through the
 //! snapshot.
 
+use crate::control::ControlMetricsExt as _;
 use crate::{
     ButtonLabelExt as _,
     control::{PressReleaseExt as _, composed_button},
@@ -358,6 +359,7 @@ impl RenderOnce for PlanCard {
                                     Button::new((root_id.clone(), "approve"))
                                         .primary()
                                         .small()
+                                        .control_metrics(cx)
                                         .accessibility_id(format!("{plan_id}-approve"))
                                         .text_label("Approve plan")
                                         .on_click(move |_: &ClickEvent, window, cx| {
@@ -379,6 +381,7 @@ impl RenderOnce for PlanCard {
                                     Button::new((root_id.clone(), "reject"))
                                         .outline()
                                         .small()
+                                        .control_metrics(cx)
                                         .accessibility_id(format!("{plan_id}-reject"))
                                         .text_label("Reject")
                                         .on_click(move |_: &ClickEvent, window, cx| {
@@ -401,6 +404,7 @@ impl RenderOnce for PlanCard {
                                         Button::new((root_id.clone(), "edit"))
                                             .ghost()
                                             .small()
+                                            .control_metrics(cx)
                                             .accessibility_id(format!("{plan_id}-edit"))
                                             .text_label("Edit plan")
                                             .on_click(move |_: &ClickEvent, window, cx| {

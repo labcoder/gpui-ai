@@ -96,8 +96,10 @@ impl RenderOnce for ContextCard {
         let accessibility_label = self.accessibility_label();
         let accessibility_description = self.snippet.clone();
 
+        // The source line is a header over the snippet, not a label glued
+        // to it: the card takes panel padding and the two sit a step apart.
         let content = v_flex()
-            .gap(tokens.spacing.xs)
+            .gap(tokens.spacing.sm)
             .child(
                 h_flex()
                     .items_center()
@@ -155,7 +157,7 @@ impl RenderOnce for ContextCard {
                 .flex_col()
                 .items_start()
                 .justify_start()
-                .p(tokens.spacing.md)
+                .p(tokens.spacing.lg)
                 .bg(tokens.colors.surface)
                 .border_1()
                 .border_color(cx.theme().border)
@@ -179,7 +181,7 @@ impl RenderOnce for ContextCard {
                     this.aria_description(description)
                 })
                 .w_full()
-                .p(tokens.spacing.md)
+                .p(tokens.spacing.lg)
                 .bg(tokens.colors.surface)
                 .border_1()
                 .border_color(cx.theme().border)

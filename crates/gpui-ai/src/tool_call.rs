@@ -11,6 +11,7 @@
 //! [`Progressive<ToolInvocation>`] and decides what each typed event means.
 
 use crate::ButtonLabelExt as _;
+use crate::control::ControlMetricsExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     code_block::CodeBlock,
@@ -457,6 +458,7 @@ impl RenderOnce for ToolCall {
                                                 Button::new((root_id.clone(), "allow"))
                                                     .primary()
                                                     .small()
+                                                    .control_metrics(cx)
                                                     .accessibility_id(format!("{id}-allow"))
                                                     .text_label("Allow")
                                                     .on_click(move |_: &ClickEvent, window, cx| {
@@ -486,6 +488,7 @@ impl RenderOnce for ToolCall {
                                                 Button::new((root_id.clone(), "deny"))
                                                     .outline()
                                                     .small()
+                                                    .control_metrics(cx)
                                                     .accessibility_id(format!("{id}-deny"))
                                                     .text_label("Deny")
                                                     .on_click(move |_: &ClickEvent, window, cx| {

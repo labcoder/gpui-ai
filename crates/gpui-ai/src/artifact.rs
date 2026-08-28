@@ -10,6 +10,7 @@
 //! Width, docking, and resizing belong to the application — compose the
 //! panel inside the upstream resizable group.
 
+use crate::control::ControlMetricsExt as _;
 use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     ButtonLabelExt as _,
@@ -622,6 +623,7 @@ impl RenderOnce for ArtifactPanel {
                             Button::new((root_id.clone(), format!("action-{}", action.id)))
                                 .outline()
                                 .small()
+                                .control_metrics(cx)
                                 .accessibility_id(format!("{artifact_id}-{}", action.id))
                                 .text_label(action.label.clone())
                                 .disabled(handler.is_none())

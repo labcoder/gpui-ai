@@ -8,6 +8,7 @@ mod transcript;
 use render::{chat_frame, jump_to_latest_button, transcript_frame};
 use transcript::{message_ids_are_unique, structural_splice};
 
+use crate::control::ControlMetricsExt as _;
 use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     attachment::{Attachment, AttachmentEvent, AttachmentStrip},

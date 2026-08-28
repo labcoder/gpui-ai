@@ -117,6 +117,33 @@ impl PressReleaseExt for Button {
     }
 }
 
+/// Applies the library's own control geometry to an upstream button.
+///
+/// Upstream sizes its buttons for its own density — a small button is
+/// twenty-four pixels tall with eight of horizontal padding, which is
+/// what the 0.4.0 feel review read as tight in the approval and plan
+/// CTAs. This keeps the upstream variant's colours (primary, danger,
+/// ghost, outline) and states, and states the geometry the rest of the
+/// library uses: one height and one padding from the size policy, one
+/// radius from the theme. An application that widens
+/// [`SizeTokens::control_padding_sm`](crate::sizing::SizeTokens::control_padding_sm)
+/// widens every one of them at once.
+pub(crate) trait ControlMetricsExt: Sized {
+    /// Restates this control's height, horizontal padding, and radius from
+    /// the crate's own policy. Apply it last, after the variant.
+    fn control_metrics(self, cx: &App) -> Self;
+}
+
+impl<E: gpui::Styled + Sized> ControlMetricsExt for E {
+    fn control_metrics(self, cx: &App) -> Self {
+        let tokens = cx.theme().semantic_tokens();
+        let sizes = SizeTokens::read(cx);
+        self.h(sizes.control_sm())
+            .px(sizes.control_padding_sm())
+            .rounded(tokens.radius.md)
+    }
+}
+
 pub(crate) fn outlined_control(
     id: impl Into<ElementId>,
     accessibility_label: impl Into<SharedString>,
@@ -189,7 +216,7 @@ fn outlined_control_bare(
         // size policy, one radius, one text style, so controls look like
         // one family next to tables.
         .h(sizes.control_sm())
-        .px(tokens.spacing.sm)
+        .px(sizes.control_padding_sm())
         .border_1()
         .border_color(cx.theme().border)
         .rounded(tokens.radius.md)

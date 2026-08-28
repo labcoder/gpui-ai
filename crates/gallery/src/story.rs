@@ -136,7 +136,7 @@ pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
 /// finished answer, not the composer the demo opens on. The
 /// `the_hero_height_matches_what_the_settled_demo_measures` test fails when
 /// the script changes shape and this number does not.
-pub const HERO_HEIGHT: u32 = 702;
+pub const HERO_HEIGHT: u32 = 730;
 
 /// Which way a story's content outgrows the frame it is shown in.
 ///
@@ -560,7 +560,7 @@ impl StoryId {
                 module: "code_diff",
                 api: "CodeDiff",
                 usage: crate::usage::CODE_DIFF,
-                height: 461,
+                height: 469,
                 overflow: Overflow::Vertical,
             },
             Self::Approval => StoryMeta {
@@ -596,7 +596,7 @@ impl StoryId {
                 module: "context_card",
                 api: "ContextCard",
                 usage: crate::usage::CONTEXT_CARD,
-                height: 192,
+                height: 216,
                 overflow: Overflow::Wide,
             },
             Self::Insights => StoryMeta {
@@ -632,7 +632,7 @@ impl StoryId {
                 module: "queue",
                 api: "MessageQueue",
                 usage: crate::usage::MESSAGE_QUEUE,
-                height: 234,
+                height: 238,
                 overflow: Overflow::Wide,
             },
             Self::SelectionActions => StoryMeta {

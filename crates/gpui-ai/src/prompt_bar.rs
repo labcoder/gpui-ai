@@ -110,6 +110,34 @@ impl PromptModel {
     }
 }
 
+/// How a composer arranges its action row.
+///
+/// The row holds a leading cluster — the model, attach, and enhance
+/// controls — and the submit control. Where those sit relative to each
+/// other is a composition choice an application makes, not something the
+/// component should decide for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PromptActions {
+    /// The cluster leads, the submit control sits at the trailing end.
+    #[default]
+    Split,
+    /// Everything gathers at the leading edge.
+    Leading,
+    /// Everything gathers at the trailing edge.
+    Trailing,
+}
+
+/// What the composer's submit control shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PromptSubmit {
+    /// The words "Send" and "Cancel", in a slot wide enough for both.
+    #[default]
+    Label,
+    /// An arrow, square, at the control's own height — a compact composer
+    /// where the affordance is the shape rather than the word.
+    Glyph,
+}
+
 /// One `@`-mention suggestion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptMention {
@@ -387,6 +415,8 @@ pub struct PromptBar {
     active_model: Option<SharedString>,
     model_trigger_bounds: Bounds<Pixels>,
     model_trigger_rem_size: Pixels,
+    actions: PromptActions,
+    submit: PromptSubmit,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -435,6 +465,8 @@ impl PromptBar {
             active_model: None,
             model_trigger_bounds: Bounds::default(),
             model_trigger_rem_size: window.rem_size(),
+            actions: PromptActions::default(),
+            submit: PromptSubmit::default(),
             _subscriptions: vec![subscription, observation],
         }
     }
@@ -554,6 +586,35 @@ impl PromptBar {
             self.attachments = attachments;
             cx.notify();
         }
+    }
+
+    /// Chooses how the action row arranges its controls.
+    ///
+    /// The default splits them: the model, attach, and enhance cluster
+    /// leads, and submit sits at the trailing end of the row.
+    pub fn set_actions(&mut self, actions: PromptActions, cx: &mut gpui::Context<Self>) {
+        if self.actions != actions {
+            self.actions = actions;
+            cx.notify();
+        }
+    }
+
+    /// Chooses whether the submit control reads as a word or a glyph.
+    pub fn set_submit(&mut self, submit: PromptSubmit, cx: &mut gpui::Context<Self>) {
+        if self.submit != submit {
+            self.submit = submit;
+            cx.notify();
+        }
+    }
+
+    /// Returns how the action row arranges its controls.
+    pub fn actions(&self) -> PromptActions {
+        self.actions
+    }
+
+    /// Returns what the submit control shows.
+    pub fn submit_appearance(&self) -> PromptSubmit {
+        self.submit
     }
 
     /// Replaces the application-owned progress snapshot.
@@ -887,10 +948,19 @@ impl Render for PromptBar {
             )
             .when(!suggestions.is_empty(), |this| {
                 this.child(
-                    prompt_listbox(
-                        (gpui::ElementId::from(root_id.clone()), "suggestions").into(),
-                        "Prompt suggestions",
+                    crate::popup::popover_surface(
+                        prompt_listbox(
+                            (gpui::ElementId::from(root_id.clone()), "suggestions").into(),
+                            "Prompt suggestions",
+                        ),
+                        cx,
                     )
+                    .debug_selector(|| "prompt-bar-suggestions".to_owned())
+                    // A list of mentions and commands is a panel over the
+                    // composer, not part of it. It carried no surface at
+                    // all, so on a dark theme it was invisible: nothing
+                    // said anything had opened.
+                    .p(tokens.spacing.xs)
                     .max_h(tokens.spacing.xxl + tokens.spacing.xxl + tokens.spacing.xxl)
                     .overflow_y_scrollbar()
                     .children(suggestions),
@@ -914,9 +984,18 @@ impl Render for PromptBar {
                     .items_center()
                     .flex_wrap()
                     .gap(tokens.spacing.xs)
+                    // The arrangement is the application's: a split row
+                    // leads with the cluster and ends with submit, and the
+                    // gathered arrangements put everything on one side.
+                    .map(|row| match self.actions {
+                        PromptActions::Split => row.justify_between(),
+                        PromptActions::Leading => row.justify_start(),
+                        PromptActions::Trailing => row.justify_end(),
+                    })
                     .child(
                         h_flex()
                             .flex_wrap()
+                            .items_center()
                             .gap(tokens.spacing.xs)
                             .child(if self.models.is_empty() {
                                 prompt_status(
@@ -1012,26 +1091,46 @@ impl Render for PromptBar {
                             true,
                             cx,
                         )
-                        .child(
+                        .map(|button| match self.submit {
+                            // A glyph composer says what it does with a
+                            // shape: one square control at its own height,
+                            // an arrow to send and a square to cancel.
+                            PromptSubmit::Glyph => button
+                                .w(crate::sizing::SizeTokens::read(cx).control_lg())
+                                .px(gpui::Pixels::ZERO)
+                                .justify_center()
+                                .rounded(cx.theme().radius_full())
+                                .child(
+                                    div().opacity(submit_ack).child(
+                                        Icon::new(if running {
+                                            IconName::Close
+                                        } else {
+                                            IconName::ArrowUp
+                                        })
+                                        .small(),
+                                    ),
+                                ),
                             // Zero-height ghosts of both faces hold the slot
                             // at the widest label, so Send↔Cancel swaps
                             // without nudging the composer row.
-                            v_flex()
-                                .relative()
-                                .items_center()
-                                .children(["Send", "Cancel"].map(|ghost| {
-                                    div()
-                                        .h(gpui::rems(0.))
-                                        .overflow_hidden()
-                                        .opacity(0.)
-                                        .child(ghost)
-                                }))
-                                .child(div().opacity(submit_ack).child(if running {
-                                    "Cancel"
-                                } else {
-                                    "Send"
-                                })),
-                        )
+                            PromptSubmit::Label => button.child(
+                                v_flex()
+                                    .relative()
+                                    .items_center()
+                                    .children(["Send", "Cancel"].map(|ghost| {
+                                        div()
+                                            .h(gpui::rems(0.))
+                                            .overflow_hidden()
+                                            .opacity(0.)
+                                            .child(ghost)
+                                    }))
+                                    .child(div().opacity(submit_ack).child(if running {
+                                        "Cancel"
+                                    } else {
+                                        "Send"
+                                    })),
+                            ),
+                        })
                         .when(running, |button| {
                             button.debug_selector(|| "prompt-bar-cancel-control".to_owned())
                         })

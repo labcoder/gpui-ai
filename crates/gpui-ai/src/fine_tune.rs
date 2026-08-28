@@ -25,7 +25,10 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::{control::outlined_control, theme::SemanticStyledExt as _};
+use crate::{
+    control::{outlined_control, outlined_control_with_label},
+    theme::SemanticStyledExt as _,
+};
 
 const MIN_DIMENSION: f64 = 1.;
 const MAX_DIMENSION: f64 = 4_096.;
@@ -1161,9 +1164,10 @@ impl Render for FineTuneCard {
                     .justify_end()
                     .gap(tokens.spacing.xs)
                     .child(
-                        outlined_control(
+                        outlined_control_with_label(
                             (gpui::ElementId::from(self.id.clone()), "reset"),
                             "Reset fine-tune values",
+                            "Reset",
                             window,
                             cx,
                         )
@@ -1175,9 +1179,10 @@ impl Render for FineTuneCard {
                         })),
                     )
                     .child(
-                        outlined_control(
+                        outlined_control_with_label(
                             (gpui::ElementId::from(self.id.clone()), "apply"),
                             "Apply fine-tune values",
+                            "Apply",
                             window,
                             cx,
                         )

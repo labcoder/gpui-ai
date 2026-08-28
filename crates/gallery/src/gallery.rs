@@ -1415,6 +1415,8 @@ struct PromptBarStory {
     ready: Entity<PromptBar>,
     multiline: Entity<PromptBar>,
     running: Entity<PromptBar>,
+    glyph: Entity<PromptBar>,
+    gathered: Entity<PromptBar>,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
 }
@@ -1452,6 +1454,34 @@ impl PromptBarStory {
                 cx,
             )
         });
+        // A compact composer: the arrow is the affordance, and the row
+        // still ends where the composer ends.
+        let glyph = cx.new(|cx| {
+            let mut prompt = Self::configured_prompt(
+                "gallery-prompt-glyph",
+                "Draft the supplier note",
+                ProgressState::Pending,
+                false,
+                window,
+                cx,
+            );
+            prompt.set_submit(PromptSubmit::Glyph, cx);
+            prompt
+        });
+        // Everything gathered at the leading edge, for a composer docked
+        // beside other chrome that owns the row's trailing end.
+        let gathered = cx.new(|cx| {
+            let mut prompt = Self::configured_prompt(
+                "gallery-prompt-gathered",
+                "Check the cold-chain window",
+                ProgressState::Pending,
+                false,
+                window,
+                cx,
+            );
+            prompt.set_actions(PromptActions::Leading, cx);
+            prompt
+        });
         let empty_subscription = cx.subscribe_in(
             &empty,
             window,
@@ -1481,17 +1511,36 @@ impl PromptBarStory {
             },
         );
 
+        let glyph_subscription = cx.subscribe_in(
+            &glyph,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
+        let gathered_subscription = cx.subscribe_in(
+            &gathered,
+            window,
+            |this, prompt, event: &PromptBarEvent, _, cx| {
+                this.on_event(prompt, event, cx);
+            },
+        );
+
         Self {
             empty,
             ready,
             multiline,
             running,
-            last_event: "Interact with either composer to inspect its typed event.".into(),
+            glyph,
+            gathered,
+            last_event: "Interact with any composer to inspect its typed event.".into(),
             _subscriptions: vec![
                 empty_subscription,
                 ready_subscription,
                 multiline_subscription,
                 running_subscription,
+                glyph_subscription,
+                gathered_subscription,
             ],
         }
     }
@@ -1636,6 +1685,28 @@ impl Render for PromptBarStory {
                     .child("Running with cancellation"),
             )
             .child(self.running.clone())
+            .child(
+                div()
+                    .id("prompt-bar-glyph-heading")
+                    .debug_selector(|| "prompt-bar-glyph-heading".into())
+                    .role(Role::Heading)
+                    .aria_label("Compact prompt whose submit control is a glyph")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Glyph submit, split row"),
+            )
+            .child(self.glyph.clone())
+            .child(
+                div()
+                    .id("prompt-bar-gathered-heading")
+                    .debug_selector(|| "prompt-bar-gathered-heading".into())
+                    .role(Role::Heading)
+                    .aria_label("Prompt whose controls gather at the leading edge")
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Controls gathered leading"),
+            )
+            .child(self.gathered.clone())
             .child(
                 TextView::markdown(
                     "prompt-bar-event-log",

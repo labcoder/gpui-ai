@@ -122,8 +122,8 @@ pub mod prelude {
     pub use crate::orbs::{OrbVariant, Orbs};
     pub use crate::plan::{PlanCard, PlanEvent, PlanState, PlanStep, PlanStepStatus};
     pub use crate::prompt_bar::{
-        PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention, PromptModel,
-        PromptSubmission,
+        PromptActions, PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention,
+        PromptModel, PromptSubmission, PromptSubmit,
     };
     pub use crate::queue::{MessageQueue, QueueEvent, QueuedMessage};
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};

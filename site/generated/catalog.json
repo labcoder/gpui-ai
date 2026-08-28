@@ -3,7 +3,7 @@
   "hero": {
     "slug": "guided-demo",
     "title": "Guided demo",
-    "height": 702,
+    "height": 730,
     "windowTitle": "Guided demo — gpui-ai",
     "siteOnly": true
   },
@@ -765,7 +765,7 @@
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
-      "height": 461,
+      "height": 469,
       "windowTitle": "Code diff — gpui-ai",
       "variants": [],
       "events": [
@@ -865,7 +865,7 @@
       "source": "crates/gpui-ai/src/context_card.rs",
       "api": "ContextCard",
       "usage": "ContextCard::new(\"design-doc\", \"Architecture\")",
-      "height": 192,
+      "height": 216,
       "windowTitle": "Context cards — gpui-ai",
       "variants": [],
       "events": [
@@ -965,7 +965,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "height": 234,
+      "height": 238,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [

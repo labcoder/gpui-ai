@@ -1,6 +1,7 @@
 //! Agent suggestion cards with confidence and alternatives.
 
 use crate::ButtonLabelExt as _;
+use crate::control::ControlMetricsExt as _;
 use crate::handlers::Handler;
 use crate::surface::{card, description, eyebrow, title};
 use crate::theme::SemanticStyledExt as _;
@@ -234,6 +235,7 @@ impl RenderOnce for RecommendationCard {
                         Button::new(format!("{}-accept", self.id))
                             .primary()
                             .small()
+                            .control_metrics(cx)
                             .accessibility_id(format!("{}-accept", self.id))
                             .text_label(self.accept_label)
                             .on_click(move |_: &ClickEvent, window, cx| {

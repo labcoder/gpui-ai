@@ -594,6 +594,7 @@ impl Chat {
                                 LabeledButton::new((base, "edit-save"))
                                     .primary()
                                     .small()
+                                    .control_metrics(cx)
                                     .text_label("Save")
                                     .on_click(cx.listener(|chat, _, window, cx| {
                                         chat.submit_edit(window, cx);

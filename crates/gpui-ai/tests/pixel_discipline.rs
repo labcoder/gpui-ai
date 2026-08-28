@@ -110,6 +110,27 @@ struct Exception {
 /// Every raw `px(...)` the library is allowed to construct outside tests.
 const EXCEPTIONS: &[Exception] = &[
     Exception {
+        file: "sizing.rs",
+        expression: "px(12.)",
+        context: "control_padding_sm",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control paddings; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(14.)",
+        context: "control_padding_md",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control paddings; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(18.)",
+        context: "control_padding_lg",
+        category: Category::ThemeDefinition,
+        rationale: "the size policy's own default control paddings; pixels feed the token",
+    },
+    Exception {
         file: "status.rs",
         expression: "gpui::px(6.)",
         context: "INDICATOR_DOT",

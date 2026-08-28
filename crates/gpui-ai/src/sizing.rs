@@ -36,6 +36,9 @@ pub struct SizeTokens {
     control_sm: Pixels,
     control_md: Pixels,
     control_lg: Pixels,
+    control_padding_sm: Pixels,
+    control_padding_md: Pixels,
+    control_padding_lg: Pixels,
     slot_sm: Pixels,
     slot_md: Pixels,
 }
@@ -59,6 +62,13 @@ impl SizeTokens {
         control_sm: px(24.),
         control_md: px(28.),
         control_lg: px(32.),
+        // A control's label needs room to read as a label rather than as
+        // text wedged into a pill. The upstream button's own eight pixels
+        // are what the 0.4.0 feel review saw as tight; these are the ramp
+        // shadcn and the reference sites settle on, scaled to our tiers.
+        control_padding_sm: px(12.),
+        control_padding_md: px(14.),
+        control_padding_lg: px(18.),
         slot_sm: px(16.),
         slot_md: px(20.),
     };
@@ -91,6 +101,39 @@ impl SizeTokens {
     /// Controls that sit beside inputs and table rows.
     pub const fn control_lg(&self) -> Pixels {
         self.control_lg
+    }
+
+    /// Horizontal padding inside a compact control.
+    pub const fn control_padding_sm(&self) -> Pixels {
+        self.control_padding_sm
+    }
+
+    /// Horizontal padding inside a standalone control.
+    pub const fn control_padding_md(&self) -> Pixels {
+        self.control_padding_md
+    }
+
+    /// Horizontal padding inside a control that rails with an input.
+    pub const fn control_padding_lg(&self) -> Pixels {
+        self.control_padding_lg
+    }
+
+    /// Replaces [`control_padding_sm`](Self::control_padding_sm).
+    pub const fn with_control_padding_sm(mut self, padding: Pixels) -> Self {
+        self.control_padding_sm = padding;
+        self
+    }
+
+    /// Replaces [`control_padding_md`](Self::control_padding_md).
+    pub const fn with_control_padding_md(mut self, padding: Pixels) -> Self {
+        self.control_padding_md = padding;
+        self
+    }
+
+    /// Replaces [`control_padding_lg`](Self::control_padding_lg).
+    pub const fn with_control_padding_lg(mut self, padding: Pixels) -> Self {
+        self.control_padding_lg = padding;
+        self
     }
 
     /// The leading glyph box beside extra-small text.

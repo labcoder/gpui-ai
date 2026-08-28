@@ -6,6 +6,7 @@
 //! reorder, edit, send now, or remove, reporting each as a [`QueueEvent`]
 //! keyed by stable ID.
 
+use crate::control::ControlMetricsExt as _;
 use crate::{
     ButtonLabelExt as _,
     handlers::SharedHandler,
@@ -222,6 +223,7 @@ impl RenderOnce for MessageQueue {
                     Button::new((root_id.clone(), "clear"))
                         .ghost()
                         .xsmall()
+                        .control_metrics(cx)
                         .accessibility_id(format!("{debug_id}-clear"))
                         .text_label("Clear queue")
                         .on_click(move |_: &ClickEvent, window, cx| {
