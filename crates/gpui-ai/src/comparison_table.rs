@@ -998,10 +998,30 @@ impl Render for ComparisonTable {
                             }
                         }
                         let spinner = role == Role::ProgressIndicator;
+                        // A settled empty comparison takes the shared
+                        // empty-state anatomy; in-flight and failed states
+                        // keep the inline status row, and loading adds a
+                        // skeleton in the coming table's shape below it.
+                        if role == Role::Status {
+                            return surface.child(
+                                comparison_status_frame(&self.id, role, label.clone())
+                                    .p(tokens.spacing.md)
+                                    .child(crate::surface::empty_state(
+                                        IconName::Inbox,
+                                        label,
+                                        None,
+                                        cx,
+                                    )),
+                            );
+                        }
+                        let skeleton_columns = items.len().max(3);
                         let (color, text) = (status_visuals(role, cx).0, label.clone());
                         surface.child(
                             comparison_status_frame(&self.id, role, label.clone())
                                 .p(tokens.spacing.md)
+                                .flex()
+                                .flex_col()
+                                .gap(tokens.spacing.md)
                                 .child(
                                     h_flex()
                                         .gap(tokens.spacing.sm)
@@ -1049,7 +1069,20 @@ impl Render for ComparisonTable {
                                                 .text_color(color)
                                                 .child(text),
                                         ),
-                                ),
+                                )
+                                .when(spinner, |frame| {
+                                    frame.child(div().w_full().child(
+                                        crate::surface::skeleton_rows(
+                                            ElementId::from((
+                                                ElementId::from(self.id.clone()),
+                                                "loading-skeleton",
+                                            )),
+                                            3,
+                                            skeleton_columns,
+                                            cx,
+                                        ),
+                                    ))
+                                }),
                         )
                     })
                     .child(

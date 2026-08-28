@@ -563,8 +563,8 @@ fn scoped_records_id(kind: &str, component_id: &str, local_id: &str) -> String {
 fn records_state_glyph(role: Role) -> AnyElement {
     match role {
         Role::ProgressIndicator => Spinner::new().xsmall().into_any_element(),
-        Role::Alert => Icon::new(IconName::CircleX).xsmall().into_any_element(),
-        _ => Icon::new(IconName::Dash).xsmall().into_any_element(),
+        Role::Alert => Icon::new(IconName::CircleX).small().into_any_element(),
+        _ => Icon::new(IconName::Inbox).small().into_any_element(),
     }
 }
 

@@ -536,6 +536,10 @@ pub(super) fn records_state_frame(
     label: SharedString,
 ) -> Stateful<Div> {
     let scoped_id = scoped_records_id("state", component_id, id);
+    // The empty-state anatomy every surface shares: the glyph above one
+    // line that says why, stacked and centered — never a bare string in
+    // a corner. Context-free so windowless accessibility checks can
+    // render it; spacing uses the fixed utility steps.
     div()
         .id(scoped_id.clone())
         .debug_selector({
@@ -544,9 +548,11 @@ pub(super) fn records_state_frame(
         })
         .size_full()
         .flex()
+        .flex_col()
         .items_center()
         .justify_center()
-        .gap(gpui::rems(0.5))
+        .gap_1()
+        .p_4()
         .role(role)
         .aria_label(label.clone())
         .child(records_state_glyph(role))

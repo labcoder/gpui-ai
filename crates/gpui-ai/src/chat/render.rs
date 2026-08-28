@@ -313,10 +313,12 @@ impl Chat {
                 .id((ElementId::from(self.id.clone()), "empty"))
                 .role(Role::Status)
                 .aria_label("No messages yet")
-                .p(tokens.spacing.md)
-                .text_token(tokens.typography.sm)
-                .text_color(cx.theme().muted_foreground)
-                .child("No messages yet")
+                .child(crate::surface::empty_state(
+                    IconName::Inbox,
+                    "No messages yet",
+                    Some("Messages appear here as the conversation starts".into()),
+                    cx,
+                ))
                 .into_any_element();
         };
         v_flex()

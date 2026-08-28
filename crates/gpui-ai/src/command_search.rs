@@ -8,7 +8,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, ElementExt as _, Icon, IconName, IndexPath,
+    ActiveTheme as _, Disableable as _, ElementExt as _, IconName, IndexPath,
     command::{Command, CommandItem, CommandState},
     h_flex,
     label::Label,
@@ -474,14 +474,12 @@ impl Render for CommandSearch {
                         .debug_selector(move || selector.to_owned())
                         .role(Role::Status)
                         .aria_label(message.clone())
-                        .py(cx.theme().semantic_tokens().spacing.lg)
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap(cx.theme().semantic_tokens().spacing.xs)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(Icon::new(IconName::Search).text_color(cx.theme().muted_foreground))
-                        .child(Label::new(message))
+                        .child(crate::surface::empty_state(
+                            IconName::Search,
+                            message,
+                            None,
+                            cx,
+                        ))
                 }
             })
             .on_query(move |query, _, cx| {
