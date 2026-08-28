@@ -1,6 +1,6 @@
 //! Agent plan display: a to-do list with live completion status.
 
-use crate::control::composed_button;
+use crate::control::{PressReleaseExt as _, composed_button};
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state};
 use crate::theme::SemanticStyledExt as _;
@@ -330,10 +330,18 @@ impl RenderOnce for TodoList {
                         .aria_toggled(accessibility_toggled)
                         .px(tokens.spacing.xs)
                         .py(tokens.spacing.xxs)
+                        .border_1()
+                        .border_color(cx.theme().transparent)
                         .rounded(tokens.radius.sm)
-                        .hover(|style| style.bg(cx.theme().accent))
-                        .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
-                        .focus_visible(|style| style.bg(cx.theme().accent))
+                        .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                        .active(|style| style.bg(cx.theme().accent))
+                        .focus_visible(|style| style.border_color(cx.theme().ring))
+                        .press_release(
+                            ElementId::from((ElementId::from(item.id.clone()), "press")),
+                            tokens.radius.sm,
+                            window,
+                            cx,
+                        )
                         .when_some(accessibility_description, |this, description| {
                             this.aria_description(description)
                         })

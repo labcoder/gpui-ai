@@ -353,7 +353,7 @@ impl RenderOnce for ContextMeter {
             .px(tokens.spacing.xs)
             .py(tokens.spacing.xxs)
             .rounded(tokens.radius.sm)
-            .hover(|style| style.bg(cx.theme().accent))
+            .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
             .child(readout);
 
         let content = if self.usage.has_breakdown() {

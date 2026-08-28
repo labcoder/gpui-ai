@@ -398,7 +398,7 @@ impl StoryId {
                 module: "search_results",
                 api: "SearchResults",
                 usage: crate::usage::SEARCH_RESULTS,
-                height: 151,
+                height: 157,
                 overflow: Overflow::Wide,
             },
             Self::Todos => StoryMeta {
@@ -407,7 +407,7 @@ impl StoryId {
                 module: "todo_list",
                 api: "TodoList",
                 usage: crate::usage::TODO_LIST,
-                height: 224,
+                height: 234,
                 overflow: Overflow::Wide,
             },
             Self::ImageGeneration => StoryMeta {

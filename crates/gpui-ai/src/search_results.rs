@@ -1,6 +1,6 @@
 //! Web-search tool output: a query and its results with sources.
 
-use crate::control::composed_button;
+use crate::control::{PressReleaseExt as _, composed_button};
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens};
 use crate::surface::{initial_badge, initial_of};
@@ -256,10 +256,21 @@ impl RenderOnce for SearchResults {
                                         .w_full()
                                         .px(tokens.spacing.md)
                                         .py(tokens.spacing.xs)
+                                        .border_1()
+                                        .border_color(cx.theme().transparent)
                                         .rounded(tokens.radius.sm)
-                                        .hover(|style| style.bg(cx.theme().accent))
-                                        .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
-                                        .focus_visible(|style| style.bg(cx.theme().accent))
+                                        .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                                        .active(|style| style.bg(cx.theme().accent))
+                                        .focus_visible(|style| style.border_color(cx.theme().ring))
+                                        .press_release(
+                                            ElementId::from((
+                                                ElementId::from(result.id.clone()),
+                                                "press",
+                                            )),
+                                            tokens.radius.sm,
+                                            window,
+                                            cx,
+                                        )
                                         .when_some(
                                             accessibility_description,
                                             |this, description| this.aria_description(description),

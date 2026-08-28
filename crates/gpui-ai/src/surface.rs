@@ -288,10 +288,10 @@ pub(crate) fn icon_button(
         .text_color(cx.theme().muted_foreground)
         .hover(|style| {
             style
-                .bg(cx.theme().accent)
+                .bg(cx.theme().accent.opacity(0.6))
                 .text_color(cx.theme().accent_foreground)
         })
-        .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+        .active(|style| style.bg(cx.theme().accent))
         .focus_visible(|style| style.border_color(cx.theme().ring))
         // A toggle that reports selected also shows it: the accent fill
         // stays while selected, so state stops being invisible.

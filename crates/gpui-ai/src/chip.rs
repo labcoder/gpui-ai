@@ -1,6 +1,6 @@
 //! Compact chips representing tool calls and code edits.
 
-use crate::control::composed_button;
+use crate::control::{PressReleaseExt as _, composed_button};
 use crate::handlers::SharedHandler;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -187,9 +187,15 @@ impl RenderOnce for ToolChip {
                 .border_1()
                 .border_color(cx.theme().border)
                 .rounded(tokens.radius.md)
-                .hover(|style| style.bg(cx.theme().accent))
-                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
+                .press_release(
+                    ElementId::from((ElementId::from(self.id.clone()), "press")),
+                    tokens.radius.md,
+                    window,
+                    cx,
+                )
                 .child(content)
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                 .into_any_element()

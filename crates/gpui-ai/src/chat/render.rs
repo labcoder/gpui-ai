@@ -277,10 +277,9 @@ impl Chat {
                         cx,
                     )
                     .debug_selector(move || format!("chat-action-helpful-{up_debug_id}"))
+                    // The selected style paints the shared accent fill; a
+                    // second per-site tint would fight it across themes.
                     .selected(rating == Some(true))
-                    .when(rating == Some(true), |button| {
-                        button.text_color(cx.theme().primary)
-                    })
                     .on_click(cx.listener(move |chat, _, _, cx| {
                         chat.submit_feedback(up_id.clone(), true, cx);
                     })),
@@ -299,9 +298,6 @@ impl Chat {
                     )
                     .debug_selector(move || format!("chat-action-unhelpful-{down_debug_id}"))
                     .selected(rating == Some(false))
-                    .when(rating == Some(false), |button| {
-                        button.text_color(cx.theme().primary)
-                    })
                     .on_click(cx.listener(move |chat, _, _, cx| {
                         chat.submit_feedback(down_id.clone(), false, cx);
                     })),

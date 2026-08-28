@@ -1,6 +1,6 @@
 //! Selection-anchored actions for readable Markdown content.
 
-use crate::control::composed_button;
+use crate::control::{PressReleaseExt as _, composed_button};
 use crate::motion::swap_progress;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -79,11 +79,13 @@ fn settled_selection(text: &str) -> Option<&str> {
 fn selection_control(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
+    window: &mut Window,
     cx: &mut App,
 ) -> gpui_base::Button {
     let tokens = cx.theme().semantic_tokens();
     let label = label.into();
-    composed_button(id, label.clone())
+    let id = id.into();
+    composed_button(id.clone(), label.clone())
         .flex()
         .items_center()
         .justify_center()
@@ -95,9 +97,10 @@ fn selection_control(
         .bg(tokens.colors.surface)
         .text_token(tokens.typography.sm)
         .text_color(tokens.colors.surface_foreground)
-        .hover(|style| style.bg(tokens.colors.accent))
-        .active(|style| style.bg(tokens.colors.secondary))
+        .hover(|style| style.bg(cx.theme().button_hover))
+        .active(|style| style.bg(cx.theme().button_active))
         .focus_visible(|style| style.border_color(tokens.colors.ring))
+        .press_release(ElementId::from((id, "press")), tokens.radius.sm, window, cx)
         .child(div().child(label))
 }
 
@@ -471,6 +474,7 @@ impl SelectionActions {
                 selection_control(
                     (ElementId::from(root_id.clone()), action_id.clone()),
                     label.clone(),
+                    window,
                     cx,
                 )
                 .when(action_ix == 0, |button| {
@@ -1239,7 +1243,7 @@ mod tests {
             canvas(
                 move |_, window, cx| {
                     let mut node = accesskit::Node::new(Role::Button);
-                    selection_control("ask", "Ask about selection", cx)
+                    selection_control("ask", "Ask about selection", window, cx)
                         .on_click(|_, _, _| {})
                         .render(window, cx)
                         .into_element()

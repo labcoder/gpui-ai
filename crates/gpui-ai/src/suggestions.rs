@@ -7,7 +7,9 @@
 
 use crate::cues::{self, Cue};
 use crate::{
-    control::composed_button, handlers::SharedHandler, motion::reveal_staggered,
+    control::{PressReleaseExt as _, composed_button},
+    handlers::SharedHandler,
+    motion::reveal_staggered,
     theme::SemanticStyledExt as _,
 };
 use gpui::{
@@ -136,7 +138,7 @@ impl RenderOnce for Suggestions {
                         let event = SuggestionsEvent::Selected {
                             id: item.id.clone(),
                         };
-                        composed_button(chip_id, item.label.clone())
+                        composed_button(chip_id.clone(), item.label.clone())
                             .debug_selector(move || format!("suggestion-{debug_id}"))
                             .when_some(item.description.clone(), |this, description| {
                                 this.aria_description(description)
@@ -151,11 +153,17 @@ impl RenderOnce for Suggestions {
                             .bg(tokens.colors.surface)
                             .text_token(tokens.typography.sm)
                             .text_color(cx.theme().foreground)
-                            .hover(|style| {
-                                style.bg(cx.theme().accent).border_color(cx.theme().ring)
-                            })
-                            .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                            // Hover fills; only keyboard focus recolors the
+                            // border — the ring stays a focus signal.
+                            .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                            .active(|style| style.bg(cx.theme().accent))
                             .focus_visible(|style| style.border_color(cx.theme().ring))
+                            .press_release(
+                                ElementId::from((chip_id, "press")),
+                                tokens.radius.full,
+                                window,
+                                cx,
+                            )
                             .child(div().child(item.label))
                             .on_click(move |_: &ClickEvent, window, cx| {
                                 cues::emit(cx, Cue::SuggestionSelected);

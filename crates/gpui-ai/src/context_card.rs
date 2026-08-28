@@ -151,8 +151,8 @@ impl RenderOnce for ContextCard {
                 .border_1()
                 .border_color(cx.theme().border)
                 .rounded(tokens.radius.md)
-                .hover(|style| style.bg(cx.theme().accent))
-                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
                 .when_some(accessibility_description, |this, description| {
                     this.aria_description(description)

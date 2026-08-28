@@ -12,7 +12,7 @@
 //! components only report [`AttachmentEvent`]s keyed by attachment ID.
 
 use crate::{
-    control::composed_button,
+    control::{PressReleaseExt as _, composed_button},
     handlers::SharedHandler,
     motion::{ArrivalRoster, MotionTokens, Shimmer},
     stream::ProgressState,
@@ -515,9 +515,16 @@ impl RenderOnce for AttachmentPreview {
                     cx,
                 )
                 .debug_selector(move || format!("attachment-{debug_id}"))
-                .hover(|style| style.bg(cx.theme().accent).border_color(cx.theme().ring))
-                .active(|style| style.bg(cx.theme().accent.opacity(0.8)))
+                // Hover fills; the ring stays a keyboard-focus signal.
+                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
+                .press_release(
+                    ElementId::from((self.id.clone(), "press")),
+                    tokens.radius.md,
+                    window,
+                    cx,
+                )
                 .child(leading)
                 .child(body)
                 .on_click(move |_: &ClickEvent, window, cx| {

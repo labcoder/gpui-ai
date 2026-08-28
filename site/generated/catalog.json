@@ -196,7 +196,7 @@
       "source": "crates/gpui-ai/src/search_results.rs",
       "api": "SearchResults",
       "usage": "SearchResults::new(\"research\", \"GPUI components\")",
-      "height": 151,
+      "height": 157,
       "windowTitle": "Web search — gpui-ai",
       "variants": [],
       "events": [
@@ -221,7 +221,7 @@
       "source": "crates/gpui-ai/src/todo_list.rs",
       "api": "TodoList",
       "usage": "TodoList::new(\"release-plan\")",
-      "height": 224,
+      "height": 234,
       "windowTitle": "To-do list — gpui-ai",
       "variants": [],
       "events": [

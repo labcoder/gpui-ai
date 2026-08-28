@@ -9,7 +9,7 @@
 
 use crate::{
     ButtonLabelExt as _,
-    control::composed_button,
+    control::{PressReleaseExt as _, composed_button},
     cues::{self, Cue},
     handlers::SharedHandler,
     motion::{ArrivalRoster, MotionTokens, acknowledged_state},
@@ -612,7 +612,7 @@ fn render_step(
                 id: plan_id.clone(),
                 step_id: step.id.clone(),
             };
-            composed_button(step_id, label)
+            composed_button(step_id.clone(), label)
                 .debug_selector(move || format!("plan-step-{debug_id}"))
                 .flex()
                 .items_stretch()
@@ -623,7 +623,14 @@ fn render_step(
                 .border_1()
                 .border_color(cx.theme().transparent)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+                .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
+                .press_release(
+                    ElementId::from((step_id, "press")),
+                    tokens.radius.sm,
+                    window,
+                    cx,
+                )
                 .child(rail)
                 .child(body)
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
