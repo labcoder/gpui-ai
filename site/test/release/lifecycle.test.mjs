@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { before, after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { buildSite } from "../../scripts/build.mjs";
@@ -31,7 +31,7 @@ import {
   waitForValue,
 } from "../../scripts/cdp.mjs";
 import { auditExpression, report } from "../contrast.mjs";
-import { observeBrowser, saveBrowserEvidence } from "../../scripts/browser-evidence.mjs";
+import { observeBrowser, saveBrowserEvidence, unexpectedBrowserEvents } from "../../scripts/browser-evidence.mjs";
 
 const { components } = catalog;
 
@@ -51,100 +51,119 @@ const IDLE_SPECIMEN = "chat";
 // the catalog measured, over 750 on a phone.
 const REFLOWING_SPECIMEN = "attachments";
 
-async function createGalleryFixture(directory) {
-  await mkdir(path.join(directory, "assets"), { recursive: true });
-  await Promise.all([
-    writeFile(path.join(directory, "index.html"), "gallery index"),
-    writeFile(path.join(directory, "embed.html"), "<!doctype html><title>Gallery fixture</title>"),
-    writeFile(path.join(directory, "assets", "gallery_bg-fixture.wasm"), "wasm"),
-  ]);
+
+const specimen = components.find(component => component.slug === POSTER_SPECIMEN);
+let temporaryRoot, outDir, serverHandle, cardsWritten;
+
+before(async () => {
+  assert.ok(browserPath, "the release gate requires the pinned browser; absence is not a skip");
+  assert.ok(existsSync(path.join(releaseGalleryDir, "embed.html")), "build the release gallery first");
+  temporaryRoot = await mkdtemp(path.join(tmpdir(), "gpui-ai-release-site-"));
+  outDir = path.join(temporaryRoot, "site");
+  // Every route exercised below gets freshly captured posters, including fallback
+  // and deep-anchor cases. Never rely on an earlier developer's poster capture.
+  await capturePosters({ only: [POSTER_SPECIMEN, IDLE_SPECIMEN, REFLOWING_SPECIMEN, catalog.hero.slug, "themes-trio"] });
+  await buildSite({ galleryDir: releaseGalleryDir, outDir });
+  cardsWritten = await captureSocialCards({ siteDir: outDir, only: ["/", `/components/${POSTER_SPECIMEN}/`] });
+  serverHandle = await serve(outDir);
+}, { timeout: 180_000 });
+
+after(async () => settleAll([
+  () => closeServer(serverHandle),
+  () => temporaryRoot && rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+]));
+
+// Each workflow owns its browser, storage, emulation, listeners, and teardown.
+// Only the completed build and its server are shared. A failed workflow cannot
+// prevent unrelated checks from running or poison their next page.
+function workflow(name, run, { noGpu = false, missingRoute = false } = {}) {
+  test(name, { timeout: 120_000 }, async (context) => {
+    const profile = await mkdtemp(path.join(temporaryRoot, "browser-"));
+    let browser;
+    context.after(async () => settleAll([
+      () => saveBrowserEvidence(browser, name),
+      () => closeBrowser(browser),
+      () => rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+    ]));
+    browser = await launchBrowser(profile);
+    const { cdp } = browser;
+    const events = await observeBrowser(browser);
+    const errors = [];
+    cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
+    await Promise.all([cdp.send("Page.enable"), cdp.send("Log.enable")]);
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-color-scheme", value: "light" }],
+    });
+    await cdp.send("Browser.grantPermissions", {
+      origin: serverHandle.origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
+    });
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await cdp.send("Page.bringToFront");
+    if (noGpu) await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: "Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined });",
+    });
+    const embed = (story, theme) => `${serverHandle.origin}/manual/gallery/embed.html?story=${story}&theme=${theme}`;
+    // Every interaction below needs the page hydrated, or it drives inert
+    // markup and reports that nothing happened. The inline head script paints
+    // data-theme before React or the route's deferred code chunk loads, so the
+    // palette is deliberately not a hydration signal. The shell owns an
+    // explicit marker that can only appear after its handlers are attached.
+    // Colours cross-fade over 200ms, so a read taken the instant the attribute
+    // changes still sees the old palette. Waiting for the class the fade runs
+    // under also proves it is added and then taken away again — a transition
+    // left in place would catch every later hover.
+    const settleTheme = async (label, previous) => {
+      // Waiting for the body to actually be a different colour is the only
+      // deterministic way to read the new one: a fixed delay races the
+      // transition, and the class the fade runs under comes off on its own timer
+      // rather than when the colours have finished moving.
+      await waitForValue(
+        cdp,
+        `getComputedStyle(document.body).backgroundColor !== ${JSON.stringify(previous)}`,
+        { label: `the ${label} cross-fade to finish`, describe: GALLERY_DIAGNOSIS, errors },
+      );
+      // And the transition must not still be in force afterwards, or it catches
+      // every later hover and makes the whole page feel slow.
+      await waitForValue(cdp, "!document.documentElement.classList.contains('theming')", {
+        label: `the ${label} transition to come back off`,
+        describe: GALLERY_DIAGNOSIS,
+        errors,
+      });
+    };
+
+    // `expected` defaults to what a visitor who has chosen nothing gets, which
+    // is the site's default theme rather than the machine's light or dark.
+    const openPage = async (route, width, height, expected = DEFAULT_THEME) => {
+      await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
+      await waitForValue(
+        cdp,
+        `document.documentElement.dataset.siteHydrated === '' && document.documentElement.dataset.theme === ${JSON.stringify(expected)}`,
+        {
+          label: `${route} to hydrate and apply its theme`,
+          describe: GALLERY_DIAGNOSIS,
+          errors,
+        },
+      );
+      // Hydration can precede the new Linux widget's first presented frame.
+      // A compositor round-trip prevents the first keydown from being dropped.
+      await cdp.send("Page.captureScreenshot", { format: "png" });
+    };
+
+
+    await run({ cdp, errors, openPage, settleTheme, embed });
+    assert.deepEqual(unexpectedBrowserEvents(events).filter(event => !(
+      missingRoute && event.kind === "http" && event.detail.status === 404 &&
+      event.detail.url === `${serverHandle.origin}/gpui-ai/nothing-is-here/`
+    )), [], `${name}: unexpected browser failures`);
+  });
 }
 
-test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
-  // Generous because this gate is one long story about one built artifact, and
-  // splitting it would mean building and booting that artifact several times to
-  // check things that are all true of the same run.
-  //
-  // The number is set from CI rather than from this machine: the gate ran in
-  // 47s there against 29s here before the poster and card captures were added,
-  // so a local minute is closer to two there. It also has to contain up to a
-  // minute of waiting for a browser to start — see PORT_READY_TIMEOUT_MS —
-  // because a launch that is slow but succeeds should not be reported as a
-  // test that hung.
-  timeout: 240_000,
-}, async (context) => {
-  assert.ok(
-    browserPath,
-    "CI runs the release gate against a real browser, and none was found on PATH or CHROME_PATH; install one rather than letting this gate skip",
-  );
-  assert.equal(existsSync(path.join(releaseGalleryDir, "embed.html")), true, "build the release gallery before the site browser gate");
-  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-release-browser-"));
-  const outDir = path.join(temporaryRoot, "site");
-  const userDataDir = path.join(temporaryRoot, "browser");
-  let serverHandle;
-  let browserHandle;
-  // Each step runs even if an earlier one throws: a browser that will not
-  // close must not strand the HTTP server or the temporary directory.
-  context.after(async () => {
-    await settleAll([
-      () => saveBrowserEvidence(browserHandle, "lifecycle"),
-      () => closeBrowser(browserHandle),
-      () => closeServer(serverHandle),
-      () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
-    ]);
-  });
-
-  // The one story this gate drives, rendered into site/public/posters before
-  // Vite copies that directory. Not all seventy: the chain being proved here —
-  // capture, publish, serve, render into the fallback — is the same whichever
-  // story runs through it, and the full set is a build step (generate:posters),
-  // not a test.
-  await capturePosters({ only: [POSTER_SPECIMEN, IDLE_SPECIMEN] });
-
-  await buildSite({ galleryDir: releaseGalleryDir, outDir });
-  // The social cards are rendered out of the built site — its stylesheet, its
-  // faces, its posters — so they come after it. Two of the thirty-seven: the
-  // chain being proved is the same whichever route runs through it.
-  const cardsWritten = await captureSocialCards({
-    siteDir: outDir,
-    only: ["/", `/components/${POSTER_SPECIMEN}/`],
-  });
-  serverHandle = await serve(outDir);
-  browserHandle = await launchBrowser(userDataDir);
-  await observeBrowser(browserHandle);
-  const { cdp } = browserHandle;
-  const baseUrl = `${serverHandle.origin}/manual`;
-  const errors = [];
-  await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable"), cdp.send("Log.enable")]);
-  // The site follows the operating system when nobody has chosen otherwise, so
-  // the runner's own preference would decide what every check below sees. Pin
-  // it; one step later flips it deliberately to prove the following works.
-  await cdp.send("Emulation.setEmulatedMedia", {
-    features: [{ name: "prefers-color-scheme", value: "light" }],
-  });
-  // Granted once, for every clipboard check below. Chrome also refuses the
-  // clipboard to a document it does not consider focused, and a headless page
-  // never is unless it is told it is.
-  await cdp.send("Browser.grantPermissions", {
-    origin: serverHandle.origin,
-    permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
-  });
-  await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
-  await cdp.send("Page.bringToFront");
-  cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.text));
-  cdp.on("Runtime.consoleAPICalled", ({ type, args }) => {
-    if (type === "error") errors.push(args.map((argument) => argument.value ?? argument.description).join(" "));
-  });
-  cdp.on("Log.entryAdded", ({ entry }) => {
-    if (entry.level === "error") errors.push(entry.text);
-  });
-
+workflow("standalone WASM cold-start, theme selection, and hero startup", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Drive the gallery directly rather than through a component page: this gate
   // is about whether the release artifact boots, syncs themes, and falls back
   // without WebGPU. The page chrome that used to wrap it is S-04, S-06 and
   // S-08 work, and coupling the artifact gate to unbuilt markup is what made
   // it fail for reasons that had nothing to do with the artifact.
-  const embed = (story, theme) => `${baseUrl}/gallery/embed.html?story=${story}&theme=${theme}`;
 
   await cdp.navigate(embed("loading", "light"), 1280, 900);
   await waitForValue(
@@ -212,7 +231,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     errors,
   });
   assert.deepEqual(errors, []);
+});
 
+workflow("embedded startup, measured size, posters, eviction, and restart", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Now through a real component page. The page ships no `src` — the frame
   // carries `data-src` and the observer promotes it — so this is the only
   // check that the demo a visitor actually meets ever starts. A page that
@@ -222,7 +243,6 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // mobile.test.mjs with real browser device scales: CDP-only DPR emulation
   // does not scale ResizeObserver's device-pixel box, so it is not a faithful
   // renderer test. This lifecycle test stays at the browser's native 1x scale.
-  const specimen = components.find((component) => component.slug === POSTER_SPECIMEN) ?? components[0];
   // Records every size the demo reports and whether the embed had drawn by
   // then, for the ordering assertion below. Installed before the page exists;
   // no-ops inside the frames themselves.
@@ -235,7 +255,11 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
         let ready = false;
         try {
           const frame = document.querySelector('[data-specimen-frame] iframe');
-          ready = frame?.contentDocument?.body?.dataset?.ready !== undefined;
+          const canvas = frame?.contentDocument?.querySelector('body > canvas');
+          ready = frame?.contentDocument?.body?.dataset?.ready !== undefined &&
+            Boolean(canvas && canvas.clientWidth > 0 && canvas.clientHeight > 0 &&
+              !(canvas.width === 300 && canvas.height === 150) &&
+              canvas.width >= canvas.clientWidth && canvas.height >= canvas.clientHeight);
         } catch {}
         window.__demoSizes.push({ height: message.height, ready });
       });
@@ -302,8 +326,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       errors,
     },
   );
-  await delay(600);
-  for (const sizeReport of JSON.parse(await cdp.evaluate("JSON.stringify(window.__demoSizes ?? [])"))) {
+  await waitForValue(cdp, "window.__demoSizes?.length > 0", {
+    label: "the drawn demo to report its measured size", errors,
+  });
+  for (const sizeReport of JSON.parse(await cdp.evaluate("JSON.stringify(window.__demoSizes)"))) {
     assert.equal(
       sizeReport.ready,
       true,
@@ -469,7 +495,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       errors,
     },
   );
+});
 
+workflow("theme tokens repaint the rendered page", async ({ cdp, errors, openPage, settleTheme, embed }) => {
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
   // S-03's whole claim: the chrome is painted from the generated tokens, so
   // setting the attribute the registry keys on repaints it. Nothing static can
   // check this — a stylesheet full of var() references looks correct whether or
@@ -510,50 +539,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // The face comes from a token too, so a theme that changed it would move the
   // chrome and the demos together.
   assert.match(repaint.before.face, /IBM Plex Sans/);
+});
 
-  // Every interaction below needs the page hydrated, or it drives inert
-  // markup and reports that nothing happened. The inline head script paints
-  // data-theme before React or the route's deferred code chunk loads, so the
-  // palette is deliberately not a hydration signal. The shell owns an
-  // explicit marker that can only appear after its handlers are attached.
-  // Colours cross-fade over 200ms, so a read taken the instant the attribute
-  // changes still sees the old palette. Waiting for the class the fade runs
-  // under also proves it is added and then taken away again — a transition
-  // left in place would catch every later hover.
-  const settleTheme = async (label, previous) => {
-    // Waiting for the body to actually be a different colour is the only
-    // deterministic way to read the new one: a fixed delay races the
-    // transition, and the class the fade runs under comes off on its own timer
-    // rather than when the colours have finished moving.
-    await waitForValue(
-      cdp,
-      `getComputedStyle(document.body).backgroundColor !== ${JSON.stringify(previous)}`,
-      { label: `the ${label} cross-fade to finish`, describe: GALLERY_DIAGNOSIS, errors },
-    );
-    // And the transition must not still be in force afterwards, or it catches
-    // every later hover and makes the whole page feel slow.
-    await waitForValue(cdp, "!document.documentElement.classList.contains('theming')", {
-      label: `the ${label} transition to come back off`,
-      describe: GALLERY_DIAGNOSIS,
-      errors,
-    });
-  };
-
-  // `expected` defaults to what a visitor who has chosen nothing gets, which
-  // is the site's default theme rather than the machine's light or dark.
-  const openPage = async (route, width, height, expected = DEFAULT_THEME) => {
-    await cdp.navigate(`${serverHandle.origin}/gpui-ai${route}`, width, height);
-    await waitForValue(
-      cdp,
-      `document.documentElement.dataset.siteHydrated === '' && document.documentElement.dataset.theme === ${JSON.stringify(expected)}`,
-      {
-        label: `${route} to hydrate and apply its theme`,
-        describe: GALLERY_DIAGNOSIS,
-        errors,
-      },
-    );
-  };
-
+workflow("mobile drawer traps focus, survives demo startup, and restores focus", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Visibility is only the render half of opening a modal. Focus, inertness,
   // and the keyboard handler are installed as one lifecycle, and later input
   // must not race any of them on a loaded runner.
@@ -785,7 +773,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     deviceScaleFactor: 1,
     mobile: false,
   });
+});
 
+workflow("theme controls persist choices and preserve pre-hydration precedence", async ({ cdp, errors, openPage, settleTheme, embed }) => {
+  await openPage(`/components/${specimen.slug}/`, 390, 844);
   // The mode control has to actually change what the page is painted from.
   const readMode = `(() => ({
     theme: document.documentElement.dataset.theme,
@@ -1043,6 +1034,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
   await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
   await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
+});
+
+workflow("demo first paint, wheel ownership, touch, override, reset, and share link", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // The demo's own toolbar. The override is the interesting one: it has to
   // move this frame without moving the page, and without the frame being torn
   // down and rebuilt, which is why it travels as a message rather than a URL.
@@ -1314,7 +1308,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     new RegExp(`/components/${specimen.slug}/\\?theme=ember-dusk$`),
     "Copy link must hand over the page as it is being looked at",
   );
+});
 
+workflow("code copy and selection preserve the original snippet", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Copy, against a real clipboard. Everything short of this checks that the
   // page holds the right string somewhere; only reading the clipboard back
   // shows what a visitor would paste. The panel is highlighted, so the
@@ -1365,6 +1361,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     snippetFile.snippets[specimen.slug].default,
     "a selection dragged across the code must give back the code, and nothing else",
   );
+});
+
+workflow("theme cards update the composed runtime and download authored palettes", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // The themes page is the one that has to prove the whole claim: the site and
   // the demos are painted from the same numbers. Choosing a card repaints the
   // page and the running trio together, and the file behind Download is the
@@ -1448,7 +1447,22 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // browser back to a visitor who has chosen nothing before the checks below.
   await cdp.evaluate("window.localStorage.removeItem('gpui-ai:theme')");
   await cdp.evaluate("window.history.replaceState(null, '', window.location.pathname)");
+});
 
+workflow("skip-link focus and mobile reference visibility", async ({ cdp, errors, openPage, settleTheme, embed }) => {
+  for (const width of [390, 1280]) {
+    await openPage("/", width, 900);
+    await cdp.evaluate("document.fonts.ready.then(() => true)");
+    const spacing = await cdp.evaluate(`(() => {
+      const install = document.querySelector('.home-install').getBoundingClientRect();
+      const demo = document.querySelector('.home .demo').getBoundingClientRect();
+      return { left: install.left - demo.left, right: install.right - demo.right,
+        gap: demo.top - install.bottom, width: install.width };
+    })()`);
+    assert.ok(spacing.width > 0 && Math.abs(spacing.left) <= 1 && Math.abs(spacing.right) <= 1,
+      `install and demo align at ${width}px: ${JSON.stringify(spacing)}`);
+    assert.ok(spacing.gap > 0, `install and demo have positive separation at ${width}px`);
+  }
   // The skip link is the first thing Tab reaches, and it moves focus rather
   // than only scrolling — which is the whole reason main carries tabindex.
   await openPage(`/components/${specimen.slug}/`, 1280, 900);
@@ -1480,7 +1494,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     `the API link must stay on the page at 390px wide (${JSON.stringify(railOnMobile)})`,
   );
   assert.match(railOnMobile.href, new RegExp(`struct\\.${specimen.api}\\.html$`));
+});
 
+workflow("unsupported WebGPU does not download WASM and shows an accessible poster", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Without WebGPU the *site* must say so, and — the part that matters — must
   // not have fetched anything. Every check above is on a machine that can draw;
   // this one is the promise the card makes to a machine that cannot. The stub
@@ -1564,7 +1580,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   );
 
   await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noGpu });
+});
 
+workflow("demo heights follow actual narrow and wide layout", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // D-13. A demo on a phone is not the demo on a desktop: the story is given a
   // third of the width and its prose rewraps, so the height the catalog
   // measured is far too short. The story reports what it actually laid out at
@@ -1631,7 +1649,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       errors,
     },
   );
+});
 
+workflow("linked variants start correctly and changes propagate to the host", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // D-04. A story draws its own switcher inside the canvas, so a reader can
   // change what they are looking at without the page knowing — and Copy link
   // handed over the state the story opens in rather than the one they were on.
@@ -1705,7 +1725,39 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
       errors,
     },
   );
+});
 
+workflow("table variants change presented content and restore the original frame", async ({ cdp, embed }) => {
+  await cdp.navigate(`${embed("records-table", "light")}&variant=populated&motion=reduced`, 640, 400);
+  await waitForValue(cdp, "document.body.dataset.ready !== undefined && window.gpuiAi?.variant() === 'populated'", {
+    label: "the populated table to boot", fatal: GALLERY_GAVE_UP, describe: GALLERY_DIAGNOSIS,
+  });
+  const frame = async () => {
+    // Only the table body, below the switcher's labels. Changing a selected
+    // tab or an API readback alone must not satisfy this check. Reduced motion
+    // makes this fixture static; no checked-in golden or font-specific bytes.
+    const deadline = Date.now() + 5_000;
+    let previous;
+    do {
+      await cdp.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+      const { data } = await cdp.send("Page.captureScreenshot", {
+        format: "png", clip: { x: 8, y: 96, width: 624, height: 180, scale: 1 },
+      }, 30_000);
+      if (data === previous) return data;
+      previous = data;
+    } while (Date.now() < deadline);
+    assert.fail("the reduced-motion table did not settle to a stable frame");
+  };
+  const populated = await frame();
+  assert.equal(await cdp.evaluate("window.gpuiAi.setVariant('empty')"), true);
+  await waitForValue(cdp, "window.gpuiAi.variant() === 'empty'", { label: "the empty table", describe: GALLERY_DIAGNOSIS });
+  assert.notEqual(await frame(), populated, "switching variants must change table content, not just the switcher");
+  assert.equal(await cdp.evaluate("window.gpuiAi.setVariant('populated')"), true);
+  await waitForValue(cdp, "window.gpuiAi.variant() === 'populated'", { label: "the restored table", describe: GALLERY_DIAGNOSIS });
+  assert.equal(await frame(), populated, "returning to populated restores the same content");
+});
+
+workflow("reduced motion is still while the full-motion control actually animates", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // D-04. The library's claim about reduced motion is that a run with it on
   // lands on a useful static frame rather than an empty one, and until now
   // nothing on the web could ask for it — GPUI reads the preference from the
@@ -1759,12 +1811,14 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     movingB,
     "this check is worthless unless the same story does move with motion on",
   );
+});
 
+workflow("catalog search ranks results and keyboard shortcuts respect text input", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // S-12. The search is only worth having if it ranks, and only worth reaching
   // for if it is one key away. Both are browser facts: the ranking has unit
   // tests, but nothing outside a browser can say whether the box the shortcut
   // lands in is the one on screen.
-  await cdp.navigate(`${serverHandle.origin}/gpui-ai/components/`, 1280, 900);
+  await openPage("/components/", 1280, 900);
   await waitForValue(cdp, "Boolean(document.querySelector('#component-filter'))", {
     label: "the catalog to render its search box",
     describe: GALLERY_DIAGNOSIS,
@@ -1814,7 +1868,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "component-filter",
     "the shortcut must not steal the cursor from a field being typed into",
   );
+});
 
+workflow("unknown routes remain the 404 page after hydration", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // S-14. A mistyped address gets the site's own page, and — the part only a
   // browser can check — hydrates as that page. The client used to fall back to
   // the first route for a path it did not recognise, so every 404 would have
@@ -1822,7 +1878,7 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
   // the moment React took over.
   const before = errors.length;
   await cdp.navigate(`${serverHandle.origin}/gpui-ai/nothing-is-here/`, 1280, 900);
-  await waitForValue(cdp, "Boolean(document.querySelector('.missing-ways'))", {
+  await waitForValue(cdp, "document.documentElement.dataset.siteHydrated === '' && Boolean(document.querySelector('.missing-ways'))", {
     label: "an address that names nothing to get the site's own page",
     describe: GALLERY_DIAGNOSIS,
     errors,
@@ -1850,7 +1906,10 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     [],
     "the 404 page hydrated with complaints, which means the client drew a different page",
   );
+}, { missingRoute: true });
 
+workflow("social cards have real served PNG dimensions", async ({ cdp, errors, openPage, settleTheme, embed }) => {
+  await openPage("/", 1280, 900);
   // S-14. A shared link is the one part of this site nobody visiting it can
   // check, so the card behind every og:image is read off disk: the right
   // format, the size the tags claim, and named by the page that points at it.
@@ -1880,7 +1939,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     );
     assert.equal(served, CARD.width, `${card.file} is not served where its tag says it is`);
   }
+});
 
+workflow("standalone embed explains missing WebGPU without a canvas", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Without WebGPU the embed must say so rather than showing an empty frame.
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
     source: "Object.defineProperty(Navigator.prototype, 'gpu', { configurable: true, get: () => undefined });",
@@ -1896,7 +1957,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     "This live example requires a browser with WebGPU support.",
   );
   assert.equal(await cdp.evaluate("document.querySelectorAll('canvas').length"), 0);
+});
 
+workflow("cold throttled font loading does not move page content", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   // Nothing on the page may move as the faces arrive.
   //
   // The four faces come in through `@import "@fontsource/…"` inside site.css,
@@ -1951,43 +2014,9 @@ test("release WASM owns startup, theme sync, lifecycle, and WebGPU fallback", {
     uploadThroughput: -1,
   });
   await cdp.send("Network.setCacheDisabled", { cacheDisabled: false });
-});
+}, { noGpu: true });
 
-test("owned theme contrast passes; upstream theme contrast is reported", {
-  timeout: 120_000,
-}, async (context) => {
-  assert.ok(browserPath, "CI runs this against a real browser, and none was found");
-
-  // The site paints its chrome from every theme in the registry. A
-  // theme is not a picture here — it decides whether the prose, the code, and
-  // the controls can be read at all, and nothing else in the suite would
-  // notice a palette that puts grey text on a grey card.
-  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-contrast-"));
-  const outDir = path.join(temporaryRoot, "site");
-  const galleryDir = path.join(temporaryRoot, "gallery");
-  const userDataDir = path.join(temporaryRoot, "browser");
-  let serverHandle;
-  let browserHandle;
-  context.after(async () => {
-    await settleAll([
-      () => saveBrowserEvidence(browserHandle, "theme-contrast"),
-      () => closeBrowser(browserHandle),
-      () => closeServer(serverHandle),
-      () => rm(temporaryRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 }),
-    ]);
-  });
-
-  // A fixture gallery, not the release artifact: this is about the chrome the
-  // site paints, and booting a canvas for every theme would prove nothing
-  // about it while taking a hundred times as long.
-  await createGalleryFixture(galleryDir);
-  await buildSite({ galleryDir, outDir });
-  serverHandle = await serve(outDir);
-  browserHandle = await launchBrowser(userDataDir);
-  await observeBrowser(browserHandle);
-  const { cdp } = browserHandle;
-  await Promise.all([cdp.send("Page.enable"), cdp.send("Runtime.enable")]);
-
+workflow("owned theme contrast passes; upstream theme contrast is reported", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   const own = new Set(
     themeFile.groups.find((group) => group.id === "gpui-ai").themes.map((theme) => theme.slug),
   );
@@ -2031,4 +2060,4 @@ test("owned theme contrast passes; upstream theme contrast is reported", {
     [],
     `the site's own themes must be readable:\n${report(ours)}`,
   );
-});
+}, { noGpu: true });

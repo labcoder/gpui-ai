@@ -56,9 +56,14 @@ test("event collection keeps expected pending icons but never hides real errors 
   assert.equal(events[0].kind, "asset-pending");
   assert.equal(events[0].count, 2);
   assert.deepEqual(unexpectedBrowserEvents(events), []);
+  // This is the exact diagnostic emitted by the Linux CI WASM build.
+  log("error", "[ERROR] gpui::elements::svg: Wasm assets loading, will be available soon...");
+  assert.deepEqual(unexpectedBrowserEvents(events), [], "pending SVG loads are not asset failures");
+  log("error", "[ERROR] gpui::elements::svg: Failed to load icon.svg");
+  log("error", "[ERROR] app: Wasm assets loading, will be available soon...");
   listeners.get("Network.responseReceived")({ response: { status: 404, url: "http://fixture/icon.svg" } });
   listeners.get("Runtime.exceptionThrown")({ exceptionDetails: { text: "Uncaught", exception: { description: "Rust panic" } } });
-  assert.deepEqual(unexpectedBrowserEvents(events).map(({ kind }) => kind), ["http", "exception"]);
+  assert.deepEqual(unexpectedBrowserEvents(events).map(({ kind }) => kind), ["error", "error", "http", "exception"]);
   for (let ix = 0; ix < 110; ix += 1) log("warning", `warning-${ix}`);
   assert.equal(events.length, 101);
   assert.match(unexpectedBrowserEvents(events).at(-1).detail, /limit exceeded/);

@@ -20,7 +20,9 @@ export async function observeBrowser(handle) {
     // Upstream's wasm_assets.rs returns this error while an icon's first
     // request is pending. Keep it in evidence, but it is not a failed fetch;
     // HTTP/network failures are recorded separately and remain fatal.
-    if (kind === "error" && detail === "[ERROR] : Wasm assets loading, will be available soon...") kind = "asset-pending";
+    // Native-hosted and Linux-built WASM loggers differ in whether the Rust
+    // target is included. Match only this known SVG pending diagnostic.
+    if (kind === "error" && /^\[ERROR\] (?:gpui::elements::svg)?: Wasm assets loading, will be available soon\.\.\.$/.test(detail)) kind = "asset-pending";
     const previous = events.find((e) => e.kind === kind && JSON.stringify(e.detail) === JSON.stringify(detail));
     if (previous) previous.count += 1;
     else if (events.length < 100) events.push({ kind, detail, count: 1 });

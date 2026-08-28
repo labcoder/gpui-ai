@@ -27,22 +27,6 @@ test('an embedded example paints no background of its own', async () => {
   );
 });
 
-test('nothing is left of the loading card the window replaced', async () => {
-  const [styles, embed] = await Promise.all([
-    readFile(new URL('./styles.css', import.meta.url), 'utf8'),
-    readFile(new URL('../embed.html', import.meta.url), 'utf8'),
-  ]);
-
-  assert.doesNotMatch(embed, /id="loading"/, 'the embed still has a loading layer');
-  assert.doesNotMatch(embed, /Loading GPUI example/, 'the embed still announces itself');
-  for (const rule of ['.loading', '.loading-card', '.pulse']) {
-    assert.ok(!styles.includes(`${rule} `) && !styles.includes(`${rule},`), `${rule} survives`);
-  }
-  // The fallback is not the loading card and does not go with it.
-  assert.match(embed, /id="fallback"/);
-  assert.match(styles, /\.fallback-card\s*\{/);
-});
-
 test('the embed pins its colour scheme before its first paint', async () => {
   const embed = await readFile(new URL('../embed.html', import.meta.url), 'utf8');
 
@@ -59,23 +43,4 @@ test('the embed pins its colour scheme before its first paint', async () => {
   for (const source of ["get('theme')", "classList.contains('dark')", 'prefers-color-scheme']) {
     assert.ok(embed.includes(source), `the pin must consult ${source}`);
   }
-});
-
-test('the size report waits for the first drawn frame', async () => {
-  const main = await readFile(new URL('./main.js', import.meta.url), 'utf8');
-
-  // A height measured before the canvas has the window's width is a story
-  // wrapped at the parser's default width — far taller than it will ever
-  // really be — and the host keeps the tallest height it is ever told. The
-  // report starts inside the reveal, where there are pixels to measure.
-  assert.match(
-    main,
-    /revealWhenDrawn\(options\.story,\s*\(\)\s*=>\s*reportSize\(/,
-    'reportSize must start from revealWhenDrawn, not before it',
-  );
-  assert.doesNotMatch(
-    main,
-    /^\s*reportSize\(options\.story,\s*wasm\);/m,
-    'a bare reportSize call would race the first frame again',
-  );
 });

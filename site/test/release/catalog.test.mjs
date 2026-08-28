@@ -17,6 +17,9 @@ after(async () => closeServer(serverHandle));
 // Every catalog entry is tested, not just the two poster fixtures. Rotate
 // three review themes across this smoke matrix; exhaustive theme/geometry
 // and semantic interaction tests live in the native component suite.
+// Retain fresh processes: isolated contexts share Chrome's GPU process. A
+// measured context-reuse spike saved startup time but cannot prove a cold GPU
+// lifecycle for each story. Do not pool pages merely to shorten this gate.
 for (const [ix, component] of catalog.components.entries()) {
   test(`catalog ${component.slug}: draws and exposes every declared variant`, { timeout: 120_000 }, async (context) => {
     const temporary = await mkdtemp(path.join(tmpdir(), "gpui-ai-catalog-web-"));
