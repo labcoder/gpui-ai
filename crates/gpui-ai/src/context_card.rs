@@ -150,7 +150,7 @@ impl RenderOnce for ContextCard {
                 .bg(tokens.colors.surface)
                 .border_1()
                 .border_color(cx.theme().border)
-                .rounded(tokens.radius.md)
+                .rounded(tokens.radius.lg)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                 .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -173,7 +173,7 @@ impl RenderOnce for ContextCard {
                 .bg(tokens.colors.surface)
                 .border_1()
                 .border_color(cx.theme().border)
-                .rounded(tokens.radius.md)
+                .rounded(tokens.radius.lg)
                 .refine_style(&self.style)
                 .into_any_element()
         }

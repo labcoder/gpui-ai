@@ -971,7 +971,7 @@ impl Render for ComparisonTable {
             .overflow_hidden()
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .child(
                 div()
                     .id(format!("comparison-table-scroll:{}", self.id))
@@ -1144,20 +1144,27 @@ impl Render for ComparisonTable {
                                                     |header| header.bg(cx.theme().accent),
                                                 )
                                                 .when(selected, |header| {
-                                                    // An absolute overlay ring
-                                                    // takes no layout space, so
+                                                    // Selection is the shared
+                                                    // fill grammar, not a ring:
+                                                    // an inset rounded wash on
+                                                    // an absolute overlay, so
                                                     // the marker cannot reflow
-                                                    // the header it outlines.
+                                                    // the header it sits under.
+                                                    // Painted first, it stays
+                                                    // beneath the content.
                                                     header.child(
                                                         div()
                                                             .absolute()
-                                                            .inset_0()
-                                                            .border_2()
-                                                            .border_color(
-                                                                cx.theme()
-                                                                    .ring
-                                                                    .opacity(acknowledged),
-                                                            ),
+                                                            .inset(tokens.spacing.xxs)
+                                                            .rounded(crate::surface::nested_radius(
+                                                                tokens.radius.lg,
+                                                                tokens.spacing.xxs,
+                                                                tokens.radius.sm,
+                                                            ))
+                                                            .bg(cx
+                                                                .theme()
+                                                                .list_active
+                                                                .opacity(acknowledged)),
                                                     )
                                                 })
                                                 .child(

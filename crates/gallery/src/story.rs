@@ -632,7 +632,7 @@ impl StoryId {
                 module: "queue",
                 api: "MessageQueue",
                 usage: crate::usage::MESSAGE_QUEUE,
-                height: 240,
+                height: 234,
                 overflow: Overflow::Wide,
             },
             Self::SelectionActions => StoryMeta {

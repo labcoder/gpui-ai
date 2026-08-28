@@ -167,7 +167,7 @@ impl RenderOnce for ToolChip {
                             .into_any_element(),
                         _ => div()
                             .size_1p5()
-                            .rounded(tokens.radius.md)
+                            .rounded(tokens.radius.full)
                             .bg(status_color)
                             .opacity(acknowledged)
                             .into_any_element(),

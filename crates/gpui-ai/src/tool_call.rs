@@ -550,7 +550,7 @@ impl RenderOnce for ToolCall {
                 ToolApproval::Requested => cx.theme().warning,
                 _ => cx.theme().border,
             })
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {

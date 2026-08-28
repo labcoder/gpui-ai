@@ -479,7 +479,7 @@ impl Chat {
                 .max_w(relative(0.82))
                 .border_1()
                 .border_color(cx.theme().border)
-                .rounded(tokens.radius.md)
+                .rounded(tokens.radius.lg)
                 .bg(match message.role {
                     ChatRole::User => cx.theme().secondary,
                     ChatRole::Assistant | ChatRole::System | ChatRole::Tool => {
@@ -489,7 +489,7 @@ impl Chat {
             MessageBubble::Filled => bubble
                 .w_auto()
                 .max_w(relative(0.82))
-                .rounded(tokens.radius.md)
+                .rounded(tokens.radius.lg)
                 .bg(match message.role {
                     ChatRole::User => cx.theme().secondary,
                     ChatRole::Assistant | ChatRole::System | ChatRole::Tool => cx.theme().muted,

@@ -207,7 +207,7 @@ impl RenderOnce for TodoList {
             .bg(tokens.colors.surface)
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .when_some(self.title, |this, title| {
                 this.child(
                     h_flex()

@@ -640,7 +640,7 @@ impl RenderOnce for CodeDiff {
             .bg(tokens.colors.surface)
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {

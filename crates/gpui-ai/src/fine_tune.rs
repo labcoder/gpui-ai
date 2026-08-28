@@ -907,7 +907,8 @@ fn opacity_slider_control(
                         .left(relative(percentage))
                         .ml(-tokens.spacing.xs)
                         .size(tokens.spacing.sm)
-                        .rounded(tokens.radius.sm)
+                        // A thumb is a dot, and dots are circles here.
+                        .rounded(tokens.radius.full)
                         .border_1()
                         .border_color(cx.theme().primary)
                         .bg(cx.theme().background),

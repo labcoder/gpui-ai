@@ -243,7 +243,7 @@ impl RenderOnce for MessageQueue {
             .bg(cx.theme().muted.opacity(0.35))
             .border_1()
             .border_color(cx.theme().border)
-            .rounded(tokens.radius.md)
+            .rounded(tokens.radius.lg)
             .child(
                 h_flex()
                     .items_center()
@@ -355,9 +355,10 @@ fn render_row(
         .px(tokens.spacing.sm)
         .py(tokens.spacing.xs)
         .rounded(tokens.radius.sm)
+        // The surface step against the container's muted wash separates
+        // the row on its own; a second border inside the framed list was
+        // the double the audit flagged.
         .bg(tokens.colors.surface)
-        .border_1()
-        .border_color(cx.theme().border)
         .child(crate::surface::leading_glyph_slot(
             crate::sizing::SizeTokens::read(cx).slot_md(),
             meta((index + 1).to_string(), cx),

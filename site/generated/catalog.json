@@ -965,7 +965,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "height": 240,
+      "height": 234,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [
