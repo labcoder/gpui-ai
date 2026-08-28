@@ -125,18 +125,9 @@ impl RenderOnce for TaskRow {
             .gap(tokens.spacing.sm)
             .py(tokens.spacing.xs)
             .text_token(tokens.typography.sm)
-            .child(
-                // A fixed square slot: dot, spinner, check, and cross all
-                // centre in the same box, so a lifecycle change never nudges
-                // the title sideways.
-                div()
-                    .flex_none()
-                    .size(tokens.spacing.lg)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(indicator),
-            )
+            // The lifecycle glyph arrives already seated in its slot, so a
+            // state change never nudges the title sideways.
+            .child(indicator)
             .child(
                 div()
                     .flex_1()
@@ -158,9 +149,12 @@ impl RenderOnce for TaskRow {
                 )
             })
             .when_some(failed_reason.or(self.task.detail), |this, detail| {
+                // The trailing detail shrinks and truncates under pressure
+                // instead of pushing the row wide; the title keeps its room.
                 this.child(
                     div()
-                        .flex_none()
+                        .min_w_0()
+                        .truncate()
                         .text_token(tokens.typography.xs)
                         .text_color(match self.state {
                             ProgressState::Failed(_) => cx.theme().danger,

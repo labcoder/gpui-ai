@@ -901,14 +901,20 @@ impl RenderOnce for StreamingText {
                     .child(answer),
             )
             .when_some(failure, |this, reason| {
+                // The glyph rides a first-line slot: the row stays
+                // items_start, so however far the reason wraps, the mark
+                // holds centered on the first line.
                 this.child(
                     h_flex()
-                        .items_center()
-                        .gap(tokens.spacing.xs)
+                        .items_start()
+                        .gap(tokens.spacing.sm)
                         .text_token(tokens.typography.xs)
                         .text_color(cx.theme().danger)
-                        .child(Icon::new(IconName::CircleX).xsmall())
-                        .child(reason),
+                        .child(crate::surface::leading_glyph_slot(
+                            crate::sizing::SizeTokens::read(cx).slot_sm(),
+                            Icon::new(IconName::CircleX).xsmall(),
+                        ))
+                        .child(div().min_w_0().child(reason)),
                 )
             })
             .when_some(on_event.clone(), |this, handler| {

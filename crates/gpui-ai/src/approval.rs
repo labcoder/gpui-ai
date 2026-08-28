@@ -209,13 +209,17 @@ impl RenderOnce for ApprovalCard {
             // once per decision — a card that mounts already decided shows
             // its resolved text without motion, and rapid decision changes
             // retarget by playing the new state's own acknowledgment.
+            // The badge and the note share a text baseline, so a note long
+            // enough to wrap stays hung from the badge's own line instead
+            // of floating the badge against the middle of a block.
             h_flex()
-                .items_center()
+                .items_baseline()
                 .gap(tokens.spacing.sm)
                 .opacity(settled)
                 .top(tokens.spacing.xxs * (1.0 - settled) * crate::motion::travel(cx))
                 .child(
                     div()
+                        .flex_none()
                         .debug_selector(move || format!("approval-decision-{decision_debug}"))
                         .child(
                             StatusBadge::new((root_id.clone(), "decision"), self.decision.label())
@@ -225,7 +229,9 @@ impl RenderOnce for ApprovalCard {
                                 }),
                         ),
                 )
-                .when_some(self.note.clone(), |this, note| this.child(meta(note, cx)))
+                .when_some(self.note.clone(), |this, note| {
+                    this.child(div().min_w_0().child(meta(note, cx)))
+                })
                 .into_any_element()
         } else {
             h_flex()

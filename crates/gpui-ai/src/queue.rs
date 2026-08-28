@@ -340,12 +340,15 @@ fn render_row(
             cx,
         ));
     let row_debug = debug_id.clone();
+    // The position number seats on the text's first line while the
+    // action cluster centers itself against the whole row; the note
+    // truncates like the text above it instead of stretching the row.
     let row = h_flex()
         .id(row_id.clone())
         .role(Role::ListItem)
         .aria_label(label)
         .debug_selector(move || format!("queue-item-{row_debug}"))
-        .items_center()
+        .items_start()
         .w_full()
         .min_w_0()
         .gap(tokens.spacing.sm)
@@ -355,7 +358,10 @@ fn render_row(
         .bg(tokens.colors.surface)
         .border_1()
         .border_color(cx.theme().border)
-        .child(meta((index + 1).to_string(), cx))
+        .child(crate::surface::leading_glyph_slot(
+            crate::sizing::SizeTokens::read(cx).slot_md(),
+            meta((index + 1).to_string(), cx),
+        ))
         .child(
             div()
                 .flex()
@@ -373,13 +379,15 @@ fn render_row(
                 .when_some(item.note.clone(), |this, note| {
                     this.child(
                         div()
+                            .min_w_0()
+                            .truncate()
                             .text_token(tokens.typography.xs)
                             .text_color(cx.theme().muted_foreground)
                             .child(note),
                     )
                 }),
         )
-        .child(controls);
+        .child(controls.self_center());
     let row = match arrival {
         Some(progress) => row
             .opacity(progress)

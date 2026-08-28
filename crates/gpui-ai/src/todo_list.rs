@@ -289,23 +289,22 @@ impl RenderOnce for TodoList {
                 let event = item.toggled_event();
                 let row = h_flex()
                     .w_full()
-                    .items_center()
+                    .items_start()
                     .gap(tokens.spacing.sm)
                     .child(
-                        // A fixed square slot: ring, spinner, and check all
-                        // centre in the same box, so a status change never
-                        // nudges the label sideways.
-                        div()
-                            .flex_none()
-                            .size(tokens.spacing.lg)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(indicator),
+                        // A first-line slot: ring, spinner, and check all
+                        // centre in the same box, a status change never
+                        // nudges the label sideways, and a wrapping label
+                        // leaves the glyph seated on its first line.
+                        crate::surface::leading_glyph_slot(
+                            crate::sizing::SizeTokens::read(cx).slot_md(),
+                            indicator,
+                        ),
                     )
                     .child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .text_token(tokens.typography.sm)
                             .map(|this| match item.status {
                                 TodoStatus::Done => {

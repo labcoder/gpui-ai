@@ -206,21 +206,25 @@ impl RenderOnce for RecommendationCard {
                         .child(eyebrow("Also considered", cx))
                         .children(self.alternatives.into_iter().enumerate().map(|(ix, alt)| {
                             let accessibility_label = alt.clone();
+                            // The bullet rides a first-line slot so a
+                            // wrapping alternative keeps it seated on its
+                            // first line instead of floating mid-block.
                             h_flex()
                                 .id(format!("{}-alternative-{ix}", self.id))
                                 .role(Role::ListItem)
                                 .aria_label(accessibility_label)
-                                .items_center()
-                                .gap(tokens.spacing.xs)
+                                .items_start()
+                                .gap(tokens.spacing.sm)
                                 .text_token(tokens.typography.sm)
                                 .text_color(cx.theme().muted_foreground)
-                                .child(
+                                .child(crate::surface::leading_glyph_slot(
+                                    crate::sizing::SizeTokens::read(cx).slot_md(),
                                     div()
                                         .size_1()
                                         .rounded(tokens.radius.full)
                                         .bg(cx.theme().muted_foreground),
-                                )
-                                .child(alt)
+                                ))
+                                .child(div().min_w_0().child(alt))
                         })),
                 )
             })
