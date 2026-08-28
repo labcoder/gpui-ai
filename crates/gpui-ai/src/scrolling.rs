@@ -133,7 +133,7 @@ impl ScrollbarTokens {
     /// The choice is projected onto the theme's own scrollbar mode, which
     /// is what every bar resolves from when nothing overrides it — the
     /// crate's surfaces and the bars upstream draws inside its tables
-    /// alike. A theme swap re-projects it through [`install`].
+    /// alike, and the crate re-projects it when it initializes.
     pub fn set(self, cx: &mut gpui::App) {
         cx.set_global(self);
         self.project_onto_theme(cx);

@@ -1727,6 +1727,11 @@ workflow("linked variants start correctly and changes propagate to the host", as
   );
 });
 
+// The width the always-visible scrollbar overlay occupies at the trailing
+// edge of a scrollable surface: upstream's 16px track plus the pixel of
+// anti-aliasing either side of it.
+const SCROLLBAR_GUTTER = 28;
+
 workflow("table variants change presented content and restore the original frame", async ({ cdp, embed }) => {
   await cdp.navigate(`${embed("records-table", "light")}&variant=populated&motion=reduced`, 640, 400);
   await waitForValue(cdp, "document.body.dataset.ready !== undefined && window.gpuiAi?.variant() === 'populated'", {
@@ -1736,12 +1741,20 @@ workflow("table variants change presented content and restore the original frame
     // Only the table body, below the switcher's labels. Changing a selected
     // tab or an API readback alone must not satisfy this check. Reduced motion
     // makes this fixture static; no checked-in golden or font-specific bytes.
+    //
+    // The clip stops short of the trailing edge, where the always-visible
+    // scrollbar overlays the body. The bar is chrome, not content: it is
+    // derived from the scroll extent, which a variant switch legitimately
+    // changes and restores, and it re-derives its thumb rather than
+    // restoring the exact pixels it drew before. What this check is for is
+    // the content — that switching variants really changes the table and
+    // returning really brings it back — so it reads the content region.
     const deadline = Date.now() + 5_000;
     let previous;
     do {
       await cdp.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
       const { data } = await cdp.send("Page.captureScreenshot", {
-        format: "png", clip: { x: 8, y: 96, width: 624, height: 180, scale: 1 },
+        format: "png", clip: { x: 8, y: 96, width: 624 - SCROLLBAR_GUTTER, height: 180, scale: 1 },
       }, 30_000);
       if (data === previous) return data;
       previous = data;
