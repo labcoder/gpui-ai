@@ -328,7 +328,7 @@
       "source": "crates/gpui-ai/src/suggestions.rs",
       "api": "Suggestions",
       "usage": "Suggestions::new(\"starters\")",
-      "height": 124,
+      "height": 132,
       "windowTitle": "Suggestions — gpui-ai",
       "variants": [],
       "events": [

@@ -146,9 +146,13 @@ impl RenderOnce for Suggestions {
                             .flex()
                             .items_center()
                             // Chip geometry from the size policy: prompt
-                            // pills stand a medium control tall, so they
-                            // rhyme with the composer's own controls.
-                            .h(crate::sizing::SizeTokens::read(cx).control_md())
+                            // pills stand a large control tall, which is
+                            // the height the composer's own controls take
+                            // and the proportion a pill wants — roughly
+                            // twice the vertical room the medium tier left
+                            // around a small-text line, against the same
+                            // horizontal inset.
+                            .h(crate::sizing::SizeTokens::read(cx).control_lg())
                             .px(tokens.spacing.md)
                             .border_1()
                             .border_color(cx.theme().border)
@@ -187,7 +191,7 @@ impl RenderOnce for Suggestions {
                         .aria_label(item.label.clone())
                         .flex()
                         .items_center()
-                        .h(crate::sizing::SizeTokens::read(cx).control_md())
+                        .h(crate::sizing::SizeTokens::read(cx).control_lg())
                         .px(tokens.spacing.md)
                         .border_1()
                         .border_color(cx.theme().border)

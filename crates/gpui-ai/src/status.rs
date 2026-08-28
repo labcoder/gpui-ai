@@ -322,6 +322,10 @@ impl RenderOnce for StatusBadge {
                 Spinner::new().xsmall().color(color).into_any_element()
             } else {
                 div()
+                    .debug_selector({
+                        let dot_debug = format!("status-badge-dot-{}", self.label);
+                        move || dot_debug.clone()
+                    })
                     .size_1p5()
                     .rounded(tokens.radius.full)
                     .bg(color)
@@ -368,12 +372,21 @@ impl RenderOnce for StatusBadge {
                 )
             });
 
+        // The dot rides a slot sized for the spinner that replaces it, so
+        // the slot carries slack the dot does not fill. Left outside that
+        // slack, the chip's own leading padding put visibly more room
+        // before the dot than after the label — the optical asymmetry the
+        // 0.4.0 feel review saw. The leading inset absorbs the slack so
+        // both ends read the same, and the slot still holds the label
+        // still when the spinner takes the dot's place.
+        let slot_slack = (tokens.spacing.md - INDICATOR_DOT) / 2.;
         chip_frame(color, ChipStrength::Tinted, cx)
             .id(self.id)
             .role(Role::Status)
             .aria_label(self.label.clone())
             .flex()
             .items_center()
+            .pl((tokens.spacing.sm - slot_slack).max(gpui::Pixels::ZERO))
             .gap(tokens.spacing.xs)
             .child(indicator)
             .child(label_slot)
@@ -385,6 +398,11 @@ impl RenderOnce for StatusBadge {
 /// width reservation. A new lifecycle label joins both or the reservation
 /// silently under-measures.
 const LIFECYCLE_LABELS: [&str; 4] = ["Pending", "Running", "Completed", "Failed"];
+
+/// The settled dot's diameter, which is `size_1p5`. Named because the
+/// badge's leading inset is measured against the slack the dot leaves in
+/// the spinner-sized slot around it.
+const INDICATOR_DOT: gpui::Pixels = gpui::px(6.);
 
 #[cfg(test)]
 mod tests {

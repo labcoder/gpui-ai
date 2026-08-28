@@ -110,6 +110,13 @@ struct Exception {
 /// Every raw `px(...)` the library is allowed to construct outside tests.
 const EXCEPTIONS: &[Exception] = &[
     Exception {
+        file: "status.rs",
+        expression: "gpui::px(6.)",
+        context: "INDICATOR_DOT",
+        category: Category::MeasuredGeometry,
+        rationale: "names the dot's own size so the badge's leading inset can absorb its slot's slack",
+    },
+    Exception {
         file: "glide.rs",
         expression: "px(x)",
         context: ".left(px(x))",

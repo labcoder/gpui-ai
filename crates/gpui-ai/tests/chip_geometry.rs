@@ -132,6 +132,26 @@ fn the_lifecycle_dot_shares_the_label_centre_line(cx: &mut TestAppContext) {
     );
 }
 
+/// The space before a badge's dot matches the space after its label.
+///
+/// The dot rides a fixed slot sized for the spinner that replaces it, so
+/// the slot is wider than the dot — and the chip's own leading padding
+/// sat outside that slack, leaving visibly more room before the dot than
+/// after the word.
+#[gpui::test]
+fn a_badge_insets_its_dot_and_its_label_alike(cx: &mut TestAppContext) {
+    let cx = probe(cx);
+    let chip = bounds(cx, "probe-badge-complete");
+    let dot = bounds(cx, "status-badge-dot-Completed");
+    let label = bounds(cx, "status-badge-label-Completed");
+    let leading = dot.left() - chip.left();
+    let trailing = chip.right() - label.right();
+    assert!(
+        (leading - trailing).abs() <= px(1.),
+        "a badge's dot and its label stand equally far from their own ends:          {leading:?} before, {trailing:?} after"
+    );
+}
+
 /// A pill leaves as much room above its text as below it.
 #[gpui::test]
 fn suggestion_pills_inset_their_text_evenly_top_and_bottom(cx: &mut TestAppContext) {
