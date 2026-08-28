@@ -1088,10 +1088,12 @@ impl Render for ThreadList {
                                         .debug_selector(|| "thread-list-empty".into())
                                         .role(Role::Status)
                                         .aria_label(message.clone())
-                                        .p(tokens.spacing.md)
-                                        .text_token(tokens.typography.sm)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(message),
+                                        .child(crate::surface::empty_state(
+                                            IconName::Inbox,
+                                            message.clone(),
+                                            Some("Start a chat to see it here".into()),
+                                            cx,
+                                        )),
                                 )
                             }),
                     ),

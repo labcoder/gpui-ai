@@ -399,7 +399,7 @@ impl RenderOnce for ToolCall {
             .px(tokens.spacing.md)
             .pb(tokens.spacing.md)
             .border_t_1()
-            .border_color(cx.theme().border)
+            .border_color(crate::surface::hairline(cx))
             .pt(tokens.spacing.sm)
             .when(approval == ToolApproval::Requested, |this| {
                 let approve = handler.clone();

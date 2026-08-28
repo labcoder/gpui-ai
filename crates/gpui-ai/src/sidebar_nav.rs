@@ -36,7 +36,6 @@ use gpui_component::{
 
 use crate::{
     motion::disclosure_progress, resolved_layout::ResolvedLayoutKey, scrolling::list_scroll_mask,
-    theme::SemanticStyledExt as _,
 };
 
 use render::{nav_control, render_row, sidebar_tree_container};
@@ -709,12 +708,14 @@ impl SidebarNav {
                         }
                     })
                     .flex_none()
-                    .p(tokens.spacing.sm)
                     .role(Role::Status)
                     .aria_label(empty_message.clone())
-                    .text_token(tokens.typography.sm)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(empty_message)
+                    .child(crate::surface::empty_state(
+                        IconName::Search,
+                        empty_message,
+                        None,
+                        cx,
+                    ))
                     .into_any_element(),
             );
         }

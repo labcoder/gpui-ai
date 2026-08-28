@@ -10,6 +10,7 @@ use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    prelude::FluentBuilder as _,
 };
 use gpui_base::Button;
 use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, v_flex};
@@ -33,6 +34,50 @@ pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
 /// A compact inset panel placed *inside* a card (payloads, code, previews).
 /// Uses the muted surface and the medium radius so it nests without a
 /// second full-card frame.
+/// The hairline a structural divider is drawn in: the border color at
+/// reduced alpha, so a rule inside a bordered container separates
+/// without competing with the frame, on any theme.
+pub(crate) fn hairline(cx: &App) -> gpui::Hsla {
+    cx.theme().border.opacity(0.6)
+}
+
+/// The empty-state anatomy every surface shares: a quiet icon, one line
+/// that says why it is empty, and an optional hint — centered, padded,
+/// never a bare string in a corner. Callers keep their own identity,
+/// role, and status semantics on the wrapper they mount this into.
+pub(crate) fn empty_state(
+    icon: impl IconNamed,
+    title: impl Into<SharedString>,
+    hint: Option<SharedString>,
+    cx: &App,
+) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    v_flex()
+        .w_full()
+        .items_center()
+        .gap(tokens.spacing.xs)
+        .p(tokens.spacing.lg)
+        .child(
+            Icon::new(icon)
+                .small()
+                .text_color(cx.theme().muted_foreground),
+        )
+        .child(
+            div()
+                .text_token(tokens.typography.sm)
+                .text_color(cx.theme().foreground)
+                .child(title.into()),
+        )
+        .when_some(hint, |this, hint| {
+            this.child(
+                div()
+                    .text_token(tokens.typography.xs)
+                    .text_color(cx.theme().muted_foreground)
+                    .child(hint),
+            )
+        })
+}
+
 /// The nesting rule for a rounded surface inside a rounded container:
 /// inner radius = container radius − inset, floored so a deep inset
 /// cannot square the corner entirely.

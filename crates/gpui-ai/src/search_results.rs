@@ -192,7 +192,7 @@ impl RenderOnce for SearchResults {
                 this.child(
                     v_flex()
                         .border_t_1()
-                        .border_color(cx.theme().border)
+                        .border_color(crate::surface::hairline(cx))
                         .py(tokens.spacing.xs)
                         .children(self.results.into_iter().map(|result| {
                             let event = result.opened_event();
