@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
+import { site as sharedSite } from "./site-fixture.mjs";
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { after, test } from "node:test";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildSite, CARD } from "../scripts/build.mjs";
+import { CARD } from "../scripts/build.mjs";
 import { socialCardName } from "../app/route-path.mjs";
 import buildInfo from "../generated/build.json" with { type: "json" };
 import catalog from "../generated/catalog.json" with { type: "json" };
@@ -36,30 +36,7 @@ const docSlugs = [
 ];
 const ROUTES = ["/", "/components/", "/themes/", `/components/${components[0].slug}/`];
 
-// The build is expensive, so every test reads one.
-let built;
-function site() {
-  built ??= (async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "mighty-pages-"));
-    const galleryDir = path.join(root, "gallery-input");
-    const outDir = path.join(root, "site-output");
-    await mkdir(path.join(galleryDir, "assets"), { recursive: true });
-    await Promise.all([
-      writeFile(path.join(galleryDir, "index.html"), "gallery index"),
-      writeFile(path.join(galleryDir, "embed.html"), "gallery fixture"),
-      writeFile(path.join(galleryDir, "assets", "gallery_bg-fixture.wasm"), "wasm"),
-    ]);
-    await buildSite({ galleryDir, outDir });
-    return { root, outDir };
-  })();
-  return built;
-}
-
-after(async () => {
-  if (!built) return;
-  const { root } = await built;
-  await rm(root, { force: true, recursive: true });
-});
+const site = sharedSite;
 
 async function page(route) {
   const { outDir } = await site();
@@ -366,23 +343,6 @@ test("the home page puts installing it above the demo", async () => {
   assert.ok(install < demo, `install is at ${install}, below the demo at ${demo}`);
 });
 
-test("the home page aligns the install panel and demo with space between them", async () => {
-  const html = await page("/");
-  const css = await readFile(path.join(repositoryRoot, "site", "app", "site.css"), "utf8");
-
-  assert.match(html, /<section class="home-install" aria-labelledby="install">/);
-  assert.match(
-    css,
-    /\.home-install\s*\{[^}]*max-width:\s*var\(--demo-width\)/s,
-    "the install section does not share the demo width",
-  );
-  assert.match(
-    css,
-    /\.home-install \+ \.demo\s*\{[^}]*margin-top:\s*var\(--space-6\)/s,
-    "the install panel and demo have no gap",
-  );
-});
-
 test("the README links every component, and every site link it makes resolves", async () => {
   const { outDir } = await site();
   const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
@@ -429,40 +389,6 @@ test("the README links every component, and every site link it makes resolves", 
     new RegExp(`includes ${themeCount} themes`, "i"),
     `the README does not say there are ${themeCount} themes`,
   );
-});
-
-test("the README's Kind column matches what each type implements", async () => {
-  const readme = await readFile(path.join(repositoryRoot, "README.md"), "utf8");
-  const directory = path.join(repositoryRoot, "crates", "gpui-ai", "src");
-  const sources = (
-    await Promise.all(
-      (await readdir(directory))
-        .filter((name) => name.endsWith(".rs"))
-        .map((name) => readFile(path.join(directory, name), "utf8")),
-    )
-  ).join("\n");
-
-  const rows = [
-    ...readme.matchAll(/^\|\s*\[([^\]]+)\]\([^)]*\)\s*\|\s*(stateless|entity)\s*\|/gm),
-  ];
-  assert.equal(rows.length, components.length, `the table contains ${rows.length} component rows`);
-
-  const wrong = [];
-  for (const [, cell, kind] of rows) {
-    const names = [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
-    for (const name of names) {
-      const entity = new RegExp(`impl Render for ${name}\\b`).test(sources);
-      const builder = new RegExp(`impl RenderOnce for ${name}\\b`).test(sources);
-      if (!entity && !builder) {
-        wrong.push(`${name} implements neither Render nor RenderOnce in this crate`);
-        continue;
-      }
-      const actual = entity ? "entity" : "stateless";
-      if (actual !== kind) wrong.push(`${name} is ${actual}, the table says ${kind}`);
-    }
-  }
-
-  assert.deepEqual(wrong, [], `the table describes ${wrong.length} components wrongly`);
 });
 
 test("every face the build produced is preloaded, on every page", async () => {

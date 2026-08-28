@@ -14,8 +14,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUTPUT = join(ROOT, "site", "generated");
+const ROOT = process.env.GPUI_AI_SOURCE_ROOT ?? fileURLToPath(new URL("..", import.meta.url));
+const OUTPUT = join(process.env.GPUI_AI_OUTPUT_ROOT ?? ROOT, "site", "generated");
 
 /** Reads one `key = "value"` from a TOML file, without a TOML parser. */
 function field(toml, key) {

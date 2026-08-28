@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { site as sharedSite } from "./site-fixture.mjs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { after, test } from "node:test";
+import { test } from "node:test";
 
-import { buildSite } from "../scripts/build.mjs";
+
 import catalog from "../generated/catalog.json" with { type: "json" };
 import themeFile from "../generated/themes.json" with { type: "json" };
 
@@ -19,29 +19,7 @@ import themeFile from "../generated/themes.json" with { type: "json" };
 // something HTML can show, and lives in the release browser gate.
 const { components } = catalog;
 
-let built;
-function site() {
-  built ??= (async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "mighty-shell-"));
-    const galleryDir = path.join(root, "gallery-input");
-    const outDir = path.join(root, "site-output");
-    await mkdir(path.join(galleryDir, "assets"), { recursive: true });
-    await Promise.all([
-      writeFile(path.join(galleryDir, "index.html"), "gallery index"),
-      writeFile(path.join(galleryDir, "embed.html"), "gallery fixture"),
-      writeFile(path.join(galleryDir, "assets", "gallery_bg-fixture.wasm"), "wasm"),
-    ]);
-    await buildSite({ galleryDir, outDir });
-    return { root, outDir };
-  })();
-  return built;
-}
-
-after(async () => {
-  if (!built) return;
-  const { root } = await built;
-  await rm(root, { force: true, recursive: true });
-});
+const site = sharedSite;
 
 const ROUTES = ["/", "/components/", "/themes/", `/components/${components[0].slug}/`];
 

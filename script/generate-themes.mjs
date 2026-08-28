@@ -22,8 +22,9 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT } from "../site/app/theme-resolve.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const THEMES = join(ROOT, "themes");
-const OUTPUT = join(ROOT, "site", "generated");
+const THEMES = join(process.env.GPUI_AI_SOURCE_ROOT ?? ROOT, "themes");
+const OUTPUT_ROOT = process.env.GPUI_AI_OUTPUT_ROOT ?? ROOT;
+const OUTPUT = join(OUTPUT_ROOT, "site", "generated");
 
 const GROUPS = [
   { id: "gpui-ai", label: "gpui-ai", directory: join(THEMES, "gpui-ai") },
@@ -404,7 +405,7 @@ function codeTokensFor(tokens) {
 // this is the source object, verbatim, in the pack shape the registry reads.
 // These land in site/public so Vite serves them at a real URL, and they are
 // generated and diff-gated exactly like everything under site/generated.
-const DOWNLOADS = join(ROOT, "site", "public", "themes");
+const DOWNLOADS = join(OUTPUT_ROOT, "site", "public", "themes");
 const downloads = new Map();
 
 function describe(theme, slug, group) {

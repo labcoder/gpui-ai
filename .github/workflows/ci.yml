@@ -46,13 +46,9 @@ jobs:
           key: quality-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Format, lint, test, and document
         run: npm run check
-      - name: Generated files are current
-        run: |
-          npm run generate
-          git diff --exit-code
 
   native:
-    name: Native (${{ matrix.os }})
+    name: Native compilation (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:

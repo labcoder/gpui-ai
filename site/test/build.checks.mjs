@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { site, createGalleryFixture } from "./site-fixture.mjs";
 import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,23 +20,8 @@ const expectedRoutes = [
   ...components.map((component) => `components/${component.slug}`),
 ];
 
-async function createGalleryFixture(directory) {
-  await mkdir(path.join(directory, "assets"), { recursive: true });
-  await Promise.all([
-    writeFile(path.join(directory, "index.html"), "gallery index"),
-    writeFile(path.join(directory, "embed.html"), "gallery fixture"),
-    writeFile(path.join(directory, "assets", "gallery_bg-fixture.wasm"), "wasm"),
-  ]);
-}
-
-test("every route is a real file, not a client-side route", async (context) => {
-  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-site-"));
-  context.after(() => rm(temporaryRoot, { force: true, recursive: true }));
-  const galleryDir = path.join(temporaryRoot, "gallery-input");
-  const outDir = path.join(temporaryRoot, "site-output");
-  await createGalleryFixture(galleryDir);
-
-  await buildSite({ galleryDir, outDir });
+test("every route is a real file, not a client-side route", async () => {
+  const { root: temporaryRoot, outDir } = await site();
 
   // GitHub Pages has no server to rewrite a deep link, so a route that is not
   // on disk is a hard 404 for anyone who refreshes or arrives from a link.
@@ -57,14 +43,8 @@ test("every route is a real file, not a client-side route", async (context) => {
   assert.deepEqual(siblingArtifacts, [], "staging directories must not be left behind");
 });
 
-test("a page carries its own content before any JavaScript runs", async (context) => {
-  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "mighty-prerender-"));
-  context.after(() => rm(temporaryRoot, { force: true, recursive: true }));
-  const galleryDir = path.join(temporaryRoot, "gallery-input");
-  const outDir = path.join(temporaryRoot, "site-output");
-  await createGalleryFixture(galleryDir);
-
-  await buildSite({ galleryDir, outDir });
+test("a page carries its own content before any JavaScript runs", async () => {
+  const { outDir } = await site();
 
   const component = components[0];
   const page = await readFile(
@@ -95,7 +75,8 @@ test("build rejects an incomplete gallery before replacing valid output", async 
   const galleryDir = path.join(temporaryRoot, "gallery-input");
   const outDir = path.join(temporaryRoot, "site-output");
   await createGalleryFixture(galleryDir);
-  await buildSite({ galleryDir, outDir });
+  await mkdir(outDir, { recursive: true });
+  await writeFile(path.join(outDir, "index.html"), "prior output bytes");
   const before = await readFile(path.join(outDir, "index.html"), "utf8");
 
   await rm(path.join(galleryDir, "embed.html"));
@@ -114,7 +95,8 @@ test("double promotion failure preserves the prior output backup", async (contex
   const galleryDir = path.join(temporaryRoot, "gallery-input");
   const outDir = path.join(temporaryRoot, "site-output");
   await createGalleryFixture(galleryDir);
-  await buildSite({ galleryDir, outDir });
+  await mkdir(outDir, { recursive: true });
+  await writeFile(path.join(outDir, "index.html"), "prior output bytes");
 
   let calls = 0;
   const failingRename = async (from, to) => {
@@ -132,7 +114,7 @@ test("double promotion failure preserves the prior output backup", async (contex
     path.join(temporaryRoot, leftovers[0], "previous", "index.html"),
     "utf8",
   );
-  assert.match(preserved, /<main/);
+  assert.equal(preserved, "prior output bytes");
 });
 
 test("the client resolves a URL to the same route the server rendered", () => {

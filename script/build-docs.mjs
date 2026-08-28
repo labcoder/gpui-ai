@@ -25,7 +25,7 @@ const OUTPUT = join(ROOT, "target", "doc");
 // published alongside the current ones.
 rmSync(OUTPUT, { force: true, recursive: true });
 
-const build = spawnSync("cargo", ["doc", "--no-deps", "-p", "gpui-ai"], {
+const build = spawnSync("cargo", ["rustdoc", "-p", "gpui-ai", "--lib", "--", "-D", "warnings"], {
   cwd: ROOT,
   stdio: "inherit",
 });

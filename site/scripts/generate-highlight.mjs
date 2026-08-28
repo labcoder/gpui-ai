@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { createHighlighter } from "shiki";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const GENERATED = join(ROOT, "site", "generated");
+const GENERATED = join(process.env.GPUI_AI_OUTPUT_ROOT ?? ROOT, "site", "generated");
 
 /**
  * What each kind of token becomes.

@@ -246,7 +246,11 @@ fn main() {
         Value::String(SNIPPET_SOURCE.to_owned()),
     );
 
-    let output = root.join("site").join("generated");
+    let output = std::env::var_os("GPUI_AI_OUTPUT_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.clone())
+        .join("site")
+        .join("generated");
     fs::create_dir_all(&output).expect("site/generated must be writable");
     let path = output.join("catalog.json");
     let rendered = format!(

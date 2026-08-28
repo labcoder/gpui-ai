@@ -73,9 +73,7 @@ jobs:
           npm --prefix crates/gallery-web/www run build
           npm run test:web:browser
       - name: Verify generated site data
-        run: |
-          npm run generate
-          git diff --exit-code
+        run: npm run check:generated
       - name: Build API documentation
         run: npm run build:docs
       - name: Assemble the site from the tested gallery

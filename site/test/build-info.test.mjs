@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
@@ -7,22 +6,6 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const generated = path.join(repositoryRoot, "site", "generated", "build.json");
-
-test("the published build facts are current and regenerating is idempotent", async () => {
-  const committed = await readFile(generated, "utf8");
-
-  const run = spawnSync(process.execPath, ["script/generate-build-info.mjs"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  });
-  assert.equal(run.status, 0, `the generator failed: ${run.stderr}`);
-
-  assert.equal(
-    await readFile(generated, "utf8"),
-    committed,
-    "site/generated/build.json is stale — run npm run generate and commit the result",
-  );
-});
 
 test("the build facts match the manifests the crate is actually built from", async () => {
   const build = JSON.parse(await readFile(generated, "utf8"));

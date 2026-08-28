@@ -1,0 +1,3 @@
+# Generated artifacts have canonical bytes on every checkout, including Windows.
+/site/generated/** text eol=lf
+/site/public/themes/** text eol=lf
