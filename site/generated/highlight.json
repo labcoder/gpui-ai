@@ -13934,7 +13934,7 @@
   "extras": {
     "install": {
       "lang": "toml",
-      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.3.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\", \"runtime_shaders\"] }",
+      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.4.0\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\", \"runtime_shaders\"] }",
       "lines": [
         [
           [
@@ -13960,7 +13960,7 @@
             ", tag = "
           ],
           [
-            "\"v0.3.0\"",
+            "\"v0.4.0\"",
             "string"
           ],
           [

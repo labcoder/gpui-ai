@@ -9,7 +9,86 @@ revision.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-08-27
+## [0.4.0] - 2026-08-28
+
+Two cycles ship together. The motion work below was prepared as 0.3.0 and
+never released; the visual craft pass that followed it is folded in here,
+so 0.4.0 is everything since v0.2.1.
+
+### Added
+
+- **A visual craft pass over every component.** One selected-surface
+  grammar for rows in lists and pickers, one interaction ramp (hover
+  tints, press deepens instantly, release decays through the shared
+  spring, and only keyboard focus recolours the border), one empty-state
+  anatomy, one lifecycle glyph, and one chip vocabulary in three
+  strengths. Glyphs beside wrappable text ride a first-line slot, so a
+  wrapping label no longer leaves its icon floating mid-block.
+- **A size policy.** `SizeTokens` names three control heights, two glyph
+  slots, and a horizontal padding per control tier, replacing six
+  coincidental heights and the upstream button's own density. An
+  application replaces the policy before its windows render and moves
+  every composed control at once.
+- **A motion preference.** `MotionPreference` chooses between full
+  motion, crossfades, and snapping. It composes with the OS reduce-motion
+  signal rather than being overridden by it: the effective preference is
+  the policy's, floored at crossfade while the system asks for less.
+- **A scrollbar policy.** `ScrollbarTokens` names when a bar shows —
+  while scrolling, on hover, or always — and whether it overlays content
+  or reserves a gutter. The choice projects onto the theme every bar
+  resolves from, so it reaches the bars upstream draws inside its own
+  tables.
+- **A popup policy.** `PopupTokens` names the side a floating surface
+  prefers, with a smart flip when it does not fit, and how long a hover
+  waits before one opens.
+- **A gliding hover highlight.** One highlight element chases the pointer
+  between uniform rows at a bench-tuned tempo, replacing per-row hover
+  flicker in the thread list, the sidebar, and the model picker. Any
+  reduced preference snaps it.
+- **Row-action affordances** on records tables: visibility always or on
+  hover, placement inline or end-aligned, defaulting to hover-revealed
+  and aligned.
+- **Change cells.** `RecordCell::change` carries before-and-after as data
+  rather than as a prose prefix; the renderer draws the tone glyph and the
+  struck previous value, and assistive technology reads the change as a
+  sentence.
+- **Composer arrangement.** `PromptActions` chooses whether the control
+  cluster and submit split the row, gather leading, or gather trailing;
+  `PromptSubmit` chooses between a word and a glyph.
+
+### Changed
+
+- Cards, tool calls, code blocks, diffs, context cards, todo lists, the
+  queue, the comparison table, and chat bubbles share one outer radius;
+  dots are circles everywhere.
+- A closed tool call sits capsule-round and relaxes to the card radius as
+  it opens, and its body grows into its measured height instead of
+  appearing at full size and fading.
+- Icon-only controls compress their glyph while pressed and ease back on
+  the same clock as the tint.
+- Tables lead with their headers, draw hairline dividers, set tabular
+  figures in right-aligned columns, and mirror the coming table's shape
+  while loading.
+- Status badges size to their own label rather than reserving the widest
+  lifecycle word, and inset their dot and their label alike.
+
+### Fixed
+
+- Sidebar rows had no hover at all: the accessibility overlay that owns
+  the row's pointer never painted one, and the presentation beneath it
+  could not see the pointer.
+- Thread list rows stood on four different left edges, and the keyboard
+  focus ring wrapped the label rather than the row, stopping short of the
+  trailing actions. Short row titles were centred rather than
+  left-aligned.
+- Search result rows and tool call headers drew square hover fills inside
+  rounded cards.
+- The mention and command list carried no surface at all, so it was
+  invisible over a dark composer.
+- Domain initials outgrew their badge at larger type scales, and the two
+  context-card branches rendered different frames.
+
+## [0.3.0] - unreleased, folded into 0.4.0
 
 ### Added
 
@@ -452,8 +531,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.3.0
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.4.0
 [0.2.1]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/labcoder/gpui-ai/releases/tag/v0.1.0
