@@ -1879,14 +1879,18 @@ fn records_story_columns() -> Vec<RecordColumn> {
         RecordColumn::new("supplier", "Supplier")
             .sortable(true)
             .fixed(true)
-            .width(px(240.)),
+            .width(px(186.)),
         RecordColumn::new("region", "Region")
             .sortable(true)
-            .width(px(130.)),
-        RecordColumn::new("products", "Products").width(px(220.)),
+            .width(px(92.)),
+        RecordColumn::new("products", "Products").width(px(140.)),
+        RecordColumn::new("unit_cost", "Unit cost")
+            .sortable(true)
+            .alignment(RecordColumnAlignment::Right)
+            .width(px(88.)),
         RecordColumn::new("status", "Status")
             .sortable(true)
-            .width(px(140.)),
+            .width(px(82.)),
     ]
 }
 // snippet:end
@@ -1897,12 +1901,14 @@ fn records_story_rows() -> Vec<RecordRow> {
             RecordCell::new("supplier", "Alpenrose Dairy"),
             RecordCell::new("region", "Northwest"),
             RecordCell::tags("products", ["Milk", "Cream"]),
+            RecordCell::new("unit_cost", "$4.12"),
             RecordCell::status("status", "Ready", RecordStatusTone::Positive),
         ]),
-        RecordRow::new("tillamook", "Tillamook County Creamery").cells([
-            RecordCell::new("supplier", "Tillamook County Creamery"),
+        RecordRow::new("tillamook", "Tillamook Creamery").cells([
+            RecordCell::new("supplier", "Tillamook Creamery"),
             RecordCell::new("region", "Pacific"),
             RecordCell::tags("products", ["Cheese", "Ice cream"]),
+            RecordCell::new("unit_cost", "$4.43"),
             RecordCell::status("status", "Review", RecordStatusTone::Caution),
         ]),
         RecordRow::new("cascade", "Cascade Cultured Foods")
@@ -1910,6 +1916,7 @@ fn records_story_rows() -> Vec<RecordRow> {
                 RecordCell::new("supplier", "Cascade Cultured Foods"),
                 RecordCell::new("region", "Mountain"),
                 RecordCell::tags("products", ["Yogurt", "Kefir"]),
+                RecordCell::new("unit_cost", "$4.37"),
                 RecordCell::status("status", "Paused", RecordStatusTone::Neutral),
             ])
             .disabled(true),
@@ -1917,9 +1924,17 @@ fn records_story_rows() -> Vec<RecordRow> {
             RecordCell::new("supplier", "Redwood Organic Dairy"),
             RecordCell::new("region", "West"),
             RecordCell::tags("products", ["Butter", "Cream"]),
+            RecordCell::new("unit_cost", "$5.08"),
             RecordCell::status("status", "Blocked", RecordStatusTone::Critical),
         ]),
     ]
+}
+
+/// The cents in a "$4.12"-shaped value, when the value is one.
+fn records_story_cost_key(value: &str) -> Option<u32> {
+    let value = value.strip_prefix('$')?;
+    let (dollars, cents) = value.split_once('.')?;
+    Some(dollars.parse::<u32>().ok()? * 100 + cents.parse::<u32>().ok()?)
 }
 
 fn records_story_many_rows() -> Arc<[RecordRow]> {
@@ -1929,6 +1944,10 @@ fn records_story_many_rows() -> Arc<[RecordRow]> {
                 RecordCell::new("supplier", format!("Supplier {index}")),
                 RecordCell::new("region", format!("Region {}", index % 8)),
                 RecordCell::tags("products", ["Milk", "Cream"]),
+                RecordCell::new(
+                    "unit_cost",
+                    format!("${}.{:02}", 3 + index % 4, (index * 17) % 100),
+                ),
                 RecordCell::status("status", "Ready", RecordStatusTone::Positive),
             ])
         })
@@ -2062,10 +2081,17 @@ impl RecordsTableStory {
                         } => {
                             if let Some(direction) = direction {
                                 this.records.sort_by(|left, right| {
-                                    let ordering = left
-                                        .cell(column_id)
-                                        .map(RecordCell::value)
-                                        .cmp(&right.cell(column_id).map(RecordCell::value));
+                                    let left = left.cell(column_id).map(RecordCell::value);
+                                    let right = right.cell(column_id).map(RecordCell::value);
+                                    let ordering = match (
+                                        left.and_then(records_story_cost_key),
+                                        right.and_then(records_story_cost_key),
+                                    ) {
+                                        // Money compares as money, not as text:
+                                        // "$12.80" belongs after "$4.12".
+                                        (Some(left), Some(right)) => left.cmp(&right),
+                                        _ => left.cmp(&right),
+                                    };
                                     match direction {
                                         RecordSortDirection::Ascending => ordering,
                                         RecordSortDirection::Descending => ordering.reverse(),
@@ -2203,14 +2229,11 @@ impl Render for RecordsTableStory {
 fn diff_story_columns() -> Vec<DiffColumn> {
     vec![
         DiffColumn::new("flavor", "Flavor")
-            .width(px(240.))
+            .width(px(150.))
             .fixed(true)
             .sortable(true),
         DiffColumn::new("category", "Category")
-            .width(px(220.))
-            .sortable(true),
-        DiffColumn::new("supplier", "Supplier")
-            .width(px(240.))
+            .width(px(200.))
             .sortable(true),
     ]
 }
@@ -2221,22 +2244,18 @@ fn diff_story_rows() -> Vec<DiffRow> {
         DiffRow::new("rocky-road", "Rocky Road", DiffChangeKind::Changed).cells([
             DiffCell::unchanged("flavor", "Rocky Road"),
             DiffCell::changed("category", "Classic", "Seasonal"),
-            DiffCell::unchanged("supplier", "aurora-scoops"),
         ]),
         DiffRow::new("bubblegum", "Bubblegum", DiffChangeKind::Removed).cells([
             DiffCell::removed("flavor", "Bubblegum"),
             DiffCell::removed("category", "Retro"),
-            DiffCell::removed("supplier", "kumo-creamery"),
         ]),
         DiffRow::new("mint-chip", "Mint Chip", DiffChangeKind::Changed).cells([
             DiffCell::unchanged("flavor", "Mint Chip"),
-            DiffCell::unchanged("category", "Classic"),
-            DiffCell::changed("supplier", "kumo-creamery", "maple-orbit"),
+            DiffCell::changed("category", "Classic", "Limited"),
         ]),
         DiffRow::new("pistachio", "Pistachio", DiffChangeKind::Added).cells([
             DiffCell::added("flavor", "Pistachio"),
             DiffCell::added("category", "Seasonal"),
-            DiffCell::added("supplier", "maple-orbit"),
         ]),
     ]
 }
@@ -2269,11 +2288,10 @@ fn diff_story_many_rows() -> Arc<[DiffRow]> {
             )
             .cells([
                 flavor,
-                DiffCell::unchanged("category", format!("Category {}", index % 8)),
                 DiffCell::changed(
-                    "supplier",
-                    format!("supplier-{}", index % 11),
-                    format!("supplier-{}", (index + 1) % 11),
+                    "category",
+                    format!("Category {}", index % 8),
+                    format!("Category {}", (index + 1) % 8),
                 ),
             ])
         })
@@ -2568,53 +2586,55 @@ impl Render for DiffTableStory {
 fn filter_story_columns() -> [FilterColumn; 4] {
     [
         FilterColumn::new("task", "Task name")
-            .width(px(230.))
+            .width(px(190.))
             .fixed(true),
         FilterColumn::new("date", "Date")
-            .width(px(110.))
+            .width(px(118.))
             .sortable(true),
         FilterColumn::new("status", "Status")
-            .width(px(130.))
+            .width(px(110.))
             .sortable(true),
-        FilterColumn::new("advisor", "Advisor").width(px(190.)),
+        FilterColumn::new("advisor", "Advisor").width(px(170.)),
     ]
 }
 // snippet:end
 
 fn filter_story_rows() -> Vec<FilterRow> {
+    // Chronological by default, with the year on every date so the span
+    // across the new year reads as time, not as an alphabet accident.
     [
-        (
-            "mango",
-            "Restock mango sorbet",
-            "Dec 03",
-            "To do",
-            "Mango Moon Gelato",
-        ),
         (
             "sesame",
             "Churn black sesame",
-            "Sep 22",
+            "Sep 22, 2025",
             "In Progress",
             "Kumo Creamery",
         ),
         (
-            "menu",
-            "Print summer menu",
-            "Jan 02",
-            "To do",
-            "Coral Coast Sorbet",
-        ),
-        (
             "batch",
             "Taste-test batch 42",
-            "Nov 08",
+            "Nov 08, 2025",
             "In Progress",
             "Maple Orbit",
         ),
         (
+            "mango",
+            "Restock mango sorbet",
+            "Dec 03, 2025",
+            "To do",
+            "Mango Moon Gelato",
+        ),
+        (
+            "menu",
+            "Print summer menu",
+            "Jan 02, 2026",
+            "To do",
+            "Coral Coast Sorbet",
+        ),
+        (
             "cones",
             "Order waffle cones",
-            "Apr 14",
+            "Apr 14, 2026",
             "Completed",
             "Aurora Scoops",
         ),
@@ -2692,6 +2712,29 @@ impl Default for FilterStoryProjection {
     }
 }
 
+/// The (year, month, day) in a "Sep 22, 2025"-shaped value, when it is one.
+fn filter_story_date_key(value: &str) -> Option<(u16, u8, u8)> {
+    let mut parts = value.split([' ', ',']).filter(|part| !part.is_empty());
+    let month = match parts.next()? {
+        "Jan" => 1,
+        "Feb" => 2,
+        "Mar" => 3,
+        "Apr" => 4,
+        "May" => 5,
+        "Jun" => 6,
+        "Jul" => 7,
+        "Aug" => 8,
+        "Sep" => 9,
+        "Oct" => 10,
+        "Nov" => 11,
+        "Dec" => 12,
+        _ => return None,
+    };
+    let day = parts.next()?.parse().ok()?;
+    let year = parts.next()?.parse().ok()?;
+    Some((year, month, day))
+}
+
 fn filter_story_project_rows(
     rows: &[FilterRow],
     projection: &FilterStoryProjection,
@@ -2711,7 +2754,12 @@ fn filter_story_project_rows(
                 .cell(column_id)
                 .map(FilterCell::value)
                 .unwrap_or_default();
-            let ordering = left.cmp(right);
+            // Dates compare as dates — "Jan 02, 2026" after "Dec 03, 2025"
+            // — and everything else stays lexicographic.
+            let ordering = match (filter_story_date_key(left), filter_story_date_key(right)) {
+                (Some(left), Some(right)) => left.cmp(&right),
+                _ => left.cmp(right),
+            };
             match direction {
                 FilterSortDirection::Ascending => ordering,
                 FilterSortDirection::Descending => ordering.reverse(),
@@ -2761,7 +2809,17 @@ fn filter_story_many_rows() -> Arc<[FilterRow]> {
             };
             FilterRow::new(format!("task-{index}"), format!("Task {index}")).cells([
                 FilterCell::new("task", format!("Task {index}")),
-                FilterCell::new("date", format!("Aug {:02}", index % 28 + 1)),
+                FilterCell::new(
+                    "date",
+                    format!(
+                        "{} {:02}, 2025",
+                        [
+                            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+                            "Nov", "Dec"
+                        ][index % 12],
+                        index % 28 + 1
+                    ),
+                ),
                 FilterCell::status("status", status, RecordStatusTone::Neutral),
                 FilterCell::new("advisor", format!("Advisor {}", index % 9)),
             ])
