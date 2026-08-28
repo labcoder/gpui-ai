@@ -33,6 +33,47 @@ pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
 /// A compact inset panel placed *inside* a card (payloads, code, previews).
 /// Uses the muted surface and the medium radius so it nests without a
 /// second full-card frame.
+/// The nesting rule for a rounded surface inside a rounded container:
+/// inner radius = container radius − inset, floored so a deep inset
+/// cannot square the corner entirely.
+pub(crate) fn nested_radius(container: Pixels, inset: Pixels, floor: Pixels) -> Pixels {
+    if container > inset {
+        (container - inset).max(floor)
+    } else {
+        floor
+    }
+}
+
+/// The one selected-surface grammar for rows in lists and pickers.
+///
+/// An inset, rounded fill spanning the whole row — trailing controls
+/// included — whose radius follows the nesting rule against the row's
+/// container. Selection paints the theme's list-active token and keeps a
+/// visible hover delta; unselected rows hover on the list-hover token.
+/// Callers own semantics (aria_selected and friends) and content; this
+/// owns only the surface, so every list that selects looks like one
+/// family.
+pub(crate) fn selection_surface<E>(
+    row: E,
+    selected: bool,
+    container_radius: Pixels,
+    inset: Pixels,
+    cx: &App,
+) -> E
+where
+    E: gpui::Styled + gpui::InteractiveElement,
+{
+    let tokens = cx.theme().semantic_tokens();
+    let radius = nested_radius(container_radius, inset, tokens.radius.sm);
+    let row = row.rounded(radius);
+    if selected {
+        row.bg(cx.theme().list_active)
+            .hover(|style| style.bg(cx.theme().list_active.opacity(0.85)))
+    } else {
+        row.hover(|style| style.bg(cx.theme().list_hover))
+    }
+}
+
 /// Seats a glyph beside wrappable text, centered on the text's first line.
 ///
 /// The slot is a fixed square box whose side equals the first line's
@@ -159,4 +200,22 @@ pub(crate) fn icon_button(
         .focus_visible(|style| style.border_color(cx.theme().ring))
         .press_release(id, tokens.radius.sm, window, cx)
         .child(Icon::new(icon).xsmall())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::nested_radius;
+    use gpui::px;
+
+    #[test]
+    fn the_nesting_rule_subtracts_the_inset_and_floors() {
+        assert_eq!(nested_radius(px(8.), px(4.), px(3.)), px(4.));
+        assert_eq!(nested_radius(px(8.), px(6.), px(3.)), px(3.), "floored");
+        assert_eq!(
+            nested_radius(px(6.), px(8.), px(3.)),
+            px(3.),
+            "inset past the corner"
+        );
+        assert_eq!(nested_radius(px(10.), px(2.), px(3.)), px(8.));
+    }
 }

@@ -48,6 +48,20 @@ pub(super) fn prompt_option(
     content: impl IntoElement,
     cx: &mut App,
 ) -> Button {
+    prompt_option_bare(id, accessibility_label, content, cx)
+        .hover(|style| style.bg(cx.theme().button_hover))
+        .active(|style| style.bg(cx.theme().button_active))
+}
+
+/// [`prompt_option`] without hover and press styles, for rows whose
+/// states come from the shared selection surface — GPUI allows each
+/// state style to be set exactly once.
+pub(super) fn prompt_option_bare(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
+    content: impl IntoElement,
+    cx: &mut App,
+) -> Button {
     let tokens = cx.theme().semantic_tokens();
     composed_button(id, accessibility_label)
         .flex()
@@ -61,8 +75,6 @@ pub(super) fn prompt_option(
         .bg(cx.theme().transparent)
         .text_token(tokens.typography.sm)
         .text_color(cx.theme().foreground)
-        .hover(|style| style.bg(cx.theme().button_hover))
-        .active(|style| style.bg(cx.theme().button_active))
         .focus_visible(|style| style.border_color(cx.theme().ring))
         .styles(|styles| {
             styles.disabled(|style| {
@@ -82,14 +94,19 @@ pub(super) fn apply_model_option_state(
     set_size: usize,
     cx: &App,
 ) -> Button {
-    button
+    // The keyboard cursor rides the shared selection surface: the
+    // list-active fill at the nesting-rule radius against the popup's
+    // frame, hover keeping its delta. `selected` stays the semantic
+    // choice (checkmark + aria), `active` the visual cursor.
+    let tokens = cx.theme().semantic_tokens();
+    let button = button
         .selected(selected)
         .aria_selected(selected)
         .aria_position_in_set(position)
         .aria_size_of_set(set_size)
-        .when(active, |button| {
-            button.bg(cx.theme().accent).aria_active_descendant()
-        })
+        .active(|style| style.bg(cx.theme().list_active))
+        .when(active, |button| button.aria_active_descendant());
+    crate::surface::selection_surface(button, active, cx.theme().radius, tokens.spacing.xs, cx)
 }
 
 /// Models grouped by provider in first-appearance order; ungrouped models
@@ -280,7 +297,7 @@ impl PromptBar {
                                 .text_color(cx.theme().primary),
                         )
                     });
-                let option = prompt_option(
+                let option = prompt_option_bare(
                     (
                         gpui::ElementId::from(root_id.clone()),
                         format!("model-{}", model.id),

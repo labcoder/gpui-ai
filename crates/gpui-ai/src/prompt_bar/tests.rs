@@ -2,7 +2,7 @@
 #![cfg(test)]
 
 use super::model_picker::{
-    apply_model_option_state, model_groups, prompt_model_control, prompt_option,
+    apply_model_option_state, model_groups, prompt_model_control, prompt_option_bare,
 };
 use super::suggestions::{
     PromptTokenKind, SuggestionKey, active_prompt_token, build_submission, retain_active_suggestion,
@@ -191,7 +191,7 @@ impl Render for ModelOptionProbe {
         let captured = self.captured.clone();
         canvas(
             move |_, window, cx| {
-                let option = prompt_option(
+                let option = prompt_option_bare(
                     "prompt-model-option",
                     "Balanced",
                     div().child("Balanced"),
