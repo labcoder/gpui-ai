@@ -280,7 +280,11 @@ pub(crate) fn initial_badge(initial: impl Into<SharedString>, cx: &App) -> Div {
     let tokens = cx.theme().semantic_tokens();
     div()
         .flex_none()
-        .size_4()
+        // The box is the type's own line box, from the size policy's slot
+        // scale — a fixed pixel square held rem-scaled glyphs, so a larger
+        // type scale pushed the letter out of its own circle.
+        .size(crate::sizing::SizeTokens::read(cx).slot_sm())
+        .overflow_hidden()
         .flex()
         .items_center()
         .justify_center()

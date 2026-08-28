@@ -667,6 +667,59 @@ pub(crate) fn disclosure_progress(
     )
 }
 
+/// Reveals a disclosure body by easing its height, not just its opacity.
+///
+/// A body that appears at full height and merely fades reads as a snap
+/// however long the fade takes — the 0.4.0 feel review's first finding.
+/// This clips the body to a fraction of its own measured height, so the
+/// surface grows into the space it is about to occupy.
+///
+/// The body's natural height is measured from the content itself, which
+/// keeps its full size inside the clip; the measurement writes no
+/// notification, so a settled disclosure schedules nothing. Until a first
+/// measurement exists the body renders unclipped, which is what a
+/// reduced preference wants anyway: `progress` is already 1.0 there.
+pub(crate) fn disclosure_clip(
+    id: impl Into<ElementId>,
+    progress: f32,
+    content: impl gpui::IntoElement,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::Div {
+    use gpui::prelude::FluentBuilder as _;
+    use gpui::{ParentElement as _, Styled as _};
+    use gpui_base::ElementExt as _;
+
+    let id = id.into();
+    let measured = window.use_keyed_state((id.clone(), "disclosure-height"), cx, |_, _| {
+        None::<gpui::Pixels>
+    });
+    let height = *measured.read(cx);
+    let clipping = progress < 1.0;
+    let recorder = measured;
+    gpui::div()
+        .w_full()
+        .overflow_hidden()
+        .when_some(height.filter(|_| clipping), |body, height| {
+            body.h(height * progress.max(0.0))
+        })
+        .child(
+            gpui::div()
+                .w_full()
+                .flex_none()
+                .on_prepaint(move |bounds, _, cx| {
+                    // The content keeps its natural height inside the clip,
+                    // so this reads the same number whether the body is
+                    // mid-reveal or settled — and a body that unmounts
+                    // while closed measures itself again on the way back.
+                    // Geometry bookkeeping only: no notify, so a settled
+                    // disclosure schedules nothing for having been measured.
+                    recorder.update(cx, |measured, _| *measured = Some(bounds.size.height));
+                })
+                .child(content),
+        )
+}
+
 /// The opacity half of a disclosure: identical to
 /// [`disclosure_progress`] under full motion (same transition key, so the
 /// two never disagree), a quick crossfade on its own clock under the

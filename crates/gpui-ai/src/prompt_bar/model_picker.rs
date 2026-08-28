@@ -369,11 +369,11 @@ impl PromptBar {
         .max_h(tokens.spacing.xxl * 7.0)
         .overflow_y_scrollbar()
         .p(tokens.spacing.xs)
-        .popover_style(cx)
         .relative()
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {
             this.close_model_menu(window, cx);
         }));
+        let surface = crate::popup::popover_surface(surface, cx);
         let surface = crate::glide::glide_frame(surface, &glide)
             .when_some(
                 crate::glide::glide_highlight(
@@ -392,9 +392,16 @@ impl PromptBar {
             )
             .children(model_options);
 
+        // The side comes from the crate's popup policy; the positioner
+        // still flips and clamps when the chosen side does not fit, so a
+        // composer at the foot of a window opens its menu upward.
+        let placement = crate::popup::PopupTokens::read(cx).side().placement(
+            self.model_trigger_bounds.top(),
+            window.viewport_size().height,
+        );
         deferred(
             Positioner::side(self.model_trigger_bounds)
-                .placement(Placement::Bottom)
+                .placement(placement)
                 .align(Align::Start)
                 .offset(tokens.spacing.xs)
                 .child(surface),

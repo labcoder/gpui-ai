@@ -9,11 +9,10 @@ use gpui::{
     Window, div, list, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, h_flex,
-    scroll::{ScrollableElement as _, ScrollableMask},
-    text::TextView,
+    ActiveTheme as _, Icon, IconName, h_flex, scroll::ScrollableMask, text::TextView,
 };
 
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     control::outlined_control_with_label,
     motion::{MotionTokens, VisibleAnimationExt as _},
@@ -982,7 +981,7 @@ impl Render for ComparisonTable {
                     .overflow_x_scroll()
                     .restrict_scroll_to_axis()
                     .track_scroll(&self.horizontal_scroll)
-                    .horizontal_scrollbar(&self.horizontal_scroll)
+                    .policy_horizontal_scrollbar(&self.horizontal_scroll, cx)
                     .when_some(status, |surface, (role, label): (Role, SharedString)| {
                         // Status states carry the same semantic color language as
                         // Task Rows: info for in-flight work, danger for failures,
@@ -1279,7 +1278,7 @@ impl Render for ComparisonTable {
                                             .flex_1()
                                             .min_h_0()
                                             .overflow_hidden()
-                                            .vertical_scrollbar(&self.feature_list)
+                                            .policy_vertical_scrollbar(&self.feature_list, cx)
                                             .child(
                                                 list(
                                                     self.feature_list.clone(),

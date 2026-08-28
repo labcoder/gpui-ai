@@ -46,6 +46,7 @@ pub mod loading;
 pub mod motion;
 pub mod orbs;
 pub mod plan;
+pub mod popup;
 pub mod prompt_bar;
 pub mod queue;
 pub mod recommendation;
@@ -184,5 +185,7 @@ pub fn init(cx: &mut App) {
     // customization lands on the application's values.
     motion::install(cx);
     sizing::install(cx);
+    scrolling::install(cx);
+    popup::install(cx);
     records_table::init(cx);
 }

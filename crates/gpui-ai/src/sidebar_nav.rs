@@ -30,10 +30,10 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, IconName, h_flex,
     input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement as _,
     v_flex,
 };
 
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     motion::disclosure_progress, resolved_layout::ResolvedLayoutKey, scrolling::list_scroll_mask,
 };
@@ -717,7 +717,7 @@ impl SidebarNav {
                         })
                         .size_full(),
                     )
-                    .vertical_scrollbar(&row_list)
+                    .policy_vertical_scrollbar(&row_list, cx)
                     .on_key_down(move |event, window, cx| {
                         if event.keystroke.modifiers.modified() {
                             return;

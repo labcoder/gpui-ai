@@ -143,9 +143,18 @@ impl RenderOnce for ContextCard {
                 )
             });
 
+        // One frame, both ways. The interactive card used to be an upstream
+        // button, whose own content layout centred and padded differently
+        // from the plain div the static card used — two cards in a column
+        // sat on different edges. The button now contributes behavior; the
+        // frame is the same frame either way.
         if let Some(handler) = self.on_event {
             composed_button(self.id.clone(), accessibility_label)
                 .w_full()
+                .flex()
+                .flex_col()
+                .items_start()
+                .justify_start()
                 .p(tokens.spacing.md)
                 .bg(tokens.colors.surface)
                 .border_1()
@@ -157,7 +166,7 @@ impl RenderOnce for ContextCard {
                 .when_some(accessibility_description, |this, description| {
                     this.aria_description(description)
                 })
-                .child(content)
+                .child(content.w_full())
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                 .refine_style(&self.style)
                 .into_any_element()
@@ -169,6 +178,7 @@ impl RenderOnce for ContextCard {
                 .when_some(accessibility_description, |this, description| {
                     this.aria_description(description)
                 })
+                .w_full()
                 .p(tokens.spacing.md)
                 .bg(tokens.colors.surface)
                 .border_1()

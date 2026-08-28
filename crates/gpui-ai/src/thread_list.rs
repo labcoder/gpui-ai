@@ -17,6 +17,7 @@
 //! conversations below it, and dismissal plus focus return come from upstream.
 
 use crate::cues::{self, Cue};
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     control::composed_button,
     resolved_layout::ResolvedLayoutKey,
@@ -35,7 +36,6 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     menu::{PopupMenu, PopupMenuItem},
     popover::Popover,
-    scroll::ScrollableElement as _,
     v_flex,
 };
 use std::{rc::Rc, sync::Arc};
@@ -1142,7 +1142,7 @@ impl Render for ThreadList {
                         .min_h_0()
                         .w_full()
                         .overflow_hidden()
-                        .vertical_scrollbar(&list_state);
+                        .policy_vertical_scrollbar(&list_state, cx);
                     // The gliding highlight paints beneath the rows; the
                     // frame's bounds anchor its coordinates.
                     match &glide {

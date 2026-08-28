@@ -8,6 +8,7 @@ mod transcript;
 use render::{chat_frame, jump_to_latest_button, transcript_frame};
 use transcript::{message_ids_are_unique, structural_splice};
 
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     attachment::{Attachment, AttachmentEvent, AttachmentStrip},
     control::{outlined_control, outlined_control_with_label},
@@ -39,7 +40,6 @@ use gpui_component::{
     button::{Button as LabeledButton, ButtonVariants as _},
     h_flex,
     input::{Escape, InputEvent, Textarea, TextareaState},
-    scroll::ScrollableElement as _,
     text::TextView,
     v_flex,
 };
@@ -1171,7 +1171,7 @@ impl Render for Chat {
                             list(self.list_state.clone(), cx.processor(Self::render_message))
                                 .size_full(),
                         )
-                        .vertical_scrollbar(&self.list_state)
+                        .policy_vertical_scrollbar(&self.list_state, cx)
                         .child(list_scroll_mask(&self.list_state))
                     }),
             )

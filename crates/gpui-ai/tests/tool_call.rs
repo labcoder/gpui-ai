@@ -217,6 +217,69 @@ fn approval_controls_emit_typed_decisions_and_resolve_the_card(cx: &mut TestAppC
     );
 }
 
+/// Opening is geometry, not just opacity. A body that appears at its full
+/// height and merely fades reads as a snap however long the fade lasts —
+/// the first finding of the 0.4.0 feel review. The body grows into its own
+/// height, so mid-flight it stands shorter than it finally will.
+#[gpui::test]
+fn opening_a_tool_call_grows_the_body_into_its_height(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let group_events = Rc::new(RefCell::new(Vec::new()));
+    let (view, cx) = cx.add_window_view({
+        let events = events.clone();
+        let group_events = group_events.clone();
+        move |_, _| InteractionProbe {
+            approval: ToolApproval::NotRequired,
+            open: Some(true),
+            group_open: Some(true),
+            events,
+            group_events,
+        }
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    // Settle open once so the body's natural height is measured.
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let settled = cx
+        .debug_bounds("tool-call-body-send-1")
+        .expect("an open card shows its body");
+
+    // Close, settle, then reopen and look one frame in.
+    cx.update(|_, cx| {
+        view.update(cx, |probe, cx| {
+            probe.open = Some(false);
+            cx.notify();
+        })
+    });
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.update(|_, cx| {
+        view.update(cx, |probe, cx| {
+            probe.open = Some(true);
+            cx.notify();
+        })
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(40));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let opening = cx
+        .debug_bounds("tool-call-disclosure-clip-send-1")
+        .expect("the opening body is clipped to a fraction of its height");
+    assert!(
+        opening.size.height < settled.size.height,
+        "mid-flight the body must stand shorter than its settled height:          {opening:?} vs {settled:?}"
+    );
+    assert!(
+        opening.size.height > gpui::Pixels::ZERO,
+        "and taller than nothing: {opening:?}"
+    );
+}
+
 #[gpui::test]
 fn pointer_toggle_emits_the_proposed_state_and_reveals_the_body(cx: &mut TestAppContext) {
     cx.update(gpui_ai::init);

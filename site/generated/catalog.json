@@ -196,7 +196,7 @@
       "source": "crates/gpui-ai/src/search_results.rs",
       "api": "SearchResults",
       "usage": "SearchResults::new(\"research\", \"GPUI components\")",
-      "height": 157,
+      "height": 161,
       "windowTitle": "Web search — gpui-ai",
       "variants": [],
       "events": [
@@ -865,7 +865,7 @@
       "source": "crates/gpui-ai/src/context_card.rs",
       "api": "ContextCard",
       "usage": "ContextCard::new(\"design-doc\", \"Architecture\")",
-      "height": 172,
+      "height": 192,
       "windowTitle": "Context cards — gpui-ai",
       "variants": [],
       "events": [

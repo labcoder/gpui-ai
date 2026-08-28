@@ -359,7 +359,13 @@ impl RenderOnce for ContextMeter {
         let content = if self.usage.has_breakdown() {
             let usage = self.usage.clone();
             let label = self.label.clone();
+            // The breakdown is data the application already holds, so it
+            // reveals rather than loads: the crate's popup policy sets the
+            // wait, where upstream's own default is 600ms.
+            let popup = crate::popup::PopupTokens::read(cx);
             HoverCard::new((root_id.clone(), "breakdown"))
+                .open_delay(popup.hover_open_delay())
+                .close_delay(popup.hover_close_delay())
                 .trigger(visual)
                 .content(move |_, _, cx| {
                     let tokens = cx.theme().semantic_tokens();

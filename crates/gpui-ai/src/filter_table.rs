@@ -8,11 +8,9 @@ use gpui::{
     Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Window, accesskit, div,
     prelude::FluentBuilder as _,
 };
-use gpui_component::{
-    ActiveTheme as _,
-    scroll::{ScrollableElement as _, ScrollableMask},
-};
+use gpui_component::{ActiveTheme as _, scroll::ScrollableMask};
 
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     control::outlined_control_with_label,
     motion::MotionTokens,
@@ -536,7 +534,7 @@ impl Render for FilterTable {
                             .overflow_x_scroll()
                             .restrict_scroll_to_axis()
                             .track_scroll(&self.filter_scroll)
-                            .horizontal_scrollbar(&self.filter_scroll)
+                            .policy_horizontal_scrollbar(&self.filter_scroll, cx)
                             .children(self.filters.iter().map(|filter| {
                                 let filter_id = filter.id.clone();
                                 let handler_owner = owner.clone();

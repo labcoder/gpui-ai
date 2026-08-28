@@ -193,7 +193,11 @@ impl RenderOnce for SearchResults {
                     v_flex()
                         .border_t_1()
                         .border_color(crate::surface::hairline(cx))
-                        .py(tokens.spacing.xs)
+                        // Rows are inset from the card that frames them, so
+                        // a hover fill sits inside the card's rounded edge
+                        // instead of running out to it.
+                        .p(tokens.spacing.xs)
+                        .gap(tokens.spacing.xxs)
                         .children(self.results.into_iter().map(|result| {
                             let event = result.opened_event();
                             let result_id = result.id.clone();
@@ -254,11 +258,16 @@ impl RenderOnce for SearchResults {
                                 Some(handler) => {
                                     composed_button(result.id.clone(), accessibility_label)
                                         .w_full()
-                                        .px(tokens.spacing.md)
+                                        .justify_start()
+                                        .px(tokens.spacing.sm)
                                         .py(tokens.spacing.xs)
                                         .border_1()
                                         .border_color(cx.theme().transparent)
-                                        .rounded(tokens.radius.sm)
+                                        .rounded(crate::surface::nested_radius(
+                                            tokens.radius.lg,
+                                            tokens.spacing.xs,
+                                            tokens.radius.sm,
+                                        ))
                                         .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                                         .active(|style| style.bg(cx.theme().accent))
                                         .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -283,6 +292,8 @@ impl RenderOnce for SearchResults {
                                 }
                                 None => div()
                                     .id(result_id)
+                                    .px(tokens.spacing.sm)
+                                    .py(tokens.spacing.xs)
                                     .role(Role::ListItem)
                                     .aria_label(accessibility_label)
                                     .when_some(accessibility_description, |this, description| {

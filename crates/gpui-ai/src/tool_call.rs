@@ -282,6 +282,13 @@ impl RenderOnce for ToolCall {
         // Opacity does not make descendants inert. Close the interaction tree
         // immediately; the header alone retains the closing transition.
         let showing = open;
+        // The capsule morph: a closed header-only card sits one step
+        // rounder — twice the card radius reads as a capsule on a
+        // single-line header — and relaxes to the card radius as the body
+        // opens. It rides the disclosure sample the body already animates
+        // on, so it costs no clock and snaps whenever the disclosure
+        // snaps. The header's own states are drawn inside it.
+        let card_radius = tokens.radius.lg + tokens.radius.lg * (1.0 - disclosure);
         let accessibility_label = self.accessibility_label();
         let interactive = self.on_event.is_some();
         let handler = self.on_event.clone();
@@ -376,12 +383,19 @@ impl RenderOnce for ToolCall {
                     .py(tokens.spacing.sm)
                     .border_1()
                     .border_color(cx.theme().transparent)
+                    // The header's states are drawn inside the card's own
+                    // corners: a closed card is header-only and takes the
+                    // whole capsule, an open one rounds its top alone. A
+                    // square fill under a rounded card was the corner the
+                    // 0.4.0 feel review saw poking out.
+                    .rounded_t(card_radius)
+                    .when(!showing, |header| header.rounded_b(card_radius))
                     .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                     .active(|style| style.bg(cx.theme().accent))
                     .focus_visible(|style| style.border_color(cx.theme().ring))
                     .press_release(
                         ElementId::from((root_id.clone(), "toggle")),
-                        gpui::Pixels::ZERO,
+                        card_radius,
                         window,
                         cx,
                     )
@@ -550,23 +564,23 @@ impl RenderOnce for ToolCall {
                 ToolApproval::Requested => cx.theme().warning,
                 _ => cx.theme().border,
             })
-            // The capsule morph: a closed header-only card sits one step
-            // rounder — twice the card radius reads as a capsule on a
-            // single-line header — and relaxes to the card radius as the
-            // body opens. It rides the disclosure sample the body already
-            // animates on, so it costs no clock and snaps whenever the
-            // disclosure snaps.
-            .rounded(tokens.radius.lg + tokens.radius.lg * (1.0 - disclosure))
+            .rounded(card_radius)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
-                // Opening content fades in; closing removes descendants
-                // immediately so input and semantics match aria_expanded.
+                // Opening content grows into its own height and fades in;
+                // closing removes descendants immediately so input and
+                // semantics match aria_expanded.
+                let clip_debug_id = id.to_string();
                 this.child(
-                    div()
-                        .opacity(disclosure_opacity)
-                        .top(tokens.spacing.xxs * (1.0 - disclosure) * crate::motion::travel(cx))
-                        .child(body),
+                    crate::motion::disclosure_clip(
+                        ElementId::from((root_id.clone(), "disclosure-clip")),
+                        disclosure,
+                        div().opacity(disclosure_opacity).child(body),
+                        window,
+                        cx,
+                    )
+                    .debug_selector(move || format!("tool-call-disclosure-clip-{clip_debug_id}")),
                 )
             })
             .refine_style(&self.style)

@@ -10,6 +10,7 @@
 //! Width, docking, and resizing belong to the application — compose the
 //! panel inside the upstream resizable group.
 
+use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
     ButtonLabelExt as _,
     code_block::CodeBlock,
@@ -27,7 +28,7 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, StyledExt as _,
-    button::Button, h_flex, scroll::ScrollableElement as _, tab::TabBar, text::TextView, v_flex,
+    button::Button, h_flex, tab::TabBar, text::TextView, v_flex,
 };
 use std::rc::Rc;
 
@@ -585,7 +586,7 @@ impl RenderOnce for ArtifactPanel {
             .flex_1()
             .min_h_0()
             .w_full()
-            .vertical_scrollbar(&scroll_handle)
+            .policy_vertical_scrollbar(&scroll_handle, cx)
             .child(
                 div()
                     .id(body_id)

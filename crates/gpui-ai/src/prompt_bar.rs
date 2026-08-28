@@ -18,9 +18,9 @@ use gpui::{
     Render, Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Subscription,
     Window, deferred, div, prelude::FluentBuilder as _,
 };
-use gpui_base::{Align, Button, POPUP_PRIORITY, Placement, Positioner};
+use gpui_base::{Align, Button, POPUP_PRIORITY, Positioner};
 use gpui_component::{
-    ActiveTheme as _, ElementExt as _, Icon, IconName, Sizable as _, ThemeStyled as _, h_flex,
+    ActiveTheme as _, ElementExt as _, Icon, IconName, Sizable as _, h_flex,
     input::{
         Enter, Escape, InputEvent, MoveDown, MoveEnd, MoveHome, MoveUp, Textarea, TextareaState,
     },

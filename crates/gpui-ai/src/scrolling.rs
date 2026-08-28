@@ -46,6 +46,208 @@ use gpui::{
 /// another list, the ancestor may therefore run before the descendant. This
 /// mask moves the descendant directly during capture while it has room and
 /// releases the event at either edge so ordinary scroll chaining resumes.
+/// When a scrollable surface shows its scrollbar.
+///
+/// A reader who cannot tell a surface scrolls will not try to scroll it,
+/// which is what the 0.4.0 feel review found in the tables and the
+/// sidebar. The policy names the three answers so an application chooses
+/// once for the whole library instead of per component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollbarVisibility {
+    /// Visible while scrolling, fading out once the surface settles.
+    Scrolling,
+    /// Visible while the pointer is over the surface.
+    Hover,
+    /// Always visible, so a surface that scrolls always says so.
+    #[default]
+    Always,
+}
+
+impl ScrollbarVisibility {
+    fn upstream(self) -> gpui_component::scroll::ScrollbarMode {
+        match self {
+            Self::Scrolling => gpui_component::scroll::ScrollbarMode::Scrolling,
+            Self::Hover => gpui_component::scroll::ScrollbarMode::Hover,
+            Self::Always => gpui_component::scroll::ScrollbarMode::Always,
+        }
+    }
+}
+
+/// Where a scrollbar sits relative to the content it scrolls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollbarPlacement {
+    /// Floats over the content's trailing edge, taking no layout space.
+    #[default]
+    Overlay,
+    /// Reserves a gutter, so the bar never covers what it scrolls.
+    Gutter,
+}
+
+/// The crate's scrollbar policy, replaceable before any window renders.
+///
+/// Defaults, then the application's policy, then a component's own
+/// builder — the same order every other policy in the library follows.
+///
+/// # Example
+///
+/// ```no_run
+/// # fn example(cx: &mut gpui::App) {
+/// gpui_ai::init(cx);
+/// gpui_ai::scrolling::ScrollbarTokens::default()
+///     .with_visibility(gpui_ai::scrolling::ScrollbarVisibility::Scrolling)
+///     .set(cx);
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScrollbarTokens {
+    visibility: ScrollbarVisibility,
+    placement: ScrollbarPlacement,
+}
+
+impl gpui::Global for ScrollbarTokens {}
+
+impl Default for ScrollbarTokens {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl ScrollbarTokens {
+    /// The crate's default scrollbar policy: always visible, overlaid.
+    ///
+    /// Always, because a surface that scrolls should look like one before
+    /// the reader touches it; overlaid, because reserving a gutter
+    /// narrows content that usually does not need it.
+    pub const DEFAULT: Self = Self {
+        visibility: ScrollbarVisibility::Always,
+        placement: ScrollbarPlacement::Overlay,
+    };
+
+    /// The policy the application installed, or the crate's default.
+    pub fn read(cx: &gpui::App) -> Self {
+        cx.try_global::<Self>().copied().unwrap_or(Self::DEFAULT)
+    }
+
+    /// Makes this policy the application's, for every surface at once.
+    ///
+    /// The choice is projected onto the theme's own scrollbar mode, which
+    /// is what every bar resolves from when nothing overrides it — the
+    /// crate's surfaces and the bars upstream draws inside its tables
+    /// alike. A theme swap re-projects it through [`install`].
+    pub fn set(self, cx: &mut gpui::App) {
+        cx.set_global(self);
+        self.project_onto_theme(cx);
+    }
+
+    fn project_onto_theme(self, cx: &mut gpui::App) {
+        // The base theme, not the component theme: the base one carries
+        // the scrollbar projection every bar resolves from.
+        let theme = gpui_base::Theme::global_mut(cx);
+        theme.scrollbar = theme
+            .scrollbar
+            .clone()
+            .with_mode(self.visibility.upstream());
+    }
+
+    /// When scrollbars show.
+    pub const fn visibility(&self) -> ScrollbarVisibility {
+        self.visibility
+    }
+
+    /// Whether scrollbars overlay content or reserve a gutter.
+    pub const fn placement(&self) -> ScrollbarPlacement {
+        self.placement
+    }
+
+    /// Replaces the [`visibility`](Self::visibility).
+    pub const fn with_visibility(mut self, visibility: ScrollbarVisibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
+    /// Replaces the [`placement`](Self::placement).
+    pub const fn with_placement(mut self, placement: ScrollbarPlacement) -> Self {
+        self.placement = placement;
+        self
+    }
+}
+
+/// Installs the crate's default scrollbar policy unless the application
+/// already chose one, and projects whichever policy holds onto the theme.
+pub(crate) fn install(cx: &mut gpui::App) {
+    let tokens = ScrollbarTokens::read(cx);
+    tokens.set(cx);
+}
+
+/// The width a scrollbar gutter reserves.
+///
+/// Upstream's bar is a fixed 16px track (an 8px thumb inside 4px rails),
+/// so a gutter that means to clear it reserves the crate's nearest
+/// spacing step rather than guessing a raw width.
+fn scrollbar_gutter(cx: &gpui::App) -> Pixels {
+    gpui_base::Theme::global(cx).tokens.spacing.lg
+}
+
+/// Mounts a vertical scrollbar under the crate's policy.
+///
+/// Upstream's convenience helper takes the theme's own mode; this routes
+/// the choice through the crate policy instead, so one application-level
+/// setting reaches every scrollable surface in the library. Under
+/// [`ScrollbarPlacement::Gutter`] the caller's content is inset by the
+/// bar's width so the bar never covers it.
+pub(crate) trait PolicyScrollbarExt: Sized {
+    /// Mounts a vertical scrollbar under the crate's scrollbar policy.
+    fn policy_vertical_scrollbar<H>(self, handle: &H, cx: &gpui::App) -> Self
+    where
+        H: gpui_component::scroll::ScrollbarHandle + Clone + 'static;
+
+    /// Mounts a horizontal scrollbar under the crate's scrollbar policy.
+    fn policy_horizontal_scrollbar<H>(self, handle: &H, cx: &gpui::App) -> Self
+    where
+        H: gpui_component::scroll::ScrollbarHandle + Clone + 'static;
+}
+
+impl<E> PolicyScrollbarExt for E
+where
+    E: gpui::ParentElement + gpui::Styled + Sized,
+{
+    fn policy_vertical_scrollbar<H>(self, handle: &H, cx: &gpui::App) -> Self
+    where
+        H: gpui_component::scroll::ScrollbarHandle + Clone + 'static,
+    {
+        let tokens = ScrollbarTokens::read(cx);
+        let element = match tokens.placement() {
+            ScrollbarPlacement::Overlay => self,
+            ScrollbarPlacement::Gutter => self.pr(scrollbar_gutter(cx)),
+        };
+        element.child(gpui::ParentElement::child(
+            gpui::div().absolute().inset_0(),
+            gpui_component::scroll::Scrollbar::new(handle)
+                .axis(gpui_component::scroll::ScrollbarAxis::Vertical)
+                .mode(tokens.visibility().upstream())
+                .viewport_from_layout(),
+        ))
+    }
+
+    fn policy_horizontal_scrollbar<H>(self, handle: &H, cx: &gpui::App) -> Self
+    where
+        H: gpui_component::scroll::ScrollbarHandle + Clone + 'static,
+    {
+        let tokens = ScrollbarTokens::read(cx);
+        let element = match tokens.placement() {
+            ScrollbarPlacement::Overlay => self,
+            ScrollbarPlacement::Gutter => self.pb(scrollbar_gutter(cx)),
+        };
+        element.child(gpui::ParentElement::child(
+            gpui::div().absolute().inset_0(),
+            gpui_component::scroll::Scrollbar::new(handle)
+                .axis(gpui_component::scroll::ScrollbarAxis::Horizontal)
+                .mode(tokens.visibility().upstream())
+                .viewport_from_layout(),
+        ))
+    }
+}
+
 pub(crate) fn list_scroll_mask(state: &ListState) -> impl gpui::IntoElement {
     let state = state.clone();
     canvas(
@@ -273,6 +475,53 @@ impl ScrollRoom {
             state.scroll_px_offset_for_scrollbar().y,
             state.max_offset_for_scrollbar().y,
         )
+    }
+}
+
+#[cfg(test)]
+mod scrollbar_policy_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    /// A surface that scrolls says so before the reader touches it: the
+    /// crate defaults to always-visible bars, and the choice reaches the
+    /// theme every bar resolves from — including the ones upstream draws
+    /// inside its tables, which no crate-side call site could reach.
+    #[gpui::test]
+    fn the_default_policy_projects_always_visible_onto_the_theme(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.update(|cx| {
+            assert_eq!(
+                ScrollbarTokens::read(cx).visibility(),
+                ScrollbarVisibility::Always
+            );
+            assert_eq!(
+                gpui_base::Theme::global(cx).scrollbar.mode(),
+                gpui_component::scroll::ScrollbarMode::Always
+            );
+        });
+    }
+
+    /// The policy is a policy: an application that chooses first keeps its
+    /// choice through init, and the theme follows it.
+    #[gpui::test]
+    fn install_respects_a_policy_the_application_chose_first(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            ScrollbarTokens::default()
+                .with_visibility(ScrollbarVisibility::Scrolling)
+                .set(cx);
+            crate::init(cx);
+        });
+        cx.update(|cx| {
+            assert_eq!(
+                ScrollbarTokens::read(cx).visibility(),
+                ScrollbarVisibility::Scrolling
+            );
+            assert_eq!(
+                gpui_base::Theme::global(cx).scrollbar.mode(),
+                gpui_component::scroll::ScrollbarMode::Scrolling
+            );
+        });
     }
 }
 

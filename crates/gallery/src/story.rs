@@ -398,7 +398,7 @@ impl StoryId {
                 module: "search_results",
                 api: "SearchResults",
                 usage: crate::usage::SEARCH_RESULTS,
-                height: 157,
+                height: 161,
                 overflow: Overflow::Wide,
             },
             Self::Todos => StoryMeta {
@@ -596,7 +596,7 @@ impl StoryId {
                 module: "context_card",
                 api: "ContextCard",
                 usage: crate::usage::CONTEXT_CARD,
-                height: 172,
+                height: 192,
                 overflow: Overflow::Wide,
             },
             Self::Insights => StoryMeta {
