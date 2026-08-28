@@ -550,7 +550,13 @@ impl RenderOnce for ToolCall {
                 ToolApproval::Requested => cx.theme().warning,
                 _ => cx.theme().border,
             })
-            .rounded(tokens.radius.lg)
+            // The capsule morph: a closed header-only card sits one step
+            // rounder — twice the card radius reads as a capsule on a
+            // single-line header — and relaxes to the card radius as the
+            // body opens. It rides the disclosure sample the body already
+            // animates on, so it costs no clock and snaps whenever the
+            // disclosure snaps.
+            .rounded(tokens.radius.lg + tokens.radius.lg * (1.0 - disclosure))
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {

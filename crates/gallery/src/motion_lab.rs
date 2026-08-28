@@ -424,7 +424,10 @@ impl Render for MotionLabStory {
                     .w(px(280.))
                     .h(px(DISCLOSURE_HEIGHT * disclosure))
                     .overflow_hidden()
-                    .rounded(theme_tokens.radius.md)
+                    // The expansion radius morph, prototyped on the same
+                    // sample the panel opens on: capsule-round while
+                    // closed, one step down to the card radius once open.
+                    .rounded(theme_tokens.radius.lg + theme_tokens.radius.lg * (1.0 - disclosure))
                     .bg(cx.theme().muted)
                     .opacity(0.4 + 0.6 * disclosure)
                     .child(
