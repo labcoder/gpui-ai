@@ -218,12 +218,14 @@ const MEASURE_TICKS: usize = 220;
 /// Kept here because the layout it points into lives here;
 /// `the_mobile_suites_tap_lands_on_the_prompt_bar_composer` is what keeps
 /// the two in step.
-pub const MOBILE_COMPOSER_TAP: (f32, f32) = (100., 150.);
+#[cfg(test)]
+const MOBILE_COMPOSER_TAP: (f32, f32) = (100., 150.);
 
 /// Where that same suite taps to dismiss the keyboard again.
 ///
 /// Has to miss the composer, or the blur it is checking never happens.
-pub const MOBILE_COMPOSER_BLUR: (f32, f32) = (8., 200.);
+#[cfg(test)]
+const MOBILE_COMPOSER_BLUR: (f32, f32) = (8., 200.);
 
 fn story_needs_simulation(story: StoryId) -> bool {
     matches!(
