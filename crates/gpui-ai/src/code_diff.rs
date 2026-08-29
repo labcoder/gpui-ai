@@ -17,7 +17,7 @@ use crate::surface::CardFrameExt as _;
 use crate::{
     handlers::SharedHandler,
     status::{StatusBadge, StatusTone},
-    surface::{icon_button, meta},
+    surface::{icon_button_turned, meta},
     theme::SemanticStyledExt as _,
 };
 use gpui::{
@@ -549,13 +549,14 @@ impl RenderOnce for CodeDiff {
         let toggle = handler.clone().map(|handler| {
             let toggle_path = path.clone();
             let toggle_debug = path.to_string();
-            icon_button(
+            // The same rotating chevron every other disclosure in the
+            // library uses, turned by the same sample the body opens on.
+            // Swapping between two icons could only ever be fully open or
+            // fully closed, and snapped while the panel was still moving.
+            icon_button_turned(
                 (root_id.clone(), "toggle"),
-                if self.open {
-                    IconName::ChevronDown
-                } else {
-                    IconName::ChevronRight
-                },
+                IconName::ChevronRight,
+                0.25 * disclosure,
                 if self.open {
                     "Collapse diff"
                 } else {

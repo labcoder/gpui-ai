@@ -380,14 +380,7 @@ fn render_row(
                         .child(item.text.clone()),
                 )
                 .when_some(item.note.clone(), |this, note| {
-                    this.child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .text_token(tokens.typography.xs)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(note),
-                    )
+                    this.child(crate::surface::hint(note, cx).min_w_0().truncate())
                 }),
         )
         .child(controls.self_center());

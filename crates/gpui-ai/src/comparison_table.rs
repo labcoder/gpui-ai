@@ -1240,11 +1240,8 @@ impl Render for ComparisonTable {
                                                 )
                                                 .when_some(state_label, |header, state| {
                                                     header.child(
-                                                        div()
-                                                            .mt(tokens.spacing.xs)
-                                                            .text_token(tokens.typography.xs)
-                                                            .text_color(cx.theme().muted_foreground)
-                                                            .child(state),
+                                                        crate::surface::hint(state, cx)
+                                                            .mt(tokens.spacing.xs),
                                                     )
                                                 })
                                                 .child(

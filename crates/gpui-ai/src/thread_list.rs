@@ -457,14 +457,7 @@ impl RowRenderer {
                                 .child(item.title.clone())
                         })
                         .when_some(item.subtitle.clone(), |this, subtitle| {
-                            this.child(
-                                div()
-                                    .w_full()
-                                    .truncate()
-                                    .text_token(tokens.typography.xs)
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(subtitle),
-                            )
+                            this.child(crate::surface::hint(subtitle, cx).w_full().truncate())
                         }),
                 )
                 .on_click(move |_, window, cx| {

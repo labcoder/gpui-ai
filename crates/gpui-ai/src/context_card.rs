@@ -111,13 +111,10 @@ impl RenderOnce for ContextCard {
                             .text_color(cx.theme().muted_foreground),
                     )
                     .child(
-                        div()
+                        crate::surface::hint(self.source, cx)
                             .flex_1()
                             .truncate()
-                            .text_token(tokens.typography.xs)
-                            .font_family(cx.theme().mono_font_family.clone())
-                            .text_color(cx.theme().muted_foreground)
-                            .child(self.source),
+                            .font_family(cx.theme().mono_font_family.clone()),
                     )
                     .when_some(self.relevance, |this, relevance| {
                         this.child(

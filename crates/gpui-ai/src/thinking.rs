@@ -21,8 +21,8 @@ use gpui::{
     Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
-    text::TextView, v_flex,
+    ActiveTheme as _, Sizable as _, StyledExt as _, h_flex, spinner::Spinner, text::TextView,
+    v_flex,
 };
 use std::{
     hash::{DefaultHasher, Hash as _, Hasher as _},
@@ -359,13 +359,7 @@ impl RenderOnce for Thinking {
             .text_token(tokens.typography.sm)
             .text_color(cx.theme().muted_foreground)
             .when(interactive, |this| {
-                // One chevron, rotated by the disclosure channel — the same
-                // sample the body fades on, so the two can never disagree.
-                this.child(
-                    Icon::new(IconName::ChevronRight)
-                        .xsmall()
-                        .rotate(gpui::percentage(0.25 * disclosure)),
-                )
+                this.child(crate::surface::disclosure_chevron(disclosure))
             })
             .child(
                 Shimmer::new((root_id.clone(), "title"), title.clone())

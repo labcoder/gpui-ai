@@ -498,17 +498,15 @@ impl RenderOnce for ArtifactPanel {
                             .text_color(cx.theme().foreground)
                             .child(artifact.title.clone()),
                     )
-                    .child(
-                        div()
-                            .text_token(tokens.typography.xs)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(match (&artifact.language, artifact.kind) {
-                                (Some(language), ArtifactKind::Code) => {
-                                    format!("{} · {language}", artifact.kind.label())
-                                }
-                                _ => artifact.kind.label().to_owned(),
-                            }),
-                    ),
+                    .child(crate::surface::hint(
+                        match (&artifact.language, artifact.kind) {
+                            (Some(language), ArtifactKind::Code) => {
+                                format!("{} · {language}", artifact.kind.label())
+                            }
+                            _ => artifact.kind.label().to_owned(),
+                        },
+                        cx,
+                    )),
             )
             .when(generating, |this| {
                 this.child(

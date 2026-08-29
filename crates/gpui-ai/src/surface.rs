@@ -269,6 +269,19 @@ pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
         .child(text.into())
 }
 
+/// The library's one disclosure affordance: a chevron that rotates open.
+///
+/// Takes the same disclosure sample the body's height and fade are drawn
+/// from, so the glyph and the panel can never disagree about how open the
+/// thing is — a swapped pair of icons can only ever be fully one or the
+/// other, and would snap while the panel was still moving.
+pub(crate) fn disclosure_chevron(disclosure: f32) -> gpui_component::Icon {
+    gpui_component::Sizable::xsmall(gpui_component::Icon::new(
+        gpui_component::IconName::ChevronRight,
+    ))
+    .rotate(gpui::percentage(0.25 * disclosure))
+}
+
 /// Quiet supporting text: extra-small, muted.
 ///
 /// The most-used text role in the library, and the one that had no name —
@@ -345,6 +358,23 @@ pub(crate) fn icon_button(
     window: &mut gpui::Window,
     cx: &mut App,
 ) -> Button {
+    icon_button_turned(id, icon, 0.0, accessibility_label, window, cx)
+}
+
+/// [`icon_button`] whose glyph is rotated by `turns` of a full circle.
+///
+/// A disclosure control is an icon button that also has to point somewhere,
+/// and its rotation composes with the press compression rather than
+/// replacing it — one transform on one glyph, so a control being pressed
+/// mid-open keeps both.
+pub(crate) fn icon_button_turned(
+    id: impl Into<ElementId>,
+    icon: impl IconNamed,
+    turns: f32,
+    accessibility_label: impl Into<SharedString>,
+    window: &mut gpui::Window,
+    cx: &mut App,
+) -> Button {
     let tokens = cx.theme().semantic_tokens();
     let id = id.into();
     // One read of the press ramp, shared by the tint and the glyph.
@@ -382,7 +412,8 @@ pub(crate) fn icon_button(
             // so the compression costs no extra frames.
             let intensity = if pressed { 1.0 } else { fade };
             let scale = 1.0 - 0.03 * intensity;
-            gpui::Transformation::scale(gpui::size(scale, scale))
+            gpui::Transformation::rotate(gpui::percentage(turns))
+                .with_scaling(gpui::size(scale, scale))
         }))
 }
 

@@ -361,13 +361,9 @@ impl RenderOnce for ToolCall {
             })
             .child(badge)
             .when(interactive, |this| {
-                // One chevron, rotated by the disclosure channel — the same
-                // sample the body fades on, so the two can never disagree.
                 this.child(
-                    Icon::new(IconName::ChevronRight)
-                        .xsmall()
-                        .text_color(cx.theme().muted_foreground)
-                        .rotate(gpui::percentage(0.25 * disclosure)),
+                    crate::surface::disclosure_chevron(disclosure)
+                        .text_color(cx.theme().muted_foreground),
                 )
             });
         let header = match handler.clone() {
@@ -745,13 +741,7 @@ impl RenderOnce for ToolGroup {
             .text_token(tokens.typography.sm)
             .text_color(cx.theme().muted_foreground)
             .when(interactive, |this| {
-                // One chevron, rotated by the disclosure channel — the same
-                // sample the calls fade on, so the two can never disagree.
-                this.child(
-                    Icon::new(IconName::ChevronRight)
-                        .xsmall()
-                        .rotate(gpui::percentage(0.25 * disclosure)),
-                )
+                this.child(crate::surface::disclosure_chevron(disclosure))
             })
             .child(Icon::new(IconName::SquareTerminal).xsmall())
             .child(

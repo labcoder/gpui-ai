@@ -234,12 +234,9 @@ impl RenderOnce for SearchResults {
                                 )
                                 .when_some(result.domain, |this, domain| {
                                     this.child(
-                                        div()
+                                        crate::surface::hint(domain, cx)
                                             .flex_none()
-                                            .text_token(tokens.typography.xs)
-                                            .font_family(cx.theme().mono_font_family.clone())
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(domain),
+                                            .font_family(cx.theme().mono_font_family.clone()),
                                     )
                                 });
 
