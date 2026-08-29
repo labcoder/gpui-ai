@@ -201,6 +201,14 @@ pub struct StoryMeta {
     pub usage: &'static str,
     /// The story's natural height in pixels at the website's demo width.
     ///
+    /// **A website concern, and only that.** The site reserves this much
+    /// space before a demo's WASM has booted, and sizes the poster it shows
+    /// where WebGPU is unavailable. Nothing lays out from it: not the
+    /// gallery, which draws every story at whatever size it actually is,
+    /// and certainly not an application using this library — a consumer of
+    /// `gpui-ai` never sees these numbers. Read by the catalog export and
+    /// by the test that keeps it honest, and by nothing else.
+    ///
     /// Measured rather than guessed: a story is centred in its frame, so a
     /// frame sized from anything else leaves dead space or clips. The
     /// `story_heights_match_what_the_stories_measure` test fails when a story

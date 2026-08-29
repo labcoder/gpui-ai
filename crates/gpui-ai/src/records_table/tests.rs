@@ -1109,3 +1109,114 @@ fn sort_and_activation_controls_expose_direct_accesskit_contracts(cx: &mut TestA
     assert_eq!(review.label(), Some("Review Aurora Scoops"));
     assert!(review.supports_action(accesskit::Action::Click));
 }
+
+/// A sortable column shows its sort control on the frame it first appears.
+///
+/// The 0.5.0 review found a table whose header carried plain labels on a
+/// first mount and grew its sort chevrons only after the component was
+/// re-rendered — so a reader could not tell a sortable column from a fixed
+/// one until they happened to disturb it.
+#[gpui::test]
+fn a_sortable_column_shows_its_sort_control_on_the_first_draw(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("first", "First", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(640.), px(300.)));
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns(
+                [RecordColumn::new("name", "Name").sortable(true)],
+                window,
+                cx,
+            );
+            records.set_records(
+                Progressive::complete(
+                    vec![RecordRow::new("a", "Aurora").cells([RecordCell::new("name", "Aurora")])]
+                        .into(),
+                ),
+                window,
+                cx,
+            );
+        });
+        window.draw(cx).clear(cx);
+    });
+
+    let selector = "records-sort-5:firstname";
+    let first = cx.debug_bounds(selector);
+    assert!(
+        first.is_some(),
+        "the sort control must be painted on the first draw, not after a later one"
+    );
+
+    // And it must not appear only because a second pass rescued it.
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        cx.debug_bounds(selector).map(|bounds| bounds.size),
+        first.map(|bounds| bounds.size),
+        "the sort control must not change shape between the first draw and the next"
+    );
+}
+
+/// A narrow column keeps its sort glyph and truncates its heading instead.
+///
+/// The glyph is the only thing that says a column can be sorted. A heading
+/// that refused to shrink pushed it past the cell's edge, where it was
+/// clipped — so at a width that squeezed the header, a sortable column
+/// read as a fixed one. The heading gives way; the glyph does not.
+#[gpui::test]
+fn a_squeezed_header_keeps_its_sort_glyph(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("tight", "Tight", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(640.), px(300.)));
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns(
+                [
+                    RecordColumn::new("name", "A supplier heading far too long for its column")
+                        .sortable(true)
+                        .width(px(120.)),
+                    RecordColumn::new("region", "Region")
+                        .sortable(true)
+                        .width(px(120.)),
+                ],
+                window,
+                cx,
+            );
+            records.set_records(
+                Progressive::complete(
+                    vec![RecordRow::new("a", "Aurora").cells([
+                        RecordCell::new("name", "Aurora"),
+                        RecordCell::new("region", "North"),
+                    ])]
+                    .into(),
+                ),
+                window,
+                cx,
+            );
+        });
+        window.draw(cx).clear(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let cell = cx
+        .debug_bounds("records-sort-5:tightname")
+        .expect("the sort control renders");
+    let glyph = cx
+        .debug_bounds("records-sort-5:tightname-glyph")
+        .expect("the sort glyph renders");
+    assert!(
+        glyph.size.width > px(0.),
+        "the glyph must occupy real width, not collapse to nothing"
+    );
+    assert!(
+        glyph.origin.x + glyph.size.width <= cell.origin.x + cell.size.width,
+        "the glyph must stay inside its header cell: glyph ends at {}, cell ends at {}",
+        glyph.origin.x + glyph.size.width,
+        cell.origin.x + cell.size.width
+    );
+}

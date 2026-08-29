@@ -75,6 +75,38 @@ fn story_list_frame() -> Stateful<Div> {
         .aria_label("Component stories")
 }
 
+/// The tallest each catalog row has been, and the width it earned that at.
+///
+/// A story is taller when its text wraps more, so a height reached at one
+/// width is not a floor at another — without the width, narrowing a window
+/// and widening it again would leave every row holding the height it
+/// reached at its narrowest.
+#[derive(Default)]
+struct CatalogFloors {
+    width: f32,
+    rows: HashMap<StoryId, f32>,
+}
+
+impl CatalogFloors {
+    /// The floor recorded for `story`, discarding everything first if these
+    /// measurements were taken at a different width.
+    fn floor_at(&mut self, width: f32, story: StoryId) -> f32 {
+        if self.width != width {
+            self.width = width;
+            self.rows.clear();
+        }
+        self.rows.get(&story).copied().unwrap_or_default()
+    }
+
+    /// Raises `story`'s floor if it has just drawn taller than before.
+    fn observe(&mut self, story: StoryId, height: f32) {
+        let recorded = self.rows.entry(story).or_default();
+        if height > *recorded {
+            *recorded = height;
+        }
+    }
+}
+
 fn story_frame(story: StoryId, in_catalog: bool) -> Stateful<Div> {
     let frame = v_flex()
         .id(format!("gallery-story-{}", story.slug()))
@@ -3644,7 +3676,21 @@ pub struct Gallery {
     /// sorted. Changing the key is what actually asks for a new one.
     generation: usize,
     catalog_list: ListState,
-    /// Rem size the catalog's retained row heights were measured against.
+    /// The tallest each catalog row has been, so a story that animates does
+    /// not shove the ones below it.
+    ///
+    /// Deliberately not the catalog's declared heights: those are measured
+    /// for the website, which reserves space before a demo has booted and
+    /// sizes its no-WebGPU posters from them. A story here is drawn at
+    /// whatever size it actually is — what this stops is the *jolt* of a
+    /// story collapsing and re-expanding as its animation restarts, which
+    /// moves every row beneath it. Growth still moves things, because
+    /// growth is the component doing its job.
+    ///
+    /// A side channel rather than a field read during render: the probe
+    /// writes it while laying out, and writing to state GPUI is observing
+    /// mid-layout is how a render ends up notifying itself.
+    story_floors: Rc<RefCell<CatalogFloors>>,
     resolved_layout: ResolvedLayoutKey,
     insight_scroll: ScrollHandle,
     prompt_bar_scroll: ScrollHandle,
@@ -3739,6 +3785,7 @@ impl Gallery {
         Self {
             selected,
             catalog_list,
+            story_floors: Rc::new(RefCell::new(CatalogFloors::default())),
             resolved_layout: ResolvedLayoutKey::default(),
             insight_scroll: ScrollHandle::new(),
             prompt_bar_scroll: ScrollHandle::new(),
@@ -3884,6 +3931,10 @@ impl Gallery {
             .get(offset.item_ix)
             .map(|story| (*story, offset.offset_in_item));
 
+        // The floors were observed at the old rem and mean nothing at the
+        // new one — a row would otherwise keep a height it earned while the
+        // type was larger.
+        self.story_floors.borrow_mut().rows.clear();
         self.catalog_list.remeasure();
         if let Some((story, offset_in_item)) = anchor
             && let Some(item_ix) = StoryId::ALL
@@ -4303,7 +4354,41 @@ impl Gallery {
         let Some(story) = StoryId::ALL.get(index).copied() else {
             return div().hidden().into_any_element();
         };
-        self.render_story(story, window, cx)
+        // A row never gives back height it has already taken, so a story
+        // whose animation restarts does not drag every row below it up the
+        // screen. The floor is the row's own measurement: the website's
+        // declared heights are the website's business, and the gallery
+        // draws a story at whatever size it actually is.
+        //
+        // Only here, never in the single-story view — that is what the web
+        // embed renders, and it reports its measured height to the host. A
+        // floor there would have it report a high-water mark instead of the
+        // truth, which is the one place this has to be exact.
+        //
+        // The wrapper carries no role, so it is not reported to assistive
+        // technology and the list's items stay the list's own children. It
+        // also carries no padding, which is why the probe inside it reads
+        // the row's full height rather than the frame's content box.
+        let width = f32::from(window.viewport_size().width);
+        let floor = self.story_floors.borrow_mut().floor_at(width, story);
+        let floors = self.story_floors.clone();
+        div()
+            .relative()
+            .w_full()
+            .min_h(px(floor))
+            .child(self.render_story(story, window, cx))
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        let height = f32::from(bounds.size.height).max(0.);
+                        floors.borrow_mut().observe(story, height);
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
+            .into_any_element()
     }
 
     fn handle_tool_call_event(
@@ -8000,6 +8085,64 @@ mod tests {
             wrong.is_empty(),
             "these story heights are stale; update StoryMeta::height in story.rs:\n{}",
             wrong.join("\n")
+        );
+    }
+
+    /// A catalog row never gives back height it has already taken.
+    ///
+    /// Stories that animate change size as they run, and in the stacked
+    /// catalog a story that collapses drags every row below it up the
+    /// screen — the jumping the 0.5.0 review reported. A row keeps the
+    /// tallest it has been, so the reader's place stops moving under them.
+    /// Deliberately the row's own measurement rather than the catalog's
+    /// declared heights: those exist for the website, and a component
+    /// library's own gallery should not be laid out by the website's needs.
+    #[gpui::test]
+    fn a_catalog_row_keeps_the_tallest_it_has_been(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::All, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(1200.)));
+        cx.update(|window, cx| {
+            window.set_rem_size(cx.theme().font_size);
+            window.draw(cx).clear(cx)
+        });
+
+        let floors = gallery.read_with(cx, |gallery, _| gallery.story_floors.clone());
+        let observed = |story: StoryId| {
+            floors
+                .borrow()
+                .rows
+                .get(&story)
+                .copied()
+                .unwrap_or_default()
+        };
+
+        // Whatever the first visible row measured, it is now that row's
+        // floor — and the floor only ever rises.
+        let first = StoryId::ALL[0];
+        let recorded = observed(first);
+        assert!(
+            recorded > 0.,
+            "a drawn row must record what it measured, got {recorded}"
+        );
+
+        floors.borrow_mut().rows.insert(first, recorded + 400.);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            observed(first),
+            recorded + 400.,
+            "a row that has been taller must not shrink back to its content"
+        );
+
+        // A floor earned while the window was narrow is not a floor once it
+        // is wide: the story only needed that height because its text
+        // wrapped more.
+        cx.simulate_resize(size(px(700.), px(1200.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            observed(first) < recorded + 400.,
+            "a change of width must discard heights measured at the old one"
         );
     }
 

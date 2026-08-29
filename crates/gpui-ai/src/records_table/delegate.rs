@@ -481,7 +481,11 @@ pub(super) fn record_sort_button(
     sort_icon: IconName,
     cx: &mut App,
 ) -> gpui_base::Button {
-    let debug_id = scoped_records_id("sort", component_id, column_id);
+    // One allocation, shared. `debug_selector` drops its closure unread in
+    // release, so what a closure builds is free and what is built *for* one
+    // is not; cloning a `SharedString` is a refcount bump.
+    let debug_id: SharedString = scoped_records_id("sort", component_id, column_id).into();
+    let glyph_debug_id = debug_id.clone();
     composed_button(
         debug_id.clone(),
         format!("Sort by {label}{sort_description}"),
@@ -492,12 +496,23 @@ pub(super) fn record_sort_button(
     .border_1()
     .border_color(cx.theme().transparent)
     .focus_visible(|style| style.border_color(cx.theme().ring))
-    .debug_selector(move || debug_id.clone())
-    .child(label)
+    .debug_selector(move || debug_id.to_string())
+    // The label yields and the glyph does not. A header cell is only as
+    // wide as its column, and a label that refuses to shrink pushes the
+    // sort glyph past the cell's edge, where it is clipped — the column
+    // then reads as unsortable until something re-lays it out at a width
+    // that happens to fit. Showing one more character of a heading is
+    // never worth losing the affordance that says the column sorts.
+    .child(div().min_w_0().truncate().child(label))
     .child(
-        Icon::new(sort_icon)
-            .xsmall()
-            .text_color(cx.theme().muted_foreground),
+        div()
+            .flex_none()
+            .debug_selector(move || format!("{glyph_debug_id}-glyph"))
+            .child(
+                Icon::new(sort_icon)
+                    .xsmall()
+                    .text_color(cx.theme().muted_foreground),
+            ),
     )
 }
 

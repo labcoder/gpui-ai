@@ -341,12 +341,14 @@ workflow("embedded startup, measured size, posters, eviction, and restart", asyn
   // the frame eases between them instead, so growth reads as a rise rather
   // than a staircase — but only after that first one, which is the reserved
   // height giving way and must not animate.
-  assert.equal(
-    await cdp.evaluate(
-      "document.querySelector('[data-specimen-frame]').hasAttribute('data-grows-smoothly')",
-    ),
-    true,
-    "a measured frame should ease its later growth",
+  // Waited for rather than asserted outright: a reported size and a frame
+  // that has re-rendered with it are two different moments, and the easing
+  // is deliberately armed a frame after the first height lands. Asserting
+  // on the instant the size appears reads the frame one render too early.
+  await waitForValue(
+    cdp,
+    "document.querySelector('[data-specimen-frame]').hasAttribute('data-grows-smoothly')",
+    { label: "a measured frame to ease its later growth", errors },
   );
   assert.ok(
     await cdp.evaluate(
