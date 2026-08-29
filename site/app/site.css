@@ -56,6 +56,13 @@
 
 html {
   font-size: var(--ai-font-size);
+  /* Reserve the scrollbar's space whether or not it is showing. Every page
+     here carries a demo that grows as its story runs, and a page sitting
+     near the height where a scrollbar appears would gain and lose one as it
+     grew — each time narrowing and widening the viewport, which shifts every
+     centred line sideways. The reader sees text shivering next to a demo
+     that is only getting taller. */
+  scrollbar-gutter: stable;
 }
 
 body {

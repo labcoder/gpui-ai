@@ -267,6 +267,75 @@ fn changing_to_reduced_motion_finishes_an_in_flight_jump(cx: &mut TestAppContext
         && chat.jump_drive.is_none()));
 }
 
+/// A reader can scroll back through a transcript that is still streaming.
+///
+/// A list following its tail reports its position as one past its last item,
+/// and scrolling by a delta from there seeks to that sentinel and lands back
+/// where it began. The wheel containment this crate puts over nested lists
+/// absorbed the reader's scroll and then moved nothing, so turning the wheel
+/// back during an answer did exactly nothing — and because the tail was never
+/// released, every arriving chunk kept the view pinned to the end.
+///
+/// Measured by which message sits at the top rather than by scroll offset:
+/// the offset is derived from the heights measured so far, and scrolling back
+/// through a virtualized list measures more of it, so the number moves even
+/// when the view does not.
+#[gpui::test]
+fn a_reader_can_scroll_back_while_an_answer_is_still_streaming(cx: &mut TestAppContext) {
+    let (harness, cx) = harness(cx);
+    set_messages(&harness, messages(0..60), cx);
+    let chat = harness.read_with(cx, |harness, _| harness.chat.clone());
+    assert!(
+        chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()),
+        "a fresh transcript opens at its end"
+    );
+
+    let top = |cx: &mut VisualTestContext| {
+        chat.read_with(cx, |chat, _| chat.list_state.logical_scroll_top().item_ix)
+    };
+    let center = chat.read_with(cx, |chat, _| chat.list_state.viewport_bounds().center());
+    let turn_wheel = |cx: &mut VisualTestContext| {
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position: center,
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(120.))),
+            modifiers: Modifiers::default(),
+            touch_phase: gpui::TouchPhase::Moved,
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    };
+
+    turn_wheel(cx);
+    assert!(
+        !chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()),
+        "turning the wheel back releases the tail"
+    );
+    let after_one = top(cx);
+    turn_wheel(cx);
+    let after_two = top(cx);
+    assert!(
+        after_two < after_one,
+        "each notch must carry the reader further back: {after_one} then {after_two}"
+    );
+
+    // The answer keeps arriving, as it does while one is being written. New
+    // messages land after the one being read, so the reader's place is the
+    // same message it was before.
+    let resting = after_two;
+    for extra in 60..66 {
+        set_messages(&harness, messages(0..extra + 1), cx);
+    }
+
+    assert!(
+        !chat.read_with(cx, |chat, _| chat.is_pinned_to_bottom()),
+        "content arriving must not drag the reader back to the end"
+    );
+    assert_eq!(
+        top(cx),
+        resting,
+        "the reader's place must survive the rest of the answer"
+    );
+}
+
 #[gpui::test]
 fn a_medium_jump_keeps_its_full_distance_and_reader_input_cancels_it(cx: &mut TestAppContext) {
     let (harness, cx) = harness(cx);

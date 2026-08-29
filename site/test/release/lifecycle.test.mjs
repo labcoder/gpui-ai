@@ -364,6 +364,23 @@ workflow("embedded startup, measured size, posters, eviction, and restart", asyn
     `the frame settled at ${settledHeight}px for a ${specimen.height}px story — a pre-draw width has been ratcheted in`,
   );
 
+
+  // A growing demo must not shake the prose beside it. A page sitting near
+  // the height where a scrollbar appears gains and loses one as the demo
+  // grows, and each appearance narrows the viewport and shifts every centred
+  // line sideways.
+  //
+  // Asserted as the reserved gutter rather than as a measured shift: this
+  // browser draws overlay scrollbars, which take no layout space, so the
+  // shift cannot be reproduced here however the page is built. The reader
+  // who reported it is on a platform with classic scrollbars, where it can.
+  // This at least fails if the reservation is dropped.
+  assert.equal(
+    await cdp.evaluate("getComputedStyle(document.documentElement).scrollbarGutter"),
+    "stable",
+    "the page must reserve the scrollbar's space so a growing demo cannot reflow the text beside it",
+  );
+
   // The embed's first paint must composite transparent over the host, which
   // means agreeing on a colour scheme before its module arrives: the pin is
   // inline in the built embed's head, ahead of the module that later owns it —

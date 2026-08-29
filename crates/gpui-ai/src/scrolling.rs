@@ -268,7 +268,15 @@ pub(crate) fn list_scroll_mask(state: &ListState) -> impl gpui::IntoElement {
                     return;
                 }
                 let delta_y = event.delta.pixel_delta(line_height).y;
-                if ScrollRoom::from_list_state(&state).can_absorb(delta_y) {
+                // A list following its tail reports its position as one past
+                // its last item, and `scroll_by` seeks from there and lands
+                // back where it began — so absorbing a backward wheel here
+                // would swallow it and move nothing, which is what stopped a
+                // reader scrolling up through a streaming transcript. The
+                // list's own handler knows how to step off the tail, so this
+                // leaves that case to it and keeps containment for the rest.
+                let leaving_tail = delta_y > Pixels::ZERO && state.is_following_tail();
+                if !leaving_tail && ScrollRoom::from_list_state(&state).can_absorb(delta_y) {
                     state.scroll_by(-delta_y);
                     cx.notify(view_id);
                     cx.stop_propagation();
