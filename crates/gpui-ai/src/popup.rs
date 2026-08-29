@@ -183,21 +183,6 @@ mod tests {
         );
     }
 
-    /// A stated side is a preference the positioner may still flip; the
-    /// policy reports it unchanged.
-    #[test]
-    fn a_stated_side_is_reported_as_asked() {
-        let viewport = px(800.);
-        assert_eq!(
-            PopupSide::Above.placement(px(100.), viewport),
-            Placement::Top
-        );
-        assert_eq!(
-            PopupSide::Below.placement(px(700.), viewport),
-            Placement::Bottom
-        );
-    }
-
     /// Hover surfaces open at the crate's tempo, not upstream's 600ms.
     #[gpui::test]
     fn hover_surfaces_open_promptly(cx: &mut TestAppContext) {

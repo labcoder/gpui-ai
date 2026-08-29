@@ -51,7 +51,7 @@ impl Render for ChipProbe {
                     )),
             )
             .child(
-                div().debug_selector(|| "probe-suggestions".into()).child(
+                div().child(
                     Suggestions::new("probe-suggestions")
                         .items([
                             Suggestion::new("short", "Go"),

@@ -280,7 +280,6 @@ pub(super) fn render_row(
                                     crate::status::ChipStrength::Neutral,
                                     cx,
                                 )
-                                .px(cx.theme().semantic_tokens().spacing.xs)
                                 .child(badge),
                             )
                         })

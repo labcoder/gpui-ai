@@ -40,12 +40,6 @@ use gpui::{
     HitboxBehavior, IntoElement as _, ListState, Pixels, ScrollWheelEvent, Styled as _, canvas, px,
 };
 
-/// Covers a retained list viewport with capture-phase wheel containment.
-///
-/// GPUI lists consume wheel input during bubbling. When a list is nested in
-/// another list, the ancestor may therefore run before the descendant. This
-/// mask moves the descendant directly during capture while it has room and
-/// releases the event at either edge so ordinary scroll chaining resumes.
 /// When a scrollable surface shows its scrollbar.
 ///
 /// A reader who cannot tell a surface scrolls will not try to scroll it,
@@ -140,13 +134,20 @@ impl ScrollbarTokens {
     }
 
     fn project_onto_theme(self, cx: &mut gpui::App) {
-        // The base theme, not the component theme: the base one carries
-        // the scrollbar projection every bar resolves from.
-        let theme = gpui_base::Theme::global_mut(cx);
-        theme.scrollbar = theme
-            .scrollbar
-            .clone()
-            .with_mode(self.visibility.upstream());
+        // The component theme's own field, not the base theme's derived
+        // projection. The base theme's scrollbar block is rebuilt from
+        // this field every time a theme is applied, so writing the derived
+        // value would be erased by the next theme swap — and swapping
+        // themes is exactly what an application does.
+        // An application may choose its policy before the theme exists —
+        // that ordering is the customization contract every policy here
+        // honours. Nothing to project onto yet; `install` runs after the
+        // theme is up and projects whichever policy is holding then.
+        if !cx.has_global::<gpui_component::Theme>() {
+            return;
+        }
+        gpui_component::Theme::set_scrollbar_mode(self.visibility.upstream(), cx);
+        gpui_component::Theme::sync_base(cx);
     }
 
     /// When scrollbars show.
@@ -248,6 +249,12 @@ where
     }
 }
 
+/// Covers a retained list viewport with capture-phase wheel containment.
+///
+/// GPUI lists consume wheel input during bubbling. When a list is nested in
+/// another list, the ancestor may therefore run before the descendant. This
+/// mask moves the descendant directly during capture while it has room and
+/// releases the event at either edge so ordinary scroll chaining resumes.
 pub(crate) fn list_scroll_mask(state: &ListState) -> impl gpui::IntoElement {
     let state = state.clone();
     canvas(
@@ -498,6 +505,26 @@ mod scrollbar_policy_tests {
             assert_eq!(
                 gpui_base::Theme::global(cx).scrollbar.mode(),
                 gpui_component::scroll::ScrollbarMode::Always
+            );
+        });
+    }
+
+    /// The projection survives a theme swap.
+    ///
+    /// The base theme's scrollbar block is derived: applying any theme
+    /// rebuilds it from the component theme's own field. Writing the
+    /// derived value instead of that field left the policy in place until
+    /// the reader changed theme, at which point every bar upstream draws
+    /// inside its tables quietly reverted.
+    #[gpui::test]
+    fn the_projection_survives_a_theme_change(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        cx.update(|cx| {
+            gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
+            assert_eq!(
+                gpui_base::Theme::global(cx).scrollbar.mode(),
+                gpui_component::scroll::ScrollbarMode::Always,
+                "a theme swap must not silently drop the scrollbar policy"
             );
         });
     }

@@ -291,10 +291,7 @@ impl TableDelegate for RecordsDelegate {
         // jittering with each glyph's natural width.
         let content = if numeric {
             div()
-                .font_features(gpui::FontFeatures(std::sync::Arc::new(vec![(
-                    "tnum".into(),
-                    1,
-                )])))
+                .font_features(tabular_figures())
                 .child(content)
                 .into_any_element()
         } else {
@@ -584,6 +581,18 @@ pub(super) fn record_row_frame(
         })
 }
 
+/// Tabular figures, built once.
+///
+/// A right-aligned cell asks for this on every frame it is visible, and
+/// the value never varies; rebuilding the string, vector, and allocation
+/// per cell per frame was pure waste in the table's hottest path.
+fn tabular_figures() -> gpui::FontFeatures {
+    static TABULAR: std::sync::OnceLock<gpui::FontFeatures> = std::sync::OnceLock::new();
+    TABULAR
+        .get_or_init(|| gpui::FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])))
+        .clone()
+}
+
 pub(super) fn record_cell_frame(identity: impl Into<String>, value: SharedString) -> Stateful<Div> {
     let identity = identity.into();
     let debug_identity = identity.clone();
@@ -637,7 +646,6 @@ fn record_cell_content(
                     crate::status::ChipStrength::Neutral,
                     cx,
                 )
-                .px(tokens.spacing.xs)
                 .child(
                     TextView::markdown(
                         format!("records-tag-{identity}-{index}"),

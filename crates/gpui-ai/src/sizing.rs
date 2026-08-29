@@ -200,22 +200,25 @@ mod tests {
         });
     }
 
+    /// Installing really installs. `read` falls back to the default when
+    /// no policy is present, so only the global's presence distinguishes
+    /// an installed policy from an absent one.
     #[gpui::test]
     fn install_provides_the_default_policy_when_none_was_chosen(cx: &mut TestAppContext) {
         cx.update(|cx| {
             crate::init(cx);
+            assert!(cx.has_global::<SizeTokens>());
             assert_eq!(*SizeTokens::read(cx), SizeTokens::DEFAULT);
         });
     }
 
+    /// The tiers stay ordered, so an override cannot silently invert one.
     #[test]
-    fn reading_without_any_app_state_falls_back_to_the_default() {
-        // The heights step the 4px grid and slots match the text
-        // line-heights they seat glyphs beside; the pairs stay ordered so
-        // an override cannot silently invert a tier.
+    fn the_default_tiers_are_ordered() {
         let tokens = SizeTokens::DEFAULT;
         assert!(tokens.control_sm() < tokens.control_md());
         assert!(tokens.control_md() < tokens.control_lg());
         assert!(tokens.slot_sm() < tokens.slot_md());
+        assert!(tokens.control_padding_sm() < tokens.control_padding_lg());
     }
 }

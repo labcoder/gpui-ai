@@ -320,13 +320,13 @@ impl RowRenderer {
         // A section label sits on the same left edge as the row titles it
         // names: both stand inside the list's gutter and add the row's own
         // text inset.
-        let header_debug = format!("thread-section-{section_id}");
-        let header_debug_label = format!("thread-section-label-{section_id}");
+        let header_key = section_id.clone();
+        let header_label_key = section_id.clone();
         let section_id =
             ElementId::from((ElementId::from(self.component.clone()), section_id.clone()));
         div()
             .id((section_id, "header"))
-            .debug_selector(move || header_debug.clone())
+            .debug_selector(move || format!("thread-section-{header_key}"))
             // Flattening costs the containment a nested group would give, so
             // the header keeps an accessible node of its own: the boundary is
             // still announced, it just no longer wraps its options.
@@ -340,9 +340,8 @@ impl RowRenderer {
             .pt(tokens.spacing.sm)
             .pb(tokens.spacing.xxs)
             .child({
-                let label_debug = header_debug_label.clone();
                 div()
-                    .debug_selector(move || label_debug.clone())
+                    .debug_selector(move || format!("thread-section-label-{header_label_key}"))
                     .child(eyebrow(label.clone(), cx))
             })
             .into_any_element()
@@ -461,7 +460,7 @@ impl RowRenderer {
                             .min_w_0()
                             .items_start()
                             .child({
-                                let title_debug = item.id.to_string();
+                                let title_debug = item.id.clone();
                                 div()
                                     .debug_selector(move || format!("thread-title-{title_debug}"))
                                     .w_full()
@@ -1506,6 +1505,45 @@ mod tests {
             bounds_of(cx, "thread-list-glide".to_owned()),
             Some(settled),
             "a settled highlight holds its row"
+        );
+    }
+
+    /// A hovered row that leaves the list takes its highlight with it.
+    ///
+    /// Hover is cleared by the row's own listener, and an unmounted row has
+    /// no listener to fire: filtering the list under a stationary pointer
+    /// used to leave the highlight painting the departed row's last
+    /// geometry over whatever moved into that space.
+    #[gpui::test]
+    fn a_filtered_away_row_takes_its_highlight_with_it(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(glide_sections(), cx));
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        let row = bounds_of(cx, "thread-row-three".to_owned()).expect("row three renders");
+        cx.simulate_mouse_move(row.center(), None, Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            bounds_of(cx, "thread-list-glide".to_owned()).is_some(),
+            "the hovered row is highlighted"
+        );
+
+        // Filter it away without moving the pointer.
+        cx.update(|window, cx| {
+            threads.update(cx, |threads, cx| threads.set_query("One", window, cx));
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(
+            bounds_of(cx, "thread-row-three".to_owned()).is_none(),
+            "the filter really removed the row"
+        );
+        assert!(
+            bounds_of(cx, "thread-list-glide".to_owned()).is_none(),
+            "and its highlight left with it, rather than painting over what took its place"
         );
     }
 

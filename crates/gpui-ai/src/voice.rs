@@ -7,7 +7,7 @@
 //! application starts, stops, or cancels the real audio work.
 
 use crate::{
-    control::{composed_button, outlined_control_with_label},
+    control::{outlined_control_with_icon, outlined_control_with_label},
     handlers::SharedHandler,
     motion::{MotionTokens, VisibleAnimationExt as _},
     surface::icon_button,
@@ -19,8 +19,7 @@ use gpui::{
     StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner,
-    v_flex,
+    ActiveTheme as _, IconName, Sizable as _, StyledExt as _, h_flex, spinner::Spinner, v_flex,
 };
 use std::rc::Rc;
 
@@ -234,38 +233,31 @@ impl RenderOnce for VoiceControls {
                     VoiceEvent::SpeakRequested,
                 )
             };
-            composed_button((root_id.clone(), "speak"), name)
-                .debug_selector(move || format!("voice-speak-{speak_debug}"))
-                .flex()
-                .items_center()
-                .gap(tokens.spacing.xs)
-                .min_h(tokens.spacing.lg)
-                .px(tokens.spacing.sm)
-                .py(tokens.spacing.xxs)
-                .rounded(tokens.radius.md)
-                .border_1()
-                .border_color(if speaking {
-                    cx.theme().primary
-                } else {
-                    cx.theme().border
-                })
-                .text_token(tokens.typography.sm)
-                .text_color(if speaking {
-                    cx.theme().primary
-                } else {
-                    cx.theme().foreground
-                })
-                .hover(|style| style.bg(cx.theme().button_hover))
-                .active(|style| style.bg(cx.theme().button_active))
-                .focus_visible(|style| style.border_color(cx.theme().ring))
-                .disabled(handler.is_none())
-                .child(Icon::new(icon).xsmall())
-                .child(div().child(if speaking { "Stop" } else { "Speak" }))
-                .on_click(move |_: &ClickEvent, window, cx| {
-                    if let Some(handler) = &handler {
-                        handler(&event, window, cx)
-                    }
-                })
+            // The library's own icon-and-label control, tinted while
+            // speaking. It used to be hand-built with a padding-derived
+            // height, so it was the one control in the crate that did not
+            // move when an application replaced the size policy — and the
+            // one without the shared press decay.
+            outlined_control_with_icon(
+                (root_id.clone(), "speak"),
+                name,
+                icon,
+                if speaking { "Stop" } else { "Speak" },
+                window,
+                cx,
+            )
+            .debug_selector(move || format!("voice-speak-{speak_debug}"))
+            .when(speaking, |button| {
+                button
+                    .border_color(cx.theme().primary)
+                    .text_color(cx.theme().primary)
+            })
+            .disabled(handler.is_none())
+            .on_click(move |_: &ClickEvent, window, cx| {
+                if let Some(handler) = &handler {
+                    handler(&event, window, cx)
+                }
+            })
         });
         let transcript_debug = debug_id.clone();
         let transcript = self.transcript.map(|text| {

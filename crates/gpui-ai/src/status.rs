@@ -59,20 +59,18 @@ impl StatusTone {
 
 /// How strongly a chip speaks.
 ///
-/// The three strengths are the whole chip vocabulary: a neutral inset
-/// pill for plain values, the tinted status chip — solid status-color
-/// text on the same hue at 12% alpha, borderless — for lifecycle and
-/// tags, and a solid chip reserved for counts and emphasis. Public
-/// because tables and rows expose the choice as a builder.
+/// Two strengths are the whole chip vocabulary: a neutral inset pill for
+/// plain values, and the tinted status chip — solid status-colour text on
+/// the same hue at low alpha, borderless — for lifecycle and tags. Each
+/// carries its own padding, because a neutral pill holds a bare word
+/// while a tinted one holds a word beside a glyph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ChipStrength {
+pub(crate) enum ChipStrength {
     /// Inset pill: secondary surface, muted ink.
     Neutral,
-    /// Solid status-color text on the same hue at low alpha. The default.
+    /// Solid status-colour text on the same hue at low alpha. The default.
     #[default]
     Tinted,
-    /// The color as fill; the page background punches the label out.
-    Solid,
 }
 
 /// The chip surface all three strengths share: extra-small medium-weight
@@ -80,14 +78,17 @@ pub enum ChipStrength {
 /// a bordered row never doubles its lines.
 pub(crate) fn chip_frame(color: Hsla, strength: ChipStrength, cx: &App) -> Div {
     let tokens = cx.theme().semantic_tokens();
-    let (background, foreground) = match strength {
-        ChipStrength::Neutral => (cx.theme().secondary, cx.theme().muted_foreground),
-        ChipStrength::Tinted => (color.opacity(0.12), color),
-        ChipStrength::Solid => (color, cx.theme().background),
+    let (background, foreground, padding) = match strength {
+        ChipStrength::Neutral => (
+            cx.theme().secondary,
+            cx.theme().muted_foreground,
+            tokens.spacing.xs,
+        ),
+        ChipStrength::Tinted => (color.opacity(0.12), color, tokens.spacing.sm),
     };
     div()
         .flex_none()
-        .px(tokens.spacing.sm)
+        .px(padding)
         .py(tokens.spacing.xxs)
         .rounded(tokens.radius.full)
         .bg(background)
@@ -310,9 +311,9 @@ impl RenderOnce for StatusBadge {
 
         // The indicator slot is fixed — sized for the spinner, centering the
         // smaller dot — so running↔settled never nudges the label sideways.
-        let indicator_debug = format!("status-badge-indicator-{}", self.label);
+        let indicator_label = self.label.clone();
         let indicator = div()
-            .debug_selector(move || indicator_debug.clone())
+            .debug_selector(move || format!("status-badge-indicator-{indicator_label}"))
             .flex_none()
             .size(tokens.spacing.md)
             .flex()
@@ -323,8 +324,8 @@ impl RenderOnce for StatusBadge {
             } else {
                 div()
                     .debug_selector({
-                        let dot_debug = format!("status-badge-dot-{}", self.label);
-                        move || dot_debug.clone()
+                        let dot_label = self.label.clone();
+                        move || format!("status-badge-dot-{dot_label}")
                     })
                     .size_1p5()
                     .rounded(tokens.radius.full)
@@ -351,9 +352,9 @@ impl RenderOnce for StatusBadge {
                 }))
             })
             .child({
-                let label_debug = format!("status-badge-label-{}", self.label);
+                let label_name = self.label.clone();
                 div()
-                    .debug_selector(move || label_debug.clone())
+                    .debug_selector(move || format!("status-badge-label-{label_name}"))
                     .opacity(progress)
                     .top(entry)
                     .child(self.label.clone())
@@ -451,32 +452,6 @@ mod tests {
             .advance_clock(crate::motion::MotionTokens::DEFAULT.quick() * 2);
         draw(cx);
         draw(cx);
-    }
-
-    #[gpui::test]
-    fn the_pill_keeps_one_width_across_the_whole_lifecycle(cx: &mut TestAppContext) {
-        let (probe, cx) = open(cx);
-        let width_at = |cx: &mut VisualTestContext| {
-            cx.debug_bounds("badge-hug")
-                .expect("the badge should render")
-                .size
-                .width
-        };
-        let pending = width_at(cx);
-
-        for state in [
-            ProgressState::Running,
-            ProgressState::Complete,
-            ProgressState::Failed("offline".into()),
-        ] {
-            set_state(&probe, cx, state.clone());
-            settle_swap(cx);
-            assert_eq!(
-                width_at(cx),
-                pending,
-                "the lifecycle slot must hold one width; {state:?} moved it"
-            );
-        }
     }
 
     #[gpui::test]

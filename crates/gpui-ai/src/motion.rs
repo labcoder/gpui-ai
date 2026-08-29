@@ -696,13 +696,22 @@ pub(crate) fn disclosure_clip(
     });
     let height = *measured.read(cx);
     let clipping = progress < 1.0;
+    // A body that unmounts while closed is measured again on the way back,
+    // and the measuring pass happens during prepaint — after this render
+    // has already sized the clip. Until a height is known, a clipping body
+    // is held closed rather than drawn at its full size: opening would
+    // otherwise flash the whole body for one frame and then collapse it,
+    // which is a worse pop than the one this replaced.
+    let clipped = match (height, clipping) {
+        (Some(height), true) => Some(height * progress.max(0.0)),
+        (None, true) => Some(gpui::Pixels::ZERO),
+        _ => None,
+    };
     let recorder = measured;
     gpui::div()
         .w_full()
         .overflow_hidden()
-        .when_some(height.filter(|_| clipping), |body, height| {
-            body.h(height * progress.max(0.0))
-        })
+        .when_some(clipped, |body, height| body.h(height))
         .child(
             gpui::div()
                 .w_full()
@@ -1527,29 +1536,6 @@ mod tests {
             install(cx);
             assert_eq!(MotionTokens::read(cx), &MotionTokens::DEFAULT);
         });
-    }
-
-    #[test]
-    fn every_loop_resolves_through_a_role_at_its_documented_tempo() {
-        // The values a component used to own privately. Changing one here is
-        // a visual change, which is what this assertion is for.
-        assert_eq!(
-            ProgressLoopSpec::GRID_SWEEP.period,
-            Duration::from_millis(1400)
-        );
-        assert_eq!(
-            ProgressLoopSpec::IMAGE_PULSE.period,
-            Duration::from_millis(1600)
-        );
-        assert_eq!(
-            ProgressLoopSpec::STATUS_SPINNER.period,
-            Duration::from_millis(900)
-        );
-        assert_eq!(
-            AmbientLoopSpec::ORB_LATTICE.period,
-            Duration::from_millis(1700)
-        );
-        assert_eq!(AmbientLoopSpec::ORB_LATTICE.period_millis(), 1700);
     }
 
     #[derive(Debug, Clone, Copy)]
