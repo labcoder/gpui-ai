@@ -9,6 +9,47 @@ revision.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-29
+
+Current upstream, two defects a reader would have noticed, and the states a
+component supports made reachable from the gallery.
+
+### Fixed
+
+- **A reader can scroll back through a streaming answer.** A chat pinned to
+  its tail could not be scrolled up at all: a following list reports its
+  position as one past its last item, and scrolling by a delta from there
+  lands where it began, so the wheel containment over nested lists absorbed
+  the scroll and moved nothing — and absorbing it meant the list's own
+  handler, the one that knows how to step off the tail, never ran.
+- **The website stops shivering as a demo grows.** Pages reserve the
+  scrollbar's space whether or not the bar is showing. A page near the height
+  where one appears gained and lost it as its demo grew, and each appearance
+  narrowed the viewport and shifted every centred line sideways.
+- **A narrow header keeps what a heading can afford to lose.** A to-do
+  count, a code block's copy control, and a context meter's number each sat
+  opposite an application-supplied label that would not shrink, so a long one
+  pushed them out of the row. The label truncates; the value holds.
+
+### Changed
+
+- **The gallery switches between a component's states.** The prompt bar
+  stacked six composers in a scroll box and command search stacked three
+  palettes; both offer them through the same toolbar the tables and chat
+  already use, and the website's component pages list them too. The two
+  stories are 432px and 387px where they were 592px and 494px.
+- **Current gpui and gpui-component.** Nothing in the API we use changed
+  shape. Two upstream fixes land with it: a table header that lagged a frame
+  behind column navigation, and a scrollbar that failed to repaint after a
+  click on its track.
+
+### Added
+
+- **A first-paint gate.** Every still story must measure the same height on
+  the frame it first draws as it does once settled — the catalog reserves
+  space from that first measurement, and a story that finishes assembling
+  itself later publishes the height of its unfinished self.
+
 ## [0.5.0] - 2026-08-29
 
 A consolidation release. Nothing here changes what the library is for; it
@@ -579,7 +620,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.4.0
 [0.2.1]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...v0.2.1
