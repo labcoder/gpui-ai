@@ -1927,6 +1927,33 @@
             "        "
           ],
           [
+            "// Wide enough for the longest supplier in the fixture: a cell's",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// selectable prose cannot ellipsize, so a column narrower than its",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// content clips mid-word rather than trailing off.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
             "RecordColumn",
             "type"
           ],
@@ -1977,7 +2004,7 @@
             "            .width(px("
           ],
           [
-            "240",
+            "280",
             "number"
           ],
           [
@@ -2027,7 +2054,7 @@
             "            .width(px("
           ],
           [
-            "130",
+            "120",
             "number"
           ],
           [
@@ -2060,7 +2087,7 @@
             ").width(px("
           ],
           [
-            "200",
+            "190",
             "number"
           ],
           [

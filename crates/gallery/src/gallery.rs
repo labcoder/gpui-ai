@@ -1947,14 +1947,17 @@ fn restore_unset_metrics(config: &ThemeConfig, cx: &mut App) {
 // snippet:start(records-table)
 fn records_story_columns() -> Vec<RecordColumn> {
     vec![
+        // Wide enough for the longest supplier in the fixture: a cell's
+        // selectable prose cannot ellipsize, so a column narrower than its
+        // content clips mid-word rather than trailing off.
         RecordColumn::new("supplier", "Supplier")
             .sortable(true)
             .fixed(true)
-            .width(px(240.)),
+            .width(px(280.)),
         RecordColumn::new("region", "Region")
             .sortable(true)
-            .width(px(130.)),
-        RecordColumn::new("products", "Products").width(px(200.)),
+            .width(px(120.)),
+        RecordColumn::new("products", "Products").width(px(190.)),
         RecordColumn::new("unit_cost", "Unit cost")
             .sortable(true)
             .alignment(RecordColumnAlignment::Right)
