@@ -9,6 +9,54 @@ revision.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-29
+
+A consolidation release. Nothing here changes what the library is for; it
+changes how much of it is stated once instead of many times, and fixes the
+defects the 0.4.0 cycle's own review found and deferred.
+
+### Fixed
+
+- **A sortable column keeps its sort glyph in a narrow header.** The
+  heading refused to shrink and the glyph had nothing holding it in place,
+  so in a column narrower than heading-plus-glyph the glyph was pushed past
+  the cell's edge and clipped — at a 120px column it ended 245px outside
+  it. The column then read as unsortable until something happened to
+  re-lay it out at a width that fit. The heading truncates now and the
+  glyph does not shrink.
+- **A press-release decay stops sampling once it has finished.** A control
+  that had been pressed once kept formatting a clock id and sampling a
+  settled channel on every later render.
+- **A growing demo on the website rises instead of stepping.** Demos whose
+  content grows — chat, streaming text — resized in measurement-sized
+  jumps; the frame transitions its height once a first measurement exists,
+  and holds still under a reduced-motion preference.
+- **The disclosure in a code diff no longer snaps.** It swapped between two
+  icons, which can only ever be fully open or fully closed, so its glyph
+  jumped while its body was still moving — the only disclosure in the
+  library that did.
+
+### Changed
+
+- **One selected-surface helper.** Whether a row's hover comes from its own
+  fill or from the list's gliding highlight is an argument now, rather than
+  a `match` reconstructed at every call site.
+- **One disclosure affordance**, `disclosure_chevron`, taking the same
+  sample the body opens on, and an icon button that composes a rotation
+  with its press compression instead of choosing between them.
+- **Named roles for the two most-used text treatments**, `hint` and
+  `subtitle`, and module-level names for the size tokens, so a call site
+  says which size it wants rather than how the policy is stored.
+- **Frames without layout.** `card_frame` and `quiet_press_surface` state
+  the card frame and the quiet interaction ramp once each; they were
+  hand-rolled at nine and twelve sites.
+- **The gallery no longer bounces as its stories animate.** A catalog row
+  keeps the tallest it has been, from its own runtime measurement, so a
+  story whose animation restarts stops dragging every row below it up the
+  screen. Deliberately not the website's declared heights: those reserve
+  space before a demo has booted and size its no-WebGPU poster, and are a
+  website concern that no consumer of this library sees.
+
 ## [0.4.0] - 2026-08-28
 
 Two cycles ship together. The motion work below was prepared as 0.3.0 and
@@ -531,7 +579,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.4.0
 [0.2.1]: https://github.com/labcoder/gpui-ai/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/labcoder/gpui-ai/compare/v0.1.0...v0.2.0
