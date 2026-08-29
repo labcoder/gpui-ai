@@ -213,8 +213,12 @@ impl RenderOnce for TodoList {
                         .items_center()
                         .justify_between()
                         .pb(tokens.spacing.xs)
+                        // The title yields and the count holds: a shortened
+                        // heading still reads, a dropped count does not.
                         .child(
                             div()
+                                .min_w_0()
+                                .truncate()
                                 .text_token(tokens.typography.xs)
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(cx.theme().muted_foreground)
@@ -222,6 +226,8 @@ impl RenderOnce for TodoList {
                         )
                         .child(
                             div()
+                                .flex_none()
+                                .debug_selector(|| "todo-list-count".to_owned())
                                 .text_token(tokens.typography.xs)
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_color(cx.theme().muted_foreground)

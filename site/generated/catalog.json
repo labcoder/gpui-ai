@@ -426,9 +426,22 @@
       "source": "crates/gpui-ai/src/command_search.rs",
       "api": "CommandSearch",
       "usage": "CommandSearch::new(\"commands\", window, cx)",
-      "height": 494,
+      "height": 387,
       "windowTitle": "Command search — gpui-ai",
-      "variants": [],
+      "variants": [
+        {
+          "id": "populated",
+          "label": "Populated"
+        },
+        {
+          "id": "empty",
+          "label": "Empty catalog"
+        },
+        {
+          "id": "no-results",
+          "label": "No results"
+        }
+      ],
       "events": [
         "CommandSearchEvent"
       ],
@@ -915,9 +928,34 @@
       "source": "crates/gpui-ai/src/prompt_bar.rs",
       "api": "PromptBar",
       "usage": "PromptBar::new(\"agent-prompt\", window, cx)",
-      "height": 592,
+      "height": 432,
       "windowTitle": "Prompt bar — gpui-ai",
-      "variants": [],
+      "variants": [
+        {
+          "id": "empty",
+          "label": "Empty"
+        },
+        {
+          "id": "ready",
+          "label": "Ready"
+        },
+        {
+          "id": "multiline",
+          "label": "Multiline"
+        },
+        {
+          "id": "running",
+          "label": "Running"
+        },
+        {
+          "id": "glyph",
+          "label": "Glyph submit"
+        },
+        {
+          "id": "gathered",
+          "label": "Gathered"
+        }
+      ],
       "events": [
         "PromptBarEvent"
       ],

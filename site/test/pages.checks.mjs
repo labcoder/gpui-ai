@@ -705,12 +705,15 @@ test("route code loads per page instead of riding in every page's bundle", async
   // cost, on review: +343 bytes for the status badge story (0.3.0 C2),
   // +9,665 bytes for the ten C6 themes (0.3.0), +208 bytes for the demo
   // frame's smooth growth (0.5.0), which is the one piece of route code that
-  // has to ride in the entry because every page's demo uses it. Story code
-  // leaking into the entry is what the probe above catches; this number
-  // catches everything else growing unreviewed.
+  // has to ride in the entry because every page's demo uses it, and +131
+  // bytes for the states the prompt bar and command search now offer (0.6.0)
+  // — nine more catalog rows of variant ids and labels, which the component
+  // index reads to list a component's states. Story code leaking into the
+  // entry is what the probe above catches; this number catches everything
+  // else growing unreviewed.
   assert.ok(
-    entry.length <= 331_183,
-    `the entry chunk is ${entry.length} bytes; the reviewed cap is 331,183`,
+    entry.length <= 331_314,
+    `the entry chunk is ${entry.length} bytes; the reviewed cap is 331,314`,
   );
 
   // The source-level guard the split lives or dies on.

@@ -243,9 +243,22 @@ fn breakdown_row(label: &'static str, value: String, cx: &App) -> impl IntoEleme
         .justify_between()
         .gap(tokens.spacing.lg)
         .text_token(tokens.typography.xs)
-        .child(div().text_color(cx.theme().muted_foreground).child(label))
+        // The label yields and the value holds. A row that states something
+        // and its number has one part that can be shortened without losing
+        // the point and one that cannot: a truncated heading still leaves a
+        // readable row, while a dropped number leaves a row that says
+        // nothing. Neither could shrink before, so a long label pushed the
+        // number out of the row, where it was clipped.
         .child(
             div()
+                .min_w_0()
+                .truncate()
+                .text_color(cx.theme().muted_foreground)
+                .child(label),
+        )
+        .child(
+            div()
+                .flex_none()
                 .font_family(cx.theme().mono_font_family.clone())
                 .text_color(cx.theme().foreground)
                 .child(value),

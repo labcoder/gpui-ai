@@ -212,6 +212,19 @@ pub fn set_active_variant(index: usize, cx: &mut App) -> bool {
 #[cfg(test)]
 const MEASURE_TICKS: usize = 220;
 
+/// Where `site/test/release/mobile.test.mjs` taps to open the keyboard.
+///
+/// In CSS pixels inside the embed, at the 390px viewport that suite drives.
+/// Kept here because the layout it points into lives here;
+/// `the_mobile_suites_tap_lands_on_the_prompt_bar_composer` is what keeps
+/// the two in step.
+pub const MOBILE_COMPOSER_TAP: (f32, f32) = (100., 150.);
+
+/// Where that same suite taps to dismiss the keyboard again.
+///
+/// Has to miss the composer, or the blur it is checking never happens.
+pub const MOBILE_COMPOSER_BLUR: (f32, f32) = (8., 200.);
+
 fn story_needs_simulation(story: StoryId) -> bool {
     matches!(
         story,
@@ -970,10 +983,52 @@ impl Render for ThreadListStory {
     }
 }
 
+/// Which catalog the command-search story is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum CommandSearchStoryState {
+    #[default]
+    Populated,
+    Empty,
+    NoResults,
+}
+
+impl CommandSearchStoryState {
+    /// Every demonstrated state in switcher order.
+    const ALL: [Self; 3] = [Self::Populated, Self::Empty, Self::NoResults];
+
+    /// Switcher labels parallel to [`Self::ALL`].
+    const LABELS: &'static [(&'static str, &'static str)] =
+        crate::story::COMMAND_SEARCH_STORY_VARIANTS;
+
+    /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
+    fn index(self) -> usize {
+        Self::ALL.iter().position(|kind| *kind == self).unwrap_or(0)
+    }
+
+    /// What the heading above the palette says this state is.
+    fn heading(self) -> &'static str {
+        match self {
+            Self::Populated => "Populated — type margin, delivery, or risk",
+            Self::Empty => "Empty catalog",
+            Self::NoResults => "No results",
+        }
+    }
+
+    /// The accessible name for that heading.
+    fn description(self) -> &'static str {
+        match self {
+            Self::Populated => "Populated command search",
+            Self::Empty => "Empty command catalog",
+            Self::NoResults => "No command results",
+        }
+    }
+}
+
 struct CommandSearchStory {
     ready: Entity<CommandSearch>,
     empty: Entity<CommandSearch>,
     no_results: Entity<CommandSearch>,
+    active_state: CommandSearchStoryState,
     last_event: SharedString,
     _subscription: Subscription,
 }
@@ -1024,8 +1079,20 @@ impl CommandSearchStory {
             ready,
             empty,
             no_results,
+            active_state: CommandSearchStoryState::default(),
             last_event: "Type, use arrow keys, press Enter, or choose a row.".into(),
             _subscription,
+        }
+    }
+
+    /// Puts the story into one of the catalogs it demonstrates.
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(state) = CommandSearchStoryState::ALL.get(index).copied() else {
+            return;
+        };
+        if self.active_state != state {
+            self.active_state = state;
+            cx.notify();
         }
     }
 }
@@ -1033,25 +1100,42 @@ impl CommandSearchStory {
 impl Render for CommandSearchStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let state = self.active_state;
+        // One palette at a time. A populated catalog, an empty one, and a
+        // search that found nothing are three answers to the same question,
+        // and stacking them made the story twice as tall as the component.
+        let palette = match state {
+            CommandSearchStoryState::Populated => self.ready.clone().into_any_element(),
+            CommandSearchStoryState::Empty => self.empty.clone().into_any_element(),
+            CommandSearchStoryState::NoResults => self.no_results.clone().into_any_element(),
+        };
         v_flex()
             .gap(tokens.spacing.md)
+            .child(story_state_switcher(
+                cx.weak_entity(),
+                "command-search",
+                CommandSearchStoryState::LABELS,
+                state.index(),
+                Self::set_active_state,
+            ))
             .child(
                 div()
-                    .id("command-search-ready-heading")
+                    .id("command-search-heading")
+                    .debug_selector(|| "command-search-heading".into())
                     .role(Role::Heading)
-                    .aria_label("Populated command search")
+                    .aria_label(state.description())
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Populated — type margin, delivery, or risk"),
+                    .child(state.heading()),
             )
             .child(
                 div()
-                    .id("command-search-ready-host")
-                    .debug_selector(|| "command-search-ready-host".into())
+                    .id("command-search-host")
+                    .debug_selector(|| "command-search-host".into())
                     .h(px(248.))
                     .max_h(px(248.))
                     .flex_none()
-                    .child(self.ready.clone()),
+                    .child(palette),
             )
             .child(
                 div()
@@ -1061,43 +1145,6 @@ impl Render for CommandSearchStory {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
-            )
-            .child(
-                h_flex()
-                    .items_start()
-                    .gap(tokens.spacing.md)
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap(tokens.spacing.xs)
-                            .child(
-                                div()
-                                    .id("command-search-empty-heading")
-                                    .role(Role::Heading)
-                                    .aria_label("Empty command catalog")
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Empty catalog"),
-                            )
-                            .child(self.empty.clone()),
-                    )
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap(tokens.spacing.xs)
-                            .child(
-                                div()
-                                    .id("command-search-no-results-heading")
-                                    .role(Role::Heading)
-                                    .aria_label("No command results")
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("No results"),
-                            )
-                            .child(self.no_results.clone()),
-                    ),
             )
     }
 }
@@ -1442,6 +1489,62 @@ impl Render for FineTuneStory {
     }
 }
 
+/// Which composer the prompt-bar story is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum PromptBarStoryState {
+    #[default]
+    Empty,
+    Ready,
+    Multiline,
+    Running,
+    Glyph,
+    Gathered,
+}
+
+impl PromptBarStoryState {
+    /// Every demonstrated state in switcher order.
+    const ALL: [Self; 6] = [
+        Self::Empty,
+        Self::Ready,
+        Self::Multiline,
+        Self::Running,
+        Self::Glyph,
+        Self::Gathered,
+    ];
+
+    /// Switcher labels parallel to [`Self::ALL`].
+    const LABELS: &'static [(&'static str, &'static str)] = crate::story::PROMPT_BAR_STORY_VARIANTS;
+
+    /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
+    fn index(self) -> usize {
+        Self::ALL.iter().position(|kind| *kind == self).unwrap_or(0)
+    }
+
+    /// What the heading above the composer says this state is.
+    fn heading(self) -> &'static str {
+        match self {
+            Self::Empty => "Empty without models",
+            Self::Ready => "Ready with mention suggestions",
+            Self::Multiline => "Multiline draft",
+            Self::Running => "Running with cancellation",
+            Self::Glyph => "Glyph submit, split row",
+            Self::Gathered => "Controls gathered leading",
+        }
+    }
+
+    /// The accessible name for that heading.
+    fn description(self) -> &'static str {
+        match self {
+            Self::Empty => "Empty prompt without a model catalog",
+            Self::Ready => "Ready prompt with mention suggestions",
+            Self::Multiline => "Multiline prompt draft",
+            Self::Running => "Running prompt with cancellation",
+            Self::Glyph => "Compact prompt whose submit control is a glyph",
+            Self::Gathered => "Prompt whose controls gather at the leading edge",
+        }
+    }
+}
+
 struct PromptBarStory {
     empty: Entity<PromptBar>,
     ready: Entity<PromptBar>,
@@ -1449,6 +1552,7 @@ struct PromptBarStory {
     running: Entity<PromptBar>,
     glyph: Entity<PromptBar>,
     gathered: Entity<PromptBar>,
+    active_state: PromptBarStoryState,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
 }
@@ -1565,7 +1669,8 @@ impl PromptBarStory {
             running,
             glyph,
             gathered,
-            last_event: "Interact with any composer to inspect its typed event.".into(),
+            active_state: PromptBarStoryState::default(),
+            last_event: "Interact with a composer to inspect its typed event.".into(),
             _subscriptions: vec![
                 empty_subscription,
                 ready_subscription,
@@ -1574,6 +1679,17 @@ impl PromptBarStory {
                 glyph_subscription,
                 gathered_subscription,
             ],
+        }
+    }
+
+    /// Puts the story into one of the composers it demonstrates.
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(state) = PromptBarStoryState::ALL.get(index).copied() else {
+            return;
+        };
+        if self.active_state != state {
+            self.active_state = state;
+            cx.notify();
         }
     }
 
@@ -1673,72 +1789,43 @@ impl PromptBarStory {
 impl Render for PromptBarStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        let state = self.active_state;
+        // One composer at a time, chosen from the toolbar. Six of them
+        // stacked was six times the height for a component that is read one
+        // at a time anyway, and the states below the fold were the ones
+        // nobody saw.
+        let composer = match state {
+            PromptBarStoryState::Empty => self.empty.clone().into_any_element(),
+            PromptBarStoryState::Ready => self.ready.clone().into_any_element(),
+            PromptBarStoryState::Multiline => self.multiline.clone().into_any_element(),
+            PromptBarStoryState::Running => self.running.clone().into_any_element(),
+            PromptBarStoryState::Glyph => self.glyph.clone().into_any_element(),
+            PromptBarStoryState::Gathered => self.gathered.clone().into_any_element(),
+        };
         v_flex()
             .gap(tokens.spacing.md)
+            .child(story_state_switcher(
+                cx.weak_entity(),
+                "prompt-bar",
+                PromptBarStoryState::LABELS,
+                state.index(),
+                Self::set_active_state,
+            ))
             .child(
                 div()
-                    .id("prompt-bar-empty-heading")
-                    .debug_selector(|| "prompt-bar-empty-heading".into())
+                    .id("prompt-bar-heading")
+                    .debug_selector(|| "prompt-bar-heading".into())
                     .role(Role::Heading)
-                    .aria_label("Empty prompt without a model catalog")
+                    .aria_label(state.description())
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Empty without models"),
+                    .child(state.heading()),
             )
-            .child(self.empty.clone())
             .child(
                 div()
-                    .id("prompt-bar-ready-heading")
-                    .role(Role::Heading)
-                    .aria_label("Ready prompt with mention suggestions")
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Ready with mention suggestions"),
+                    .debug_selector(|| "prompt-bar-composer".into())
+                    .child(composer),
             )
-            .child(self.ready.clone())
-            .child(
-                div()
-                    .id("prompt-bar-multiline-heading")
-                    .debug_selector(|| "prompt-bar-multiline-heading".into())
-                    .role(Role::Heading)
-                    .aria_label("Multiline prompt draft")
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Multiline draft"),
-            )
-            .child(self.multiline.clone())
-            .child(
-                div()
-                    .id("prompt-bar-running-heading")
-                    .role(Role::Heading)
-                    .aria_label("Running prompt with cancellation")
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Running with cancellation"),
-            )
-            .child(self.running.clone())
-            .child(
-                div()
-                    .id("prompt-bar-glyph-heading")
-                    .debug_selector(|| "prompt-bar-glyph-heading".into())
-                    .role(Role::Heading)
-                    .aria_label("Compact prompt whose submit control is a glyph")
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Glyph submit, split row"),
-            )
-            .child(self.glyph.clone())
-            .child(
-                div()
-                    .id("prompt-bar-gathered-heading")
-                    .debug_selector(|| "prompt-bar-gathered-heading".into())
-                    .role(Role::Heading)
-                    .aria_label("Prompt whose controls gather at the leading edge")
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Controls gathered leading"),
-            )
-            .child(self.gathered.clone())
             .child(
                 TextView::markdown(
                     "prompt-bar-event-log",
@@ -5756,10 +5843,12 @@ impl Gallery {
                         v_flex()
                             .id("prompt-bar-story-scroll")
                             .debug_selector(|| "prompt-bar-story-scroll".into())
-                            // 256px clipped suggestion rows mid-card; the grouped
-                            // model menu needs room to open below the composer.
-                            .h(px(560.))
-                            .max_h(px(560.))
+                            // One composer at a time now, so the box is sized
+                            // for one: 256px clipped suggestion rows mid-card,
+                            // and the grouped model menu still needs room to
+                            // open below the composer.
+                            .h(px(400.))
+                            .max_h(px(400.))
                             .flex_none()
                             .gap_2()
                             .track_scroll(&self.prompt_bar_scroll)
@@ -7408,13 +7497,17 @@ mod tests {
         cx.simulate_resize(size(px(700.), px(400.)));
         cx.update(|window, cx| window.draw(cx).clear(cx));
 
+        // The story shows one composer, named by its heading, and the
+        // toolbar is how the reader reaches the rest. It used to stack all
+        // six, which is what made the end of this story hard to reach in the
+        // first place.
         assert!(
-            cx.debug_bounds("prompt-bar-empty-heading").is_some(),
-            "the shared story should render an explicit empty state"
+            cx.debug_bounds("prompt-bar-state-switcher").is_some(),
+            "the story should offer its states rather than stack them"
         );
         assert!(
-            cx.debug_bounds("prompt-bar-multiline-heading").is_some(),
-            "the shared story should render an explicit multiline state"
+            cx.debug_bounds("prompt-bar-heading").is_some(),
+            "the shown composer should say which state it is"
         );
 
         let gallery = result
@@ -7436,6 +7529,84 @@ mod tests {
         assert!(
             end.bottom() <= story.bottom(),
             "{end:?} must fit in {story:?}"
+        );
+    }
+
+    /// The mobile suite's tap lands on the composer.
+    ///
+    /// GPUI's web backend exposes no accessibility tree, so `mobile.test.mjs`
+    /// opens the keyboard by tapping a canvas coordinate. That coordinate is
+    /// a measured fact about this story's layout, and a layout change moves
+    /// it silently — the suite then taps blank canvas and fails twenty
+    /// seconds later with a timeout that says nothing about the cause. This
+    /// asserts the two agree, in the crate that owns the layout.
+    #[gpui::test]
+    fn the_mobile_suites_tap_lands_on_the_prompt_bar_composer(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::PromptBar, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.update(|_, cx| {
+            gallery.update(cx, |gallery, cx| {
+                gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+            })
+        });
+        // The viewport the mobile suite drives the embed at.
+        cx.simulate_resize(size(px(390.), px(300.)));
+        cx.update(|window, cx| window.set_rem_size(cx.theme().font_size));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let composer = cx
+            .debug_bounds("prompt-bar-composer")
+            .expect("the story renders a composer");
+        let (tap_x, tap_y) = super::MOBILE_COMPOSER_TAP;
+        assert!(
+            composer.left() <= px(tap_x)
+                && px(tap_x) <= composer.right()
+                && composer.top() <= px(tap_y)
+                && px(tap_y) <= composer.bottom(),
+            "mobile.test.mjs taps ({tap_x}, {tap_y}), which is outside the composer at {composer:?} \
+             — move the tap in mobile.test.mjs and this constant together"
+        );
+
+        let (blur_x, blur_y) = super::MOBILE_COMPOSER_BLUR;
+        assert!(
+            !(composer.left() <= px(blur_x)
+                && px(blur_x) <= composer.right()
+                && composer.top() <= px(blur_y)
+                && px(blur_y) <= composer.bottom()),
+            "the blur tap ({blur_x}, {blur_y}) is inside the composer at {composer:?}, so it \
+             would never close the keyboard it is checking closes"
+        );
+    }
+
+    /// The switcher puts a different composer on screen.
+    ///
+    /// The states a component supports are worth nothing if the gallery can
+    /// only reach the first, which is what stacking them below the fold
+    /// amounted to.
+    #[gpui::test]
+    fn the_prompt_bar_story_switches_between_its_composers(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (_, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::PromptBar, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.simulate_resize(size(px(900.), px(700.)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let offered = crate::story::PROMPT_BAR_STORY_VARIANTS;
+        assert!(offered.len() > 1, "the story offers more than one state");
+        assert_eq!(
+            super::active_variant_index(),
+            Some(0),
+            "it starts on the first"
+        );
+
+        let switched = cx.update(|_, cx| super::set_active_variant(offered.len() - 1, cx));
+        assert!(switched, "the switcher should take the change");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            super::active_variant_index(),
+            Some(offered.len() - 1),
+            "the story should report the state it was put into"
         );
     }
 
@@ -7946,6 +8117,80 @@ mod tests {
         assert!(
             large > base,
             "solstice asks for 17px type, so its chat must be taller than {base}, not {large}"
+        );
+    }
+
+    /// Every still story is finished on the frame it first draws.
+    ///
+    /// The catalog's reserved heights are measured from a single draw, so a
+    /// story that finishes assembling itself on some later frame publishes
+    /// the height of its unfinished self and the website reserves too little.
+    /// More to the point, a reader looking at a first paint is looking at
+    /// the component — whatever is missing then is missing for them.
+    ///
+    /// Only the stories that do not simulate: an animating story is a
+    /// different height on every frame by design, and says nothing about
+    /// whether its first one was complete.
+    #[gpui::test]
+    fn a_still_story_is_finished_on_the_frame_it_first_draws(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let mut late = Vec::new();
+
+        for story in StoryId::ALL {
+            if super::story_needs_simulation(*story) {
+                continue;
+            }
+            let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(*story, cx));
+            let cx: &mut VisualTestContext = cx;
+            cx.update(|_, cx| {
+                gallery.update(cx, |gallery, cx| {
+                    gallery.set_chrome(super::GalleryChrome::Embedded, cx)
+                })
+            });
+            cx.simulate_resize(size(px(900.), px(2400.)));
+            cx.update(|window, cx| window.set_rem_size(cx.theme().font_size));
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+
+            let selector: &'static str =
+                Box::leak(format!("story-{}", story.slug()).into_boxed_str());
+            let first = cx
+                .debug_bounds(selector)
+                .expect("a measurable story frame")
+                .size
+                .height;
+
+            cx.run_until_parked();
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            let settled = cx
+                .debug_bounds(selector)
+                .expect("a measurable story frame")
+                .size
+                .height;
+
+            let retired = gallery.downgrade();
+            drop(gallery);
+            cx.update(|window, _| window.remove_window());
+            cx.run_until_parked();
+            assert!(retired.upgrade().is_none(), "the story must be disposed");
+
+            let first = f32::from(first).ceil() as u32;
+            let settled = f32::from(settled).ceil() as u32;
+            if first.abs_diff(settled) > 2 {
+                late.push(format!(
+                    "  {} => first draw {first}px, settles at {settled}px",
+                    story.slug()
+                ));
+            }
+        }
+
+        assert!(
+            late.is_empty(),
+            "these stories are not finished on their first frame:
+{}",
+            late.join(
+                "
+"
+            )
         );
     }
 

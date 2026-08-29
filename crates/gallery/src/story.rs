@@ -118,6 +118,23 @@ pub enum StoryId {
 pub const CHAT_STORY_VARIANTS: &[(&str, &str)] =
     &[("conversation", "Conversation"), ("welcome", "Welcome")];
 
+/// Variants the prompt-bar story switches between.
+pub const PROMPT_BAR_STORY_VARIANTS: &[(&str, &str)] = &[
+    ("empty", "Empty"),
+    ("ready", "Ready"),
+    ("multiline", "Multiline"),
+    ("running", "Running"),
+    ("glyph", "Glyph submit"),
+    ("gathered", "Gathered"),
+];
+
+/// Variants the command-search story switches between.
+pub const COMMAND_SEARCH_STORY_VARIANTS: &[(&str, &str)] = &[
+    ("populated", "Populated"),
+    ("empty", "Empty catalog"),
+    ("no-results", "No results"),
+];
+
 /// Variants every table story switches between.
 pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
     ("populated", "Populated"),
@@ -534,7 +551,7 @@ impl StoryId {
                 module: "command_search",
                 api: "CommandSearch",
                 usage: crate::usage::COMMAND_SEARCH,
-                height: 494,
+                height: 387,
                 width: StoryWidth::Wide,
                 overflow: Overflow::Vertical,
             },
@@ -684,7 +701,7 @@ impl StoryId {
                 module: "prompt_bar",
                 api: "PromptBar",
                 usage: crate::usage::PROMPT_BAR,
-                height: 592,
+                height: 432,
                 width: StoryWidth::Column,
                 overflow: Overflow::Vertical,
             },
@@ -727,6 +744,8 @@ impl StoryId {
     pub const fn variants(self) -> &'static [(&'static str, &'static str)] {
         match self {
             Self::Chat => CHAT_STORY_VARIANTS,
+            Self::PromptBar => PROMPT_BAR_STORY_VARIANTS,
+            Self::CommandSearch => COMMAND_SEARCH_STORY_VARIANTS,
             Self::RecordsTable | Self::DiffTable | Self::FilterTable | Self::ComparisonTable => {
                 TABLE_STORY_VARIANTS
             }

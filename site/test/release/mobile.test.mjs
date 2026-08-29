@@ -116,13 +116,17 @@ for (const [ratio, fallback] of [[2, false], [3, false], [3, true]]) {
     phase = "editing";
     await cdp.evaluate(`document.querySelector('iframe').src = './gallery/embed.html?story=prompt-bar&theme=sunday-panel'`);
     await ready("prompt-bar");
-    await tap(100, 73);
+    // Measured, not guessed: `MOBILE_COMPOSER_TAP` in crates/gallery/src/gallery.rs
+    // carries the same pair, and a gallery test fails if it stops landing on
+    // the composer. Change both together.
+    await tap(100, 150);
     await wait(`(${inputExpression}).focused && !(${inputExpression}).readOnly`, "composer opens an editable IME session");
     await cdp.send("Input.insertText", { text: "Mobile gyjpq ﬁ" }, INPUT_TIMEOUT_MS);
     await wait(`(${inputExpression}).value === 'Mobile gyjpq ﬁ'`, "mobile text reaches the real composer");
+    // MOBILE_COMPOSER_BLUR: outside the composer, in the frame's own margin.
     await tap(8, 200);
     await wait(`(${inputExpression}).readOnly && !(${inputExpression}).focused`, "leaving the composer closes the IME session");
-    await tap(100, 73);
+    await tap(100, 150);
     await wait(`(${inputExpression}).focused && !(${inputExpression}).readOnly`, "re-entry reopens the IME session");
     assert.equal((await cdp.evaluate(inputExpression)).value, "Mobile gyjpq ﬁ", "blur/re-entry preserves the draft");
 

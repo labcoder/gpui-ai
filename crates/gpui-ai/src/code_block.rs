@@ -118,15 +118,24 @@ impl RenderOnce for CodeBlock {
                     .bg(cx.theme().muted.opacity(0.35))
                     .border_b_1()
                     .border_color(cx.theme().border)
+                    // The language name yields and the copy control holds:
+                    // a long language should shorten its own label rather
+                    // than push the only affordance in the header out of it.
                     .child(
                         div()
+                            .min_w_0()
+                            .truncate()
                             .text_token(tokens.typography.xs)
                             .font_family(cx.theme().mono_font_family.clone())
                             .text_color(cx.theme().muted_foreground)
                             .child(language.clone()),
                     )
                     .when(self.copyable, |this| {
-                        this.child(Clipboard::new("copy").value(self.code.clone()))
+                        this.child(
+                            div()
+                                .flex_none()
+                                .child(Clipboard::new("copy").value(self.code.clone())),
+                        )
                     }),
             )
             .child(
