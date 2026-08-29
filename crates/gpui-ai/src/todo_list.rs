@@ -295,10 +295,7 @@ impl RenderOnce for TodoList {
                         // centre in the same box, a status change never
                         // nudges the label sideways, and a wrapping label
                         // leaves the glyph seated on its first line.
-                        crate::surface::leading_glyph_slot(
-                            crate::sizing::SizeTokens::read(cx).slot_md(),
-                            indicator,
-                        ),
+                        crate::surface::leading_glyph_slot(crate::sizing::slot_md(cx), indicator),
                     )
                     .child(
                         div()

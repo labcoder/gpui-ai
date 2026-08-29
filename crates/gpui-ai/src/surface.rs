@@ -158,47 +158,43 @@ pub(crate) fn nested_radius(container: Pixels, inset: Pixels, floor: Pixels) -> 
 /// Callers own semantics (aria_selected and friends) and content; this
 /// owns only the surface, so every list that selects looks like one
 /// family.
+/// Where a row's hover comes from.
+///
+/// A list either paints hover on each row or runs one highlight that
+/// glides between them; a row cannot do both without painting the hover
+/// twice. Passing the list's glide state — or `None` — is how a row says
+/// which list it is in.
+pub(crate) type RowGlide<'a> =
+    Option<(&'a SharedString, &'a gpui::Entity<crate::glide::GlideHover>)>;
+
 pub(crate) fn selection_surface<E>(
     row: E,
     selected: bool,
     container_radius: Pixels,
     inset: Pixels,
+    glide: RowGlide<'_>,
     cx: &App,
 ) -> E
 where
-    E: gpui::Styled + gpui::InteractiveElement,
+    E: gpui::StatefulInteractiveElement + gpui::ParentElement + gpui::Styled,
 {
     let tokens = cx.theme().semantic_tokens();
     let radius = nested_radius(container_radius, inset, tokens.radius.sm);
     let row = row.rounded(radius);
-    if selected {
-        row.bg(cx.theme().list_active)
-            .hover(|style| style.bg(cx.theme().list_active.opacity(0.85)))
-    } else {
-        row.hover(|style| style.bg(cx.theme().list_hover))
-    }
-}
-
-/// [`selection_surface`] for rows whose hover is the gliding highlight:
-/// the same radius rule and selected fill, but no per-row hover paint —
-/// the one highlight element is the hover.
-pub(crate) fn selection_surface_glide<E>(
-    row: E,
-    selected: bool,
-    container_radius: Pixels,
-    inset: Pixels,
-    cx: &App,
-) -> E
-where
-    E: gpui::Styled + gpui::InteractiveElement,
-{
-    let tokens = cx.theme().semantic_tokens();
-    let radius = nested_radius(container_radius, inset, tokens.radius.sm);
-    let row = row.rounded(radius);
-    if selected {
-        row.bg(cx.theme().list_active)
-    } else {
-        row
+    match glide {
+        // The highlight is the hover; a fill here would paint it twice.
+        Some((key, state)) => {
+            let row = if selected {
+                row.bg(cx.theme().list_active)
+            } else {
+                row
+            };
+            crate::glide::glide_row(row, key.clone(), state)
+        }
+        None if selected => row
+            .bg(cx.theme().list_active)
+            .hover(|style| style.bg(cx.theme().list_active.opacity(0.85))),
+        None => row.hover(|style| style.bg(cx.theme().list_hover)),
     }
 }
 
@@ -317,7 +313,7 @@ pub(crate) fn initial_badge(initial: impl Into<SharedString>, cx: &App) -> Div {
         // The box is the type's own line box, from the size policy's slot
         // scale — a fixed pixel square held rem-scaled glyphs, so a larger
         // type scale pushed the letter out of its own circle.
-        .size(crate::sizing::SizeTokens::read(cx).slot_sm())
+        .size(crate::sizing::slot_sm(cx))
         .overflow_hidden()
         .flex()
         .items_center()
@@ -358,7 +354,7 @@ pub(crate) fn icon_button(
         .flex_none()
         .items_center()
         .justify_center()
-        .size(crate::sizing::SizeTokens::read(cx).control_sm())
+        .size(crate::sizing::control_sm(cx))
         .rounded(tokens.radius.sm)
         .border_1()
         .border_color(cx.theme().transparent)

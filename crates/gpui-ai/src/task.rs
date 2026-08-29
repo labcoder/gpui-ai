@@ -95,7 +95,7 @@ impl RenderOnce for TaskRow {
         let indicator = crate::status::progress_glyph(
             &self.state,
             ElementId::from((ElementId::from(self.task.id.clone()), "task-glyph")),
-            crate::sizing::SizeTokens::read(cx).slot_md(),
+            crate::sizing::slot_md(cx),
             window,
             cx,
         )

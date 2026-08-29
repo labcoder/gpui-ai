@@ -362,7 +362,7 @@ fn render_row(
         // the double the audit flagged.
         .bg(tokens.colors.surface)
         .child(crate::surface::leading_glyph_slot(
-            crate::sizing::SizeTokens::read(cx).slot_md(),
+            crate::sizing::slot_md(cx),
             meta((index + 1).to_string(), cx),
         ))
         .child(

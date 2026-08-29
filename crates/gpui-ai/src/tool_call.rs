@@ -258,7 +258,7 @@ impl ToolCall {
         crate::status::progress_glyph(
             &self.state,
             ElementId::from((ElementId::from(self.invocation.id.clone()), "glyph")),
-            crate::sizing::SizeTokens::read(cx).slot_sm(),
+            crate::sizing::slot_sm(cx),
             window,
             cx,
         )
@@ -326,7 +326,7 @@ impl RenderOnce for ToolCall {
                 // change never nudges the name sideways.
                 div()
                     .flex_none()
-                    .size(crate::sizing::SizeTokens::read(cx).slot_xs())
+                    .size(crate::sizing::slot_xs(cx))
                     .flex()
                     .items_center()
                     .justify_center()

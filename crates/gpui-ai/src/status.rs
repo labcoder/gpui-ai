@@ -120,7 +120,7 @@ pub(crate) fn progress_glyph(
         ProgressState::Failed(_) => 3,
     };
     let acknowledged = crate::motion::acknowledged_state(ack_slot, ordinal, window, cx);
-    let roomy = slot >= crate::sizing::SizeTokens::read(cx).slot_md();
+    let roomy = slot >= crate::sizing::slot_md(cx);
     let glyph: AnyElement = match state {
         ProgressState::Pending => div()
             .when(roomy, |dot| dot.size_2())
@@ -315,7 +315,7 @@ impl RenderOnce for StatusBadge {
         let indicator = div()
             .debug_selector(move || format!("status-badge-indicator-{indicator_label}"))
             .flex_none()
-            .size(crate::sizing::SizeTokens::read(cx).slot_xs())
+            .size(crate::sizing::slot_xs(cx))
             .flex()
             .items_center()
             .justify_center()
@@ -380,7 +380,7 @@ impl RenderOnce for StatusBadge {
         // 0.4.0 feel review saw. The leading inset absorbs the slack so
         // both ends read the same, and the slot still holds the label
         // still when the spinner takes the dot's place.
-        let slot_slack = (crate::sizing::SizeTokens::read(cx).slot_xs() - INDICATOR_DOT) / 2.;
+        let slot_slack = (crate::sizing::slot_xs(cx) - INDICATOR_DOT) / 2.;
         chip_frame(color, ChipStrength::Tinted, cx)
             .id(self.id)
             .role(Role::Status)

@@ -108,26 +108,14 @@ pub(super) fn apply_model_option_state(
         .aria_size_of_set(set_size)
         .active(|style| style.bg(cx.theme().list_active))
         .when(active, |button| button.aria_active_descendant());
-    match glide {
-        Some((key, state)) => crate::glide::glide_row(
-            crate::surface::selection_surface_glide(
-                button,
-                active,
-                cx.theme().radius,
-                tokens.spacing.xs,
-                cx,
-            ),
-            key.clone(),
-            state,
-        ),
-        None => crate::surface::selection_surface(
-            button,
-            active,
-            cx.theme().radius,
-            tokens.spacing.xs,
-            cx,
-        ),
-    }
+    crate::surface::selection_surface(
+        button,
+        active,
+        cx.theme().radius,
+        tokens.spacing.xs,
+        glide,
+        cx,
+    )
 }
 
 /// Models grouped by provider in first-appearance order; ungrouped models

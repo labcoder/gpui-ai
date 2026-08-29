@@ -207,6 +207,36 @@ pub(crate) fn install(cx: &mut App) {
     }
 }
 
+/// The sizes, asked for directly.
+///
+/// Every one of these is `SizeTokens::read(cx).<name>()`. Naming them at
+/// module level means a call site says which size it wants rather than how
+/// the policy is stored, and the override path stays the only way to change
+/// what they answer.
+pub(crate) fn control_sm(cx: &App) -> Pixels {
+    SizeTokens::read(cx).control_sm()
+}
+
+pub(crate) fn control_md(cx: &App) -> Pixels {
+    SizeTokens::read(cx).control_md()
+}
+
+pub(crate) fn control_lg(cx: &App) -> Pixels {
+    SizeTokens::read(cx).control_lg()
+}
+
+pub(crate) fn slot_xs(cx: &App) -> Pixels {
+    SizeTokens::read(cx).slot_xs()
+}
+
+pub(crate) fn slot_sm(cx: &App) -> Pixels {
+    SizeTokens::read(cx).slot_sm()
+}
+
+pub(crate) fn slot_md(cx: &App) -> Pixels {
+    SizeTokens::read(cx).slot_md()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

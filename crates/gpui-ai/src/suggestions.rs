@@ -152,7 +152,7 @@ impl RenderOnce for Suggestions {
                             // twice the vertical room the medium tier left
                             // around a small-text line, against the same
                             // horizontal inset.
-                            .h(crate::sizing::SizeTokens::read(cx).control_lg())
+                            .h(crate::sizing::control_lg(cx))
                             .px(tokens.spacing.md)
                             .border_1()
                             .border_color(cx.theme().border)
@@ -191,7 +191,7 @@ impl RenderOnce for Suggestions {
                         .aria_label(item.label.clone())
                         .flex()
                         .items_center()
-                        .h(crate::sizing::SizeTokens::read(cx).control_lg())
+                        .h(crate::sizing::control_lg(cx))
                         .px(tokens.spacing.md)
                         .border_1()
                         .border_color(cx.theme().border)

@@ -89,7 +89,7 @@ fn selection_control(
         .flex()
         .items_center()
         .justify_center()
-        .h(crate::sizing::SizeTokens::read(cx).control_md())
+        .h(crate::sizing::control_md(cx))
         .px(tokens.spacing.sm)
         .border_1()
         .border_color(tokens.colors.border)

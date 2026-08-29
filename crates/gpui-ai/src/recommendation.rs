@@ -219,7 +219,7 @@ impl RenderOnce for RecommendationCard {
                                 .text_token(tokens.typography.sm)
                                 .text_color(cx.theme().muted_foreground)
                                 .child(crate::surface::leading_glyph_slot(
-                                    crate::sizing::SizeTokens::read(cx).slot_md(),
+                                    crate::sizing::slot_md(cx),
                                     div()
                                         .size_1()
                                         .rounded(tokens.radius.full)

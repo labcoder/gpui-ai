@@ -358,7 +358,7 @@ fn prompt_control_shell(
         .flex()
         .items_center()
         .justify_center()
-        .h(crate::sizing::SizeTokens::read(cx).control_md())
+        .h(crate::sizing::control_md(cx))
         .px(tokens.spacing.sm)
         .border_1()
         .border_color(border)
@@ -1096,7 +1096,7 @@ impl Render for PromptBar {
                             // shape: one square control at its own height,
                             // an arrow to send and a square to cancel.
                             PromptSubmit::Glyph => button
-                                .w(crate::sizing::SizeTokens::read(cx).control_lg())
+                                .w(crate::sizing::control_lg(cx))
                                 .px(gpui::Pixels::ZERO)
                                 .justify_center()
                                 .rounded(cx.theme().radius_full())

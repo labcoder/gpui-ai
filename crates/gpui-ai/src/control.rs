@@ -60,32 +60,36 @@ pub(crate) fn press_release_state(
 ///
 /// A control that has been pressed once keeps a non-zero generation for
 /// the rest of its life, so a guard on the generation alone left every
-/// later render formatting a clock id and sampling a settled channel. The
-/// release time bounds that: past the press spring's own response the
-/// decay is over, and there is nothing to sample.
+/// later render formatting a clock id and sampling a settled channel.
+///
+/// The curve says when to stop, rather than a clock guessing: the frame
+/// that samples a finished decay latches this flag, and every frame after
+/// it takes the cheap path. Reading a wall clock instead risks cutting the
+/// sampling off mid-decay, and the sample is what asks for the next frame
+/// — the tint would then stay painted at whatever it last reached.
 fn press_release_fade(key: &ElementId, window: &mut Window, cx: &mut App) -> f32 {
     let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
-    let released_at = window.use_keyed_state((key.clone(), "press-released-at"), cx, |_, _| {
-        None::<std::time::Instant>
-    });
+    let settled = press_fade_settled(key, window, cx);
     let generation = *generation.read(cx);
-    if generation == 0 {
-        return 0.0;
-    }
-    // Twice the response, because the sampled curve settles within it and
-    // this is a shortcut past sampling, not a replacement for it.
-    let window_of_interest = crate::motion::MotionTokens::read(cx)
-        .press_spring()
-        .response()
-        * 2;
-    let settled = released_at.read(cx).is_none_or(|at| {
-        cx.background_executor().now().saturating_duration_since(at) > window_of_interest
-    });
-    if settled {
+    if generation == 0 || *settled.read(cx) {
         return 0.0;
     }
     let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
-    1.0 - press_release_progress(clock, window, cx)
+    let progress = press_release_progress(clock, window, cx);
+    if progress >= 1.0 {
+        settled.update(cx, |settled, _| *settled = true);
+    }
+    1.0 - progress
+}
+
+/// Whether this control's release decay has finished playing.
+///
+/// Starts true: a control that has never been pressed has nothing to
+/// decay. A press clears it and the settled frame sets it again, so the
+/// generation stays monotonic — reusing a generation would reuse a clock
+/// that has already run, and the next release would snap instead of ease.
+fn press_fade_settled(key: &ElementId, window: &mut Window, cx: &mut App) -> gpui::Entity<bool> {
+    window.use_keyed_state((key.clone(), "press-fade-settled"), cx, |_, _| true)
 }
 
 impl PressReleaseExt for Button {
@@ -98,9 +102,7 @@ impl PressReleaseExt for Button {
     ) -> Self {
         let pressed = window.use_keyed_state((key.clone(), "pressed"), cx, |_, _| false);
         let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
-        let released_at = window.use_keyed_state((key.clone(), "press-released-at"), cx, |_, _| {
-            None::<std::time::Instant>
-        });
+        let settled = press_fade_settled(&key, window, cx);
         let fade = press_release_fade(&key, window, cx);
         let arm = pressed.clone();
         let release = move |window: &mut gpui::Window, cx: &mut App| {
@@ -108,8 +110,7 @@ impl PressReleaseExt for Button {
             if was_pressed {
                 arm.update(cx, |pressed, _| *pressed = false);
                 generation.update(cx, |generation, _| *generation += 1);
-                let now = cx.background_executor().now();
-                released_at.update(cx, |released_at, _| *released_at = Some(now));
+                settled.update(cx, |settled, _| *settled = false);
                 window.refresh();
             }
         };
@@ -138,17 +139,6 @@ impl PressReleaseExt for Button {
     }
 }
 
-/// Applies the library's own control geometry to an upstream button.
-///
-/// Upstream sizes its buttons for its own density — a small button is
-/// twenty-four pixels tall with eight of horizontal padding, which is
-/// what the 0.4.0 feel review read as tight in the approval and plan
-/// CTAs. This keeps the upstream variant's colours (primary, danger,
-/// ghost, outline) and states, and states the geometry the rest of the
-/// library uses: one height and one padding from the size policy, one
-/// radius from the theme. An application that widens
-/// [`SizeTokens::control_padding_sm`](crate::sizing::SizeTokens::control_padding_sm)
-/// widens every one of them at once.
 /// The quiet pressable surface every low-chrome control shares.
 ///
 /// A transparent border reserving the focus ring, the accent ramp — hover
@@ -184,6 +174,17 @@ impl QuietSurfaceExt for Button {
     }
 }
 
+/// Applies the library's own control geometry to an upstream button.
+///
+/// Upstream sizes its buttons for its own density — a small button is
+/// twenty-four pixels tall with eight of horizontal padding, which is
+/// what the 0.4.0 feel review read as tight in the approval and plan
+/// CTAs. This keeps the upstream variant's colours (primary, danger,
+/// ghost, outline) and states, and states the geometry the rest of the
+/// library uses: one height and one padding from the size policy, one
+/// radius from the theme. An application that widens
+/// [`SizeTokens::control_padding_sm`](crate::sizing::SizeTokens::control_padding_sm)
+/// widens every one of them at once.
 pub(crate) trait ControlMetricsExt: Sized {
     /// Restates this control's height, horizontal padding, and radius from
     /// the crate's own policy. Apply it last, after the variant.

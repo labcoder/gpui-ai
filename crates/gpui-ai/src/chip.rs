@@ -174,7 +174,7 @@ impl RenderOnce for ToolChip {
                 // same box, so running↔settled never nudges the label.
                 div()
                     .flex_none()
-                    .size(crate::sizing::SizeTokens::read(cx).slot_xs())
+                    .size(crate::sizing::slot_xs(cx))
                     .flex()
                     .items_center()
                     .justify_center()

@@ -392,106 +392,93 @@ impl RowRenderer {
         let base = div()
             .id((item_id.clone(), "row"))
             .debug_selector(move || format!("thread-row-{row_debug_id}"));
-        let surface = match &self.glide {
-            Some(glide) => crate::glide::glide_row(
-                crate::surface::selection_surface_glide(
-                    base,
-                    selected,
-                    tokens.radius.lg,
-                    tokens.spacing.xs,
-                    cx,
-                ),
-                item.id.clone(),
-                glide,
-            ),
-            None => crate::surface::selection_surface(
-                base,
-                selected,
-                tokens.radius.lg,
-                tokens.spacing.xs,
-                cx,
-            ),
-        };
-        surface
-            // The acknowledged fade plays on the fill alone — the row's
-            // content never dims — by re-stating the selected background
-            // at the acknowledgment's alpha over the surface's own.
-            .when(selected, |row| {
-                row.bg(cx.theme().list_active.opacity(acknowledged))
-            })
-            // One rect is the row: selection fills it, the keyboard ring
-            // outlines it, and the hover highlight covers it — trailing
-            // actions included. A ring around the label alone stopped
-            // before the ellipsis and made focus look unlike selection.
-            .border_1()
-            .border_color(if focused {
-                cx.theme().ring
-            } else {
-                cx.theme().transparent
-            })
-            .w_full()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap(tokens.spacing.xxs)
-            .mb(tokens.spacing.xxs)
-            .pr(tokens.spacing.xxs)
-            .child(
-                composed_button((item_id.clone(), "select"), accessibility_label)
-                    .debug_selector(move || format!("thread-{debug_id}"))
-                    .role(Role::ListBoxOption)
-                    .selected(selected)
-                    .aria_selected(selected)
-                    .aria_position_in_set(position)
-                    .aria_size_of_set(self.visible_threads)
-                    // Keyboard focus stays on the listbox and travels as an
-                    // active descendant, so a row scrolling out of the window
-                    // cannot take the focus with it.
-                    .when(focused, |button| button.aria_active_descendant())
-                    .tab_stop(false)
-                    .flex_1()
-                    .min_w_0()
-                    .justify_start()
-                    .px(row_text_inset(cx))
-                    .py(tokens.spacing.xs)
-                    .child(
-                        v_flex()
-                            .w_full()
-                            .min_w_0()
-                            .items_start()
-                            .child({
-                                let title_debug = item.id.clone();
+        crate::surface::selection_surface(
+            base,
+            selected,
+            tokens.radius.lg,
+            tokens.spacing.xs,
+            self.glide.as_ref().map(|glide| (&item.id, glide)),
+            cx,
+        )
+        // The acknowledged fade plays on the fill alone — the row's
+        // content never dims — by re-stating the selected background
+        // at the acknowledgment's alpha over the surface's own.
+        .when(selected, |row| {
+            row.bg(cx.theme().list_active.opacity(acknowledged))
+        })
+        // One rect is the row: selection fills it, the keyboard ring
+        // outlines it, and the hover highlight covers it — trailing
+        // actions included. A ring around the label alone stopped
+        // before the ellipsis and made focus look unlike selection.
+        .border_1()
+        .border_color(if focused {
+            cx.theme().ring
+        } else {
+            cx.theme().transparent
+        })
+        .w_full()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(tokens.spacing.xxs)
+        .mb(tokens.spacing.xxs)
+        .pr(tokens.spacing.xxs)
+        .child(
+            composed_button((item_id.clone(), "select"), accessibility_label)
+                .debug_selector(move || format!("thread-{debug_id}"))
+                .role(Role::ListBoxOption)
+                .selected(selected)
+                .aria_selected(selected)
+                .aria_position_in_set(position)
+                .aria_size_of_set(self.visible_threads)
+                // Keyboard focus stays on the listbox and travels as an
+                // active descendant, so a row scrolling out of the window
+                // cannot take the focus with it.
+                .when(focused, |button| button.aria_active_descendant())
+                .tab_stop(false)
+                .flex_1()
+                .min_w_0()
+                .justify_start()
+                .px(row_text_inset(cx))
+                .py(tokens.spacing.xs)
+                .child(
+                    v_flex()
+                        .w_full()
+                        .min_w_0()
+                        .items_start()
+                        .child({
+                            let title_debug = item.id.clone();
+                            div()
+                                .debug_selector(move || format!("thread-title-{title_debug}"))
+                                .w_full()
+                                .truncate()
+                                .text_token(tokens.typography.sm)
+                                .text_color(cx.theme().foreground)
+                                .child(item.title.clone())
+                        })
+                        .when_some(item.subtitle.clone(), |this, subtitle| {
+                            this.child(
                                 div()
-                                    .debug_selector(move || format!("thread-title-{title_debug}"))
                                     .w_full()
                                     .truncate()
-                                    .text_token(tokens.typography.sm)
-                                    .text_color(cx.theme().foreground)
-                                    .child(item.title.clone())
-                            })
-                            .when_some(item.subtitle.clone(), |this, subtitle| {
-                                this.child(
-                                    div()
-                                        .w_full()
-                                        .truncate()
-                                        .text_token(tokens.typography.xs)
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(subtitle),
-                                )
-                            }),
-                    )
-                    .on_click(move |_, window, cx| {
-                        let _ = owner.update(cx, |this, cx| {
-                            this.focus_thread(select_id.clone(), window, cx);
-                            cx.emit(ThreadListEvent::Selected {
-                                id: select_id.clone(),
-                            });
-                            cues::emit(cx, Cue::ThreadSelected);
+                                    .text_token(tokens.typography.xs)
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(subtitle),
+                            )
+                        }),
+                )
+                .on_click(move |_, window, cx| {
+                    let _ = owner.update(cx, |this, cx| {
+                        this.focus_thread(select_id.clone(), window, cx);
+                        cx.emit(ThreadListEvent::Selected {
+                            id: select_id.clone(),
                         });
-                    }),
-            )
-            .child(self.render_actions_menu(item, item_id, window, cx))
-            .into_any_element()
+                        cues::emit(cx, Cue::ThreadSelected);
+                    });
+                }),
+        )
+        .child(self.render_actions_menu(item, item_id, window, cx))
+        .into_any_element()
     }
 
     /// The row's ellipsis and the popup menu it opens.

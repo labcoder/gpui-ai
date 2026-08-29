@@ -904,7 +904,7 @@ impl RenderOnce for StreamingText {
                         .text_token(tokens.typography.xs)
                         .text_color(cx.theme().danger)
                         .child(crate::surface::leading_glyph_slot(
-                            crate::sizing::SizeTokens::read(cx).slot_sm(),
+                            crate::sizing::slot_sm(cx),
                             Icon::new(IconName::CircleX).xsmall(),
                         ))
                         .child(div().min_w_0().child(reason)),

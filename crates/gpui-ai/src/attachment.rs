@@ -392,7 +392,7 @@ impl RenderOnce for AttachmentPreview {
         // The compact tile seats its glyph in the medium slot; the full
         // tile doubles it for a thumbnail. Derived from the size policy so
         // a resized slot scale moves the tiles with every other glyph box.
-        let slot = crate::sizing::SizeTokens::read(cx).slot_md();
+        let slot = crate::sizing::slot_md(cx);
         let leading_size = if self.compact { slot } else { slot * 2. };
 
         // Thumbnail when we have one; otherwise the kind glyph on a quiet tint.

@@ -35,7 +35,7 @@ pub(super) fn nav_control(
         .gap(tokens.spacing.xs)
         // Header controls rail with the filter input beside them, so they
         // take the input's own height tier from the size policy.
-        .h(crate::sizing::SizeTokens::read(cx).control_lg())
+        .h(crate::sizing::control_lg(cx))
         .px(tokens.spacing.sm)
         .rounded(tokens.radius.sm)
         .border_1()
@@ -148,7 +148,7 @@ pub(super) fn sidebar_item_control(
             .when_some(row.icon.clone(), |this, icon| {
                 this.child(
                     crate::surface::leading_glyph_slot(
-                        crate::sizing::SizeTokens::read(cx).slot_md(),
+                        crate::sizing::slot_md(cx),
                         Icon::default().path(icon).size_4(),
                     )
                     .flex_none(),
@@ -335,9 +335,7 @@ pub(super) fn render_row(
                 // A collapsed rail keeps the expanded row's height, so the
                 // rail's rhythm is the tree's rhythm and icons do not
                 // bunch up when the labels leave.
-                .when(collapsed, |this| {
-                    this.h(crate::sizing::SizeTokens::read(cx).control_lg())
-                })
+                .when(collapsed, |this| this.h(crate::sizing::control_lg(cx)))
                 .child(menu_item.render(
                     format!("sidebar-nav-menu.{component_id}.{}", row.id),
                     // SidebarMenuItem owns the pinned presentation. The

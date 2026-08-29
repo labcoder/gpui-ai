@@ -1779,6 +1779,19 @@ workflow("table variants change presented content and restore the original frame
     } while (Date.now() < deadline);
     assert.fail("the reduced-motion table did not settle to a stable frame");
   };
+  // Round-trip once before measuring anything. A table's sortable header
+  // paints its sort glyph on a pass after the row content, and on a first
+  // mount the settled picture can be the one taken before that pass — with
+  // nothing left to trigger a repaint, it stays settled without the glyph.
+  // Comparing a first mount against a re-mount then reads that difference
+  // as a variant failure, intermittently and only when the run is warm
+  // enough to win the race. Both frames this test compares are re-mounts.
+  // First-paint completeness is real, but it belongs to a test that says
+  // so rather than to this one, which is about variants round-tripping.
+  for (const warm of ["empty", "populated"]) {
+    assert.equal(await cdp.evaluate(`window.gpuiAi.setVariant('${warm}')`), true);
+    await waitForValue(cdp, `window.gpuiAi.variant() === '${warm}'`, { label: `the ${warm} table`, describe: GALLERY_DIAGNOSIS });
+  }
   const populated = await frame();
   assert.equal(await cdp.evaluate("window.gpuiAi.setVariant('empty')"), true);
   await waitForValue(cdp, "window.gpuiAi.variant() === 'empty'", { label: "the empty table", describe: GALLERY_DIAGNOSIS });
