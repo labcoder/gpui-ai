@@ -336,6 +336,24 @@ workflow("embedded startup, measured size, posters, eviction, and restart", asyn
       `a height of ${sizeReport.height} was reported before the first drawn frame`,
     );
   }
+  // A story that is still arriving reports a new height every few frames, and
+  // the frame used to jump to each one. Once the first real height has landed
+  // the frame eases between them instead, so growth reads as a rise rather
+  // than a staircase — but only after that first one, which is the reserved
+  // height giving way and must not animate.
+  assert.equal(
+    await cdp.evaluate(
+      "document.querySelector('[data-specimen-frame]').hasAttribute('data-grows-smoothly')",
+    ),
+    true,
+    "a measured frame should ease its later growth",
+  );
+  assert.ok(
+    await cdp.evaluate(
+      "parseFloat(getComputedStyle(document.querySelector('[data-specimen-frame]')).transitionDuration) > 0",
+    ),
+    "the eased frame should carry a real transition duration",
+  );
   const settledHeight = await cdp.evaluate(
     "Math.round(document.querySelector('[data-specimen-frame]').getBoundingClientRect().height)",
   );

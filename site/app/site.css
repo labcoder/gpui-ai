@@ -893,6 +893,31 @@ pre.code-plain {
   }
 }
 
+/* A running story grows as its content arrives, and the frame follows. The
+   frame only ever grows — see Demo.tsx — so this eases a rise, never a
+   collapse. Off until the first measurement has landed, so the reserved
+   height gives way to the real one instantly rather than unfurling. */
+.demo-body[data-grows-smoothly] {
+  transition: height 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* The window reveals the story as it grows rather than resizing it: the
+     iframe below is pinned to the target height throughout, so the story
+     inside never lays itself out against an intermediate size. It measures
+     itself and reports what it finds, and the host keeps the tallest
+     report forever — so one transient measurement taken mid-animation
+     would be ratcheted in and never released. */
+  overflow: hidden;
+}
+
+.demo-body[data-grows-smoothly] iframe {
+  height: var(--demo-height);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-body[data-grows-smoothly] {
+    transition: none;
+  }
+}
+
 .demo-body {
   position: relative;
   height: var(--demo-height);

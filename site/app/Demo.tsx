@@ -109,6 +109,7 @@ export function Demo({
   const [status, setStatus] = useState<"starting" | "ready" | "failed">("starting");
   const [scrolls, setScrolls] = useState(false);
   const [measured, setMeasured] = useState<number>();
+  const [growsSmoothly, setGrowsSmoothly] = useState(false);
   const [variant, setVariant] = useState<string>();
   const [wanted, setWanted] = useState<string>();
   const [override, setOverride] = useState<string>(FOLLOW);
@@ -138,6 +139,26 @@ export function Demo({
     // one would size an empty window from a story that is no longer in it.
     setMeasured(undefined);
   }, [src, reloads]);
+
+  // A story that is still arriving reports a new height every few frames —
+  // a chat gains a message, streamed prose wraps one more line — and the
+  // frame jumped to each one. Growing the frame over the same span the
+  // content took to arrive turns a staircase into a rise.
+  //
+  // Not on the first measurement, though: that one is the reserved height
+  // giving way to the real one, and animating it would make every demo on
+  // the page look like it was unfurling. The flag is set a frame after the
+  // first height lands, so the first jump is instant and everything after
+  // it is smooth, and it resets whenever the frame does.
+  const awaitingFirstHeight = measured === undefined;
+  useEffect(() => {
+    if (awaitingFirstHeight) {
+      setGrowsSmoothly(false);
+      return;
+    }
+    const settle = requestAnimationFrame(() => setGrowsSmoothly(true));
+    return () => cancelAnimationFrame(settle);
+  }, [awaitingFirstHeight]);
 
   useEffect(() => {
     if (!src) return;
@@ -360,6 +381,7 @@ export function Demo({
           className="demo-body"
           data-specimen-frame=""
           data-story={story}
+          {...(growsSmoothly ? { "data-grows-smoothly": "" } : {})}
           data-src={demoSrc(story)}
           {...(webgpu === false ? { "data-poster-only": "" } : {})}
           ref={frame}
