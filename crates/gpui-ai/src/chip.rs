@@ -111,6 +111,24 @@ impl Styled for ToolChip {
     }
 }
 
+/// The bordered pill a tool chip wears, whichever branch renders it.
+///
+/// Deliberately not [`crate::status::chip_frame`]: that vocabulary is
+/// borderless and fully round, and this one is bordered at the medium
+/// radius. Whether the two should become one is a visual decision, not a
+/// refactor — until it is made, this at least stops the pill being stated
+/// twice inside one function, where the two copies are what drift.
+fn tool_chip_frame<E: Styled>(element: E, cx: &App) -> E {
+    let tokens = cx.theme().semantic_tokens();
+    element
+        .px(tokens.spacing.sm)
+        .py(tokens.spacing.xxs)
+        .bg(cx.theme().secondary)
+        .border_1()
+        .border_color(cx.theme().border)
+        .rounded(tokens.radius.md)
+}
+
 impl RenderOnce for ToolChip {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -180,13 +198,7 @@ impl RenderOnce for ToolChip {
             .refine_style(&self.style);
 
         if let Some(handler) = self.on_event {
-            composed_button(self.id.clone(), accessibility_label)
-                .px(tokens.spacing.sm)
-                .py(tokens.spacing.xxs)
-                .bg(cx.theme().secondary)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(tokens.radius.md)
+            tool_chip_frame(composed_button(self.id.clone(), accessibility_label), cx)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                 .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -200,16 +212,10 @@ impl RenderOnce for ToolChip {
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
                 .into_any_element()
         } else {
-            content
+            tool_chip_frame(content, cx)
                 .id(self.id)
                 .role(Role::Status)
                 .aria_label(accessibility_label)
-                .px(tokens.spacing.sm)
-                .py(tokens.spacing.xxs)
-                .bg(cx.theme().secondary)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(tokens.radius.md)
                 .into_any_element()
         }
     }

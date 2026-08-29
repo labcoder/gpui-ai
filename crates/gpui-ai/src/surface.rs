@@ -351,6 +351,8 @@ pub(crate) fn icon_button(
 ) -> Button {
     let tokens = cx.theme().semantic_tokens();
     let id = id.into();
+    // One read of the press ramp, shared by the tint and the glyph.
+    let (pressed, fade) = crate::control::press_release_state(&id, window, cx);
     composed_button(id.clone(), accessibility_label)
         .flex()
         .flex_none()
@@ -382,7 +384,6 @@ pub(crate) fn icon_button(
             // The glyph compresses while pressed and eases back on the
             // same release clock as the tint — SVG transforms are free,
             // so the compression costs no extra frames.
-            let (pressed, fade) = crate::control::press_release_state(&id, window, cx);
             let intensity = if pressed { 1.0 } else { fade };
             let scale = 1.0 - 0.03 * intensity;
             gpui::Transformation::scale(gpui::size(scale, scale))

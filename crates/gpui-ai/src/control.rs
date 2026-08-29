@@ -52,16 +52,40 @@ pub(crate) fn press_release_state(
     cx: &mut App,
 ) -> (bool, f32) {
     let pressed = window.use_keyed_state((key.clone(), "pressed"), cx, |_, _| false);
-    let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
     let pressed = *pressed.read(cx);
+    (pressed, press_release_fade(key, window, cx))
+}
+
+/// How much of the release tint is still showing, and nothing else.
+///
+/// A control that has been pressed once keeps a non-zero generation for
+/// the rest of its life, so a guard on the generation alone left every
+/// later render formatting a clock id and sampling a settled channel. The
+/// release time bounds that: past the press spring's own response the
+/// decay is over, and there is nothing to sample.
+fn press_release_fade(key: &ElementId, window: &mut Window, cx: &mut App) -> f32 {
+    let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
+    let released_at = window.use_keyed_state((key.clone(), "press-released-at"), cx, |_, _| {
+        None::<std::time::Instant>
+    });
     let generation = *generation.read(cx);
-    let fade = if generation == 0 {
-        0.0
-    } else {
-        let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
-        1.0 - press_release_progress(clock, window, cx)
-    };
-    (pressed, fade)
+    if generation == 0 {
+        return 0.0;
+    }
+    // Twice the response, because the sampled curve settles within it and
+    // this is a shortcut past sampling, not a replacement for it.
+    let window_of_interest = crate::motion::MotionTokens::read(cx)
+        .press_spring()
+        .response()
+        * 2;
+    let settled = released_at.read(cx).is_none_or(|at| {
+        cx.background_executor().now().saturating_duration_since(at) > window_of_interest
+    });
+    if settled {
+        return 0.0;
+    }
+    let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
+    1.0 - press_release_progress(clock, window, cx)
 }
 
 impl PressReleaseExt for Button {
@@ -74,21 +98,18 @@ impl PressReleaseExt for Button {
     ) -> Self {
         let pressed = window.use_keyed_state((key.clone(), "pressed"), cx, |_, _| false);
         let generation = window.use_keyed_state((key.clone(), "press-generation"), cx, |_, _| 0u64);
-        let fade = {
-            let generation = *generation.read(cx);
-            if generation == 0 {
-                0.0
-            } else {
-                let clock = ElementId::Name(format!("press-release-{key:?}-{generation}").into());
-                1.0 - press_release_progress(clock, window, cx)
-            }
-        };
+        let released_at = window.use_keyed_state((key.clone(), "press-released-at"), cx, |_, _| {
+            None::<std::time::Instant>
+        });
+        let fade = press_release_fade(&key, window, cx);
         let arm = pressed.clone();
         let release = move |window: &mut gpui::Window, cx: &mut App| {
             let was_pressed = *arm.read(cx);
             if was_pressed {
                 arm.update(cx, |pressed, _| *pressed = false);
                 generation.update(cx, |generation, _| *generation += 1);
+                let now = cx.background_executor().now();
+                released_at.update(cx, |released_at, _| *released_at = Some(now));
                 window.refresh();
             }
         };
