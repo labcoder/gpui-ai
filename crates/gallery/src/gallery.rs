@@ -182,12 +182,24 @@ fn height_probe() -> impl IntoElement {
 type VariantSetter = Rc<dyn Fn(usize, &mut App) -> bool>;
 
 thread_local! {
-    static ACTIVE_SWITCHER: RefCell<Option<(usize, VariantSetter)>> = const { RefCell::new(None) };
+    static ACTIVE_SWITCHER: RefCell<Option<RegisteredSwitcher>> = const { RefCell::new(None) };
+}
+
+/// The switcher currently registered, and which story it belongs to.
+///
+/// The slug is what lets a redraw update the index without building a new
+/// setter: a switcher registers every time it draws, and the embed redraws
+/// its one story continuously, so allocating a fresh boxed closure each
+/// frame bought nothing.
+struct RegisteredSwitcher {
+    slug: &'static str,
+    index: usize,
+    apply: VariantSetter,
 }
 
 /// Which state the story on screen is showing, if it offers any.
 pub fn active_variant_index() -> Option<usize> {
-    ACTIVE_SWITCHER.with(|switcher| switcher.borrow().as_ref().map(|(index, _)| *index))
+    ACTIVE_SWITCHER.with(|switcher| switcher.borrow().as_ref().map(|current| current.index))
 }
 
 /// Puts the story on screen into one of the states it offers.
@@ -198,7 +210,7 @@ pub fn set_active_variant(index: usize, cx: &mut App) -> bool {
         switcher
             .borrow()
             .as_ref()
-            .map(|(_, apply)| Rc::clone(apply))
+            .map(|current| Rc::clone(&current.apply))
     }) else {
         return false;
     };
@@ -255,9 +267,8 @@ enum TableStoryState {
     Constrained,
 }
 
-impl TableStoryState {
-    /// Every demonstrated state in switcher order.
-    const ALL: [Self; 7] = [
+impl StoryStates for TableStoryState {
+    const ALL: &'static [Self] = &[
         Self::Populated,
         Self::Loading,
         Self::Error,
@@ -267,8 +278,22 @@ impl TableStoryState {
         Self::Constrained,
     ];
 
-    /// Switcher labels parallel to [`Self::ALL`].
     const LABELS: &'static [(&'static str, &'static str)] = crate::story::TABLE_STORY_VARIANTS;
+}
+
+/// The states one multi-state story switches between.
+///
+/// Implemented by each story's own state enum rather than by a shared enum:
+/// what a table demonstrates and what a composer demonstrates have nothing
+/// in common but the shape. The shape is all this names — the states in
+/// switcher order, the labels parallel to them, and the position lookup the
+/// toolbar needs, which was written out three times before.
+trait StoryStates: Copy + PartialEq + Sized + 'static {
+    /// Every demonstrated state, in the order the switcher offers them.
+    const ALL: &'static [Self];
+
+    /// Switcher labels, parallel to [`Self::ALL`].
+    const LABELS: &'static [(&'static str, &'static str)];
 
     /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
     fn index(self) -> usize {
@@ -289,17 +314,27 @@ fn story_state_switcher<T: 'static>(
 ) -> Stateful<Div> {
     let registered = owner.clone();
     ACTIVE_SWITCHER.with(|switcher| {
-        *switcher.borrow_mut() = Some((
-            active_index,
+        let mut switcher = switcher.borrow_mut();
+        // The same story redrawing only moved its index; the setter it
+        // registered still points at the same entity.
+        if let Some(current) = switcher.as_mut()
+            && current.slug == slug
+        {
+            current.index = active_index;
+            return;
+        }
+        *switcher = Some(RegisteredSwitcher {
+            slug,
+            index: active_index,
             // The entity may be gone — a switcher registers as it draws and
             // nothing unregisters it — so whether the story took the change is
             // the answer, not whether a setter was found.
-            Rc::new(move |index: usize, cx: &mut App| {
+            apply: Rc::new(move |index: usize, cx: &mut App| {
                 registered
                     .update(cx, |story, cx| apply(story, index, cx))
                     .is_ok()
             }) as VariantSetter,
-        ));
+        });
     });
 
     h_flex()
@@ -994,19 +1029,14 @@ enum CommandSearchStoryState {
     NoResults,
 }
 
-impl CommandSearchStoryState {
-    /// Every demonstrated state in switcher order.
-    const ALL: [Self; 3] = [Self::Populated, Self::Empty, Self::NoResults];
+impl StoryStates for CommandSearchStoryState {
+    const ALL: &'static [Self] = &[Self::Populated, Self::Empty, Self::NoResults];
 
-    /// Switcher labels parallel to [`Self::ALL`].
     const LABELS: &'static [(&'static str, &'static str)] =
         crate::story::COMMAND_SEARCH_STORY_VARIANTS;
+}
 
-    /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|kind| *kind == self).unwrap_or(0)
-    }
-
+impl CommandSearchStoryState {
     /// What the heading above the palette says this state is.
     fn heading(self) -> &'static str {
         match self {
@@ -1503,9 +1533,8 @@ enum PromptBarStoryState {
     Gathered,
 }
 
-impl PromptBarStoryState {
-    /// Every demonstrated state in switcher order.
-    const ALL: [Self; 6] = [
+impl StoryStates for PromptBarStoryState {
+    const ALL: &'static [Self] = &[
         Self::Empty,
         Self::Ready,
         Self::Multiline,
@@ -1514,14 +1543,10 @@ impl PromptBarStoryState {
         Self::Gathered,
     ];
 
-    /// Switcher labels parallel to [`Self::ALL`].
     const LABELS: &'static [(&'static str, &'static str)] = crate::story::PROMPT_BAR_STORY_VARIANTS;
+}
 
-    /// Position of this state in [`Self::ALL`] and [`Self::LABELS`].
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|kind| *kind == self).unwrap_or(0)
-    }
-
+impl PromptBarStoryState {
     /// What the heading above the composer says this state is.
     fn heading(self) -> &'static str {
         match self {
@@ -7486,8 +7511,15 @@ mod tests {
         );
     }
 
+    /// The prompt-bar story fits the box it is given.
+    ///
+    /// It used to stack six composers and scroll, and this checked the end
+    /// stayed reachable. One composer at a time fits without scrolling, so
+    /// what is left to check is that it still does — the box carries
+    /// headroom for the model menu to open into, and a story that outgrew
+    /// it would be clipped rather than scrolled.
     #[gpui::test]
-    fn constrained_direct_prompt_bar_story_keeps_its_end_reachable(cx: &mut TestAppContext) {
+    fn the_constrained_prompt_bar_story_fits_its_frame(cx: &mut TestAppContext) {
         cx.update(super::init);
         let gallery_slot = Rc::new(RefCell::new(None));
         let result = gallery_slot.clone();
@@ -7530,7 +7562,7 @@ mod tests {
             .expect("the prompt bar story end marker should remain rendered");
         assert!(
             end.bottom() <= story.bottom(),
-            "{end:?} must fit in {story:?}"
+            "{end:?} must fit in {story:?} — the box is sized for one composer              plus the room its model menu needs to open into"
         );
     }
 
