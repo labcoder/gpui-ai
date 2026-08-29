@@ -422,12 +422,7 @@ fn metric_item(card_id: &SharedString, metric: InsightMetric, cx: &mut App) -> S
         .p(tokens.spacing.sm)
         .bg(cx.theme().muted)
         .rounded(tokens.radius.sm)
-        .child(
-            div()
-                .text_token(tokens.typography.xs)
-                .text_color(cx.theme().muted_foreground)
-                .child(metric.label),
-        )
+        .child(crate::surface::hint(metric.label, cx))
         .child(
             div()
                 .text_token(tokens.typography.md)
@@ -594,12 +589,7 @@ impl RenderOnce for InsightCard {
                     .child(
                         v_flex()
                             .gap(tokens.spacing.xs)
-                            .child(
-                                div()
-                                    .text_token(tokens.typography.xs)
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(page_text),
-                            )
+                            .child(crate::surface::hint(page_text, cx))
                             .child(
                                 div()
                                     .text_token(tokens.typography.lg)

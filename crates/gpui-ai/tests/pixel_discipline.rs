@@ -112,6 +112,13 @@ const EXCEPTIONS: &[Exception] = &[
     Exception {
         file: "sizing.rs",
         expression: "px(12.)",
+        context: "STATUS_INDICATOR_SLOT",
+        category: Category::ThemeDefinition,
+        rationale: "the status indicator's own box; pixels feed the token",
+    },
+    Exception {
+        file: "sizing.rs",
+        expression: "px(12.)",
         context: "control_padding_sm",
         category: Category::ThemeDefinition,
         rationale: "the size policy's own default control paddings; pixels feed the token",

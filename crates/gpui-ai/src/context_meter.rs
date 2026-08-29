@@ -372,13 +372,7 @@ impl RenderOnce for ContextMeter {
                     v_flex()
                         .gap(tokens.spacing.xs)
                         .min_w(tokens.spacing.xxl * 5.0)
-                        .child(
-                            div()
-                                .text_token(tokens.typography.sm)
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(cx.theme().foreground)
-                                .child(label.clone()),
-                        )
+                        .child(crate::surface::subtitle(label.clone(), cx))
                         .child(
                             div()
                                 .h(tokens.spacing.xs)

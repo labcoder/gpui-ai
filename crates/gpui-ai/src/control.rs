@@ -128,6 +128,41 @@ impl PressReleaseExt for Button {
 /// radius from the theme. An application that widens
 /// [`SizeTokens::control_padding_sm`](crate::sizing::SizeTokens::control_padding_sm)
 /// widens every one of them at once.
+/// The quiet pressable surface every low-chrome control shares.
+///
+/// A transparent border reserving the focus ring, the accent ramp — hover
+/// tints, press deepens to the full accent, release decays through the
+/// shared spring — and the ring on keyboard focus alone. The radius is
+/// stated once and reaches the fill, the ring, and the decay overlay,
+/// where each site used to state it twice and could drift.
+pub(crate) trait QuietSurfaceExt: Sized {
+    fn quiet_press_surface(
+        self,
+        key: ElementId,
+        radius: gpui::Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self;
+}
+
+impl QuietSurfaceExt for Button {
+    fn quiet_press_surface(
+        self,
+        key: ElementId,
+        radius: gpui::Pixels,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
+        self.border_1()
+            .border_color(cx.theme().transparent)
+            .rounded(radius)
+            .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
+            .active(|style| style.bg(cx.theme().accent))
+            .focus_visible(|style| style.border_color(cx.theme().ring))
+            .press_release(key, radius, window, cx)
+    }
+}
+
 pub(crate) trait ControlMetricsExt: Sized {
     /// Restates this control's height, horizontal padding, and radius from
     /// the crate's own policy. Apply it last, after the variant.

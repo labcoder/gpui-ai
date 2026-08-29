@@ -1,8 +1,10 @@
 //! Agent plan display: a to-do list with live completion status.
 
-use crate::control::{PressReleaseExt as _, composed_button};
+use crate::control::QuietSurfaceExt as _;
+use crate::control::composed_button;
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state};
+use crate::surface::CardFrameExt as _;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
@@ -204,10 +206,7 @@ impl RenderOnce for TodoList {
             .aria_label(accessibility_label)
             .p(tokens.spacing.md)
             .gap(tokens.spacing.xs)
-            .bg(tokens.colors.surface)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.lg)
+            .card_frame(cx)
             .when_some(self.title, |this, title| {
                 this.child(
                     h_flex()
@@ -330,13 +329,7 @@ impl RenderOnce for TodoList {
                         .aria_toggled(accessibility_toggled)
                         .px(tokens.spacing.xs)
                         .py(tokens.spacing.xxs)
-                        .border_1()
-                        .border_color(cx.theme().transparent)
-                        .rounded(tokens.radius.sm)
-                        .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                        .active(|style| style.bg(cx.theme().accent))
-                        .focus_visible(|style| style.border_color(cx.theme().ring))
-                        .press_release(
+                        .quiet_press_surface(
                             ElementId::from((ElementId::from(item.id.clone()), "press")),
                             tokens.radius.sm,
                             window,

@@ -7,8 +7,9 @@
 //! full trace stays one click (or Enter) away. Applications may override the
 //! automatic policy with [`Thinking::open`].
 
+use crate::control::QuietSurfaceExt as _;
 use crate::{
-    control::{PressReleaseExt as _, composed_button},
+    control::composed_button,
     handlers::Handler,
     motion::{ArrivalRoster, MotionTokens, Shimmer, disclosure_progress, reveal},
     stream::{ProgressState, Progressive},
@@ -376,13 +377,7 @@ impl RenderOnce for Thinking {
                 .aria_expanded(open)
                 .px(tokens.spacing.xs)
                 .py(tokens.spacing.xxs)
-                .border_1()
-                .border_color(cx.theme().transparent)
-                .rounded(tokens.radius.sm)
-                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                .active(|style| style.bg(cx.theme().accent))
-                .focus_visible(|style| style.border_color(cx.theme().ring))
-                .press_release(
+                .quiet_press_surface(
                     ElementId::from((root_id.clone(), "toggle-press")),
                     tokens.radius.sm,
                     window,

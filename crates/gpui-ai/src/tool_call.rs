@@ -12,6 +12,7 @@
 
 use crate::ButtonLabelExt as _;
 use crate::control::ControlMetricsExt as _;
+use crate::control::QuietSurfaceExt as _;
 use crate::cues::{self, Cue};
 use crate::{
     code_block::CodeBlock,
@@ -325,7 +326,7 @@ impl RenderOnce for ToolCall {
                 // change never nudges the name sideways.
                 div()
                     .flex_none()
-                    .size(tokens.spacing.md)
+                    .size(crate::sizing::SizeTokens::read(cx).slot_xs())
                     .flex()
                     .items_center()
                     .justify_center()
@@ -787,13 +788,7 @@ impl RenderOnce for ToolGroup {
                     .aria_expanded(open)
                     .px(tokens.spacing.xs)
                     .py(tokens.spacing.xxs)
-                    .border_1()
-                    .border_color(cx.theme().transparent)
-                    .rounded(tokens.radius.md)
-                    .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                    .active(|style| style.bg(cx.theme().accent))
-                    .focus_visible(|style| style.border_color(cx.theme().ring))
-                    .press_release(
+                    .quiet_press_surface(
                         ElementId::from((root_id.clone(), "toggle")),
                         tokens.radius.md,
                         window,

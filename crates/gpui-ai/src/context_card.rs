@@ -2,6 +2,7 @@
 
 use crate::control::composed_button;
 use crate::handlers::SharedHandler;
+use crate::surface::CardFrameExt as _;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
@@ -158,10 +159,7 @@ impl RenderOnce for ContextCard {
                 .items_start()
                 .justify_start()
                 .p(tokens.spacing.lg)
-                .bg(tokens.colors.surface)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(tokens.radius.lg)
+                .card_frame(cx)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                 .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -182,10 +180,7 @@ impl RenderOnce for ContextCard {
                 })
                 .w_full()
                 .p(tokens.spacing.lg)
-                .bg(tokens.colors.surface)
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded(tokens.radius.lg)
+                .card_frame(cx)
                 .refine_style(&self.style)
                 .into_any_element()
         }

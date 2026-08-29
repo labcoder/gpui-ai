@@ -16,8 +16,31 @@ use gpui::{
 use gpui_base::Button;
 use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, v_flex};
 
-/// The standard card: surface background, hairline border, large radius,
-/// panel padding, and a medium content gap.
+/// The card's own surface: background, hairline border, and the card
+/// radius — the three properties that make a thing look like a card,
+/// without the layout a particular card wants.
+///
+/// Most of the library's cards are not [`card`]: they carry their own
+/// padding and gaps, or they are buttons, or they are scroll containers.
+/// They stated these three lines each instead, which is how a radius
+/// change becomes a ten-file change.
+pub(crate) trait CardFrameExt: Sized {
+    /// Paints this element as a card: surface, hairline border, card radius.
+    fn card_frame(self, cx: &App) -> Self;
+}
+
+impl<E: gpui::Styled + Sized> CardFrameExt for E {
+    fn card_frame(self, cx: &App) -> Self {
+        let tokens = cx.theme().semantic_tokens();
+        self.bg(tokens.colors.surface)
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(tokens.radius.lg)
+    }
+}
+
+/// The standard card: [`card_frame`] plus panel padding and a medium
+/// content gap, for a card whose layout is a plain vertical stack.
 pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     let tokens = cx.theme().semantic_tokens();
     v_flex()
@@ -26,10 +49,7 @@ pub(crate) fn card(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
         .min_w_0()
         .gap(tokens.spacing.md)
         .p(tokens.spacing.lg)
-        .bg(tokens.colors.surface)
-        .border_1()
-        .border_color(cx.theme().border)
-        .rounded(tokens.radius.lg)
+        .card_frame(cx)
 }
 
 /// Loading rows that mirror the layout they stand in for: quiet muted
@@ -95,7 +115,7 @@ pub(crate) fn hairline(cx: &App) -> gpui::Hsla {
 pub(crate) fn empty_state(
     icon: impl IconNamed,
     title: impl Into<SharedString>,
-    hint: Option<SharedString>,
+    note: Option<SharedString>,
     cx: &App,
 ) -> Div {
     let tokens = cx.theme().semantic_tokens();
@@ -115,14 +135,7 @@ pub(crate) fn empty_state(
                 .text_color(cx.theme().foreground)
                 .child(title.into()),
         )
-        .when_some(hint, |this, hint| {
-            this.child(
-                div()
-                    .text_token(tokens.typography.xs)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(hint),
-            )
-        })
+        .when_some(note, |this, note| this.child(hint(note, cx)))
 }
 
 /// The nesting rule for a rounded surface inside a rounded container:
@@ -260,18 +273,39 @@ pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
         .child(text.into())
 }
 
+/// Quiet supporting text: extra-small, muted.
+///
+/// The most-used text role in the library, and the one that had no name —
+/// a domain beside a title, a count beside a label, a hint under a field.
+/// [`meta`] is its monospace sibling for values a reader may compare.
+pub(crate) fn hint(text: impl Into<SharedString>, cx: &App) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    div()
+        .text_token(tokens.typography.xs)
+        .text_color(cx.theme().muted_foreground)
+        .child(text.into())
+}
+
+/// A heading inside a card: small, semibold, in the foreground ink.
+///
+/// Distinct from [`title`], which is a card's own name at the medium size;
+/// this is the heading of a section within one.
+pub(crate) fn subtitle(text: impl Into<SharedString>, cx: &App) -> Div {
+    let tokens = cx.theme().semantic_tokens();
+    div()
+        .text_token(tokens.typography.sm)
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(cx.theme().foreground)
+        .child(text.into())
+}
+
 /// The trailing unit on a numeric field — "px", "%", "ms".
 ///
 /// A bare string handed to an input's suffix inherits the field's own ink
 /// and size, so the unit reads as part of the number. This gives every
 /// unit in the library one quiet voice instead.
 pub(crate) fn field_unit(unit: impl Into<SharedString>, cx: &App) -> Div {
-    let tokens = cx.theme().semantic_tokens();
-    div()
-        .flex_none()
-        .text_token(tokens.typography.xs)
-        .text_color(cx.theme().muted_foreground)
-        .child(unit.into())
+    hint(unit, cx).flex_none()
 }
 
 /// A favicon-style badge: one uppercase initial on a primary tint. Sources,

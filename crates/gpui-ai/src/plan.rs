@@ -8,9 +8,10 @@
 //! snapshot.
 
 use crate::control::ControlMetricsExt as _;
+use crate::control::QuietSurfaceExt as _;
 use crate::{
     ButtonLabelExt as _,
-    control::{PressReleaseExt as _, composed_button},
+    control::composed_button,
     cues::{self, Cue},
     handlers::SharedHandler,
     motion::{ArrivalRoster, MotionTokens, acknowledged_state},
@@ -602,12 +603,7 @@ fn render_step(
                 .child(step.title.clone()),
         )
         .when_some(step.detail.clone(), |this, detail| {
-            this.child(
-                div()
-                    .text_token(tokens.typography.xs)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(detail),
-            )
+            this.child(crate::surface::hint(detail, cx))
         });
 
     let row = match handler {
@@ -623,13 +619,7 @@ fn render_step(
                 .w_full()
                 .min_w_0()
                 .gap(tokens.spacing.sm)
-                .rounded(tokens.radius.sm)
-                .border_1()
-                .border_color(cx.theme().transparent)
-                .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
-                .active(|style| style.bg(cx.theme().accent))
-                .focus_visible(|style| style.border_color(cx.theme().ring))
-                .press_release(
+                .quiet_press_surface(
                     ElementId::from((step_id, "press")),
                     tokens.radius.sm,
                     window,

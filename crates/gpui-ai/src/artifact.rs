@@ -12,6 +12,7 @@
 
 use crate::control::ControlMetricsExt as _;
 use crate::scrolling::PolicyScrollbarExt as _;
+use crate::surface::CardFrameExt as _;
 use crate::{
     ButtonLabelExt as _,
     code_block::CodeBlock,
@@ -654,10 +655,7 @@ impl RenderOnce for ArtifactPanel {
             .size_full()
             .min_w_0()
             .min_h_0()
-            .bg(tokens.colors.surface)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.lg)
+            .card_frame(cx)
             .overflow_hidden()
             .child(header)
             .children(tabs)

@@ -3,6 +3,7 @@
 use crate::control::{PressReleaseExt as _, composed_button};
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens};
+use crate::surface::CardFrameExt as _;
 use crate::surface::{initial_badge, initial_of};
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
@@ -162,10 +163,7 @@ impl RenderOnce for SearchResults {
             .id(self.id)
             .role(Role::Search)
             .aria_label(header.clone())
-            .bg(tokens.colors.surface)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.lg)
+            .card_frame(cx)
             .overflow_hidden()
             .child(
                 h_flex()

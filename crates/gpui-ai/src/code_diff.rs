@@ -13,6 +13,7 @@
 
 use crate::control::ControlMetricsExt as _;
 use crate::motion::{acknowledged_state, disclosure_progress};
+use crate::surface::CardFrameExt as _;
 use crate::{
     handlers::SharedHandler,
     status::{StatusBadge, StatusTone},
@@ -646,10 +647,7 @@ impl RenderOnce for CodeDiff {
             .debug_selector(move || format!("code-diff-{path_debug}"))
             .w_full()
             .min_w_0()
-            .bg(tokens.colors.surface)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.lg)
+            .card_frame(cx)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {

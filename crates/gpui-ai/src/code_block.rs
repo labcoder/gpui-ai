@@ -1,6 +1,7 @@
 //! Syntax-highlighted code blocks with streaming reveal.
 
 use crate::stream::{ProgressState, StreamedContent};
+use crate::surface::CardFrameExt as _;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
     App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role,
@@ -106,10 +107,7 @@ impl RenderOnce for CodeBlock {
             .when_some(accessibility_description, |this, description| {
                 this.aria_description(description)
             })
-            .bg(tokens.colors.surface)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(tokens.radius.lg)
+            .card_frame(cx)
             .overflow_hidden()
             .child(
                 h_flex()

@@ -315,7 +315,7 @@ impl RenderOnce for StatusBadge {
         let indicator = div()
             .debug_selector(move || format!("status-badge-indicator-{indicator_label}"))
             .flex_none()
-            .size(tokens.spacing.md)
+            .size(crate::sizing::SizeTokens::read(cx).slot_xs())
             .flex()
             .items_center()
             .justify_center()
@@ -380,7 +380,7 @@ impl RenderOnce for StatusBadge {
         // 0.4.0 feel review saw. The leading inset absorbs the slack so
         // both ends read the same, and the slot still holds the label
         // still when the spinner takes the dot's place.
-        let slot_slack = (tokens.spacing.md - INDICATOR_DOT) / 2.;
+        let slot_slack = (crate::sizing::SizeTokens::read(cx).slot_xs() - INDICATOR_DOT) / 2.;
         chip_frame(color, ChipStrength::Tinted, cx)
             .id(self.id)
             .role(Role::Status)

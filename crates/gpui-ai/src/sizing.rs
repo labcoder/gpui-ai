@@ -22,6 +22,14 @@
 
 use gpui::{App, Global, Pixels, px};
 
+/// A status indicator's own box: wide enough for the extra-small spinner
+/// that replaces the dot, and no wider.
+///
+/// Named rather than written inline because the policy's defaults share a
+/// struct literal, and two identical literals inside one cannot be told
+/// apart by the raw-pixel gate's own reckoning.
+const STATUS_INDICATOR_SLOT: Pixels = px(12.);
+
 /// The crate's size policy: three control heights and two glyph slots.
 ///
 /// `control` heights size pressable controls — `sm` for compact chips and
@@ -39,6 +47,7 @@ pub struct SizeTokens {
     control_padding_sm: Pixels,
     control_padding_md: Pixels,
     control_padding_lg: Pixels,
+    slot_xs: Pixels,
     slot_sm: Pixels,
     slot_md: Pixels,
 }
@@ -69,6 +78,7 @@ impl SizeTokens {
         control_padding_sm: px(12.),
         control_padding_md: px(14.),
         control_padding_lg: px(18.),
+        slot_xs: STATUS_INDICATOR_SLOT,
         slot_sm: px(16.),
         slot_md: px(20.),
     };
@@ -133,6 +143,17 @@ impl SizeTokens {
     /// Replaces [`control_padding_lg`](Self::control_padding_lg).
     pub const fn with_control_padding_lg(mut self, padding: Pixels) -> Self {
         self.control_padding_lg = padding;
+        self
+    }
+
+    /// The status-indicator box: a dot, or the spinner that replaces it.
+    pub const fn slot_xs(&self) -> Pixels {
+        self.slot_xs
+    }
+
+    /// Replaces the [`slot_xs`](Self::slot_xs) box.
+    pub const fn with_slot_xs(mut self, size: Pixels) -> Self {
+        self.slot_xs = size;
         self
     }
 
@@ -218,6 +239,7 @@ mod tests {
         let tokens = SizeTokens::DEFAULT;
         assert!(tokens.control_sm() < tokens.control_md());
         assert!(tokens.control_md() < tokens.control_lg());
+        assert!(tokens.slot_xs() < tokens.slot_sm());
         assert!(tokens.slot_sm() < tokens.slot_md());
         assert!(tokens.control_padding_sm() < tokens.control_padding_lg());
     }

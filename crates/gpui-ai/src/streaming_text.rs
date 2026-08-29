@@ -8,7 +8,7 @@ use crate::{
     surface::initial_badge,
 };
 use gpui::{
-    AnyElement, App, Axis, ClickEvent, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    AnyElement, App, Axis, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
     ParentElement as _, RenderOnce, Role, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
@@ -541,13 +541,7 @@ fn citation_preview(title: SharedString, destination: SharedString, cx: &mut App
     v_flex()
         .gap(tokens.spacing.xxs)
         .max_w(tokens.spacing.xxl * 9.0)
-        .child(
-            div()
-                .text_token(tokens.typography.sm)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(cx.theme().foreground)
-                .child(title),
-        )
+        .child(crate::surface::subtitle(title, cx))
         .child(
             div()
                 .text_token(tokens.typography.xs)
