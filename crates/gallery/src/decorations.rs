@@ -43,6 +43,12 @@ pub(crate) enum DecorationKind {
     /// The photograph as it is, with nothing between it and the content.
     #[default]
     Photo,
+    /// Real frosted glass: the backdrop blurred, lined up with what is behind.
+    Frosted,
+    /// Translucency with no blur — the cheap look, named for what it is.
+    Tint,
+    /// Coloured light orbiting the frame, painted by the parent and the slot.
+    Aurora,
     /// The same photograph under a fixed dark scrim, so the text is readable.
     Scrim,
     /// A photograph reduced to four inks by an ordered dither.
@@ -64,6 +70,9 @@ pub(crate) enum DecorationKind {
 impl DecorationKind {
     pub(crate) const ALL: &'static [Self] = &[
         Self::Photo,
+        Self::Frosted,
+        Self::Tint,
+        Self::Aurora,
         Self::Scrim,
         Self::Dither,
         Self::PopArt,
@@ -76,6 +85,9 @@ impl DecorationKind {
 
     pub(crate) const LABELS: &'static [(&'static str, &'static str)] = &[
         ("photo", "Photo"),
+        ("frosted", "Frosted glass"),
+        ("tint", "Tint"),
+        ("aurora", "Aurora"),
         ("scrim", "Photo + scrim"),
         ("dither", "Dither"),
         ("pop-art", "Pop art"),
@@ -95,6 +107,21 @@ impl DecorationKind {
         match self {
             Self::Photo => {
                 "The photograph with nothing between it and the words. Its own                  colours, not the theme's — a decoration is the application's,                  and nothing here has to follow the palette. Also the reason                  the next one exists."
+            }
+            Self::Frosted => {
+                "Actual frosted glass: the backdrop blurred on the CPU and \
+                 placed by the same numbers as the sharp copy behind it, so \
+                 the two line up. GPUI has no backdrop filter — this works \
+                 because the parent knows where both are."
+            }
+            Self::Tint => {
+                "Translucency and an edge highlight, no blur. Cheaper, honest \
+                 about it, and what most panels actually need."
+            }
+            Self::Aurora => {
+                "Coloured light travelling the frame. The parent paints the \
+                 half that bleeds outside, the slot paints the half that \
+                 falls inside — the slot clips, so neither could do it alone."
             }
             Self::Scrim => {
                 "The same photograph under a fixed dark scrim — a flat black                  at sixty per cent, chosen by hand and identical in every                  theme. The commonest thing anyone will actually want."
@@ -133,6 +160,9 @@ impl DecorationKind {
     pub(crate) fn build(self, ripple: f32, cx: &App) -> Decoration {
         match self {
             Self::Photo => Decoration::behind(photograph()),
+            Self::Frosted => Decoration::behind(frosted_panel(cx)),
+            Self::Tint => Decoration::behind(tint_panel(cx)),
+            Self::Aurora => Decoration::behind(aurora_inside(cx)),
             Self::Scrim => Decoration::behind(
                 div()
                     .size_full()
@@ -173,20 +203,127 @@ struct Photo {
     width: u32,
     height: u32,
     luminance: Vec<u8>,
+    /// Straight RGB, kept for the one decoration that blurs rather than
+    /// quantises: frosted glass is the picture out of focus, and a tone map
+    /// of it is a different thing entirely.
+    rgb: Vec<u8>,
 }
+
+/// The size the photograph is drawn at wherever it appears as a backdrop.
+///
+/// Fixed, and public to the story, because the glass decoration only lines up
+/// with what is behind it if both are placed from the same numbers. See
+/// [`BACKDROP`].
+pub(crate) const BACKDROP: gpui::Size<f32> = gpui::Size {
+    width: 560.0,
+    height: 320.0,
+};
+
+/// The decorated card's size inside the backdrop.
+pub(crate) const CARD: gpui::Size<f32> = gpui::Size {
+    width: 420.0,
+    height: 168.0,
+};
+
+/// Where the card sits inside the backdrop.
+///
+/// The blurred copy is shifted by exactly this, which is the only reason it
+/// lines up with the sharp one.
+pub(crate) const CARD_INSET: gpui::Size<f32> = gpui::Size {
+    width: (BACKDROP.width - CARD.width) / 2.0,
+    height: (BACKDROP.height - CARD.height) / 2.0,
+};
 
 fn photo() -> &'static Photo {
     static PHOTO: OnceLock<Photo> = OnceLock::new();
     PHOTO.get_or_init(|| {
         let decoded = image::load_from_memory(include_bytes!("../assets/carina-nebula.jpg"))
             .expect("the bundled photograph must decode")
-            .to_luma8();
+            .to_rgb8();
         Photo {
             width: decoded.width(),
             height: decoded.height(),
-            luminance: decoded.into_raw(),
+            luminance: image::DynamicImage::ImageRgb8(decoded.clone())
+                .to_luma8()
+                .into_raw(),
+            rgb: decoded.into_raw(),
         }
     })
+}
+
+/// How far the frosted decoration blurs the picture behind it, in pixels.
+const FROST_RADIUS: usize = 14;
+
+/// The photograph out of focus, as a texture that can be drawn behind a
+/// translucent panel.
+///
+/// Three box blurs, which is the usual stand-in for a Gaussian and is what
+/// makes this cheap enough to do on the CPU at all. Done once and cached: it
+/// does not depend on the theme, so unlike the quantised treatments it never
+/// needs redoing.
+fn frosted() -> Arc<RenderImage> {
+    static FROSTED: OnceLock<Arc<RenderImage>> = OnceLock::new();
+    Arc::clone(FROSTED.get_or_init(|| {
+        let photo = photo();
+        let (width, height) = (photo.width as usize, photo.height as usize);
+        let mut channels = photo.rgb.clone();
+        for _ in 0..3 {
+            box_blur(&mut channels, width, height, FROST_RADIUS, true);
+            box_blur(&mut channels, width, height, FROST_RADIUS, false);
+        }
+        let mut buffer = ImageBuffer::new(photo.width, photo.height);
+        for (index, pixel) in channels.as_chunks::<3>().0.iter().enumerate() {
+            buffer.put_pixel(
+                index as u32 % photo.width,
+                index as u32 / photo.width,
+                // BGRA, as everywhere `RenderImage` is built by hand.
+                ImageRgba([pixel[2], pixel[1], pixel[0], 255]),
+            );
+        }
+        Arc::new(RenderImage::new([Frame::new(buffer)]))
+    }))
+}
+
+/// One separable box-blur pass over an RGB buffer, in place.
+///
+/// A running sum rather than a window average, so the cost is one add and one
+/// subtract per pixel regardless of radius — the difference between a blur
+/// that is cheap at fourteen pixels and one that is not.
+fn box_blur(data: &mut [u8], width: usize, height: usize, radius: usize, horizontal: bool) {
+    let (lanes, span) = if horizontal {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    let stride = if horizontal { 3 } else { width * 3 };
+    let mut lane = vec![0u8; span * 3];
+    for index in 0..lanes {
+        let base = if horizontal {
+            index * width * 3
+        } else {
+            index * 3
+        };
+        for step in 0..span {
+            let at = base + step * stride;
+            lane[step * 3..step * 3 + 3].copy_from_slice(&data[at..at + 3]);
+        }
+        for channel in 0..3 {
+            let mut sum = 0u32;
+            let window = radius * 2 + 1;
+            for step in 0..=radius.min(span - 1) {
+                sum += u32::from(lane[step * 3 + channel]);
+            }
+            sum += u32::from(lane[channel]) * radius as u32;
+            for step in 0..span {
+                let at = base + step * stride;
+                data[at + channel] = (sum / window as u32) as u8;
+                let leaving = step.saturating_sub(radius);
+                let arriving = (step + radius + 1).min(span - 1);
+                sum += u32::from(lane[arriving * 3 + channel]);
+                sum -= u32::from(lane[leaving * 3 + channel]);
+            }
+        }
+    }
 }
 
 /// The classic 8x8 ordered-dither threshold matrix, as sixty-fourths.
@@ -236,7 +373,7 @@ thread_local! {
 ///
 /// No quantising and no cache: GPUI decodes and holds this one itself, which
 /// is all an application needs when it is not processing the pixels.
-fn photograph() -> impl IntoElement {
+fn photograph() -> gpui::Img {
     img(Arc::new(gpui::Image::from_bytes(
         gpui::ImageFormat::Jpeg,
         include_bytes!("../assets/carina-nebula.jpg").to_vec(),
@@ -353,6 +490,255 @@ fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba) -> Arc<RenderImage> 
         );
     }
     Arc::new(RenderImage::new([Frame::new(buffer)]))
+}
+
+/// Whether this state needs the story to paint a backdrop behind the card.
+///
+/// The frosted panel is only frosted glass if there is something behind it to
+/// be out of focus, and it only lines up if the story places that something
+/// from [`BACKDROP`] and [`CARD_INSET`].
+pub(crate) fn needs_backdrop(kind: DecorationKind) -> bool {
+    matches!(
+        kind,
+        DecorationKind::Frosted | DecorationKind::Tint | DecorationKind::Aurora
+    )
+}
+
+/// The sharp photograph, at the size the blurred copy is placed against.
+pub(crate) fn backdrop() -> impl IntoElement {
+    div()
+        .absolute()
+        .inset_0()
+        .child(photograph().w(px(BACKDROP.width)).h(px(BACKDROP.height)))
+}
+
+/// The blurred backdrop, placed so it lines up with the sharp one behind.
+///
+/// This is the whole trick, and it is worth being plain about why it works.
+/// GPUI has no backdrop filter: an element cannot ask for what is behind it.
+/// What it can do is draw a blurred copy of a backdrop the application already
+/// has — and if the copy is drawn at the same size and offset as the original,
+/// the result is indistinguishable from a real one, because it is the same
+/// pixels out of focus.
+///
+/// The offset is the catch. This decoration is clipped to the component, and
+/// `inset_0` inside a card is not `inset_0` inside the story behind it, so the
+/// two only agree if the parent places both from the same numbers. It does:
+/// see [`BACKDROP`] and the story's stage. That is also the honest limit — it
+/// works for a backdrop the application can rasterise and position, not for
+/// arbitrary live content underneath.
+fn frosted_panel(cx: &App) -> impl IntoElement {
+    let ground = cx.theme().background;
+    div()
+        .size_full()
+        .child(
+            img(frosted())
+                .absolute()
+                .left(px(-CARD_INSET.width))
+                .top(px(-CARD_INSET.height))
+                .w(px(BACKDROP.width))
+                .h(px(BACKDROP.height)),
+        )
+        // Frost is not only blur: a little of the panel's own ground, and a
+        // lit top edge where the light catches the bevel.
+        .child(div().absolute().inset_0().bg(ground.opacity(0.45)))
+        .child(edge_light(cx))
+}
+
+/// Translucency with no blur at all.
+///
+/// The same panel treatment with the blurred copy left out, so the two states
+/// next to each other show exactly what the blur is worth.
+fn tint_panel(cx: &App) -> impl IntoElement {
+    div()
+        .size_full()
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .bg(cx.theme().background.opacity(0.55)),
+        )
+        .child(edge_light(cx))
+}
+
+/// The lit top edge that makes a translucent panel read as a surface.
+fn edge_light(cx: &App) -> impl IntoElement {
+    div().absolute().inset_0().bg(linear_gradient(
+        180.0,
+        linear_color_stop(cx.theme().foreground.opacity(0.14), 0.0),
+        linear_color_stop(cx.theme().foreground.opacity(0.0), 0.22),
+    ))
+}
+
+/// The colours the aurora cycles through, in order.
+const AURORA: [Hsla; 4] = [
+    Hsla {
+        h: 0.45,
+        s: 0.85,
+        l: 0.60,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.62,
+        s: 0.85,
+        l: 0.62,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.80,
+        s: 0.80,
+        l: 0.65,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.95,
+        s: 0.85,
+        l: 0.66,
+        a: 1.0,
+    },
+];
+
+/// Where a light sits on the frame at `phase`, as a fraction of each edge.
+///
+/// The perimeter walked as one loop, so a light travels corner to corner at an
+/// even pace instead of jumping between edges.
+fn on_perimeter(phase: f32, width: f32, height: f32) -> (f32, f32) {
+    let perimeter = (width + height) * 2.0;
+    let along = phase.rem_euclid(1.0) * perimeter;
+    if along < width {
+        (along, 0.0)
+    } else if along < width + height {
+        (width, along - width)
+    } else if along < width * 2.0 + height {
+        (width - (along - width - height), height)
+    } else {
+        (0.0, height - (along - width * 2.0 - height))
+    }
+}
+
+/// A soft round glow, as an image.
+///
+/// GPUI has no radial gradient, and the obvious substitute — a big blurred
+/// box-shadow on a transparent circle — paints the silhouette blurred, which
+/// is a filled glow and very nearly right. Very nearly: at these sizes its
+/// shader leaves a faint ring at the blur's edge, and four of them overlapping
+/// on a dark stage draws visible arcs. A sprite has no such edge, costs one
+/// small rasterisation per colour for the life of the process, and gives the
+/// falloff curve to choose rather than inherit.
+fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
+    thread_local! {
+        static SPRITES: RefCell<Vec<(u32, Arc<RenderImage>)>> = const { RefCell::new(Vec::new()) };
+    }
+    const SIZE: u32 = 128;
+    let rgba = Rgba::from(colour);
+    let key = packed(rgba);
+    SPRITES.with(|sprites| {
+        let mut sprites = sprites.borrow_mut();
+        if let Some((_, sprite)) = sprites.iter().find(|(cached, _)| *cached == key) {
+            return Arc::clone(sprite);
+        }
+        let mut buffer = ImageBuffer::new(SIZE, SIZE);
+        let centre = f32::from(SIZE as u16) / 2.0;
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                let dx = (x as f32 + 0.5 - centre) / centre;
+                let dy = (y as f32 + 0.5 - centre) / centre;
+                // Smoothstep on the radius: no hard edge at the rim, and a
+                // shoulder near the centre so the light has a core.
+                let distance = (dx * dx + dy * dy).sqrt().min(1.0);
+                // Cubed rather than smoothstepped: a small bright core with
+                // a long faint tail, which is what a light looks like.
+                // Smoothstep holds half its alpha out to half its radius and
+                // reads as a coloured ball with an edge.
+                let fade = 1.0 - distance;
+                let alpha = fade * fade * fade;
+                // Premultiplied. `RenderImage` is composited as premultiplied
+                // BGRA, so straight alpha renders every partly transparent
+                // pixel darker than it should be — which draws a dark ring at
+                // exactly the radius where the falloff passes through the
+                // middle, and is visible as an outline around each light.
+                buffer.put_pixel(
+                    x,
+                    y,
+                    ImageRgba([
+                        (rgba.b * alpha * 255.0) as u8,
+                        (rgba.g * alpha * 255.0) as u8,
+                        (rgba.r * alpha * 255.0) as u8,
+                        (alpha * 255.0) as u8,
+                    ]),
+                );
+            }
+        }
+        let sprite = Arc::new(RenderImage::new([Frame::new(buffer)]));
+        sprites.push((key, Arc::clone(&sprite)));
+        sprite
+    })
+}
+
+/// One soft coloured light, centred on a point.
+///
+/// An outer shadow on a transparent element is the silhouette blurred and
+/// drawn behind it — a filled glow, which is wrong for a wavefront and exactly
+/// right for this.
+fn aurora_light(x: f32, y: f32, colour: Hsla, size: f32, alpha: f32) -> gpui::Div {
+    div()
+        .absolute()
+        .left(px(x - size / 2.0))
+        .top(px(y - size / 2.0))
+        .size(px(size))
+        .opacity(alpha)
+        .child(img(glow_sprite(colour)).size(px(size)))
+}
+
+/// The half of the aurora that falls inside the component.
+///
+/// Clipped to the component's shape by the slot, which is what keeps it off
+/// the corners. The other half is [`aurora_around`], and neither is the whole
+/// effect.
+fn aurora_inside(cx: &App) -> impl IntoElement {
+    let _ = cx;
+    decoration::animated("aurora-inside", Duration::from_millis(4200), |delta| {
+        div()
+            .size_full()
+            .children(AURORA.iter().enumerate().map(move |(index, colour)| {
+                let phase = delta + index as f32 / AURORA.len() as f32;
+                let (x, y) = on_perimeter(phase, CARD.width, CARD.height);
+                aurora_light(x, y, *colour, 170.0, 0.9)
+            }))
+    })
+}
+
+/// The half of the aurora that bleeds outside the component.
+///
+/// Drawn by the parent, because the decoration slot clips to the component and
+/// a glow that leaves its edge cannot come from inside it. An application owns
+/// the layout around its own components, so this is where it belongs — and the
+/// pair of them is the answer to how far the slot reaches.
+pub(crate) fn aurora_around() -> impl IntoElement {
+    // Absolute here, not at the call site: `decoration::animated` returns an
+    // in-flow `div().size_full()`, which is right inside the slot — the slot
+    // positions it — and wrong out here, where it is a sibling of the
+    // component and would take layout space from it.
+    div().absolute().inset_0().child(decoration::animated(
+        "aurora-around",
+        Duration::from_millis(4200),
+        |delta| {
+            div()
+                .absolute()
+                .inset_0()
+                .children(AURORA.iter().enumerate().map(move |(index, colour)| {
+                    let phase = delta + index as f32 / AURORA.len() as f32;
+                    let (x, y) = on_perimeter(phase, CARD.width, CARD.height);
+                    aurora_light(
+                        x + CARD_INSET.width,
+                        y + CARD_INSET.height,
+                        *colour,
+                        210.0,
+                        0.8,
+                    )
+                }))
+        },
+    ))
 }
 
 /// Dots on a grid whose size breathes, so the field reads as a texture that

@@ -2153,8 +2153,8 @@ impl Render for DecorationsStory {
                 kind.index(),
                 Self::set_active_state,
             ))
-            .child(
-                ApprovalCard::new("decorated-gate", "Publish the launch plan?")
+            .child({
+                let card = ApprovalCard::new("decorated-gate", "Publish the launch plan?")
                     .description(
                         "The card is unchanged. Everything behind and in front of it \
                          is the application's.",
@@ -2163,8 +2163,64 @@ impl Render for DecorationsStory {
                     .on_event(cx.listener(|story, _: &ApprovalEvent, _, cx| {
                         story.pressed = !story.pressed;
                         cx.notify();
-                    })),
-            )
+                    }));
+                if crate::decorations::needs_backdrop(kind) {
+                    // The stage: what an application paints around its own
+                    // component. Three states need it, for two reasons. The
+                    // frosted panel needs something behind it to be out of
+                    // focus, placed from the same numbers so the blurred copy
+                    // lines up. The aurora needs somewhere outside the card to
+                    // glow, because the slot clips to the card and light that
+                    // leaves its edge can only be drawn from out here.
+                    //
+                    // Fixed sizes, unusually for this gallery, and that is the
+                    // honest shape of it: lining a blurred copy up with its
+                    // original means both are placed by the same arithmetic.
+                    let aurora = kind == crate::decorations::DecorationKind::Aurora;
+                    div()
+                        .relative()
+                        // The aurora's lights are wider than the stage at the
+                        // corners, and drawing a blurred shadow off the edge
+                        // of the world leaves shards behind it. The stage is
+                        // the page as far as this effect is concerned.
+                        .overflow_hidden()
+                        .w(px(crate::decorations::BACKDROP.width))
+                        .h(px(crate::decorations::BACKDROP.height))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        // The aurora gets a dark stage rather than the
+                        // photograph. Coloured light is read against what is
+                        // behind it, and a bright nebula leaves nothing for it
+                        // to be brighter than.
+                        .when(aurora, |stage| stage.bg(cx.theme().background))
+                        .when(!aurora, |stage| stage.child(crate::decorations::backdrop()))
+                        .when(aurora, |stage| {
+                            stage.child(crate::decorations::aurora_around())
+                        })
+                        .child(
+                            // The card is pinned to the size the decoration
+                            // arithmetic assumes. Everywhere else in this
+                            // gallery a component sizes itself; here the
+                            // blurred copy has to land on the same pixels as
+                            // the sharp one, and a content-driven height would
+                            // move it.
+                            card.w(px(crate::decorations::CARD.width))
+                                .h(px(crate::decorations::CARD.height))
+                                // The tint is translucency, so the component's
+                                // own background has to get out of the way —
+                                // the decoration paints over it, not under it.
+                                // This is the ordinary style override, doing
+                                // exactly what it says.
+                                .when(kind == crate::decorations::DecorationKind::Tint, |card| {
+                                    card.bg(gpui::transparent_black())
+                                }),
+                        )
+                        .into_any_element()
+                } else {
+                    card.into_any_element()
+                }
+            })
             .child(
                 div()
                     .id("decorations-note")
