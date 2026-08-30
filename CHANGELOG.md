@@ -9,6 +9,41 @@ revision.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-29
+
+Visual expression, and the controls a person answers with.
+
+### Added
+
+- **A decoration slot on every framed component.** Two layers — one under the
+  content and over the frame's own background, one over the content — both
+  clipped to the component's shape and neither taking any part in its layout.
+  A component with no decoration adds no elements at all, and a test walks
+  every framed component and fails naming the one that drops a layer.
+- **Motion for a caller's own decoration.** `decoration::animated` drives one
+  from a looping value that stops when the panel scrolls out of view and holds
+  still under a reduced-motion preference — the crate's own suspension
+  machinery, which was already right and simply unreachable from outside.
+  `decoration::toward` covers the event-driven case: a ripple from a press, a
+  shake that grows toward a limit.
+- **Form controls in the library's own grammar.** `ChoiceGroup` for one choice
+  from a set, `Toggle` as a box or a switch. Written rather than wrapped:
+  upstream's are `Styled` only on their outer frame, so a wrapped one can never
+  match the rows and cards around it.
+- **`QuestionFlow`**, a short sequence of single-choice questions asked one at
+  a time, with the place in the sequence stated and a way past a question that
+  does not apply. Where an approval card asks for one decision about something
+  proposed, this gathers what is needed to propose anything.
+- **An Extensions section on the website.** Not components: a slot, a channel,
+  and four decorations — cross-hatch, halftone, ripple, veil — written in the
+  gallery the way an application would write them. This crate ships no effects.
+
+### Changed
+
+- The library ships no decoration effects of its own, deliberately. What fills
+  a slot is an application's expression; the gallery is where the slot is
+  proved.
+
 ## [0.6.0] - 2026-08-29
 
 Current upstream, two defects a reader would have noticed, and the states a
@@ -620,7 +655,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/labcoder/gpui-ai/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/labcoder/gpui-ai/compare/v0.2.1...v0.4.0
