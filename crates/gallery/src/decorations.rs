@@ -26,11 +26,11 @@
 //! to say, on a theme switch. Everything between those is a cached
 //! `RenderImage` handed to `img()`.
 
-use gpui::RenderImage;
 use gpui::{
     App, Hsla, IntoElement, ParentElement as _, Rgba, Styled as _, div, img, linear_color_stop,
     linear_gradient, px, relative,
 };
+use gpui::{BoxShadow, RenderImage, point};
 use gpui::{ObjectFit, StyledImage as _};
 use gpui_ai::prelude::{Decoration, decoration};
 use gpui_component::ActiveTheme as _;
@@ -40,8 +40,12 @@ use std::{cell::RefCell, sync::Arc, sync::OnceLock, time::Duration};
 /// Which decoration the story is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum DecorationKind {
-    /// A photograph reduced to four inks by an ordered dither.
+    /// The photograph as it is, with nothing between it and the content.
     #[default]
+    Photo,
+    /// The same photograph under a fixed dark scrim, so the text is readable.
+    Scrim,
+    /// A photograph reduced to four inks by an ordered dither.
     Dither,
     /// The same photograph flattened to flat bands of colour.
     PopArt,
@@ -51,26 +55,34 @@ pub(crate) enum DecorationKind {
     Halftone,
     /// Rings that travel out from a press.
     Ripple,
+    /// Rings that keep coming, on a clock rather than a press.
+    Pulse,
     /// A gradient veil over the content rather than under it.
     Veil,
 }
 
 impl DecorationKind {
     pub(crate) const ALL: &'static [Self] = &[
+        Self::Photo,
+        Self::Scrim,
         Self::Dither,
         Self::PopArt,
         Self::Engrave,
         Self::Halftone,
         Self::Ripple,
+        Self::Pulse,
         Self::Veil,
     ];
 
     pub(crate) const LABELS: &'static [(&'static str, &'static str)] = &[
+        ("photo", "Photo"),
+        ("scrim", "Photo + scrim"),
         ("dither", "Dither"),
         ("pop-art", "Pop art"),
         ("engrave", "Cross-hatch"),
         ("halftone", "Halftone"),
         ("ripple", "Ripple"),
+        ("pulse", "Pulse"),
         ("veil", "Veil"),
     ];
 
@@ -81,6 +93,12 @@ impl DecorationKind {
     /// What this one is doing, in a line.
     pub(crate) fn note(self) -> &'static str {
         match self {
+            Self::Photo => {
+                "The photograph with nothing between it and the words. Its own                  colours, not the theme's — a decoration is the application's,                  and nothing here has to follow the palette. Also the reason                  the next one exists."
+            }
+            Self::Scrim => {
+                "The same photograph under a fixed dark scrim — a flat black                  at sixty per cent, chosen by hand and identical in every                  theme. The commonest thing anyone will actually want."
+            }
             Self::Dither => {
                 "A photograph quantised to four inks by an 8x8 ordered dither, \
                  in the theme's own colours. Rasterised on a theme change, \
@@ -101,6 +119,9 @@ impl DecorationKind {
                 "Rings driven from a press rather than a clock. The library \
                  eases the value; the rings are the application's own drawing."
             }
+            Self::Pulse => {
+                "The same rings on the motion channel instead of a press, so                  they keep arriving — and stop when the panel scrolls away."
+            }
             Self::Veil => {
                 "The over layer, not the under one: a gradient across the \
                  content, passing every click through to what it covers."
@@ -111,11 +132,21 @@ impl DecorationKind {
     /// Builds the decoration itself.
     pub(crate) fn build(self, ripple: f32, cx: &App) -> Decoration {
         match self {
+            Self::Photo => Decoration::behind(photograph()),
+            Self::Scrim => Decoration::behind(
+                div()
+                    .size_full()
+                    .child(photograph())
+                    // Fixed, not from the theme: this is what an application
+                    // reaches for when it wants one look everywhere.
+                    .child(div().absolute().inset_0().bg(SCRIM)),
+            ),
             Self::Dither => Decoration::behind(processed(Treatment::Dither, cx)),
             Self::PopArt => Decoration::behind(processed(Treatment::PopArt, cx)),
             Self::Engrave => Decoration::behind(processed(Treatment::Engrave, cx)),
             Self::Halftone => Decoration::behind(under_content(halftone(cx), cx)),
-            Self::Ripple => Decoration::behind(under_content(rings(ripple, cx), cx)),
+            Self::Ripple => Decoration::behind(rings(ripple, cx)),
+            Self::Pulse => Decoration::behind(pulse(cx)),
             Self::Veil => Decoration::above(veil(cx)),
         }
     }
@@ -175,6 +206,19 @@ const BAYER: [u8; 64] = [
     63, 31, 55, 23, 61, 29, 53, 21,
 ];
 
+/// The scrim over the plain photograph: flat black at sixty per cent.
+///
+/// Written as a literal rather than taken from the theme, because that is the
+/// question this state exists to answer — a decoration is the application's,
+/// and nothing about the slot requires it to follow the palette. Every other
+/// image state here does follow it, by choice rather than by rule.
+const SCRIM: Hsla = Hsla {
+    h: 0.0,
+    s: 0.0,
+    l: 0.0,
+    a: 0.6,
+};
+
 /// How many inks a treatment reduces the photograph to.
 const INKS: u16 = 4;
 
@@ -186,6 +230,19 @@ type Rasterised = (Treatment, u32, u32, Arc<RenderImage>);
 
 thread_local! {
     static LAST: RefCell<Option<Rasterised>> = const { RefCell::new(None) };
+}
+
+/// The photograph as it was taken, in its own colours.
+///
+/// No quantising and no cache: GPUI decodes and holds this one itself, which
+/// is all an application needs when it is not processing the pixels.
+fn photograph() -> impl IntoElement {
+    img(Arc::new(gpui::Image::from_bytes(
+        gpui::ImageFormat::Jpeg,
+        include_bytes!("../assets/carina-nebula.jpg").to_vec(),
+    )))
+    .size_full()
+    .object_fit(ObjectFit::Cover)
 }
 
 /// The photograph under `treatment`, in the theme's own two colours.
@@ -329,36 +386,72 @@ fn halftone(cx: &App) -> impl IntoElement {
 /// moves rather than by a clock the decoration owns.
 fn rings(progress: f32, cx: &App) -> impl IntoElement {
     let ink = cx.theme().primary;
-    // Sized in pixels rather than as a fraction of the frame: a decorated card
-    // is far wider than it is tall, and a fraction of both axes is an ellipse.
-    const REST: f32 = 56.0;
-    const REACH: f32 = 620.0;
     div().size_full().children((0..4).map(move |ring| {
         // Each ring trails the one before it, so a single value produces a
         // sequence rather than four circles doing the same thing.
         let travel = (progress - ring as f32 * 0.16).clamp(0.0, 1.0);
-        // At rest the first ring stays, faintly, so the state reads as waiting
-        // for a press rather than as an effect that failed to draw.
-        let resting = progress <= f32::EPSILON;
-        let (size, alpha) = if resting {
-            (REST, if ring == 0 { 0.30 } else { 0.0 })
-        } else {
-            (REST + travel * REACH, (1.0 - travel) * 0.85)
-        };
-        div()
-            .absolute()
-            .inset_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .size(px(size))
-                    .rounded_full()
-                    .border_4()
-                    .border_color(ink.opacity(alpha)),
-            )
+        // At rest one ring stays, faintly, so the state reads as waiting for a
+        // press rather than as an effect that failed to draw.
+        if progress <= f32::EPSILON {
+            let resting = if ring == 0 { 0.30 } else { 0.0 };
+            return lit_circle(0.0, resting, ink);
+        }
+        lit_circle(travel, (1.0 - travel) * 0.9, ink)
     }))
+}
+
+/// Rings that keep arriving, driven by the clock instead of a press.
+///
+/// The same drawing as the ripple; only where the value comes from differs,
+/// which is the whole reason the two sit next to each other.
+fn pulse(cx: &App) -> impl IntoElement {
+    let ink = cx.theme().primary;
+    decoration::animated("pulse", Duration::from_millis(2600), move |delta| {
+        div().size_full().children((0..3).map(move |ring| {
+            // Thirds of a cycle apart, so one is always arriving as another
+            // leaves — a rhythm rather than a flash.
+            let travel = (delta + ring as f32 / 3.0).fract();
+            lit_circle(travel, (1.0 - travel) * 0.75, ink)
+        }))
+    })
+}
+
+/// A ring that reads as a curved front rather than a drawn outline.
+///
+/// GPUI has no radial gradient and no blur filter, so depth has to come from
+/// the shadow: an inset one lights the inner edge the way a surface catches
+/// light, and an outer one blurs further the wider the ring grows, as a
+/// wavefront loses definition while it spreads. Sized in pixels because a
+/// decorated card is far wider than it is tall, and a fraction of both axes
+/// is an ellipse.
+fn lit_circle(travel: f32, alpha: f32, ink: Hsla) -> gpui::Div {
+    const REST: f32 = 56.0;
+    const REACH: f32 = 620.0;
+    div()
+        .absolute()
+        .inset_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .size(px(REST + travel * REACH))
+                .rounded_full()
+                // Inset only. An outer shadow on a transparent element is
+                // the whole silhouette blurred and drawn behind it, which
+                // fills the circle in — a glowing disc, not a wavefront. The
+                // inset one hugs the edge, and the border keeps it defined
+                // once the blur has spread out at full travel.
+                .border_2()
+                .border_color(ink.opacity(alpha * 0.55))
+                .shadow(vec![BoxShadow {
+                    color: ink.opacity(alpha),
+                    offset: point(px(0.0), px(0.0)),
+                    blur_radius: px(12.0),
+                    spread_radius: px(0.0),
+                    inset: true,
+                }]),
+        )
 }
 
 /// A gradient across the content: the over layer, proving it passes input
