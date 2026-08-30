@@ -48,11 +48,11 @@ pub(crate) enum DecorationKind {
     Glass,
     /// Translucency with no blur — the cheap look, named for what it is.
     Tint,
-    /// Two bright trails travelling the frame, glowing both ways.
+    /// A fixed field of colour with light sweeping through it.
     Beam,
-    /// The same trails, throwing their light into the panel only.
+    /// The same field, lighting only what falls inside the frame.
     BeamInward,
-    /// The same trails, throwing their light outward only.
+    /// The same field, lighting only what falls outside it.
     BeamOutward,
     /// A metallic sheen turning around the frame.
     Metal,
@@ -779,166 +779,242 @@ fn stroke_run(
     }
 }
 
-/// A round glow with a soft falloff, as an image.
+/// Where a beam's light is allowed to fall.
 ///
-/// The one thing none of GPUI's primitives will do. A quad has a crisp edge, a
-/// stroke is a band with two crisp edges and butt ends, and there is no radial
-/// gradient and no blur. A sprite has the falloff drawn into it, and costs one
-/// small rasterisation per colour for the life of the process.
-///
-/// Straight alpha, not premultiplied. GPUI's own `swap_rgba_pa_to_bgra`
-/// divides by alpha on the way in, which is what un-premultiplying is — so
-/// handing it premultiplied data makes every partly transparent pixel darker
-/// than it should be. Against black that is invisible; against a light theme
-/// it is a grey halo around every light, which is exactly what it looked like.
-fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
-    thread_local! {
-        static SPRITES: RefCell<Vec<(u32, Arc<RenderImage>)>> = const { RefCell::new(Vec::new()) };
-    }
-    const SIZE: u32 = 128;
-    let rgba = Rgba::from(colour);
-    let key = packed(rgba);
-    SPRITES.with(|sprites| {
-        let mut sprites = sprites.borrow_mut();
-        if let Some((_, sprite)) = sprites.iter().find(|(cached, _)| *cached == key) {
-            return Arc::clone(sprite);
-        }
-        let mut buffer = ImageBuffer::new(SIZE, SIZE);
-        let centre = SIZE as f32 / 2.0;
-        for y in 0..SIZE {
-            for x in 0..SIZE {
-                let dx = (x as f32 + 0.5 - centre) / centre;
-                let dy = (y as f32 + 0.5 - centre) / centre;
-                let distance = (dx * dx + dy * dy).sqrt().min(1.0);
-                let fade = 1.0 - distance;
-                let alpha = fade * fade * fade;
-                buffer.put_pixel(
-                    x,
-                    y,
-                    ImageRgba([
-                        (rgba.b * 255.0) as u8,
-                        (rgba.g * 255.0) as u8,
-                        (rgba.r * 255.0) as u8,
-                        (alpha * 255.0) as u8,
-                    ]),
-                );
-            }
-        }
-        let sprite = Arc::new(RenderImage::new([Frame::new(buffer)]));
-        sprites.push((key, Arc::clone(&sprite)));
-        sprite
-    })
-}
-
-/// Where a beam's glow is allowed to fall.
-///
-/// The same trail reads as a different material depending on this, which is
-/// why it is a choice rather than a constant: light kept inside the panel is a
-/// lamp behind frosted glass, light kept outside it is a neon tube, and both
-/// at once is the frame itself glowing.
+/// Not a filter over one drawing: each of these lights a different set of
+/// layers, which is why the three read as different materials rather than as
+/// one effect with pieces missing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Spill {
-    /// Into the component and out of it, evenly.
+    /// Inside the frame and out, which is the frame itself glowing.
     Both,
-    /// Into the component only.
+    /// Inside only — a lamp behind the panel.
     Inward,
-    /// Out of the component only.
+    /// Outside only — neon around it.
     Outward,
 }
 
-/// How many lights along a trail, and how many across it.
+/// One patch of colour on the frame, fixed in place.
 ///
-/// The glow is a cloud rather than a row, because a row of lights on a line is
-/// a line of lights: it needs width to read as something the frame is giving
-/// off. Forty-eight along by four across is dense enough that neighbours
-/// overlap by most of their size and what shows is where they sum.
-const TRAIL_ALONG: usize = 48;
-const TRAIL_ACROSS: usize = 4;
+/// The thing that took longest to understand, and the whole difference between
+/// this and a comet: **the colours do not travel**. Nine patches sit at fixed
+/// places around the frame, and what moves is a window of brightness sweeping
+/// over them. That is why the reference reads as flow — light passing through
+/// colour that is already there — while a coloured head chasing its own tail
+/// reads as a loading spinner.
+///
+/// Positions are fractions of the frame and may fall outside it; sizes are the
+/// ellipse's half-extents in pixels. Taken from the published `beam-spec.json`
+/// of <https://github.com/Jakubantalik/Libraries>, which is the same field its
+/// web demo draws.
+struct Patch {
+    rgb: (u8, u8, u8),
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
 
-/// One light's size, and how far the cloud reaches either side of the frame.
-const TRAIL_LIGHT: f32 = 40.0;
-const TRAIL_SPREAD: f32 = 30.0;
+const FIELD: [Patch; 9] = [
+    Patch {
+        rgb: (255, 50, 100),
+        x: 0.330,
+        y: -0.074,
+        w: 70.0,
+        h: 40.0,
+    },
+    Patch {
+        rgb: (40, 140, 255),
+        x: 0.120,
+        y: -0.050,
+        w: 60.0,
+        h: 35.0,
+    },
+    Patch {
+        rgb: (50, 200, 80),
+        x: 0.021,
+        y: 0.683,
+        w: 40.0,
+        h: 70.0,
+    },
+    Patch {
+        rgb: (30, 185, 170),
+        x: 0.021,
+        y: 0.683,
+        w: 20.0,
+        h: 35.0,
+    },
+    Patch {
+        rgb: (100, 70, 255),
+        x: 0.744,
+        y: 1.000,
+        w: 180.0,
+        h: 32.0,
+    },
+    Patch {
+        rgb: (40, 140, 255),
+        x: 0.550,
+        y: 1.000,
+        w: 85.0,
+        h: 26.0,
+    },
+    Patch {
+        rgb: (255, 120, 40),
+        x: 0.939,
+        y: 0.000,
+        w: 74.0,
+        h: 32.0,
+    },
+    Patch {
+        rgb: (240, 50, 180),
+        x: 1.000,
+        y: 0.271,
+        w: 26.0,
+        h: 42.0,
+    },
+    Patch {
+        rgb: (180, 40, 240),
+        x: 1.000,
+        y: 0.271,
+        w: 52.0,
+        h: 48.0,
+    },
+];
 
-/// The glow one trail throws.
+/// The travelling window of brightness, as a fraction of a turn.
 ///
-/// Every light is a point, and a point can be asked whether it is inside the
-/// frame. That is the whole of `Spill`: inward keeps the ones inside, outward
-/// keeps the ones outside, and both keeps all of them. No clipping, no bias,
-/// no approximation — the answer is exact because the question is asked of a
-/// position rather than of a shape that has to be cut.
+/// `rotate.beamMaskStops` from the same spec: dark until a third of the way
+/// round, full from about half to four fifths, then back down. Read as a
+/// sweep over the fixed field rather than as a shape in its own right.
+fn sweep(at: f32) -> f32 {
+    const STOPS: [(f32, f32); 10] = [
+        (0.00, 0.0),
+        (0.30, 0.0),
+        (0.36, 0.1),
+        (0.44, 0.35),
+        (0.52, 1.0),
+        (0.80, 1.0),
+        (0.86, 0.35),
+        (0.92, 0.1),
+        (0.95, 0.0),
+        (1.00, 0.0),
+    ];
+    let at = at.rem_euclid(1.0);
+    let mut previous = STOPS[0];
+    for stop in STOPS.into_iter().skip(1) {
+        if at <= stop.0 {
+            let span = (stop.0 - previous.0).max(f32::EPSILON);
+            let mix = (at - previous.0) / span;
+            return previous.1 + (stop.1 - previous.1) * mix;
+        }
+        previous = stop;
+    }
+    0.0
+}
+
+/// One patch rasterised across the frame, kept to one side of its edge.
 ///
-/// It is also the same rule the halftone and the pulse follow, which is worth
-/// more than the effect itself: anything drawn into a frame here decides for
-/// itself whether it belongs, and nothing anywhere is relying on a clip that
-/// GPUI does not have.
-fn trail_glow(head: f32, radius: f32, spill: Spill) -> impl IntoElement {
+/// The patches never move, so the frame's shape can be written into their
+/// alpha exactly once — the same trick every picture here uses, and the reason
+/// `Spill` can be exact without anything clipping at runtime. Inside and
+/// outside are two rasterisations of the same patch, not one filtered.
+fn patch_image(index: usize, inside: bool, radius: f32, grow: f32) -> Arc<RenderImage> {
+    /// Which patch, which side of the frame, and at what size.
+    type PatchKey = (usize, bool, u32);
+    thread_local! {
+        static PATCHES: RefCell<Vec<(PatchKey, Arc<RenderImage>)>> =
+            const { RefCell::new(Vec::new()) };
+    }
+    let key: PatchKey = (index, inside, (grow * 100.0) as u32);
+    PATCHES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some((_, image)) = cache.iter().find(|(cached, _)| *cached == key) {
+            return Arc::clone(image);
+        }
+        let patch = &FIELD[index];
+        let (card_w, card_h) = (CARD.width as u32, CARD.height as u32);
+        let (cx_, cy_) = (patch.x * CARD.width, patch.y * CARD.height);
+        let (rx, ry) = (patch.w * grow, patch.h * grow);
+        let mut buffer = ImageBuffer::new(card_w, card_h);
+        for y in 0..card_h {
+            for x in 0..card_w {
+                let (dx, dy) = (x as f32 + 0.5 - cx_, y as f32 + 0.5 - cy_);
+                // Elliptical falloff, cubed: a small bright core and a long
+                // tail, which is what a light looks like.
+                let reach = ((dx / rx).powi(2) + (dy / ry).powi(2)).sqrt().min(1.0);
+                // Squared rather than cubed. Cubed keeps a small bright core
+                // and almost no tail, which reads as a dot on the line; the
+                // glow wants most of its energy in the spread.
+                let fade = 1.0 - reach;
+                let mut alpha = fade * fade;
+                let shape = shape_alpha(x, y, CARD.width, CARD.height, radius);
+                alpha *= if inside { shape } else { 1.0 - shape };
+                buffer.put_pixel(
+                    x,
+                    y,
+                    ImageRgba([patch.rgb.2, patch.rgb.1, patch.rgb.0, (alpha * 255.0) as u8]),
+                );
+            }
+        }
+        let image = Arc::new(RenderImage::new([Frame::new(buffer)]));
+        cache.push((key, Arc::clone(&image)));
+        image
+    })
+}
+
+/// The whole field, at one moment of the sweep.
+///
+/// Three layers, and their weights come from the spec's own presets rather
+/// than from taste: a tight bright one on the line, a wide soft one inside,
+/// and a wider softer one outside. `Spill` chooses which of the three are
+/// drawn, so inward and outward are their own materials rather than the same
+/// picture with half of it deleted.
+fn beam_field(phase: f32, radius: f32, spill: Spill, dark: bool) -> impl IntoElement {
+    // `sizeThemePresets.md`, which is the size a card is.
+    let (stroke, inner, bloom) = if dark {
+        (0.26_f32, 0.42_f32, 0.24_f32)
+    } else {
+        (0.12, 0.26, 0.34)
+    };
+    // (inside, size). The three layers are three sizes of the same patch,
+    // kept close to the spec's own: a tight one that reads as the line, one at
+    // full size for the glow, and a slightly wider soft one. Scaling the same
+    // blob by three did not work — at two and a half times it is wider than
+    // the card and washes the middle instead of hugging the edge.
+    let layers: &[(bool, f32)] = match spill {
+        Spill::Both => &[(true, 0.5), (true, 1.4), (false, 1.9)],
+        Spill::Inward => &[(true, 0.5), (true, 1.6)],
+        Spill::Outward => &[(false, 0.6), (false, 1.9)],
+    };
+    let weights: Vec<f32> = match spill {
+        Spill::Both => vec![stroke, inner, bloom],
+        Spill::Inward => vec![stroke, inner * 1.5],
+        Spill::Outward => vec![stroke * 1.4, bloom * 2.0],
+    };
     div()
         .absolute()
         .inset_0()
-        .children((0..TRAIL_ALONG * TRAIL_ACROSS).filter_map(move |index| {
-            let (step, band) = (index / TRAIL_ACROSS, index % TRAIL_ACROSS);
-            let along = step as f32 / (TRAIL_ALONG - 1) as f32;
-            let t = head - BEAM_LENGTH * (1.0 - along);
-            let (x, y) = perimeter_point(t, CARD.width, CARD.height, radius);
-            let (nx, ny) = outward_normal(x, y, CARD.width, CARD.height);
-            // Spread across the frame's edge, so the cloud has thickness.
-            let across = band as f32 / (TRAIL_ACROSS - 1) as f32 - 0.5;
-            let offset = across * 2.0 * TRAIL_SPREAD;
-            let (lx, ly) = (x + nx * offset, y + ny * offset);
-
-            let inside = rounded_rect_sdf(
-                lx - CARD.width / 2.0,
-                ly - CARD.height / 2.0,
-                CARD.width / 2.0,
-                CARD.height / 2.0,
-                radius,
-            ) <= 0.0;
-            let wanted = match spill {
-                Spill::Both => true,
-                Spill::Inward => inside,
-                Spill::Outward => !inside,
-            };
-            if !wanted {
-                return None;
-            }
-
-            // Brightest at the head and at the frame, so the trail has a
-            // direction and the cloud has a centre.
-            let strength = along * along * along * (1.0 - across.abs() * 1.6).max(0.0);
-            if strength <= 0.01 {
-                return None;
-            }
-            Some(
+        .children(layers.iter().enumerate().flat_map(move |(layer, spec)| {
+            let (inside, grow) = *spec;
+            let weight = weights[layer];
+            (0..FIELD.len()).map(move |index| {
+                let patch = &FIELD[index];
+                // Where this patch sits around the frame decides when the
+                // sweep reaches it. The colours stay; the light travels.
+                let angle = (patch.y - 0.5).atan2(patch.x - 0.5);
+                let around = angle / std::f32::consts::TAU + 0.25;
+                let lit = sweep(around - phase);
                 div()
                     .absolute()
-                    .left(px(lx - TRAIL_LIGHT / 2.0))
-                    .top(px(ly - TRAIL_LIGHT / 2.0))
-                    .size(px(TRAIL_LIGHT))
-                    .opacity(strength * 0.5)
-                    .child(img(glow_sprite(beam_colour(along))).size(px(TRAIL_LIGHT))),
-            )
+                    .inset_0()
+                    .opacity((lit * weight).clamp(0.0, 1.0))
+                    .child(
+                        img(patch_image(index, inside, radius, grow))
+                            .absolute()
+                            .inset_0(),
+                    )
+            })
         }))
-}
-
-/// Which way is out of the frame at a point on its perimeter.
-///
-/// Only ever axis-aligned: a light near a corner is on one of the two edges
-/// that meet there, and pushing it along that edge's normal is close enough at
-/// the size these are drawn.
-fn outward_normal(x: f32, y: f32, width: f32, height: f32) -> (f32, f32) {
-    let gaps = [x, width - x, y, height - y];
-    let nearest = gaps
-        .iter()
-        .copied()
-        .enumerate()
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map_or(0, |(index, _)| index);
-    match nearest {
-        0 => (-1.0, 0.0),
-        1 => (1.0, 0.0),
-        2 => (0.0, -1.0),
-        _ => (0.0, 1.0),
-    }
 }
 
 /// Which border effect a state is drawing.
@@ -1096,7 +1172,7 @@ fn paint_border(
 /// half of it falls outside the component, and the slot clips to the
 /// component's shape. An application owns the layout around its own
 /// components, so this is where a border belongs.
-pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
+pub(crate) fn border_effect(kind: Border, radius: f32, dark: bool) -> impl IntoElement {
     let (id, period) = match kind {
         Border::Beam(_) => ("border-beam", Duration::from_millis(3200)),
         Border::Metal => ("border-metal", Duration::from_millis(5200)),
@@ -1110,12 +1186,7 @@ pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
         .child(decoration::animated(id, period, move |delta| {
             let layer = div().size_full();
             let layer = match kind {
-                Border::Beam(spill) => layer
-                    .child(trail_glow(delta, radius, spill))
-                    // A second trail, opposite the first. One travelling line
-                    // reads as a loading spinner; two reads as a frame that is
-                    // alive, which is what the reference does.
-                    .child(trail_glow(delta + 0.5, radius, spill)),
+                Border::Beam(spill) => layer.child(beam_field(delta, radius, spill, dark)),
                 Border::Metal => layer,
             };
             layer.child(

@@ -2214,6 +2214,7 @@ impl Render for DecorationsStory {
                             stage.child(crate::decorations::border_effect(
                                 border,
                                 f32::from(tokens.radius.lg),
+                                cx.theme().mode.is_dark(),
                             ))
                         })
                         .into_any_element()
