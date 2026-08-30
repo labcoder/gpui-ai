@@ -49,6 +49,7 @@ pub mod orbs;
 pub mod plan;
 pub mod popup;
 pub mod prompt_bar;
+pub mod question_flow;
 pub mod queue;
 pub mod recommendation;
 pub mod records_table;
@@ -129,6 +130,7 @@ pub mod prelude {
         PromptActions, PromptAttachment, PromptBar, PromptBarEvent, PromptCommand, PromptMention,
         PromptModel, PromptSubmission, PromptSubmit,
     };
+    pub use crate::question_flow::{Question, QuestionFlow, QuestionFlowEvent};
     pub use crate::queue::{MessageQueue, QueueEvent, QueuedMessage};
     pub use crate::recommendation::{RecommendationCard, RecommendationEvent};
     pub use crate::records_table::{
