@@ -39,6 +39,7 @@ pub mod cues;
 pub mod diff_table;
 pub mod filter_table;
 pub mod fine_tune;
+pub mod form;
 mod glide;
 pub mod image_generation;
 pub mod insight;
@@ -111,6 +112,9 @@ pub mod prelude {
         FilterSortDirection, FilterTable, FilterTableEvent,
     };
     pub use crate::fine_tune::{FineTuneCard, FineTuneEvent, FineTuneTypeface, FineTuneValues};
+    pub use crate::form::{
+        ChoiceEvent, ChoiceGroup, ChoiceOption, Toggle, ToggleEvent, ToggleShape,
+    };
     pub use crate::image_generation::ImageGeneration;
     pub use crate::insight::{
         InsightCard, InsightEvent, InsightMetric, InsightPoint, InsightTrend,
