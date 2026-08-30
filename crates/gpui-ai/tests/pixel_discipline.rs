@@ -113,62 +113,6 @@ struct Exception {
 /// Every raw `px(...)` the library is allowed to construct outside tests.
 const EXCEPTIONS: &[Exception] = &[
     Exception {
-        file: "decoration.rs",
-        expression: "px(cx)",
-        context: "path.move_to(point(px(cx)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(cy)",
-        context: "path.move_to(point(px(cx), px(cy)))",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(from_x)",
-        context: "path.line_to(point(px(from_x)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(from_y)",
-        context: "path.line_to(point(px(from_x), px(from_y)))",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(r)",
-        context: "let arc = px(r)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(0.0)",
-        context: "px(0.0)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(to_x)",
-        context: "point(px(to_x)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
-        file: "decoration.rs",
-        expression: "px(to_y)",
-        context: "px(to_y)",
-        category: Category::MeasuredGeometry,
-        rationale: "the corner mask is drawn in the measured bounds of the frame it covers",
-    },
-    Exception {
         file: "sizing.rs",
         expression: "px(12.)",
         context: "STATUS_INDICATOR_SLOT",

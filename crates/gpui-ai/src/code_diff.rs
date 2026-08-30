@@ -546,7 +546,6 @@ impl RenderOnce for CodeDiff {
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
-        let decoration_frame = tokens.colors.surface;
         let file = self.file;
         let handler = self.on_event;
         let path = file.path.clone();
@@ -667,7 +666,7 @@ impl RenderOnce for CodeDiff {
             .w_full()
             .min_w_0()
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius, decoration_frame)
+            .decoration_under(&mut decoration, decoration_radius)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
@@ -681,7 +680,7 @@ impl RenderOnce for CodeDiff {
                         .children(hunks),
                 )
             })
-            .decoration_over(&mut decoration, decoration_radius, decoration_frame)
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

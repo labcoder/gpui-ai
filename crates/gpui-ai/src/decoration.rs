@@ -30,10 +30,7 @@
 //! away panel paying for itself forever.
 
 use crate::motion::VisibleAnimationExt as _;
-use gpui::{
-    AnyElement, App, ElementId, Hsla, IntoElement, ParentElement, PathBuilder, Pixels, Styled,
-    Window, canvas, div, point, px,
-};
+use gpui::{AnyElement, App, ElementId, IntoElement, ParentElement, Pixels, Styled, Window, div};
 use std::time::Duration;
 
 /// The layers an application paints into one component's frame.
@@ -74,84 +71,35 @@ impl Decoration {
     }
 
     /// Takes the under layer, wrapped in the frame's own shape.
-    fn take_under(&mut self, radius: Pixels, frame: Hsla) -> Option<impl IntoElement> {
-        self.behind
-            .take()
-            .map(|layer| clipped(layer, radius, frame))
+    fn take_under(&mut self, radius: Pixels) -> Option<impl IntoElement> {
+        self.behind.take().map(|layer| clipped(layer, radius))
     }
 
     /// Takes the over layer, wrapped in the frame's own shape.
-    fn take_over(&mut self, radius: Pixels, frame: Hsla) -> Option<impl IntoElement> {
-        self.above.take().map(|layer| clipped(layer, radius, frame))
+    fn take_over(&mut self, radius: Pixels) -> Option<impl IntoElement> {
+        self.above.take().map(|layer| clipped(layer, radius))
     }
 }
 
-/// A layer filling its frame and clipped to the frame's corners.
-fn clipped(layer: AnyElement, radius: Pixels, frame: Hsla) -> impl IntoElement {
-    div()
-        .absolute()
-        .inset_0()
-        .overflow_hidden()
-        .child(layer)
-        .child(corner_mask(radius, frame))
-}
-
-/// Paints the frame's own colour back into the four corners.
+/// Places one layer over the component's own background, clipped to its box.
 ///
-/// GPUI masks content with a rectangle — `ContentMask` is a `Bounds`, and
-/// `overflow_hidden` clips to the box and never to a corner radius. So a
-/// decoration drawn to the edge of a rounded component keeps its square
-/// corners and shows outside the frame, which is what this slot spent three
-/// releases quietly doing.
+/// Rectangularly, and that is a real limit rather than an oversight. GPUI
+/// masks content with a `ContentMask`, which is a `Bounds` — `overflow_hidden`
+/// clips to the box and never to a corner radius, and there is no rounded mask
+/// to ask for instead.
 ///
-/// There is no rounded mask to ask for, so the corners are painted over
-/// instead: for each one, the region between the square corner and the arc,
-/// filled in the colour the frame would have shown there anyway. Exact for an
-/// opaque frame, which every component here has.
-fn corner_mask(radius: Pixels, frame: Hsla) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |bounds, (), window, _| {
-            let r = f32::from(radius);
-            if r <= 0.0 {
-                return;
-            }
-            let (left, top) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
-            let right = left + f32::from(bounds.size.width);
-            let bottom = top + f32::from(bounds.size.height);
-            // Each corner: out to where the arc begins, round the arc, and
-            // back. `sweep` flips with the winding so every corner is cut the
-            // same way round.
-            let corners = [
-                ((left, top), (left + r, top), (left, top + r), true),
-                ((right, top), (right, top + r), (right - r, top), true),
-                (
-                    (right, bottom),
-                    (right - r, bottom),
-                    (right, bottom - r),
-                    true,
-                ),
-                ((left, bottom), (left, bottom - r), (left + r, bottom), true),
-            ];
-            for ((cx, cy), (from_x, from_y), (to_x, to_y), sweep) in corners {
-                let mut path = PathBuilder::fill();
-                path.move_to(point(px(cx), px(cy)));
-                path.line_to(point(px(from_x), px(from_y)));
-                let arc = px(r);
-                path.arc_to(
-                    point(arc, arc),
-                    px(0.0),
-                    false,
-                    sweep,
-                    point(px(to_x), px(to_y)),
-                );
-                path.close();
-                if let Ok(path) = path.build() {
-                    window.paint_path(path, frame);
-                }
-            }
-        },
-    )
+/// So a layer that paints all the way to the edge has to carry the
+/// component's radius itself: `img(..).rounded(radius)` and a `div` with a
+/// background both clip themselves in the shader, and that is what the gallery
+/// does. A layer that does not reach the corners — scattered dots, a ring in
+/// the middle — needs nothing.
+///
+/// Painting the corners back in the frame's colour was tried and is wrong: the
+/// sliver outside the radius is where whatever sits *behind* the component
+/// shows through, so filling it with the component's own surface draws a blob
+/// over the backdrop rather than a rounded corner.
+fn clipped(layer: AnyElement, _radius: Pixels) -> impl IntoElement {
+    div().absolute().inset_0().overflow_hidden().child(layer)
 }
 
 /// Places a component's decoration layers.
@@ -162,20 +110,15 @@ fn corner_mask(radius: Pixels, frame: Hsla) -> impl IntoElement {
 /// a component from quietly honouring only one of them.
 pub(crate) trait DecoratedExt: Sized {
     /// Places the under layer. Call before adding any content.
-    fn decoration_under(self, decoration: &mut Decoration, radius: Pixels, frame: Hsla) -> Self;
+    fn decoration_under(self, decoration: &mut Decoration, radius: Pixels) -> Self;
 
     /// Places the over layer. Call after adding all content.
-    fn decoration_over(self, decoration: &mut Decoration, radius: Pixels, frame: Hsla) -> Self;
+    fn decoration_over(self, decoration: &mut Decoration, radius: Pixels) -> Self;
 }
 
 impl<E: ParentElement + Styled + Sized> DecoratedExt for E {
-    fn decoration_under(
-        mut self,
-        decoration: &mut Decoration,
-        radius: Pixels,
-        frame: Hsla,
-    ) -> Self {
-        if let Some(layer) = decoration.take_under(radius, frame) {
+    fn decoration_under(mut self, decoration: &mut Decoration, radius: Pixels) -> Self {
+        if let Some(layer) = decoration.take_under(radius) {
             // The frame becomes the positioning context for both layers. Only
             // when there is one: a component with no decoration keeps exactly
             // the layout it had before this existed.
@@ -185,8 +128,8 @@ impl<E: ParentElement + Styled + Sized> DecoratedExt for E {
         self
     }
 
-    fn decoration_over(mut self, decoration: &mut Decoration, radius: Pixels, frame: Hsla) -> Self {
-        if let Some(layer) = decoration.take_over(radius, frame) {
+    fn decoration_over(mut self, decoration: &mut Decoration, radius: Pixels) -> Self {
+        if let Some(layer) = decoration.take_over(radius) {
             self.style().position = Some(gpui::Position::Relative);
             self.extend(std::iter::once(layer.into_any_element()));
         }

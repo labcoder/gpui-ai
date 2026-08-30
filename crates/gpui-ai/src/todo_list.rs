@@ -169,7 +169,6 @@ impl RenderOnce for TodoList {
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
-        let decoration_frame = tokens.colors.surface;
         let motion = MotionTokens::read(cx).clone();
         let done = self
             .items
@@ -225,7 +224,7 @@ impl RenderOnce for TodoList {
             .p(tokens.spacing.md)
             .gap(tokens.spacing.xs)
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius, decoration_frame)
+            .decoration_under(&mut decoration, decoration_radius)
             .when_some(self.title, |this, title| {
                 this.child(
                     h_flex()
@@ -374,7 +373,7 @@ impl RenderOnce for TodoList {
                         .into_any_element(),
                 }
             }))
-            .decoration_over(&mut decoration, decoration_radius, decoration_frame)
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

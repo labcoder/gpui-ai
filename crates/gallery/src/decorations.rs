@@ -49,8 +49,12 @@ pub(crate) enum DecorationKind {
     Glass,
     /// Translucency with no blur — the cheap look, named for what it is.
     Tint,
-    /// A bright segment travelling the frame, drawn as a stroked path.
+    /// Two bright trails travelling the frame, glowing both ways.
     Beam,
+    /// The same trails, throwing their light into the panel only.
+    BeamInward,
+    /// The same trails, throwing their light outward only.
+    BeamOutward,
     /// A metallic sheen turning around the frame.
     Metal,
     /// The same photograph under a fixed dark scrim, so the text is readable.
@@ -63,8 +67,6 @@ pub(crate) enum DecorationKind {
     Engrave,
     /// A grid of dots that breathe.
     Halftone,
-    /// Rings that travel out from a press.
-    Ripple,
     /// Rings that keep coming, on a clock rather than a press.
     Pulse,
     /// A gradient veil over the content rather than under it.
@@ -78,13 +80,14 @@ impl DecorationKind {
         Self::Glass,
         Self::Tint,
         Self::Beam,
+        Self::BeamInward,
+        Self::BeamOutward,
         Self::Metal,
         Self::Scrim,
         Self::Dither,
         Self::PopArt,
         Self::Engrave,
         Self::Halftone,
-        Self::Ripple,
         Self::Pulse,
         Self::Veil,
     ];
@@ -95,13 +98,14 @@ impl DecorationKind {
         ("glass", "Glass"),
         ("tint", "Tint"),
         ("beam", "Border beam"),
+        ("beam-inward", "Beam · inward"),
+        ("beam-outward", "Beam · outward"),
         ("metal", "Liquid metal"),
         ("scrim", "Photo + scrim"),
         ("dither", "Dither"),
         ("pop-art", "Pop art"),
         ("engrave", "Cross-hatch"),
         ("halftone", "Halftone"),
-        ("ripple", "Ripple"),
         ("pulse", "Pulse"),
         ("veil", "Veil"),
     ];
@@ -133,10 +137,20 @@ impl DecorationKind {
                  about it, and what most panels actually need."
             }
             Self::Beam => {
-                "A bright segment travelling the frame, stroked along the \
-                 rounded path itself rather than positioned near it — so it \
-                 turns the corners instead of cutting them. Ninety-six flat \
-                 pieces, because a GPUI gradient carries two stops."
+                "Two trails stroked along the rounded path itself rather than \
+                 positioned near it, so they turn the corners instead of \
+                 cutting them. The glow is thirty overlapping lights per \
+                 trail: five you could count, thirty sum into a band."
+            }
+            Self::BeamInward => {
+                "The same trails with the light pushed into the panel. A lamp \
+                 behind frosted glass rather than a tube around it — the same \
+                 code, one argument different."
+            }
+            Self::BeamOutward => {
+                "And pushed the other way, which is neon. Worth having all \
+                 three: the trail is the cheap part, and where its light \
+                 falls is what decides what the frame is made of."
             }
             Self::Metal => {
                 "The same stroke with a metallic ramp instead of a beam. Metal \
@@ -162,10 +176,6 @@ impl DecorationKind {
                 "A grid of dots on a travelling wave, on the library's motion \
                  channel. It stops when the panel scrolls out of view."
             }
-            Self::Ripple => {
-                "Rings driven from a press rather than a clock. The library \
-                 eases the value; the rings are the application's own drawing."
-            }
             Self::Pulse => {
                 "The same rings on the motion channel instead of a press, so                  they keep arriving — and stop when the panel scrolls away."
             }
@@ -177,30 +187,31 @@ impl DecorationKind {
     }
 
     /// Builds the decoration itself.
-    pub(crate) fn build(self, ripple: f32, cx: &App) -> Decoration {
+    pub(crate) fn build(self, cx: &App) -> Decoration {
         match self {
-            Self::Photo => Decoration::behind(photograph()),
+            Self::Photo => Decoration::behind(photograph(cx)),
             Self::Frosted => Decoration::behind(frosted_panel(cx)),
             Self::Glass => Decoration::behind(glass_panel(cx)),
             Self::Tint => Decoration::behind(tint_panel(cx)),
             Self::Scrim => Decoration::behind(
                 div()
                     .size_full()
-                    .child(photograph())
+                    .child(photograph(cx))
                     // Fixed, not from the theme: this is what an application
                     // reaches for when it wants one look everywhere.
-                    .child(div().absolute().inset_0().bg(SCRIM)),
+                    .child(div().absolute().inset_0().rounded(shape(cx)).bg(SCRIM)),
             ),
             Self::Dither => Decoration::behind(processed(Treatment::Dither, cx)),
             Self::PopArt => Decoration::behind(processed(Treatment::PopArt, cx)),
             Self::Engrave => Decoration::behind(processed(Treatment::Engrave, cx)),
             Self::Halftone => Decoration::behind(under_content(halftone(cx), cx)),
-            Self::Ripple => Decoration::behind(rings(ripple, cx)),
             Self::Pulse => Decoration::behind(pulse(cx)),
             // Nothing in the slot. A stroke sits astride the component's
             // edge, and the slot clips to the component — so the whole effect
             // is the parent's, and saying so here is the point.
-            Self::Beam | Self::Metal => Decoration::default(),
+            Self::Beam | Self::BeamInward | Self::BeamOutward | Self::Metal => {
+                Decoration::default()
+            }
             Self::Veil => Decoration::above(veil(cx)),
         }
     }
@@ -396,13 +407,25 @@ thread_local! {
 ///
 /// No quantising and no cache: GPUI decodes and holds this one itself, which
 /// is all an application needs when it is not processing the pixels.
-fn photograph() -> gpui::Img {
+/// The radius a decoration layer has to round itself to.
+///
+/// The slot clips rectangularly, because GPUI's content mask is a `Bounds` and
+/// there is no rounded one to ask for. So every layer here that paints to the
+/// edge carries the component's own radius: an image and a background both
+/// clip themselves in the shader, which is the only rounded clipping actually
+/// on offer. A layer that never reaches a corner does not need it.
+fn shape(cx: &App) -> Pixels {
+    cx.theme().semantic_tokens().radius.lg
+}
+
+fn photograph(cx: &App) -> gpui::Img {
     img(Arc::new(gpui::Image::from_bytes(
         gpui::ImageFormat::Jpeg,
         include_bytes!("../assets/carina-nebula.jpg").to_vec(),
     )))
     .size_full()
     .object_fit(ObjectFit::Cover)
+    .rounded(shape(cx))
 }
 
 /// The photograph under `treatment`, in the theme's own two colours.
@@ -423,7 +446,13 @@ fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
         built
     });
 
-    under_content(img(image).size_full().object_fit(ObjectFit::Cover), cx)
+    under_content(
+        img(image)
+            .size_full()
+            .object_fit(ObjectFit::Cover)
+            .rounded(shape(cx)),
+        cx,
+    )
 }
 
 /// Puts a decoration under the content with a wash between the two.
@@ -442,11 +471,17 @@ fn under_content(layer: impl IntoElement, cx: &App) -> impl IntoElement {
     div()
         .size_full()
         .child(layer)
-        .child(div().absolute().inset_0().bg(linear_gradient(
-            90.0,
-            linear_color_stop(ground.opacity(0.94), 0.0),
-            linear_color_stop(ground.opacity(0.55), 1.0),
-        )))
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .rounded(shape(cx))
+                .bg(linear_gradient(
+                    90.0,
+                    linear_color_stop(ground.opacity(0.94), 0.0),
+                    linear_color_stop(ground.opacity(0.55), 1.0),
+                )),
+        )
 }
 
 /// A colour as one comparable number, so a cache key is cheap and exact.
@@ -634,13 +669,19 @@ fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
     arc(r, r, pi, pi / 2.0, along)
 }
 
-/// How many pieces the border is stroked in.
+/// How many pieces a colour ramp around the border is stroked in.
 ///
 /// Each piece is one flat colour. GPUI's gradients carry exactly two stops —
 /// `colors: [LinearColorStop; 2]`, a fixed array handed to the shader — so a
-/// ramp of more colours than that has to be built out of pieces. Ninety-six
-/// is fine enough that the seams are invisible at any size a card is.
-const BORDER_STEPS: usize = 96;
+/// ramp of more colours than that has to be built out of pieces, and the only
+/// way a ramp reads as light rather than as tiling is for each piece to be
+/// small enough that its neighbour is imperceptibly different.
+///
+/// Ninety-six was not. On a card's perimeter that is a step every twelve
+/// pixels, which against a sheen that moves quickly is a visible block. At
+/// four hundred and eighty it is a step every two and a half, under the width
+/// of the stroke itself.
+const BORDER_STEPS: usize = 480;
 
 /// The points one run of the border walks, in order.
 ///
@@ -761,40 +802,91 @@ fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
     })
 }
 
-/// The glow the beam throws, as a handful of lights along its length.
+/// Where a beam's glow is allowed to fall.
 ///
-/// Sprites rather than strokes: the beam's core follows the frame because a
-/// path is the only thing that turns a corner properly, and its glow is a
-/// blob of light, which is the only thing a sprite is. Using each for what it
-/// is good at is cheaper than making either do both.
-fn beam_glow(phase: f32, radius: f32) -> impl IntoElement {
-    const LIGHTS: usize = 5;
-    const REACH: f32 = 190.0;
+/// The same trail reads as three different materials depending on this, which
+/// is why it is a choice rather than a constant: light thrown into the panel
+/// is a lamp behind frosted glass, light thrown outward is a neon tube, and
+/// light confined to the line is an LED strip.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Spill {
+    /// Into the component and out of it, evenly.
+    Both,
+    /// Into the component only.
+    Inward,
+    /// Out of the component only.
+    Outward,
+}
+
+/// How many lights make up one trail's glow.
+///
+/// The number is the whole difference between a glow and a row of spotlights.
+/// Five lights spaced along a fifth of the perimeter are five circles you can
+/// count; thirty at the same total length overlap by most of their width, and
+/// what you see is where they sum — a continuous band whose colour slides
+/// along it, which is what the reference actually shows.
+const TRAIL_LIGHTS: usize = 30;
+
+/// The glow one trail throws.
+fn trail_glow(head: f32, radius: f32, spill: Spill) -> impl IntoElement {
+    const REACH: f32 = 96.0;
     div()
         .absolute()
         .inset_0()
-        .children((0..LIGHTS).map(move |light| {
-            let along = light as f32 / (LIGHTS - 1) as f32;
-            let t = phase - BEAM_LENGTH * (1.0 - along);
+        .children((0..TRAIL_LIGHTS).map(move |light| {
+            let along = light as f32 / (TRAIL_LIGHTS - 1) as f32;
+            let t = head - BEAM_LENGTH * (1.0 - along);
             let (x, y) = perimeter_point(t, CARD.width, CARD.height, radius);
-            // Brightest at the head, gone at the tail.
-            let strength = along * along;
-            let size = REACH * (0.55 + along * 0.45);
+            // Brightest at the head and gone at the tail, so the trail has a
+            // direction rather than being a lit arc.
+            let strength = along * along * along;
+            // Pushed off the line for the one-sided spills. A light centred on
+            // the border spills equally; moved half its own width inward, the
+            // frame's own clip takes most of the outward half.
+            let (nx, ny) = outward_normal(x, y, CARD.width, CARD.height);
+            let shift = match spill {
+                Spill::Both => 0.0,
+                Spill::Inward => -REACH * 0.34,
+                Spill::Outward => REACH * 0.34,
+            };
+            let (cx_, cy_) = (x + nx * shift, y + ny * shift);
+            let alpha = strength * 0.5;
             div()
                 .absolute()
-                .left(px(x - size / 2.0))
-                .top(px(y - size / 2.0))
-                .size(px(size))
-                .opacity(strength * 0.55)
-                .child(img(glow_sprite(beam_colour(along))).size(px(size)))
+                .left(px(cx_ - REACH / 2.0))
+                .top(px(cy_ - REACH / 2.0))
+                .size(px(REACH))
+                .opacity(alpha)
+                .child(img(glow_sprite(beam_colour(along))).size(px(REACH)))
         }))
+}
+
+/// Which way is out of the frame at a point on its perimeter.
+///
+/// Only ever axis-aligned: a light near a corner is on one of the two edges
+/// that meet there, and pushing it along that edge's normal is close enough at
+/// the size these are drawn.
+fn outward_normal(x: f32, y: f32, width: f32, height: f32) -> (f32, f32) {
+    let gaps = [x, width - x, y, height - y];
+    let nearest = gaps
+        .iter()
+        .copied()
+        .enumerate()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map_or(0, |(index, _)| index);
+    match nearest {
+        0 => (-1.0, 0.0),
+        1 => (1.0, 0.0),
+        2 => (0.0, -1.0),
+        _ => (0.0, 1.0),
+    }
 }
 
 /// Which border effect a state is drawing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Border {
-    /// A short bright segment travelling the frame.
-    Beam,
+    /// Trails travelling the frame, throwing light where `Spill` says.
+    Beam(Spill),
     /// A metallic sheen turning around the frame.
     Metal,
 }
@@ -851,7 +943,10 @@ fn beam_colour(along: f32) -> Hsla {
 /// because it is reflecting a small bright thing rather than emitting.
 fn metal_colour(along: f32) -> Hsla {
     let turns = along.rem_euclid(1.0) * 2.0 * std::f32::consts::TAU;
-    let sheen = (turns.cos() * 0.5 + 0.5).powi(6);
+    // Fourth power rather than sixth: steep enough to read as a reflection
+    // rather than a lamp, shallow enough that the ramp is not crossing most
+    // of its range inside one piece.
+    let sheen = (turns.cos() * 0.5 + 0.5).powi(4);
     Hsla {
         h: 0.62,
         s: 0.10,
@@ -884,29 +979,32 @@ fn paint_border(
     stroke_run(window, bounds, radius, 0.0, 0.0, 1.0, 1.0, resting, 320);
 
     match kind {
-        Border::Beam => {
+        Border::Beam(_) => {
             let head = phase;
             let tail = head - BEAM_LENGTH;
             // The core carries the colour, so it is the one thing cut up.
-            for step in 0..CORE_STEPS {
-                let along = step as f32 / CORE_STEPS as f32;
-                let from = tail + BEAM_LENGTH * along;
-                let to = tail + BEAM_LENGTH * (step as f32 + 1.3) / CORE_STEPS as f32;
-                let colour = beam_colour(along);
-                // Fades at both ends, so the beam has a head and a tail rather
-                // than two cut edges.
-                let strength = (along * (1.0 - along) * 4.0).clamp(0.0, 1.0);
-                stroke_run(
-                    window,
-                    bounds,
-                    radius,
-                    0.0,
-                    from,
-                    to,
-                    2.0,
-                    colour.opacity(strength),
-                    4,
-                );
+            for trail in 0..2 {
+                let tail = tail + trail as f32 * 0.5;
+                for step in 0..CORE_STEPS {
+                    let along = step as f32 / CORE_STEPS as f32;
+                    let from = tail + BEAM_LENGTH * along;
+                    let to = tail + BEAM_LENGTH * (step as f32 + 1.3) / CORE_STEPS as f32;
+                    let colour = beam_colour(along);
+                    // Fades at both ends, so the beam has a head and a tail rather
+                    // than two cut edges.
+                    let strength = (along * (1.0 - along) * 4.0).clamp(0.0, 1.0);
+                    stroke_run(
+                        window,
+                        bounds,
+                        radius,
+                        0.0,
+                        from,
+                        to,
+                        2.0,
+                        colour.opacity(strength),
+                        4,
+                    );
+                }
             }
         }
         Border::Metal => {
@@ -941,7 +1039,7 @@ fn paint_border(
 /// components, so this is where a border belongs.
 pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
     let (id, period) = match kind {
-        Border::Beam => ("border-beam", Duration::from_millis(3200)),
+        Border::Beam(_) => ("border-beam", Duration::from_millis(3200)),
         Border::Metal => ("border-metal", Duration::from_millis(5200)),
     };
     div()
@@ -952,10 +1050,14 @@ pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
         .h(px(CARD.height))
         .child(decoration::animated(id, period, move |delta| {
             let layer = div().size_full();
-            let layer = if kind == Border::Beam {
-                layer.child(beam_glow(delta, radius))
-            } else {
-                layer
+            let layer = match kind {
+                Border::Beam(spill) => layer
+                    .child(trail_glow(delta, radius, spill))
+                    // A second trail, opposite the first. One travelling line
+                    // reads as a loading spinner; two reads as a frame that is
+                    // alive, which is what the reference does.
+                    .child(trail_glow(delta + 0.5, radius, spill)),
+                Border::Metal => layer,
             };
             layer.child(
                 canvas(
@@ -1000,7 +1102,9 @@ pub(crate) fn stage_for(kind: DecorationKind) -> Stage {
 /// The border effect a state draws around its component, if any.
 pub(crate) fn border_for(kind: DecorationKind) -> Option<Border> {
     match kind {
-        DecorationKind::Beam => Some(Border::Beam),
+        DecorationKind::Beam => Some(Border::Beam(Spill::Both)),
+        DecorationKind::BeamInward => Some(Border::Beam(Spill::Inward)),
+        DecorationKind::BeamOutward => Some(Border::Beam(Spill::Outward)),
         DecorationKind::Metal => Some(Border::Metal),
         _ => None,
     }
@@ -1180,13 +1284,14 @@ fn lensed() -> Arc<RenderImage> {
 fn glass_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
-        .child(img(lensed()).absolute().inset_0())
+        .child(img(lensed()).absolute().inset_0().rounded(shape(cx)))
         // A breath of the panel's own ground, and the lit top edge. Glass is
         // not colourless; it lifts what is under it.
         .child(
             div()
                 .absolute()
                 .inset_0()
+                .rounded(shape(cx))
                 .bg(cx.theme().background.opacity(0.16)),
         )
         .child(edge_light(cx))
@@ -1212,6 +1317,9 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
         .child(
+            // Deliberately unrounded: this one is larger than the slot and
+            // positioned by offset, so its corners are nowhere near the
+            // frame's. The wash and the edge light above it carry the shape.
             img(frosted())
                 .absolute()
                 .left(px(-CARD_INSET.width))
@@ -1221,7 +1329,13 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
         )
         // Frost is not only blur: a little of the panel's own ground, and a
         // lit top edge where the light catches the bevel.
-        .child(div().absolute().inset_0().bg(ground.opacity(0.45)))
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .rounded(shape(cx))
+                .bg(ground.opacity(0.45)),
+        )
         .child(edge_light(cx))
 }
 
@@ -1236,6 +1350,7 @@ fn tint_panel(cx: &App) -> impl IntoElement {
             div()
                 .absolute()
                 .inset_0()
+                .rounded(shape(cx))
                 .bg(cx.theme().background.opacity(0.55)),
         )
         .child(edge_light(cx))
@@ -1243,11 +1358,15 @@ fn tint_panel(cx: &App) -> impl IntoElement {
 
 /// The lit top edge that makes a translucent panel read as a surface.
 fn edge_light(cx: &App) -> impl IntoElement {
-    div().absolute().inset_0().bg(linear_gradient(
-        180.0,
-        linear_color_stop(cx.theme().foreground.opacity(0.14), 0.0),
-        linear_color_stop(cx.theme().foreground.opacity(0.0), 0.22),
-    ))
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(shape(cx))
+        .bg(linear_gradient(
+            180.0,
+            linear_color_stop(cx.theme().foreground.opacity(0.14), 0.0),
+            linear_color_stop(cx.theme().foreground.opacity(0.0), 0.22),
+        ))
 }
 
 /// Dots on a grid whose size breathes, so the field reads as a texture that
@@ -1275,24 +1394,6 @@ fn halftone(cx: &App) -> impl IntoElement {
                 }))
         }))
     })
-}
-
-/// Rings travelling out from the centre, sized by a value the application
-/// moves rather than by a clock the decoration owns.
-fn rings(progress: f32, cx: &App) -> impl IntoElement {
-    let ink = cx.theme().primary;
-    div().size_full().children((0..4).map(move |ring| {
-        // Each ring trails the one before it, so a single value produces a
-        // sequence rather than four circles doing the same thing.
-        let travel = (progress - ring as f32 * 0.16).clamp(0.0, 1.0);
-        // At rest one ring stays, faintly, so the state reads as waiting for a
-        // press rather than as an effect that failed to draw.
-        if progress <= f32::EPSILON {
-            let resting = if ring == 0 { 0.30 } else { 0.0 };
-            return lit_circle(0.0, resting, ink);
-        }
-        lit_circle(travel, (1.0 - travel) * 0.9, ink)
-    }))
 }
 
 /// Rings that keep arriving, driven by the clock instead of a press.
@@ -1353,7 +1454,7 @@ fn lit_circle(travel: f32, alpha: f32, ink: Hsla) -> gpui::Div {
 /// through to everything it covers.
 fn veil(cx: &App) -> impl IntoElement {
     let ink: Hsla = cx.theme().primary;
-    div().size_full().bg(linear_gradient(
+    div().size_full().rounded(shape(cx)).bg(linear_gradient(
         // Down and across, so it reads as light falling rather than a band.
         135.0,
         linear_color_stop(ink.opacity(0.0), 0.35),

@@ -2106,15 +2106,12 @@ impl Render for QuestionFlowStory {
 /// that fought the frame would be obvious immediately.
 struct DecorationsStory {
     kind: crate::decorations::DecorationKind,
-    /// How far the ripple has travelled, 0 at rest.
-    pressed: bool,
 }
 
 impl DecorationsStory {
     fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
         Self {
             kind: crate::decorations::DecorationKind::default(),
-            pressed: false,
         }
     }
 
@@ -2124,26 +2121,15 @@ impl DecorationsStory {
         };
         if self.kind != kind {
             self.kind = kind;
-            self.pressed = false;
             cx.notify();
         }
     }
 }
 
 impl Render for DecorationsStory {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
         let kind = self.kind;
-        // The ripple is the one decoration driven by the application rather
-        // than by a clock: the library eases the value, the story owns when
-        // it moves.
-        let ripple = gpui_ai::prelude::decoration::toward(
-            "decorations-ripple",
-            if self.pressed { 1.0 } else { 0.0 },
-            window,
-            cx,
-        );
-
         v_flex()
             .gap(tokens.spacing.md)
             .child(story_state_switcher(
@@ -2159,9 +2145,8 @@ impl Render for DecorationsStory {
                         "The card is unchanged. Everything behind and in front of it \
                          is the application's.",
                     )
-                    .decoration(kind.build(ripple, cx))
-                    .on_event(cx.listener(|story, _: &ApprovalEvent, _, cx| {
-                        story.pressed = !story.pressed;
+                    .decoration(kind.build(cx))
+                    .on_event(cx.listener(|_, _: &ApprovalEvent, _, cx| {
                         cx.notify();
                     }))
                     // An undecided approval card borders itself in

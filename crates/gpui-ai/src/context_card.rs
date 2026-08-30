@@ -107,7 +107,6 @@ impl RenderOnce for ContextCard {
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
-        let decoration_frame = tokens.colors.surface;
         let clickable = self.on_event.is_some();
         let event = ContextCardEvent::Opened {
             id: self.id.clone(),
@@ -175,7 +174,7 @@ impl RenderOnce for ContextCard {
                 .justify_start()
                 .p(tokens.spacing.lg)
                 .card_frame(cx)
-                .decoration_under(&mut decoration, decoration_radius, decoration_frame)
+                .decoration_under(&mut decoration, decoration_radius)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                 .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -184,7 +183,7 @@ impl RenderOnce for ContextCard {
                 })
                 .child(content.w_full())
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
-                .decoration_over(&mut decoration, decoration_radius, decoration_frame)
+                .decoration_over(&mut decoration, decoration_radius)
                 .refine_style(&self.style)
                 .into_any_element()
         } else {
@@ -198,8 +197,8 @@ impl RenderOnce for ContextCard {
                 .w_full()
                 .p(tokens.spacing.lg)
                 .card_frame(cx)
-                .decoration_under(&mut decoration, decoration_radius, decoration_frame)
-                .decoration_over(&mut decoration, decoration_radius, decoration_frame)
+                .decoration_under(&mut decoration, decoration_radius)
+                .decoration_over(&mut decoration, decoration_radius)
                 .refine_style(&self.style)
                 .into_any_element()
         }
