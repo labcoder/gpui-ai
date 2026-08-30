@@ -54,7 +54,13 @@ const cardFile = (routePath) => `og/${socialCardName(routePath)}.png`;
  * said something else would be a second, unversioned copy of the page's
  * summary, and the two would drift.
  */
-function cards() {
+/// The pages that get a card, and what each one says.
+///
+/// Exported so a test can compare it against the routes the site emits
+/// without rendering anything. The full capture already catches a route that
+/// claims a card nothing writes, but it catches it at the end of a release
+/// build; this is the same fact available in milliseconds.
+export function cards() {
   const component = (entry) => ({
     path: `/components/${entry.slug}/`,
     eyebrow: entry.category,
@@ -78,6 +84,16 @@ function cards() {
       title: `${catalog.components.length} components`,
       summary: "Grouped by what they are for, each with a demo running the real thing.",
       poster: "tool-calls",
+    },
+    {
+      path: "/extensions/",
+      eyebrow: "Extensions",
+      title: "Paint into any frame",
+      summary: "A decoration slot on every framed component, and a motion channel to drive it.",
+      // The decorations story, which is the section's own subject: a card
+      // showing a component being decorated says what the page is about in
+      // the one way prose cannot.
+      poster: "decorations",
     },
     {
       path: "/themes/",

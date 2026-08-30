@@ -75,6 +75,11 @@ export function posterStories() {
         .filter(({ slug }) => trio.includes(slug))
         .reduce((total, { height }) => total + height, 48),
     },
+    // The Extensions section's own demo: site-only like the two above, and
+    // the poster a reader without WebGPU sees in place of it. Its height is
+    // written here rather than read from the catalog, because a story that
+    // documents no component has no catalog row to read it from.
+    { slug: "decorations", height: 420 },
     ...catalog.components.map(({ slug, height }) => ({ slug, height })),
   ];
 }

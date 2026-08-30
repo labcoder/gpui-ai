@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { cards } from "../scripts/capture-og.mjs";
 import { site as sharedSite } from "./site-fixture.mjs";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -511,6 +512,26 @@ test("the unfurl for a component page describes that component", async () => {
   );
   assert.match(html, new RegExp(`property="og:description" content="${asRendered(component.summary)}"`));
   assert.match(html, new RegExp(`content="[^"]*/og/components-${component.slug}\\.png"`));
+});
+
+test("every page the site emits has a social card planned for it", async () => {
+  // The full capture proves this too, by rendering every card and then reading
+  // every built page's og:image — at the end of a release build. A route added
+  // without a card entry therefore failed in CI rather than here, which is a
+  // slow way to learn a fact that is two lists long. This reads the same plan
+  // the capture uses, against the pages the build actually wrote.
+  const { outDir } = await site();
+  const xml = await readFile(path.join(outDir, "sitemap.xml"), "utf8");
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+  const emitted = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) =>
+    match[1].slice(origin.length),
+  );
+  const planned = new Set(cards().map((card) => card.path));
+  assert.deepEqual(
+    emitted.filter((route) => !planned.has(route)),
+    [],
+    "these pages would claim a card nothing writes",
+  );
 });
 
 test("the sitemap lists every page and nothing else", async () => {
