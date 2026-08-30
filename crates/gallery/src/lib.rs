@@ -2,6 +2,7 @@
 
 #[cfg(any(test, feature = "performance"))]
 pub mod catalog_performance;
+mod decorations;
 mod dock_composition;
 mod gallery;
 mod motion_lab;

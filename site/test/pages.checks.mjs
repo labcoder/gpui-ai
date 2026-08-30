@@ -524,6 +524,7 @@ test("the sitemap lists every page and nothing else", async () => {
   const expected = [
     "/",
     "/components/",
+    "/extensions/",
     "/themes/",
     "/docs/",
     ...docSlugs.map((slug) => `/docs/${slug}/`),
@@ -706,15 +707,15 @@ test("route code loads per page instead of riding in every page's bundle", async
   // +9,665 bytes for the ten C6 themes (0.3.0), +208 bytes for the demo
   // frame's smooth growth (0.5.0), which is the one piece of route code that
   // has to ride in the entry because every page's demo uses it, +131 bytes for
-  // the states the prompt bar and command search now offer (0.6.0), and +2,187
+  // the states the prompt bar and command search now offer (0.6.0), +2,187
   // bytes for two more components (0.7.0) — the form controls and the question
-  // flow, whose catalog rows carry a summary, an API name, a usage line, and
-  // the form story's own two states. Story code leaking into the entry is what
+  // flow — and +3,420 bytes for the Extensions section, which is a route and a
+  // page rather than a catalog row. Story code leaking into the entry is what
   // the probe above catches; this number catches everything else growing
   // unreviewed.
   assert.ok(
-    entry.length <= 333_501,
-    `the entry chunk is ${entry.length} bytes; the reviewed cap is 333,501`,
+    entry.length <= 336_921,
+    `the entry chunk is ${entry.length} bytes; the reviewed cap is 336,921`,
   );
 
   // The source-level guard the split lives or dies on.

@@ -1,3 +1,4 @@
+import { ExtensionsPage } from "./ExtensionsPage";
 import "./site.css";
 import { CatalogPage } from "./CatalogPage";
 import { ComponentPage } from "./ComponentPage";
@@ -23,6 +24,8 @@ function Page({ route }: { readonly route: Route }) {
       return <HomePage />;
     case "index":
       return <CatalogPage />;
+    case "extensions":
+      return <ExtensionsPage />;
     case "themes":
       return <ThemesPage />;
     case "component":

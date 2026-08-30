@@ -209,6 +209,7 @@ function Masthead({
         </a>
         <nav className="masthead-nav" aria-label="Site">
           <a href={href("/components/")}>Components</a>
+          <a href={href("/extensions/")}>Extensions</a>
           <a href={href("/docs/")}>Docs</a>
           <a href={href("/themes/")}>Themes</a>
         </nav>

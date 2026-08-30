@@ -103,6 +103,14 @@ pub enum StoryId {
     /// compose inside someone else's docking, so there is nothing here for the
     /// website to name or size.
     DockComposition,
+    /// Decorations an application paints into a component's frame.
+    ///
+    /// Same contract as [`StoryId::GuidedDemo`]: addressable, absent from the
+    /// catalog. It documents no component — it demonstrates the slot every
+    /// framed component offers, which is an extension point rather than a
+    /// thing with an API of its own. The website shows it under Extensions
+    /// for exactly that reason.
+    Decorations,
     /// The motion lab: an instrument, not an exhibit.
     ///
     /// Same contract as [`StoryId::GuidedDemo`]: addressable, absent from the
@@ -141,6 +149,14 @@ pub const COMMAND_SEARCH_STORY_VARIANTS: &[(&str, &str)] = &[
 
 /// Variants the form story switches between.
 pub const FORM_STORY_VARIANTS: &[(&str, &str)] = &[("choices", "Choices"), ("toggles", "Toggles")];
+
+/// Variants the decorations story switches between.
+pub const DECORATION_STORY_VARIANTS: &[(&str, &str)] = &[
+    ("hatch", "Cross-hatch"),
+    ("halftone", "Halftone"),
+    ("ripple", "Ripple"),
+    ("veil", "Veil"),
+];
 
 /// Variants every table story switches between.
 pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
@@ -328,6 +344,7 @@ impl StoryId {
             Self::Form => "form-controls",
             Self::QuestionFlow => "question-flow",
             Self::GuidedDemo => "guided-demo",
+            Self::Decorations => "decorations",
             Self::MotionLab => "motion-lab",
             Self::ThemesTrio => "themes-trio",
             Self::DockComposition => "dock-composition",
@@ -376,6 +393,7 @@ impl StoryId {
             Self::Form => "Form controls",
             Self::QuestionFlow => "Question flow",
             Self::GuidedDemo => "Guided demo",
+            Self::Decorations => "Decorations",
             Self::ThemesTrio => "Themes trio",
             Self::DockComposition => "Dock composition",
             Self::MotionLab => "Motion lab",
@@ -393,6 +411,7 @@ impl StoryId {
             // instrument is a component.
             Self::All
             | Self::GuidedDemo
+            | Self::Decorations
             | Self::ThemesTrio
             | Self::DockComposition
             | Self::MotionLab => {
@@ -779,6 +798,7 @@ impl StoryId {
             Self::Chat => CHAT_STORY_VARIANTS,
             Self::PromptBar => PROMPT_BAR_STORY_VARIANTS,
             Self::CommandSearch => COMMAND_SEARCH_STORY_VARIANTS,
+            Self::Decorations => DECORATION_STORY_VARIANTS,
             Self::Form => FORM_STORY_VARIANTS,
             Self::RecordsTable | Self::DiffTable | Self::FilterTable | Self::ComparisonTable => {
                 TABLE_STORY_VARIANTS
@@ -798,6 +818,9 @@ impl FromStr for StoryId {
         // Addressable, but not catalog components, so not in ALL.
         if slug == Self::GuidedDemo.slug() {
             return Ok(Self::GuidedDemo);
+        }
+        if slug == Self::Decorations.slug() {
+            return Ok(Self::Decorations);
         }
         if slug == Self::ThemesTrio.slug() {
             return Ok(Self::ThemesTrio);

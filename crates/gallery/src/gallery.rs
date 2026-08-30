@@ -412,7 +412,8 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::PromptBar
         | StoryId::SelectionActions
         | StoryId::Form
-        | StoryId::QuestionFlow => false,
+        | StoryId::QuestionFlow
+        | StoryId::Decorations => false,
     }
 }
 
@@ -2087,6 +2088,83 @@ impl Render for QuestionFlowStory {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Last event: {}", self.last_event)),
+            )
+    }
+}
+
+/// Decorations painted into a real component, switchable.
+///
+/// The component is an approval card because it is one an application would
+/// actually decorate: it already carries a semantic border, so a decoration
+/// that fought the frame would be obvious immediately.
+struct DecorationsStory {
+    kind: crate::decorations::DecorationKind,
+    /// How far the ripple has travelled, 0 at rest.
+    pressed: bool,
+}
+
+impl DecorationsStory {
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
+        Self {
+            kind: crate::decorations::DecorationKind::default(),
+            pressed: false,
+        }
+    }
+
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(kind) = crate::decorations::DecorationKind::ALL.get(index).copied() else {
+            return;
+        };
+        if self.kind != kind {
+            self.kind = kind;
+            self.pressed = false;
+            cx.notify();
+        }
+    }
+}
+
+impl Render for DecorationsStory {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let kind = self.kind;
+        // The ripple is the one decoration driven by the application rather
+        // than by a clock: the library eases the value, the story owns when
+        // it moves.
+        let ripple = gpui_ai::prelude::decoration::toward(
+            "decorations-ripple",
+            if self.pressed { 1.0 } else { 0.0 },
+            window,
+            cx,
+        );
+
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(story_state_switcher(
+                cx.weak_entity(),
+                "decorations",
+                crate::decorations::DecorationKind::LABELS,
+                kind.index(),
+                Self::set_active_state,
+            ))
+            .child(
+                ApprovalCard::new("decorated-gate", "Publish the launch plan?")
+                    .description(
+                        "The card is unchanged. Everything behind and in front of it \
+                         is the application's.",
+                    )
+                    .decoration(kind.build(ripple, cx))
+                    .on_event(cx.listener(|story, _: &ApprovalEvent, _, cx| {
+                        story.pressed = !story.pressed;
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .id("decorations-note")
+                    .role(Role::Status)
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(kind.note()),
             )
     }
 }
@@ -6220,6 +6298,14 @@ impl Gallery {
                     QuestionFlowStory::new,
                 );
                 self.section(story, "Question flow", || flow, cx)
+            }
+            StoryId::Decorations => {
+                let decorations = window.use_keyed_state(
+                    ("decorations-story-state", self.generation),
+                    cx,
+                    DecorationsStory::new,
+                );
+                self.section(story, "Decorations", || decorations, cx)
             }
             StoryId::SelectionActions => {
                 let selection_story = window.use_keyed_state(

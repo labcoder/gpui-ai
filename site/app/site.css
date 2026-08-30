@@ -621,6 +621,35 @@ section + section {
   font-size: 0.875rem;
 }
 
+/* What each extension is and how it is built, as a definition list: the name
+   is the term, how it is drawn sits beside it, and what it costs is the
+   definition. A table would have promised columns that only two of the three
+   ever fill. */
+.extension-notes {
+  margin: var(--space-4) 0 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.extension-notes dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.extension-notes dt .how {
+  font-weight: 400;
+  font-size: 0.9em;
+  color: var(--ai-muted-foreground);
+}
+
+.extension-notes dd {
+  margin: var(--space-1) 0 0;
+  color: var(--ai-muted-foreground);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

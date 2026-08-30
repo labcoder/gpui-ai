@@ -11,7 +11,15 @@ export interface Route {
   /** What the page is, for metadata. */
   readonly description: string;
   /** Which page component renders it. */
-  readonly kind: "home" | "index" | "component" | "themes" | "docs" | "doc" | "missing";
+  readonly kind:
+    | "home"
+    | "index"
+    | "component"
+    | "extensions"
+    | "themes"
+    | "docs"
+    | "doc"
+    | "missing";
   /** Present for `kind: "component"` and `kind: "doc"`. */
   readonly slug?: string;
 }
@@ -36,6 +44,13 @@ export const routes: readonly Route[] = [
     title: "Components · gpui-ai",
     description: `All ${components.length} gpui-ai components, grouped by what they are for.`,
     kind: "index",
+  },
+  {
+    path: "/extensions/",
+    title: "Extensions · gpui-ai",
+    description:
+      "The points where an application changes what gpui-ai looks like: a decoration slot on every framed component, and a motion channel to drive it.",
+    kind: "extensions",
   },
   {
     path: "/themes/",
