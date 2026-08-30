@@ -372,7 +372,7 @@ impl RenderOnce for ToolCall {
                     id: id.clone(),
                     open: !open,
                 };
-                let toggle_debug_id = id.to_string();
+                let toggle_debug_id = id.clone();
                 composed_button((root_id.clone(), "toggle"), accessibility_label.clone())
                     .debug_selector(move || format!("tool-call-toggle-{toggle_debug_id}"))
                     .aria_expanded(open)
@@ -410,7 +410,7 @@ impl RenderOnce for ToolCall {
         let input = self.invocation.input.clone();
         let input_language = self.invocation.input_language.clone();
         let output = self.invocation.output.clone();
-        let body_debug_id = id.to_string();
+        let body_debug_id = id.clone();
         let body = v_flex()
             .debug_selector(move || format!("tool-call-body-{body_debug_id}"))
             .w_full()
@@ -445,7 +445,7 @@ impl RenderOnce for ToolCall {
                             h_flex()
                                 .gap(tokens.spacing.xs)
                                 .when_some(approve, |this, handler| {
-                                    let allow_debug_id = approve_id.to_string();
+                                    let allow_debug_id = approve_id.clone();
                                     this.child(
                                         div()
                                             .debug_selector(move || {
@@ -475,7 +475,7 @@ impl RenderOnce for ToolCall {
                                     )
                                 })
                                 .when_some(reject, |this, handler| {
-                                    let deny_debug_id = reject_id.to_string();
+                                    let deny_debug_id = reject_id.clone();
                                     this.child(
                                         div()
                                             .debug_selector(move || {
@@ -549,7 +549,7 @@ impl RenderOnce for ToolCall {
                 )
             });
 
-        let card_debug_id = id.to_string();
+        let card_debug_id = id.clone();
         v_flex()
             .id((root_id.clone(), "card"))
             .debug_selector(move || format!("tool-call-card-{card_debug_id}"))
@@ -571,7 +571,7 @@ impl RenderOnce for ToolCall {
                 // Opening content grows into its own height and fades in;
                 // closing removes descendants immediately so input and
                 // semantics match aria_expanded.
-                let clip_debug_id = id.to_string();
+                let clip_debug_id = id.clone();
                 this.child(
                     crate::motion::disclosure_clip(
                         ElementId::from((root_id.clone(), "disclosure-clip")),
@@ -772,7 +772,7 @@ impl RenderOnce for ToolGroup {
                     id: self.id.clone(),
                     open: !open,
                 };
-                let group_debug_id = self.id.to_string();
+                let group_debug_id = self.id.clone();
                 composed_button((root_id.clone(), "toggle"), title.clone())
                     .debug_selector(move || format!("tool-group-toggle-{group_debug_id}"))
                     .aria_expanded(open)
@@ -805,7 +805,7 @@ impl RenderOnce for ToolGroup {
                     v_flex()
                         .id((root_id, "calls"))
                         .debug_selector({
-                            let calls_debug_id = self.id.to_string();
+                            let calls_debug_id = self.id.clone();
                             move || format!("tool-group-calls-{calls_debug_id}")
                         })
                         .role(Role::List)

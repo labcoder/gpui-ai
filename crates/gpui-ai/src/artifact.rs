@@ -383,7 +383,9 @@ impl RenderOnce for ArtifactPanel {
         let artifact = self.artifact;
         let handler = self.on_event;
         let artifact_id = artifact.id.clone();
-        let debug_id = artifact_id.to_string();
+        // Shared by every selector below. A `SharedString` clone is a
+        // refcount bump; `to_string` would copy the heap for each one.
+        let debug_id = artifact_id.clone();
         let root_id = self.id.clone();
         let label: SharedString = artifact.accessibility_label().into();
         let generating =
@@ -628,13 +630,16 @@ impl RenderOnce for ArtifactPanel {
                 .border_t_1()
                 .border_color(cx.theme().border);
             for action in &self.actions {
-                let action_debug = format!("{debug_id}-{}", action.id);
+                let action_debug = action.id.clone();
+                let artifact_debug = artifact_id.clone();
                 let action_id = action.id.clone();
                 let event_artifact = artifact_id.clone();
                 let handler = handler.clone();
                 row = row.child(
                     div()
-                        .debug_selector(move || format!("artifact-action-{action_debug}"))
+                        .debug_selector(move || {
+                            format!("artifact-action-{artifact_debug}-{action_debug}")
+                        })
                         .child(
                             Button::new((root_id.clone(), format!("action-{}", action.id)))
                                 .outline()

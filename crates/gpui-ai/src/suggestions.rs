@@ -132,7 +132,7 @@ impl RenderOnce for Suggestions {
             .gap(tokens.spacing.xs)
             .children(self.items.into_iter().enumerate().map(|(ix, item)| {
                 let chip_id = ElementId::from((root_id.clone(), format!("chip-{}", item.id)));
-                let debug_id = item.id.to_string();
+                let debug_id = item.id.clone();
                 let chip = match handler.clone() {
                     Some(handler) => {
                         let event = SuggestionsEvent::Selected {
@@ -172,7 +172,7 @@ impl RenderOnce for Suggestions {
                                 cx,
                             )
                             .child({
-                                let label_debug = item.id.to_string();
+                                let label_debug = item.id.clone();
                                 div()
                                     .debug_selector(move || {
                                         format!("suggestion-label-{label_debug}")

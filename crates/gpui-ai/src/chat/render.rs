@@ -27,7 +27,7 @@ pub(super) fn transcript_frame(id: ElementId) -> Stateful<gpui::Div> {
 
 pub(super) fn message_frame(chat_id: &SharedString, message: &ChatMessage) -> Stateful<gpui::Div> {
     let id = message.id.clone();
-    let debug_id = id.to_string();
+    let debug_id = id.clone();
     v_flex()
         .id((ElementId::from(chat_id.clone()), id.clone()))
         .debug_selector(move || format!("chat-message-{debug_id}"))
@@ -45,7 +45,7 @@ pub(super) fn retry_button(
     window: &mut Window,
     cx: &mut App,
 ) -> Button {
-    let debug_id = message_id.to_string();
+    let debug_id = message_id.clone();
     outlined_control(
         (
             ElementId::from((ElementId::from(chat_id.clone()), message_id.clone())),
@@ -198,7 +198,7 @@ impl Chat {
             .group_hover(group_name, |style| style.opacity(1.0))
             .when(actions.copy, |bar| {
                 let id = message_id.clone();
-                let debug_id = message_id.to_string();
+                let debug_id = message_id.clone();
                 let copy_button = icon_button(
                     (base_id.clone(), "copy"),
                     if copied {
@@ -225,7 +225,7 @@ impl Chat {
             })
             .when(actions.regenerate, |bar| {
                 let id = message_id.clone();
-                let debug_id = message_id.to_string();
+                let debug_id = message_id.clone();
                 bar.child(
                     icon_button(
                         (base_id.clone(), "regenerate"),
@@ -244,7 +244,7 @@ impl Chat {
             })
             .when(actions.edit, |bar| {
                 let id = message_id.clone();
-                let debug_id = message_id.to_string();
+                let debug_id = message_id.clone();
                 bar.child(
                     icon_button(
                         (base_id.clone(), "edit"),
@@ -262,8 +262,8 @@ impl Chat {
             .when(actions.feedback, |bar| {
                 let up_id = message_id.clone();
                 let down_id = message_id.clone();
-                let up_debug_id = message_id.to_string();
-                let down_debug_id = message_id.to_string();
+                let up_debug_id = message_id.clone();
+                let down_debug_id = message_id.clone();
                 bar.child(
                     icon_button(
                         (base_id.clone(), "helpful"),
@@ -556,9 +556,9 @@ impl Chat {
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
         let base = ElementId::from((ElementId::from(self.id.clone()), message_id.clone()));
-        let editor_debug_id = message_id.to_string();
-        let cancel_debug_id = message_id.to_string();
-        let save_debug_id = message_id.to_string();
+        let editor_debug_id = message_id.clone();
+        let cancel_debug_id = message_id.clone();
+        let save_debug_id = message_id.clone();
         v_flex()
             .id((base.clone(), "editor"))
             .debug_selector(move || format!("chat-edit-editor-{editor_debug_id}"))
@@ -614,9 +614,9 @@ impl Chat {
     ) -> AnyElement {
         let tokens = cx.theme().semantic_tokens();
         let base = ElementId::from((ElementId::from(self.id.clone()), message_id.clone()));
-        let group_debug_id = message_id.to_string();
-        let prev_debug_id = message_id.to_string();
-        let next_debug_id = message_id.to_string();
+        let group_debug_id = message_id.clone();
+        let prev_debug_id = message_id.clone();
+        let next_debug_id = message_id.clone();
         let prev_id = message_id.clone();
         let next_id = message_id.clone();
         let label: SharedString = position.label().into();

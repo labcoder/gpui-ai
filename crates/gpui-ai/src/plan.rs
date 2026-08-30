@@ -511,7 +511,8 @@ fn render_step(
 ) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
     let step_id = ElementId::from((root_id.clone(), format!("step-{}", step.id)));
-    let debug_id = format!("{plan_id}-{}", step.id);
+    let plan_debug = plan_id.clone();
+    let step_debug = step.id.clone();
     let label: SharedString = format!(
         "Step {}: {}, {}",
         index + 1,
@@ -632,7 +633,7 @@ fn render_step(
                 step_id: step.id.clone(),
             };
             composed_button(step_id.clone(), label)
-                .debug_selector(move || format!("plan-step-{debug_id}"))
+                .debug_selector(move || format!("plan-step-{plan_debug}-{step_debug}"))
                 .flex()
                 .items_stretch()
                 .w_full()
@@ -653,7 +654,7 @@ fn render_step(
             .id(step_id)
             .role(Role::ListItem)
             .aria_label(label)
-            .debug_selector(move || format!("plan-step-{debug_id}"))
+            .debug_selector(move || format!("plan-step-{plan_debug}-{step_debug}"))
             .items_stretch()
             .w_full()
             .min_w_0()

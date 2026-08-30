@@ -549,7 +549,7 @@ impl RenderOnce for CodeDiff {
         let file = self.file;
         let handler = self.on_event;
         let path = file.path.clone();
-        let path_debug = path.to_string();
+        let path_debug = path.clone();
         let stats = file.stats();
         let label: SharedString = file.accessibility_label().into();
         let language: SharedString = file
@@ -565,7 +565,7 @@ impl RenderOnce for CodeDiff {
 
         let toggle = handler.clone().map(|handler| {
             let toggle_path = path.clone();
-            let toggle_debug = path.to_string();
+            let toggle_debug = path.clone();
             // The same rotating chevron every other disclosure in the
             // library uses, turned by the same sample the body opens on.
             // Swapping between two icons could only ever be fully open or

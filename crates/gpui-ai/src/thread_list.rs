@@ -377,7 +377,7 @@ impl RowRenderer {
         } else {
             item.title.clone()
         };
-        let debug_id = item.id.to_string();
+        let debug_id = item.id.clone();
         let select_id = item.id.clone();
         let owner = self.owner.clone();
 
@@ -388,7 +388,7 @@ impl RowRenderer {
         // the semantics and the keyboard focus ring; it paints nothing.
         // With the gliding highlight on, the row paints no hover of its
         // own and reports its geometry and hover to the shared state.
-        let row_debug_id = item.id.to_string();
+        let row_debug_id = item.id.clone();
         let base = div()
             .id((item_id.clone(), "row"))
             .debug_selector(move || format!("thread-row-{row_debug_id}"));
@@ -488,7 +488,7 @@ impl RowRenderer {
         cx: &mut App,
     ) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
-        let more_debug_id = item.id.to_string();
+        let more_debug_id = item.id.clone();
         let list_focus = self.list_focus.clone();
         let owner = self.owner.clone();
         let action_id = item.id.clone();

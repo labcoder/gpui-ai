@@ -496,7 +496,7 @@ fn citation_companion_link(
         destination: citation.destination.clone(),
     };
     let local_id = SharedString::from(format!("citation-{}", citation.id));
-    let debug_id = citation.id.to_string();
+    let debug_id = citation.id.clone();
     let visible_label = SharedString::from(format!("Citation: {}", citation.label));
 
     gpui_base::Link::new((root_id, local_id))
@@ -526,7 +526,7 @@ fn follow_up_button(
     window: &mut Window,
     cx: &mut App,
 ) -> Button {
-    let debug_id = follow_up.id.to_string();
+    let debug_id = follow_up.id.clone();
     let event = follow_up.selected_event();
     outlined_control(follow_up.id.clone(), follow_up.label, window, cx)
         .debug_selector(move || format!("streaming-follow-up-{debug_id}"))
@@ -585,7 +585,7 @@ fn source_chip(
                 id: source.id.clone(),
                 url,
             };
-            let debug_id = source.id.to_string();
+            let debug_id = source.id.clone();
             composed_button((root_id, format!("source-{index}")), accessibility_label)
                 .debug_selector(move || format!("streaming-source-{debug_id}"))
                 .px(tokens.spacing.sm)

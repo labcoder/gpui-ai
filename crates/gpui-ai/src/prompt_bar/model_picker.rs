@@ -275,7 +275,7 @@ impl PromptBar {
             for model in members {
                 model_ix += 1;
                 let model_id = model.id.clone();
-                let model_selector = format!("prompt-bar-model-option-{}", model.id);
+                let model_debug = model.id.clone();
                 let selected = self.selected_model.as_ref() == Some(&model.id);
                 let active = self.active_model.as_ref() == Some(&model.id);
                 let content = h_flex()
@@ -324,7 +324,7 @@ impl PromptBar {
                 .when_some(model.description.clone(), |button, description| {
                     button.aria_description(description)
                 })
-                .debug_selector(move || model_selector.clone())
+                .debug_selector(move || format!("prompt-bar-model-option-{model_debug}"))
                 .role(Role::ListBoxOption)
                 .disabled(model.disabled);
                 model_options.push(

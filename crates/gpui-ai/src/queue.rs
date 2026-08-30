@@ -274,7 +274,6 @@ fn render_row(
 ) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
     let row_id = ElementId::from((root_id.clone(), format!("item-{}", item.id)));
-    let debug_id = format!("{queue_debug}-{}", item.id);
     let label: SharedString = format!("Queued {} of {count}: {}", index + 1, item.text).into();
 
     let mut control = |suffix: &'static str,
@@ -284,10 +283,10 @@ fn render_row(
                        event: QueueEvent,
                        cx: &mut App| {
         let handler = handler.clone();
-        let selector = format!("queue-{suffix}-{debug_id}");
+        let row_debug = item.id.clone();
         icon_button((row_id.clone(), suffix), icon, name, window, cx)
             .disabled(!enabled || handler.is_none())
-            .debug_selector(move || selector.clone())
+            .debug_selector(move || format!("queue-{suffix}-{queue_debug}-{row_debug}"))
             .on_click(move |_: &ClickEvent, window, cx| {
                 if let Some(handler) = &handler {
                     handler(&event, window, cx)
@@ -341,7 +340,7 @@ fn render_row(
             QueueEvent::Removed { id: id.clone() },
             cx,
         ));
-    let row_debug = debug_id.clone();
+    let row_debug = item.id.clone();
     // The position number seats on the text's first line while the
     // action cluster centers itself against the whole row; the note
     // truncates like the text above it instead of stretching the row.
@@ -349,7 +348,7 @@ fn render_row(
         .id(row_id.clone())
         .role(Role::ListItem)
         .aria_label(label)
-        .debug_selector(move || format!("queue-item-{row_debug}"))
+        .debug_selector(move || format!("queue-item-{queue_debug}-{row_debug}"))
         .items_start()
         .w_full()
         .min_w_0()
