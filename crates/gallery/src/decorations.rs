@@ -577,6 +577,11 @@ fn rasterise_stage(stage: Stage) -> Arc<RenderImage> {
 /// paths rather than positioned as boxes: a box can be put near a corner, but
 /// only a path goes round one.
 fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
+    // Clamped before anything divides by it. The inward glow strokes a path
+    // inset by more than the corner radius, which leaves a rectangle with no
+    // corners at all — and a quarter arc of length zero is what put a NaN
+    // into the path builder and took the whole window down with it.
+    let r = r.clamp(0.0, w.min(h) / 2.0);
     let straight_x = (w - r * 2.0).max(0.0);
     let straight_y = (h - r * 2.0).max(0.0);
     let quarter = std::f32::consts::FRAC_PI_2 * r;
@@ -584,7 +589,16 @@ fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
     let mut along = t.rem_euclid(1.0) * total;
 
     let arc = |centre_x: f32, centre_y: f32, from: f32, span: f32, along: f32| {
-        let angle = from + span * (along / quarter);
+        // Zero when there is no arc to walk. An inset past the corner
+        // radius leaves a rectangle, and dividing a zero-length arc by its
+        // own length is what put a NaN into the path and took the window
+        // down before it ever appeared.
+        let travelled = if quarter > f32::EPSILON {
+            along / quarter
+        } else {
+            0.0
+        };
+        let angle = from + span * travelled;
         (centre_x + r * angle.cos(), centre_y + r * angle.sin())
     };
     let pi = std::f32::consts::PI;
@@ -628,6 +642,27 @@ fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
 /// is fine enough that the seams are invisible at any size a card is.
 const BORDER_STEPS: usize = 96;
 
+/// The points one run of the border walks, in order.
+///
+/// Split out from the stroking so a test can walk exactly what the painter
+/// walks. Guessing at plausible parameters is what let a NaN through the last
+/// time: the numbers that broke it were the ones the beam actually uses, and
+/// a test that invented its own never saw them.
+fn run_points(
+    size: (f32, f32),
+    radius: f32,
+    inset: f32,
+    from: f32,
+    to: f32,
+    samples: usize,
+) -> impl Iterator<Item = (f32, f32)> {
+    let radius = (radius - inset).max(0.0);
+    (0..=samples).map(move |step| {
+        let t = from + (to - from) * step as f32 / samples as f32;
+        perimeter_point(t, size.0, size.1, radius)
+    })
+}
+
 /// Strokes part of the perimeter in one flat colour, as a single path.
 ///
 /// `inset` shrinks the path it follows, which is how a glow is biased inward:
@@ -664,11 +699,8 @@ fn stroke_run(
     if size.0 <= 0.0 || size.1 <= 0.0 {
         return;
     }
-    let radius = (radius - inset).max(0.0);
     let mut path = PathBuilder::stroke(px(width));
-    for step in 0..=samples {
-        let t = from + (to - from) * step as f32 / samples as f32;
-        let (x, y) = perimeter_point(t, size.0, size.1, radius);
+    for (step, (x, y)) in run_points(size, radius, inset, from, to, samples).enumerate() {
         let at = point(px(origin.0 + x), px(origin.1 + y));
         if step == 0 {
             path.move_to(at);
@@ -679,6 +711,83 @@ fn stroke_run(
     if let Ok(path) = path.build() {
         window.paint_path(path, colour);
     }
+}
+
+/// A round glow with a soft falloff, as an image.
+///
+/// The one thing none of GPUI's primitives will do. A quad has a crisp edge, a
+/// stroke is a band with two crisp edges and butt ends, and there is no radial
+/// gradient and no blur. A sprite has the falloff drawn into it, and costs one
+/// small rasterisation per colour for the life of the process.
+///
+/// Premultiplied, because `RenderImage` composites that way: straight alpha
+/// renders every partly transparent pixel too dark and rings the glow.
+fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
+    thread_local! {
+        static SPRITES: RefCell<Vec<(u32, Arc<RenderImage>)>> = const { RefCell::new(Vec::new()) };
+    }
+    const SIZE: u32 = 128;
+    let rgba = Rgba::from(colour);
+    let key = packed(rgba);
+    SPRITES.with(|sprites| {
+        let mut sprites = sprites.borrow_mut();
+        if let Some((_, sprite)) = sprites.iter().find(|(cached, _)| *cached == key) {
+            return Arc::clone(sprite);
+        }
+        let mut buffer = ImageBuffer::new(SIZE, SIZE);
+        let centre = SIZE as f32 / 2.0;
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                let dx = (x as f32 + 0.5 - centre) / centre;
+                let dy = (y as f32 + 0.5 - centre) / centre;
+                let distance = (dx * dx + dy * dy).sqrt().min(1.0);
+                let fade = 1.0 - distance;
+                let alpha = fade * fade * fade;
+                buffer.put_pixel(
+                    x,
+                    y,
+                    ImageRgba([
+                        (rgba.b * alpha * 255.0) as u8,
+                        (rgba.g * alpha * 255.0) as u8,
+                        (rgba.r * alpha * 255.0) as u8,
+                        (alpha * 255.0) as u8,
+                    ]),
+                );
+            }
+        }
+        let sprite = Arc::new(RenderImage::new([Frame::new(buffer)]));
+        sprites.push((key, Arc::clone(&sprite)));
+        sprite
+    })
+}
+
+/// The glow the beam throws, as a handful of lights along its length.
+///
+/// Sprites rather than strokes: the beam's core follows the frame because a
+/// path is the only thing that turns a corner properly, and its glow is a
+/// blob of light, which is the only thing a sprite is. Using each for what it
+/// is good at is cheaper than making either do both.
+fn beam_glow(phase: f32, radius: f32) -> impl IntoElement {
+    const LIGHTS: usize = 5;
+    const REACH: f32 = 190.0;
+    div()
+        .absolute()
+        .inset_0()
+        .children((0..LIGHTS).map(move |light| {
+            let along = light as f32 / (LIGHTS - 1) as f32;
+            let t = phase - BEAM_LENGTH * (1.0 - along);
+            let (x, y) = perimeter_point(t, CARD.width, CARD.height, radius);
+            // Brightest at the head, gone at the tail.
+            let strength = along * along;
+            let size = REACH * (0.55 + along * 0.45);
+            div()
+                .absolute()
+                .left(px(x - size / 2.0))
+                .top(px(y - size / 2.0))
+                .size(px(size))
+                .opacity(strength * 0.55)
+                .child(img(glow_sprite(beam_colour(along))).size(px(size)))
+        }))
 }
 
 /// Which border effect a state is drawing.
@@ -751,13 +860,6 @@ fn metal_colour(along: f32) -> Hsla {
     }
 }
 
-/// How far inside the frame the beam's glow is thrown.
-///
-/// The part of this effect that is not the beam. A bright line on a border is
-/// a bright line on a border; what makes it read as light is that the panel
-/// behind it is lit too.
-const INWARD_GLOW: f32 = 30.0;
-
 /// How many pieces the beam's coloured core is cut into.
 ///
 /// Only the core, because only the core changes colour along its length. The
@@ -785,42 +887,6 @@ fn paint_border(
         Border::Beam => {
             let head = phase;
             let tail = head - BEAM_LENGTH;
-            let mid = beam_colour(0.55);
-            // Inward first, widest and faintest, on paths pulled inside the
-            // frame so the light falls into the panel rather than around it.
-            stroke_run(
-                window,
-                bounds,
-                radius,
-                INWARD_GLOW,
-                tail,
-                head,
-                INWARD_GLOW * 2.2,
-                mid.opacity(0.10),
-                96,
-            );
-            stroke_run(
-                window,
-                bounds,
-                radius,
-                INWARD_GLOW * 0.45,
-                tail,
-                head,
-                INWARD_GLOW,
-                mid.opacity(0.13),
-                96,
-            );
-            stroke_run(
-                window,
-                bounds,
-                radius,
-                0.0,
-                tail,
-                head,
-                8.0,
-                mid.opacity(0.28),
-                96,
-            );
             // The core carries the colour, so it is the one thing cut up.
             for step in 0..CORE_STEPS {
                 let along = step as f32 / CORE_STEPS as f32;
@@ -885,11 +951,20 @@ pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
         .w(px(CARD.width))
         .h(px(CARD.height))
         .child(decoration::animated(id, period, move |delta| {
-            canvas(
-                |_, _, _| (),
-                move |bounds, (), window, _| paint_border(window, bounds, kind, delta, radius),
+            let layer = div().size_full();
+            let layer = if kind == Border::Beam {
+                layer.child(beam_glow(delta, radius))
+            } else {
+                layer
+            };
+            layer.child(
+                canvas(
+                    |_, _, _| (),
+                    move |bounds, (), window, _| paint_border(window, bounds, kind, delta, radius),
+                )
+                .absolute()
+                .inset_0(),
             )
-            .size_full()
         }))
 }
 
@@ -1301,6 +1376,49 @@ mod tests {
         assert_eq!(DecorationKind::LABELS, DECORATION_STORY_VARIANTS);
         assert_eq!(DecorationKind::ALL.len(), DecorationKind::LABELS.len());
         assert_eq!(StoryId::Decorations.variants(), DECORATION_STORY_VARIANTS);
+    }
+
+    /// Every point the beam and the metal actually put into a path builder.
+    ///
+    /// Walks the painter's own parameters — the same insets, the same run
+    /// bounds, the same sample counts — over a full turn of the animation.
+    /// The first version of this test invented its own numbers and passed
+    /// while the gallery was panicking on startup, which is the entire reason
+    /// it shares `run_points` with the painter now rather than guessing.
+    #[test]
+    fn no_border_run_produces_a_point_a_path_will_reject() {
+        let size = (super::CARD.width, super::CARD.height);
+        let radius = 12.0_f32;
+        // The frame's own run, plus a sweep of insets: nothing insets the
+        // path today, but `stroke_run` still takes one, and an inset past the
+        // corner radius is exactly what produced the NaN.
+        let runs = [
+            (0.0_f32, 320_usize),
+            (6.0, 96),
+            (12.0, 96),
+            (30.0, 96),
+            (60.0, 96),
+        ];
+        for turn in 0..240 {
+            let phase = turn as f32 / 240.0;
+            let head = phase;
+            let tail = head - super::BEAM_LENGTH;
+            for (inset, samples) in runs {
+                for (x, y) in super::run_points(size, radius, inset, tail, head, samples) {
+                    assert!(
+                        x.is_finite() && y.is_finite(),
+                        "beam inset {inset} phase {phase} gave ({x}, {y})"
+                    );
+                }
+            }
+            for piece in 0..super::BORDER_STEPS {
+                let from = piece as f32 / super::BORDER_STEPS as f32;
+                let to = (piece as f32 + 1.3) / super::BORDER_STEPS as f32;
+                for (x, y) in super::run_points(size, radius, 0.0, from, to, 4) {
+                    assert!(x.is_finite() && y.is_finite(), "metal gave ({x}, {y})");
+                }
+            }
+        }
     }
 
     /// Every kind has to be reachable from the slug an address carries.
