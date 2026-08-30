@@ -101,6 +101,7 @@ impl RenderOnce for CodeBlock {
         // no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
+        let decoration_frame = tokens.colors.surface;
         let language = self.language.unwrap_or_else(|| "text".into());
 
         // Build a fenced markdown block, using a fence longer than any
@@ -126,7 +127,7 @@ impl RenderOnce for CodeBlock {
             })
             .card_frame(cx)
             .overflow_hidden()
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration, decoration_radius, decoration_frame)
             .child(
                 h_flex()
                     .items_center()
@@ -175,7 +176,7 @@ impl RenderOnce for CodeBlock {
                         .child(reason),
                 )
             })
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration, decoration_radius, decoration_frame)
             .refine_style(&self.style)
     }
 }

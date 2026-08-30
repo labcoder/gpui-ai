@@ -235,6 +235,7 @@ impl RenderOnce for QuestionFlow {
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
+        let decoration_frame = tokens.colors.surface;
         let total = self.questions.len();
         let shown = self.shown();
         let root_id = ElementId::from(self.id.clone());
@@ -301,7 +302,7 @@ impl RenderOnce for QuestionFlow {
             .id(root_id.clone())
             .debug_selector(move || format!("question-flow-{debug_id}"))
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration, decoration_radius, decoration_frame)
             .p(tokens.spacing.lg)
             .gap(tokens.spacing.md)
             .role(Role::Group)
@@ -310,7 +311,7 @@ impl RenderOnce for QuestionFlow {
                     .clone()
                     .unwrap_or_else(|| question.prompt.clone()),
             )
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration, decoration_radius, decoration_frame)
             .refine_style(&self.style)
             .when_some(card_title, |card, text| card.child(title(text, cx)))
             .child(

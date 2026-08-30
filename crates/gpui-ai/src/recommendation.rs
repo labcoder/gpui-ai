@@ -133,13 +133,14 @@ impl RenderOnce for RecommendationCard {
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
         let decoration_radius = tokens.radius.lg;
+        let decoration_frame = tokens.colors.surface;
         let event = RecommendationEvent::Accepted {
             id: self.id.clone(),
         };
         let accessibility_label = self.title.clone();
         let accessibility_description = self.description.clone();
         card(self.id.clone(), cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration, decoration_radius, decoration_frame)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
@@ -262,7 +263,7 @@ impl RenderOnce for RecommendationCard {
                     ),
                 )
             })
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration, decoration_radius, decoration_frame)
             .refine_style(&self.style)
     }
 }
