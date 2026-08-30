@@ -628,27 +628,46 @@ fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
 /// is fine enough that the seams are invisible at any size a card is.
 const BORDER_STEPS: usize = 96;
 
-/// Strokes one piece of the perimeter in a flat colour.
-fn stroke_piece(
+/// Strokes part of the perimeter in one flat colour, as a single path.
+///
+/// `inset` shrinks the path it follows, which is how a glow is biased inward:
+/// a stroke is centred on its path, so a wide one on a path pulled inside the
+/// frame spills mostly into the component instead of evenly both ways.
+///
+/// One path rather than a run of short ones, and that matters. Consecutive
+/// stroked paths meet with butt ends that neither quite abut nor quite
+/// overlap, and at nine pixels wide the joins read as notches all the way
+/// round. Only a colour that changes along the path needs to be cut up.
+#[allow(clippy::too_many_arguments)]
+fn stroke_run(
     window: &mut Window,
     box_: gpui::Bounds<Pixels>,
     radius: f32,
+    inset: f32,
     from: f32,
     to: f32,
     width: f32,
     colour: Hsla,
+    samples: usize,
 ) {
-    let origin = (f32::from(box_.origin.x), f32::from(box_.origin.y));
-    let size = (f32::from(box_.size.width), f32::from(box_.size.height));
     if colour.a <= 0.002 || width <= 0.0 {
         return;
     }
+    let origin = (
+        f32::from(box_.origin.x) + inset,
+        f32::from(box_.origin.y) + inset,
+    );
+    let size = (
+        f32::from(box_.size.width) - inset * 2.0,
+        f32::from(box_.size.height) - inset * 2.0,
+    );
+    if size.0 <= 0.0 || size.1 <= 0.0 {
+        return;
+    }
+    let radius = (radius - inset).max(0.0);
     let mut path = PathBuilder::stroke(px(width));
-    // Sampled rather than arced: a piece is a ninety-sixth of the way round,
-    // so three points already describe it to well under a pixel, and this
-    // needs no reasoning about arc flags at the corners.
-    for step in 0..=3 {
-        let t = from + (to - from) * step as f32 / 3.0;
+    for step in 0..=samples {
+        let t = from + (to - from) * step as f32 / samples as f32;
         let (x, y) = perimeter_point(t, size.0, size.1, radius);
         let at = point(px(origin.0 + x), px(origin.1 + y));
         if step == 0 {
@@ -732,45 +751,117 @@ fn metal_colour(along: f32) -> Hsla {
     }
 }
 
+/// How far inside the frame the beam's glow is thrown.
+///
+/// The part of this effect that is not the beam. A bright line on a border is
+/// a bright line on a border; what makes it read as light is that the panel
+/// behind it is lit too.
+const INWARD_GLOW: f32 = 30.0;
+
+/// How many pieces the beam's coloured core is cut into.
+///
+/// Only the core, because only the core changes colour along its length. The
+/// wide passes are single paths, which is what stopped them showing seams.
+const CORE_STEPS: usize = 28;
+
 /// Draws the whole border for one frame.
-fn paint_border(window: &mut Window, bounds: gpui::Bounds<Pixels>, kind: Border, phase: f32) {
-    let radius = 12.0;
+fn paint_border(
+    window: &mut Window,
+    bounds: gpui::Bounds<Pixels>,
+    kind: Border,
+    phase: f32,
+    radius: f32,
+) {
     let resting = Hsla {
         h: 0.0,
         s: 0.0,
         l: 1.0,
         a: 0.10,
     };
-    for step in 0..BORDER_STEPS {
-        let from = step as f32 / BORDER_STEPS as f32;
-        // A hair past the next piece's start, so the seams do not show as gaps
-        // on the outside of a corner.
-        let to = (step as f32 + 1.08) / BORDER_STEPS as f32;
-        let mut piece = |width: f32, colour: Hsla| {
-            stroke_piece(window, bounds, radius, from, to, width, colour);
-        };
-        match kind {
-            Border::Beam => {
-                // The rest of the frame stays drawn: a beam is a bright part
-                // of a border, not a light with no border under it.
-                piece(1.0, resting);
-                let behind = (phase - from).rem_euclid(1.0);
-                if behind < BEAM_LENGTH {
-                    let along = 1.0 - behind / BEAM_LENGTH;
-                    let colour = beam_colour(along);
-                    // Fades at both ends, so the beam has a head and a tail
-                    // rather than two cut edges.
-                    let strength = (along * (1.0 - along) * 4.0).clamp(0.0, 1.0);
-                    piece(9.0, colour.opacity(strength * 0.16));
-                    piece(4.0, colour.opacity(strength * 0.45));
-                    piece(1.6, colour.opacity(strength));
-                }
+    // The frame itself, in one unbroken stroke.
+    stroke_run(window, bounds, radius, 0.0, 0.0, 1.0, 1.0, resting, 320);
+
+    match kind {
+        Border::Beam => {
+            let head = phase;
+            let tail = head - BEAM_LENGTH;
+            let mid = beam_colour(0.55);
+            // Inward first, widest and faintest, on paths pulled inside the
+            // frame so the light falls into the panel rather than around it.
+            stroke_run(
+                window,
+                bounds,
+                radius,
+                INWARD_GLOW,
+                tail,
+                head,
+                INWARD_GLOW * 2.2,
+                mid.opacity(0.10),
+                96,
+            );
+            stroke_run(
+                window,
+                bounds,
+                radius,
+                INWARD_GLOW * 0.45,
+                tail,
+                head,
+                INWARD_GLOW,
+                mid.opacity(0.13),
+                96,
+            );
+            stroke_run(
+                window,
+                bounds,
+                radius,
+                0.0,
+                tail,
+                head,
+                8.0,
+                mid.opacity(0.28),
+                96,
+            );
+            // The core carries the colour, so it is the one thing cut up.
+            for step in 0..CORE_STEPS {
+                let along = step as f32 / CORE_STEPS as f32;
+                let from = tail + BEAM_LENGTH * along;
+                let to = tail + BEAM_LENGTH * (step as f32 + 1.3) / CORE_STEPS as f32;
+                let colour = beam_colour(along);
+                // Fades at both ends, so the beam has a head and a tail rather
+                // than two cut edges.
+                let strength = (along * (1.0 - along) * 4.0).clamp(0.0, 1.0);
+                stroke_run(
+                    window,
+                    bounds,
+                    radius,
+                    0.0,
+                    from,
+                    to,
+                    2.0,
+                    colour.opacity(strength),
+                    4,
+                );
             }
-            Border::Metal => {
-                piece(1.0, resting);
+        }
+        Border::Metal => {
+            // No inward glow: metal reflects, it does not throw light. That is
+            // the whole difference between the two, and the reason they are
+            // separate states rather than one with a switch.
+            for step in 0..BORDER_STEPS {
+                let from = step as f32 / BORDER_STEPS as f32;
+                let to = (step as f32 + 1.3) / BORDER_STEPS as f32;
                 let colour = metal_colour(from - phase);
-                piece(5.0, colour.opacity(0.14));
-                piece(1.8, colour.opacity(0.95));
+                stroke_run(
+                    window,
+                    bounds,
+                    radius,
+                    0.0,
+                    from,
+                    to,
+                    2.0,
+                    colour.opacity(0.95),
+                    4,
+                );
             }
         }
     }
@@ -782,7 +873,7 @@ fn paint_border(window: &mut Window, bounds: gpui::Bounds<Pixels>, kind: Border,
 /// half of it falls outside the component, and the slot clips to the
 /// component's shape. An application owns the layout around its own
 /// components, so this is where a border belongs.
-pub(crate) fn border_effect(kind: Border) -> impl IntoElement {
+pub(crate) fn border_effect(kind: Border, radius: f32) -> impl IntoElement {
     let (id, period) = match kind {
         Border::Beam => ("border-beam", Duration::from_millis(3200)),
         Border::Metal => ("border-metal", Duration::from_millis(5200)),
@@ -796,7 +887,7 @@ pub(crate) fn border_effect(kind: Border) -> impl IntoElement {
         .child(decoration::animated(id, period, move |delta| {
             canvas(
                 |_, _, _| (),
-                move |bounds, (), window, _| paint_border(window, bounds, kind, delta),
+                move |bounds, (), window, _| paint_border(window, bounds, kind, delta, radius),
             )
             .size_full()
         }))

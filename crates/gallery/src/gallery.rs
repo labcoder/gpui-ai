@@ -2163,7 +2163,15 @@ impl Render for DecorationsStory {
                     .on_event(cx.listener(|story, _: &ApprovalEvent, _, cx| {
                         story.pressed = !story.pressed;
                         cx.notify();
-                    }));
+                    }))
+                    // An undecided approval card borders itself in
+                    // `theme().warning` on purpose: a decision gate says
+                    // "decide" before a word of it is read. It is the right
+                    // colour for that card and the wrong one for this story,
+                    // where it is the loudest thing on screen and the subject
+                    // is what the decoration does. Overriding it is the
+                    // ordinary style path — which is itself worth showing.
+                    .border_color(cx.theme().border);
                 if crate::decorations::needs_backdrop(kind) {
                     // The stage: what an application paints around its own
                     // component. Three states need it, for two reasons. The
@@ -2216,7 +2224,10 @@ impl Render for DecorationsStory {
                         // rather than under it. A border effect is astride the
                         // component's edge, which is why it is out here at all.
                         .when_some(border, |stage, border| {
-                            stage.child(crate::decorations::border_effect(border))
+                            stage.child(crate::decorations::border_effect(
+                                border,
+                                f32::from(tokens.radius.lg),
+                            ))
                         })
                         .into_any_element()
                 } else {
