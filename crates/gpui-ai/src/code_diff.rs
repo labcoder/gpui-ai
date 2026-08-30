@@ -12,6 +12,7 @@
 //! on the same rem-based line height so numbers and lines stay aligned.
 
 use crate::control::ControlMetricsExt as _;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::motion::{acknowledged_state, disclosure_progress};
 use crate::surface::CardFrameExt as _;
 use crate::{
@@ -478,6 +479,7 @@ pub enum CodeDiffEvent {
 pub struct CodeDiff {
     id: ElementId,
     style: StyleRefinement,
+    decoration: Decoration,
     file: DiffFile,
     open: bool,
     reviewable: bool,
@@ -485,11 +487,22 @@ pub struct CodeDiff {
 }
 
 impl CodeDiff {
+    /// Layers painted into this diff's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a viewer for one file, open by default.
     pub fn new(id: impl Into<ElementId>, file: &DiffFile) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             file: file.clone(),
             open: true,
             reviewable: false,
@@ -527,8 +540,12 @@ impl Styled for CodeDiff {
 }
 
 impl RenderOnce for CodeDiff {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let file = self.file;
         let handler = self.on_event;
         let path = file.path.clone();
@@ -649,6 +666,7 @@ impl RenderOnce for CodeDiff {
             .w_full()
             .min_w_0()
             .card_frame(cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
@@ -662,6 +680,7 @@ impl RenderOnce for CodeDiff {
                         .children(hunks),
                 )
             })
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

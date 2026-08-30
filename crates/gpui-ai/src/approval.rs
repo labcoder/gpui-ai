@@ -3,6 +3,7 @@
 use crate::ButtonLabelExt as _;
 use crate::control::ControlMetricsExt as _;
 use crate::cues::{self, Cue};
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::handlers::SharedHandler;
 use crate::motion::acknowledged_state;
 use crate::status::{StatusBadge, StatusTone};
@@ -74,6 +75,7 @@ pub enum ApprovalTone {
 pub struct ApprovalCard {
     id: SharedString,
     style: StyleRefinement,
+    decoration: Decoration,
     title: SharedString,
     description: Option<SharedString>,
     approve_label: SharedString,
@@ -87,11 +89,22 @@ pub struct ApprovalCard {
 }
 
 impl ApprovalCard {
+    /// Layers painted into this card's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a gate with the question being asked of the human.
     pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             title: title.into(),
             description: None,
             approve_label: "Approve".into(),
@@ -170,8 +183,12 @@ impl Styled for ApprovalCard {
 }
 
 impl RenderOnce for ApprovalCard {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let has_payload = !self.children.is_empty();
         let handler = self.on_event;
         let approve_event = ApprovalEvent::Approved {
@@ -305,6 +322,7 @@ impl RenderOnce for ApprovalCard {
         // A decision gate is the one card that earns a semantic accent: the
         // warning border says "stop and decide" before any text is read.
         card(self.id.clone(), cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
@@ -326,6 +344,7 @@ impl RenderOnce for ApprovalCard {
                 )
             })
             .child(footer)
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

@@ -36,6 +36,7 @@ pub mod context_card;
 pub mod context_meter;
 mod control;
 pub mod cues;
+pub mod decoration;
 pub mod diff_table;
 pub mod filter_table;
 pub mod fine_tune;
@@ -104,6 +105,7 @@ pub mod prelude {
     pub use crate::context_card::{ContextCard, ContextCardEvent};
     pub use crate::context_meter::{ContextMeter, ContextMeterVariant, ContextUsage, UsageLevel};
     pub use crate::cues::{Cue, CueSubscription};
+    pub use crate::decoration::{self as decoration, Decoration};
     pub use crate::diff_table::{
         DiffCell, DiffChangeKind, DiffColumn, DiffColumnAlignment, DiffProposalAction,
         DiffProposalState, DiffRow, DiffSortDirection, DiffTable, DiffTableEvent,

@@ -9,6 +9,7 @@
 
 use crate::control::ControlMetricsExt as _;
 use crate::control::QuietSurfaceExt as _;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::{
     ButtonLabelExt as _,
     control::composed_button,
@@ -203,6 +204,7 @@ pub enum PlanEvent {
 pub struct PlanCard {
     id: SharedString,
     style: StyleRefinement,
+    decoration: Decoration,
     title: SharedString,
     description: Option<SharedString>,
     steps: Vec<PlanStep>,
@@ -213,11 +215,22 @@ pub struct PlanCard {
 }
 
 impl PlanCard {
+    /// Layers painted into this card's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a proposed plan.
     pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             title: title.into(),
             description: None,
             steps: Vec::new(),
@@ -283,8 +296,12 @@ impl Styled for PlanCard {
 }
 
 impl RenderOnce for PlanCard {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let done = self.done_count();
         let handler = self.on_event;
         let plan_id = self.id.clone();
@@ -430,6 +447,7 @@ impl RenderOnce for PlanCard {
         };
 
         card(self.id.clone(), cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .role(Role::Group)
             .aria_label(label)
             .when_some(self.description.clone(), |this, text| {
@@ -474,6 +492,7 @@ impl RenderOnce for PlanCard {
                     .children(steps),
             )
             .children(footer)
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

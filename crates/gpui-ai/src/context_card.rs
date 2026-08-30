@@ -1,6 +1,7 @@
 //! Cards for retrieved knowledge chunks with source attribution.
 
 use crate::control::composed_button;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::handlers::SharedHandler;
 use crate::surface::CardFrameExt as _;
 use crate::theme::SemanticStyledExt as _;
@@ -29,6 +30,7 @@ use std::rc::Rc;
 pub struct ContextCard {
     id: SharedString,
     style: StyleRefinement,
+    decoration: Decoration,
     source: SharedString,
     snippet: Option<SharedString>,
     relevance: Option<f32>,
@@ -36,12 +38,23 @@ pub struct ContextCard {
 }
 
 impl ContextCard {
+    /// Layers painted into this card's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a card for a chunk retrieved from `source` (a document name,
     /// URL, or collection).
     pub fn new(id: impl Into<SharedString>, source: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             source: source.into(),
             snippet: None,
             relevance: None,
@@ -88,8 +101,12 @@ impl Styled for ContextCard {
 }
 
 impl RenderOnce for ContextCard {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let clickable = self.on_event.is_some();
         let event = ContextCardEvent::Opened {
             id: self.id.clone(),
@@ -157,6 +174,7 @@ impl RenderOnce for ContextCard {
                 .justify_start()
                 .p(tokens.spacing.lg)
                 .card_frame(cx)
+                .decoration_under(&mut decoration, decoration_radius)
                 .hover(|style| style.bg(cx.theme().accent.opacity(0.6)))
                 .active(|style| style.bg(cx.theme().accent))
                 .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -165,6 +183,7 @@ impl RenderOnce for ContextCard {
                 })
                 .child(content.w_full())
                 .on_click(move |_: &ClickEvent, window, cx| handler(&event, window, cx))
+                .decoration_over(&mut decoration, decoration_radius)
                 .refine_style(&self.style)
                 .into_any_element()
         } else {
@@ -178,6 +197,8 @@ impl RenderOnce for ContextCard {
                 .w_full()
                 .p(tokens.spacing.lg)
                 .card_frame(cx)
+                .decoration_under(&mut decoration, decoration_radius)
+                .decoration_over(&mut decoration, decoration_radius)
                 .refine_style(&self.style)
                 .into_any_element()
         }

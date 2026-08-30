@@ -13,6 +13,7 @@
 
 use crate::ButtonLabelExt as _;
 use crate::control::ControlMetricsExt as _;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::form::{ChoiceEvent, ChoiceGroup, ChoiceOption};
 use crate::handlers::SharedHandler;
 use crate::surface::{CardFrameExt as _, description, meta, title};
@@ -155,9 +156,20 @@ pub struct QuestionFlow {
     finish_label: SharedString,
     on_event: Option<SharedHandler<QuestionFlowEvent>>,
     style: StyleRefinement,
+    decoration: Decoration,
 }
 
 impl QuestionFlow {
+    /// Layers painted into this flow's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a flow with a stable identifier and what it is gathering for.
     pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
         Self {
@@ -170,6 +182,7 @@ impl QuestionFlow {
             finish_label: "Done".into(),
             on_event: None,
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
         }
     }
 
@@ -226,8 +239,12 @@ impl Styled for QuestionFlow {
 }
 
 impl RenderOnce for QuestionFlow {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let total = self.questions.len();
         let shown = self.shown();
         let root_id = ElementId::from(self.id.clone());
@@ -294,6 +311,7 @@ impl RenderOnce for QuestionFlow {
             .id(root_id.clone())
             .debug_selector(move || format!("question-flow-{debug_id}"))
             .card_frame(cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .p(tokens.spacing.lg)
             .gap(tokens.spacing.md)
             .role(Role::Group)
@@ -302,6 +320,7 @@ impl RenderOnce for QuestionFlow {
                     .clone()
                     .unwrap_or_else(|| question.prompt.clone()),
             )
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
             .when_some(card_title, |card, text| card.child(title(text, cx)))
             .child(

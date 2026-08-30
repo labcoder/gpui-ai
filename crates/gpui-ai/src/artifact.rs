@@ -11,6 +11,7 @@
 //! panel inside the upstream resizable group.
 
 use crate::control::ControlMetricsExt as _;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::scrolling::PolicyScrollbarExt as _;
 use crate::surface::CardFrameExt as _;
 use crate::{
@@ -312,6 +313,7 @@ pub enum ArtifactPanelEvent {
 pub struct ArtifactPanel {
     id: ElementId,
     style: StyleRefinement,
+    decoration: Decoration,
     artifact: Artifact,
     view: ArtifactView,
     actions: Vec<ArtifactAction>,
@@ -319,11 +321,22 @@ pub struct ArtifactPanel {
 }
 
 impl ArtifactPanel {
+    /// Layers painted into this panel's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a panel for an artifact, showing its preview.
     pub fn new(id: impl Into<ElementId>, artifact: &Artifact) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             artifact: artifact.clone(),
             view: ArtifactView::Preview,
             actions: Vec::new(),
@@ -361,8 +374,12 @@ impl Styled for ArtifactPanel {
 }
 
 impl RenderOnce for ArtifactPanel {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let artifact = self.artifact;
         let handler = self.on_event;
         let artifact_id = artifact.id.clone();
@@ -654,11 +671,13 @@ impl RenderOnce for ArtifactPanel {
             .min_w_0()
             .min_h_0()
             .card_frame(cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .overflow_hidden()
             .child(header)
             .children(tabs)
             .child(body)
             .children(footer)
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

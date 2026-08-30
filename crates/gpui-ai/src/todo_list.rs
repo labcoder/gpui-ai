@@ -2,6 +2,7 @@
 
 use crate::control::QuietSurfaceExt as _;
 use crate::control::composed_button;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens, acknowledged_state};
 use crate::surface::CardFrameExt as _;
@@ -104,17 +105,29 @@ pub enum TodoListEvent {
 pub struct TodoList {
     id: ElementId,
     style: StyleRefinement,
+    decoration: Decoration,
     title: Option<SharedString>,
     items: Vec<TodoItem>,
     on_event: Option<SharedHandler<TodoListEvent>>,
 }
 
 impl TodoList {
+    /// Layers painted into this list's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates an empty list.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             title: None,
             items: Vec::new(),
             on_event: None,
@@ -150,8 +163,12 @@ impl Styled for TodoList {
 }
 
 impl RenderOnce for TodoList {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let motion = MotionTokens::read(cx).clone();
         let done = self
             .items
@@ -207,6 +224,7 @@ impl RenderOnce for TodoList {
             .p(tokens.spacing.md)
             .gap(tokens.spacing.xs)
             .card_frame(cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .when_some(self.title, |this, title| {
                 this.child(
                     h_flex()
@@ -355,6 +373,7 @@ impl RenderOnce for TodoList {
                         .into_any_element(),
                 }
             }))
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

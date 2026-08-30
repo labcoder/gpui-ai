@@ -1,6 +1,7 @@
 //! Web-search tool output: a query and its results with sources.
 
 use crate::control::{PressReleaseExt as _, composed_button};
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::handlers::SharedHandler;
 use crate::motion::{ArrivalRoster, MotionTokens};
 use crate::surface::CardFrameExt as _;
@@ -77,6 +78,7 @@ pub enum SearchResultsEvent {
 pub struct SearchResults {
     id: ElementId,
     style: StyleRefinement,
+    decoration: Decoration,
     query: SharedString,
     searching: bool,
     results: Vec<SearchResult>,
@@ -84,11 +86,22 @@ pub struct SearchResults {
 }
 
 impl SearchResults {
+    /// Layers painted into this card's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates the component for a search `query`.
     pub fn new(id: impl Into<ElementId>, query: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             query: query.into(),
             searching: false,
             results: Vec::new(),
@@ -125,8 +138,12 @@ impl Styled for SearchResults {
 }
 
 impl RenderOnce for SearchResults {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let header: SharedString = if self.searching {
             format!("Searching \u{201c}{}\u{201d}\u{2026}", self.query).into()
         } else {
@@ -164,6 +181,7 @@ impl RenderOnce for SearchResults {
             .role(Role::Search)
             .aria_label(header.clone())
             .card_frame(cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .overflow_hidden()
             .child(
                 h_flex()
@@ -303,6 +321,7 @@ impl RenderOnce for SearchResults {
                         })),
                 )
             })
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

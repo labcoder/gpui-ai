@@ -1,5 +1,6 @@
 //! Syntax-highlighted code blocks with streaming reveal.
 
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::stream::{ProgressState, StreamedContent};
 use crate::surface::CardFrameExt as _;
 use crate::theme::SemanticStyledExt as _;
@@ -29,6 +30,7 @@ use gpui_component::{
 pub struct CodeBlock {
     id: ElementId,
     style: StyleRefinement,
+    decoration: Decoration,
     code: SharedString,
     language: Option<SharedString>,
     streaming: bool,
@@ -37,11 +39,22 @@ pub struct CodeBlock {
 }
 
 impl CodeBlock {
+    /// Layers painted into this block's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a block from complete code.
     pub fn new(id: impl Into<ElementId>, code: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             code: code.into(),
             language: None,
             streaming: false,
@@ -82,8 +95,12 @@ impl Styled for CodeBlock {
 }
 
 impl RenderOnce for CodeBlock {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a component with
+        // no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let language = self.language.unwrap_or_else(|| "text".into());
 
         // Build a fenced markdown block, using a fence longer than any
@@ -109,6 +126,7 @@ impl RenderOnce for CodeBlock {
             })
             .card_frame(cx)
             .overflow_hidden()
+            .decoration_under(&mut decoration, decoration_radius)
             .child(
                 h_flex()
                     .items_center()
@@ -157,6 +175,7 @@ impl RenderOnce for CodeBlock {
                         .child(reason),
                 )
             })
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }

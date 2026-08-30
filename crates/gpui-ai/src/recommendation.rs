@@ -2,6 +2,7 @@
 
 use crate::ButtonLabelExt as _;
 use crate::control::ControlMetricsExt as _;
+use crate::decoration::{DecoratedExt as _, Decoration};
 use crate::handlers::Handler;
 use crate::surface::{card, description, eyebrow, title};
 use crate::theme::SemanticStyledExt as _;
@@ -45,6 +46,7 @@ use gpui_component::{
 pub struct RecommendationCard {
     id: SharedString,
     style: StyleRefinement,
+    decoration: Decoration,
     title: SharedString,
     description: Option<SharedString>,
     confidence: Option<f32>,
@@ -54,11 +56,22 @@ pub struct RecommendationCard {
 }
 
 impl RecommendationCard {
+    /// Layers painted into this card's frame: one under the content, one
+    /// over it, both clipped to its own shape and neither affecting layout.
+    ///
+    /// This crate ships no effects of its own — what goes in a decoration is
+    /// the application's expression.
+    pub fn decoration(mut self, decoration: Decoration) -> Self {
+        self.decoration = decoration;
+        self
+    }
+
     /// Creates a card with the recommendation headline.
     pub fn new(id: impl Into<SharedString>, title: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
+            decoration: Decoration::default(),
             title: title.into(),
             description: None,
             confidence: None,
@@ -114,14 +127,19 @@ impl Styled for RecommendationCard {
 }
 
 impl RenderOnce for RecommendationCard {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
+        // Taken once: each layer is placed at most once, and a
+        // component with no decoration adds no elements at all.
+        let mut decoration = std::mem::take(&mut self.decoration);
+        let decoration_radius = tokens.radius.lg;
         let event = RecommendationEvent::Accepted {
             id: self.id.clone(),
         };
         let accessibility_label = self.title.clone();
         let accessibility_description = self.description.clone();
         card(self.id.clone(), cx)
+            .decoration_under(&mut decoration, decoration_radius)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
@@ -244,6 +262,7 @@ impl RenderOnce for RecommendationCard {
                     ),
                 )
             })
+            .decoration_over(&mut decoration, decoration_radius)
             .refine_style(&self.style)
     }
 }
