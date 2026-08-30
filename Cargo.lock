@@ -2108,6 +2108,7 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "gpui_platform",
+ "image",
  "serde_json",
  "windows-sys 0.61.2",
 ]

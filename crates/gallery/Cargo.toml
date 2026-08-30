@@ -31,6 +31,9 @@ export = ["dep:serde_json"]
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
+# Already in the tree through gpui; named here because the decoration
+# stories read pixels rather than just handing bytes to an <img>.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 gpui_platform.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
