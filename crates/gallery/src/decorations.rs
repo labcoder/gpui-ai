@@ -26,12 +26,11 @@
 //! to say, on a theme switch. Everything between those is a cached
 //! `RenderImage` handed to `img()`.
 
+use gpui::RenderImage;
 use gpui::{
     App, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels, Rgba, Styled as _, Window,
-    canvas, div, img, linear_color_stop, linear_gradient, point, px, relative,
+    canvas, div, img, linear_color_stop, linear_gradient, point, px,
 };
-use gpui::{BoxShadow, RenderImage};
-use gpui::{ObjectFit, StyledImage as _};
 use gpui_ai::prelude::{Decoration, decoration};
 use gpui_component::ActiveTheme as _;
 use image::{Frame, ImageBuffer, Rgba as ImageRgba};
@@ -237,7 +236,6 @@ enum Treatment {
 struct Photo {
     width: u32,
     height: u32,
-    luminance: Vec<u8>,
     /// Straight RGB, kept for the one decoration that blurs rather than
     /// quantises: frosted glass is the picture out of focus, and a tone map
     /// of it is a different thing entirely.
@@ -278,9 +276,6 @@ fn photo() -> &'static Photo {
         Photo {
             width: decoded.width(),
             height: decoded.height(),
-            luminance: image::DynamicImage::ImageRgb8(decoded.clone())
-                .to_luma8()
-                .into_raw(),
             rgb: decoded.into_raw(),
         }
     })
@@ -296,7 +291,7 @@ const FROST_RADIUS: usize = 14;
 /// makes this cheap enough to do on the CPU at all. Done once and cached: it
 /// does not depend on the theme, so unlike the quantised treatments it never
 /// needs redoing.
-fn frosted() -> Arc<RenderImage> {
+fn frosted(radius: f32) -> Arc<RenderImage> {
     static FROSTED: OnceLock<Arc<RenderImage>> = OnceLock::new();
     Arc::clone(FROSTED.get_or_init(|| {
         let (width, height) = (BACKDROP.width as usize, BACKDROP.height as usize);
@@ -305,16 +300,10 @@ fn frosted() -> Arc<RenderImage> {
             box_blur(&mut channels, width, height, FROST_RADIUS, true);
             box_blur(&mut channels, width, height, FROST_RADIUS, false);
         }
-        let mut buffer = ImageBuffer::new(BACKDROP.width as u32, BACKDROP.height as u32);
-        for (index, pixel) in channels.as_chunks::<3>().0.iter().enumerate() {
-            buffer.put_pixel(
-                index as u32 % BACKDROP.width as u32,
-                index as u32 / BACKDROP.width as u32,
-                // BGRA, as everywhere `RenderImage` is built by hand.
-                ImageRgba([pixel[2], pixel[1], pixel[0], 255]),
-            );
-        }
-        Arc::new(RenderImage::new([Frame::new(buffer)]))
+        // Cropped to the card rather than drawn oversized and offset. The
+        // offset version could not carry the frame's shape at all: its own
+        // corners were far outside the frame's.
+        shaped_crop(&channels, radius)
     }))
 }
 
@@ -403,6 +392,34 @@ thread_local! {
     static LAST: RefCell<Option<Rasterised>> = const { RefCell::new(None) };
 }
 
+/// A card-sized crop of a stage buffer, with the frame's shape in its alpha.
+///
+/// Every picture a decoration shows goes through here, which is the point:
+/// one place that knows the crop and the shape, rather than each treatment
+/// remembering to carry both.
+fn shaped_crop(pixels: &[u8], radius: f32) -> Arc<RenderImage> {
+    let (card_w, card_h) = (CARD.width as u32, CARD.height as u32);
+    let mut buffer = ImageBuffer::new(card_w, card_h);
+    for y in 0..card_h {
+        for x in 0..card_w {
+            let rgb = sample_rgb(
+                pixels,
+                BACKDROP.width as u32,
+                BACKDROP.height as u32,
+                x as f32 + CARD_INSET.width,
+                y as f32 + CARD_INSET.height,
+            );
+            let alpha = shape_alpha(x, y, CARD.width, CARD.height, radius);
+            buffer.put_pixel(
+                x,
+                y,
+                ImageRgba([rgb[2], rgb[1], rgb[0], (alpha * 255.0) as u8]),
+            );
+        }
+    }
+    Arc::new(RenderImage::new([Frame::new(buffer)]))
+}
+
 /// The photograph as it was taken, in its own colours.
 ///
 /// No quantising and no cache: GPUI decodes and holds this one itself, which
@@ -418,14 +435,11 @@ fn shape(cx: &App) -> Pixels {
     cx.theme().semantic_tokens().radius.lg
 }
 
-fn photograph(cx: &App) -> gpui::Img {
-    img(Arc::new(gpui::Image::from_bytes(
-        gpui::ImageFormat::Jpeg,
-        include_bytes!("../assets/carina-nebula.jpg").to_vec(),
-    )))
-    .size_full()
-    .object_fit(ObjectFit::Cover)
-    .rounded(shape(cx))
+fn photograph(cx: &App) -> impl IntoElement {
+    static SHAPED: OnceLock<Arc<RenderImage>> = OnceLock::new();
+    let radius = f32::from(shape(cx));
+    let image = Arc::clone(SHAPED.get_or_init(|| shaped_crop(stage_pixels(Stage::Photo), radius)));
+    img(image).absolute().inset_0()
 }
 
 /// The photograph under `treatment`, in the theme's own two colours.
@@ -441,18 +455,14 @@ fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
         {
             return Arc::clone(image);
         }
-        let built = rasterise(treatment, ground, ink);
+        let built = rasterise(treatment, ground, ink, f32::from(shape(cx)));
         *last = Some((key.0, key.1, key.2, Arc::clone(&built)));
         built
     });
 
-    under_content(
-        img(image)
-            .size_full()
-            .object_fit(ObjectFit::Cover)
-            .rounded(shape(cx)),
-        cx,
-    )
+    // Exact size, no fit: the picture was rasterised for this box with the
+    // frame's shape already in its alpha, so nothing has to clip it.
+    under_content(img(image).absolute().inset_0(), cx)
 }
 
 /// Puts a decoration under the content with a wash between the two.
@@ -498,14 +508,27 @@ fn packed(colour: Rgba) -> u32 {
 /// BGRA, because that is what `RenderImage` holds; writing it in the order the
 /// name suggests puts the sky in the wrong colour, which is the sort of thing
 /// that looks like a theme bug for a week.
-fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba) -> Arc<RenderImage> {
-    let photo = photo();
+fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba, radius: f32) -> Arc<RenderImage> {
+    let stage = stage_pixels(Stage::Photo);
     let top = f32::from(INKS - 1);
-    let mut buffer = ImageBuffer::new(photo.width, photo.height);
-    for (index, tone) in photo.luminance.iter().enumerate() {
-        let x = index as u32 % photo.width;
-        let y = index as u32 / photo.width;
-        let value = f32::from(*tone) / 255.0;
+    let (card_w, card_h) = (CARD.width as u32, CARD.height as u32);
+    let mut buffer = ImageBuffer::new(card_w, card_h);
+    for index in 0..(card_w * card_h) {
+        let x = index % card_w;
+        let y = index / card_w;
+        // Sampled at the card's own offset into the same buffer everything
+        // else reads, so the picture inside a card and the picture behind it
+        // are the same picture.
+        let rgb = sample_rgb(
+            stage,
+            BACKDROP.width as u32,
+            BACKDROP.height as u32,
+            x as f32 + CARD_INSET.width,
+            y as f32 + CARD_INSET.height,
+        );
+        let value =
+            (0.2126 * f32::from(rgb[0]) + 0.7152 * f32::from(rgb[1]) + 0.0722 * f32::from(rgb[2]))
+                / 255.0;
         // The dither nudges each pixel by where it sits in the 8x8 tile before
         // rounding, so a tone between two inks lands on one or the other in a
         // pattern the eye reads back as the tone between them. Pop art skips
@@ -536,6 +559,7 @@ fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba) -> Arc<RenderImage> 
             _ => (nudged.clamp(0.0, 1.0) * top).round() / top,
         };
         let mix = |from: f32, to: f32| ((from + (to - from) * level) * 255.0) as u8;
+        let alpha = shape_alpha(x, y, CARD.width, CARD.height, radius);
         buffer.put_pixel(
             x,
             y,
@@ -543,7 +567,7 @@ fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba) -> Arc<RenderImage> 
                 mix(ground.b, ink.b),
                 mix(ground.g, ink.g),
                 mix(ground.r, ink.r),
-                255,
+                (alpha * 255.0) as u8,
             ]),
         );
     }
@@ -761,8 +785,11 @@ fn stroke_run(
 /// gradient and no blur. A sprite has the falloff drawn into it, and costs one
 /// small rasterisation per colour for the life of the process.
 ///
-/// Premultiplied, because `RenderImage` composites that way: straight alpha
-/// renders every partly transparent pixel too dark and rings the glow.
+/// Straight alpha, not premultiplied. GPUI's own `swap_rgba_pa_to_bgra`
+/// divides by alpha on the way in, which is what un-premultiplying is — so
+/// handing it premultiplied data makes every partly transparent pixel darker
+/// than it should be. Against black that is invisible; against a light theme
+/// it is a grey halo around every light, which is exactly what it looked like.
 fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
     thread_local! {
         static SPRITES: RefCell<Vec<(u32, Arc<RenderImage>)>> = const { RefCell::new(Vec::new()) };
@@ -788,9 +815,9 @@ fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
                     x,
                     y,
                     ImageRgba([
-                        (rgba.b * alpha * 255.0) as u8,
-                        (rgba.g * alpha * 255.0) as u8,
-                        (rgba.r * alpha * 255.0) as u8,
+                        (rgba.b * 255.0) as u8,
+                        (rgba.g * 255.0) as u8,
+                        (rgba.r * 255.0) as u8,
                         (alpha * 255.0) as u8,
                     ]),
                 );
@@ -844,10 +871,16 @@ fn trail_glow(head: f32, radius: f32, spill: Spill) -> impl IntoElement {
             // the border spills equally; moved half its own width inward, the
             // frame's own clip takes most of the outward half.
             let (nx, ny) = outward_normal(x, y, CARD.width, CARD.height);
+            // Most of a light's own width, not a third of it. At a third the
+            // three states were indistinguishable, which is worse than not
+            // offering them. This is a bias and not a confinement: keeping
+            // light strictly to one side of a line needs clipping GPUI does
+            // not have, and pretending otherwise is how the last three
+            // corner fixes went.
             let shift = match spill {
                 Spill::Both => 0.0,
-                Spill::Inward => -REACH * 0.34,
-                Spill::Outward => REACH * 0.34,
+                Spill::Inward => -REACH * 0.72,
+                Spill::Outward => REACH * 0.72,
             };
             let (cx_, cy_) = (x + nx * shift, y + ny * shift);
             let alpha = strength * 0.5;
@@ -959,7 +992,7 @@ fn metal_colour(along: f32) -> Hsla {
 ///
 /// Only the core, because only the core changes colour along its length. The
 /// wide passes are single paths, which is what stopped them showing seams.
-const CORE_STEPS: usize = 28;
+const CORE_STEPS: usize = 140;
 
 /// Draws the whole border for one frame.
 fn paint_border(
@@ -1179,6 +1212,26 @@ fn sample_rgb(data: &[u8], width: u32, height: u32, x: f32, y: f32) -> [u8; 3] {
     out
 }
 
+/// How opaque a pixel is, given how far inside the frame's shape it sits.
+///
+/// The whole answer to full-bleed decoration, and worth being plain about why
+/// it has to live in the pixels. GPUI cannot clip a subtree to a rounded
+/// rectangle — `ContentMask` is a `Bounds` — and the per-element corner radii
+/// that do exist are lost the moment an image is drawn with `ObjectFit::Cover`,
+/// because Cover hands the sprite bounds larger than the element and the radii
+/// land on corners that are off screen. That is the whole of the bug that kept
+/// coming back.
+///
+/// A decoration rasterised with its corners already transparent needs no
+/// clipping at all: it is the right shape before it is ever drawn. One pixel
+/// of feathering, because a hard cut on a curve is a staircase.
+fn shape_alpha(x: u32, y: u32, width: f32, height: f32, radius: f32) -> f32 {
+    let dx = x as f32 + 0.5 - width / 2.0;
+    let dy = y as f32 + 0.5 - height / 2.0;
+    let distance = rounded_rect_sdf(dx, dy, width / 2.0, height / 2.0, radius);
+    (0.5 - distance).clamp(0.0, 1.0)
+}
+
 /// Signed distance from `p` to a rounded rectangle centred on the origin.
 ///
 /// Negative inside. The whole lens is built on this: how deep a pixel sits
@@ -1215,7 +1268,7 @@ const MAGNIFY: f32 = 1.09;
 /// of anything actually made of glass.
 ///
 /// Rasterised once, because none of it depends on the theme.
-fn lensed() -> Arc<RenderImage> {
+fn lensed(shape_radius: f32) -> Arc<RenderImage> {
     static LENSED: OnceLock<Arc<RenderImage>> = OnceLock::new();
     Arc::clone(LENSED.get_or_init(|| {
         let stage = stage_pixels(Stage::Rule);
@@ -1269,10 +1322,16 @@ fn lensed() -> Arc<RenderImage> {
                     let value = f32::from(channel) / 255.0;
                     ((value + rim * 1.15).min(1.0) * 255.0) as u8
                 };
+                let alpha = shape_alpha(x, y, card_w, card_h, shape_radius);
                 buffer.put_pixel(
                     x,
                     y,
-                    ImageRgba([lift(pixel[2]), lift(pixel[1]), lift(pixel[0]), 255]),
+                    ImageRgba([
+                        lift(pixel[2]),
+                        lift(pixel[1]),
+                        lift(pixel[0]),
+                        (alpha * 255.0) as u8,
+                    ]),
                 );
             }
         }
@@ -1284,7 +1343,7 @@ fn lensed() -> Arc<RenderImage> {
 fn glass_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
-        .child(img(lensed()).absolute().inset_0().rounded(shape(cx)))
+        .child(img(lensed(f32::from(shape(cx)))).absolute().inset_0())
         // A breath of the panel's own ground, and the lit top edge. Glass is
         // not colourless; it lifts what is under it.
         .child(
@@ -1320,12 +1379,7 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
             // Deliberately unrounded: this one is larger than the slot and
             // positioned by offset, so its corners are nowhere near the
             // frame's. The wash and the edge light above it carry the shape.
-            img(frosted())
-                .absolute()
-                .left(px(-CARD_INSET.width))
-                .top(px(-CARD_INSET.height))
-                .w(px(BACKDROP.width))
-                .h(px(BACKDROP.height)),
+            img(frosted(f32::from(shape(cx)))).absolute().inset_0(),
         )
         // Frost is not only blur: a little of the panel's own ground, and a
         // lit top edge where the light catches the bevel.
@@ -1375,79 +1429,87 @@ fn halftone(cx: &App) -> impl IntoElement {
     const COLUMNS: usize = 22;
     const ROWS: usize = 9;
     let ink = cx.theme().primary.opacity(0.55);
+    let radius = f32::from(shape(cx));
     decoration::animated("halftone", Duration::from_secs(6), move |delta| {
         // One wave crossing the grid, so a dot's size depends on where it is
         // as well as when it is — a field rather than a pulse.
         let phase = delta * std::f32::consts::TAU;
-        div().size_full().children((0..ROWS).map(move |row| {
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .top(relative(row as f32 / ROWS as f32))
-                .flex()
-                .justify_between()
-                .children((0..COLUMNS).map(move |column| {
-                    let across = (column as f32 / COLUMNS as f32) * std::f32::consts::TAU;
-                    let wave = (phase + across + row as f32 * 0.6).sin() * 0.5 + 0.5;
-                    div().size(px(3.0 + wave * 13.0)).rounded_full().bg(ink)
-                }))
-        }))
+        div()
+            .size_full()
+            .children((0..ROWS * COLUMNS).filter_map(move |cell| {
+                let (row, column) = (cell / COLUMNS, cell % COLUMNS);
+                let across = (column as f32 / COLUMNS as f32) * std::f32::consts::TAU;
+                let wave = (phase + across + row as f32 * 0.6).sin() * 0.5 + 0.5;
+                let size = 3.0 + wave * 13.0;
+                let x = (column as f32 + 0.5) * CARD.width / COLUMNS as f32;
+                let y = (row as f32 + 0.5) * CARD.height / ROWS as f32;
+                Some(dot(x, y, size, radius)?.bg(ink))
+            }))
     })
 }
 
-/// Rings that keep arriving, driven by the clock instead of a press.
+/// A dot at `x`, `y`, or nothing at all if it would leave the frame.
 ///
-/// The same drawing as the ripple; only where the value comes from differs,
-/// which is the whole reason the two sit next to each other.
+/// The shape rule for anything drawn rather than rasterised. A rasterised
+/// decoration carries the frame's shape in its alpha; a drawn one cannot, so
+/// it simply does not draw outside it. Both amount to the same promise, kept
+/// two ways, because GPUI will not clip either of them.
+fn dot(x: f32, y: f32, size: f32, radius: f32) -> Option<gpui::Div> {
+    let distance = rounded_rect_sdf(
+        x - CARD.width / 2.0,
+        y - CARD.height / 2.0,
+        CARD.width / 2.0,
+        CARD.height / 2.0,
+        radius,
+    );
+    if distance + size / 2.0 > 0.0 {
+        return None;
+    }
+    Some(
+        div()
+            .absolute()
+            .left(px(x - size / 2.0))
+            .top(px(y - size / 2.0))
+            .size(px(size))
+            .rounded_full(),
+    )
+}
+
+/// Fronts that keep arriving, on the motion channel.
+///
+/// Drawn as points around a circle rather than as a stroked one, for the same
+/// reason the halftone is a grid of dots: a point can be left out when it
+/// leaves the frame and a stroke cannot. The dotted front is not a compromise
+/// either — it reads as something propagating rather than as an outline
+/// being scaled up.
 fn pulse(cx: &App) -> impl IntoElement {
+    const RINGS: usize = 3;
+    const POINTS: usize = 110;
+    const REACH: f32 = 420.0;
     let ink = cx.theme().primary;
+    let radius = f32::from(shape(cx));
     decoration::animated("pulse", Duration::from_millis(2600), move |delta| {
-        div().size_full().children((0..3).map(move |ring| {
-            // Thirds of a cycle apart, so one is always arriving as another
-            // leaves — a rhythm rather than a flash.
-            let travel = (delta + ring as f32 / 3.0).fract();
-            lit_circle(travel, (1.0 - travel) * 0.75, ink)
-        }))
+        div()
+            .size_full()
+            .children((0..RINGS * POINTS).filter_map(move |index| {
+                let (ring, step) = (index / POINTS, index % POINTS);
+                // Thirds of a cycle apart, so one front is always arriving as
+                // another leaves.
+                let travel = (delta + ring as f32 / RINGS as f32).fract();
+                let reach = 26.0 + travel * REACH;
+                let angle = step as f32 / POINTS as f32 * std::f32::consts::TAU;
+                let size = 2.0 + (1.0 - travel) * 3.0;
+                Some(
+                    dot(
+                        CARD.width / 2.0 + reach * angle.cos(),
+                        CARD.height / 2.0 + reach * angle.sin(),
+                        size,
+                        radius,
+                    )?
+                    .bg(ink.opacity((1.0 - travel) * 0.8)),
+                )
+            }))
     })
-}
-
-/// A ring that reads as a curved front rather than a drawn outline.
-///
-/// GPUI has no radial gradient and no blur filter, so depth has to come from
-/// the shadow: an inset one lights the inner edge the way a surface catches
-/// light, and an outer one blurs further the wider the ring grows, as a
-/// wavefront loses definition while it spreads. Sized in pixels because a
-/// decorated card is far wider than it is tall, and a fraction of both axes
-/// is an ellipse.
-fn lit_circle(travel: f32, alpha: f32, ink: Hsla) -> gpui::Div {
-    const REST: f32 = 56.0;
-    const REACH: f32 = 620.0;
-    div()
-        .absolute()
-        .inset_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            div()
-                .size(px(REST + travel * REACH))
-                .rounded_full()
-                // Inset only. An outer shadow on a transparent element is
-                // the whole silhouette blurred and drawn behind it, which
-                // fills the circle in — a glowing disc, not a wavefront. The
-                // inset one hugs the edge, and the border keeps it defined
-                // once the blur has spread out at full travel.
-                .border_2()
-                .border_color(ink.opacity(alpha * 0.55))
-                .shadow(vec![BoxShadow {
-                    color: ink.opacity(alpha),
-                    offset: point(px(0.0), px(0.0)),
-                    blur_radius: px(12.0),
-                    spread_radius: px(0.0),
-                    inset: true,
-                }]),
-        )
 }
 
 /// A gradient across the content: the over layer, proving it passes input

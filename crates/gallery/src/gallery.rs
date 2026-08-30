@@ -2157,18 +2157,17 @@ impl Render for DecorationsStory {
                     // is what the decoration does. Overriding it is the
                     // ordinary style path — which is itself worth showing.
                     .border_color(cx.theme().border);
-                if crate::decorations::needs_backdrop(kind) {
-                    // The stage: what an application paints around its own
-                    // component. Three states need it, for two reasons. The
-                    // frosted panel needs something behind it to be out of
-                    // focus, placed from the same numbers so the blurred copy
-                    // lines up. The aurora needs somewhere outside the card to
-                    // glow, because the slot clips to the card and light that
-                    // leaves its edge can only be drawn from out here.
+                {
+                    // Every state is staged, at one fixed size, and that is
+                    // the architecture rather than a convenience. A decoration
+                    // carries the frame's shape in its own alpha because
+                    // nothing here can clip it to one — and pixels can only be
+                    // rasterised for a box whose size is known. So the box is
+                    // known: one size for every state, and no state that is
+                    // right at one width and broken at another.
                     //
-                    // Fixed sizes, unusually for this gallery, and that is the
-                    // honest shape of it: lining a blurred copy up with its
-                    // original means both are placed by the same arithmetic.
+                    // The backdrop is separate: it is drawn only where a
+                    // decoration needs something behind it to be seen through.
                     let border = crate::decorations::border_for(kind);
                     div()
                         .relative()
@@ -2182,11 +2181,14 @@ impl Render for DecorationsStory {
                         // is read against what is behind it, and a bright
                         // nebula leaves nothing for it to be brighter than.
                         .when(border.is_some(), |stage| stage.bg(cx.theme().background))
-                        .when(border.is_none(), |stage| {
-                            stage.child(crate::decorations::backdrop(
-                                crate::decorations::stage_for(kind),
-                            ))
-                        })
+                        .when(
+                            border.is_none() && crate::decorations::needs_backdrop(kind),
+                            |stage| {
+                                stage.child(crate::decorations::backdrop(
+                                    crate::decorations::stage_for(kind),
+                                ))
+                            },
+                        )
                         .child(
                             // The card is pinned to the size the decoration
                             // arithmetic assumes. Everywhere else in this
@@ -2215,8 +2217,6 @@ impl Render for DecorationsStory {
                             ))
                         })
                         .into_any_element()
-                } else {
-                    card.into_any_element()
                 }
             })
             .child(
