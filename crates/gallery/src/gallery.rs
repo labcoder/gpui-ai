@@ -2194,7 +2194,11 @@ impl Render for DecorationsStory {
                         // behind it, and a bright nebula leaves nothing for it
                         // to be brighter than.
                         .when(aurora, |stage| stage.bg(cx.theme().background))
-                        .when(!aurora, |stage| stage.child(crate::decorations::backdrop()))
+                        .when(!aurora, |stage| {
+                            stage.child(crate::decorations::backdrop(
+                                crate::decorations::stage_for(kind),
+                            ))
+                        })
                         .when(aurora, |stage| {
                             stage.child(crate::decorations::aurora_around())
                         })

@@ -153,7 +153,8 @@ pub const FORM_STORY_VARIANTS: &[(&str, &str)] = &[("choices", "Choices"), ("tog
 /// Variants the decorations story switches between.
 pub const DECORATION_STORY_VARIANTS: &[(&str, &str)] = &[
     ("photo", "Photo"),
-    ("frosted", "Frosted glass"),
+    ("frosted", "Frosted"),
+    ("glass", "Glass"),
     ("tint", "Tint"),
     ("aurora", "Aurora"),
     ("scrim", "Photo + scrim"),

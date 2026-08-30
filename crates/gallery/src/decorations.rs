@@ -45,6 +45,8 @@ pub(crate) enum DecorationKind {
     Photo,
     /// Real frosted glass: the backdrop blurred, lined up with what is behind.
     Frosted,
+    /// Glass proper: the backdrop lensed and lifted at the rim.
+    Glass,
     /// Translucency with no blur — the cheap look, named for what it is.
     Tint,
     /// Coloured light orbiting the frame, painted by the parent and the slot.
@@ -71,6 +73,7 @@ impl DecorationKind {
     pub(crate) const ALL: &'static [Self] = &[
         Self::Photo,
         Self::Frosted,
+        Self::Glass,
         Self::Tint,
         Self::Aurora,
         Self::Scrim,
@@ -85,7 +88,8 @@ impl DecorationKind {
 
     pub(crate) const LABELS: &'static [(&'static str, &'static str)] = &[
         ("photo", "Photo"),
-        ("frosted", "Frosted glass"),
+        ("frosted", "Frosted"),
+        ("glass", "Glass"),
         ("tint", "Tint"),
         ("aurora", "Aurora"),
         ("scrim", "Photo + scrim"),
@@ -113,6 +117,12 @@ impl DecorationKind {
                  placed by the same numbers as the sharp copy behind it, so \
                  the two line up. GPUI has no backdrop filter — this works \
                  because the parent knows where both are."
+            }
+            Self::Glass => {
+                "Glass rather than frost: a convex bevel, Snell's law across \
+                 its normal, and the view under the rim squeezed where the \
+                 surface tips over. Frosted blurs what it covers; this lenses \
+                 it."
             }
             Self::Tint => {
                 "Translucency and an edge highlight, no blur. Cheaper, honest \
@@ -161,6 +171,7 @@ impl DecorationKind {
         match self {
             Self::Photo => Decoration::behind(photograph()),
             Self::Frosted => Decoration::behind(frosted_panel(cx)),
+            Self::Glass => Decoration::behind(glass_panel(cx)),
             Self::Tint => Decoration::behind(tint_panel(cx)),
             Self::Aurora => Decoration::behind(aurora_inside(cx)),
             Self::Scrim => Decoration::behind(
@@ -264,18 +275,17 @@ const FROST_RADIUS: usize = 14;
 fn frosted() -> Arc<RenderImage> {
     static FROSTED: OnceLock<Arc<RenderImage>> = OnceLock::new();
     Arc::clone(FROSTED.get_or_init(|| {
-        let photo = photo();
-        let (width, height) = (photo.width as usize, photo.height as usize);
-        let mut channels = photo.rgb.clone();
+        let (width, height) = (BACKDROP.width as usize, BACKDROP.height as usize);
+        let mut channels = stage_pixels(Stage::Photo).clone();
         for _ in 0..3 {
             box_blur(&mut channels, width, height, FROST_RADIUS, true);
             box_blur(&mut channels, width, height, FROST_RADIUS, false);
         }
-        let mut buffer = ImageBuffer::new(photo.width, photo.height);
+        let mut buffer = ImageBuffer::new(BACKDROP.width as u32, BACKDROP.height as u32);
         for (index, pixel) in channels.as_chunks::<3>().0.iter().enumerate() {
             buffer.put_pixel(
-                index as u32 % photo.width,
-                index as u32 / photo.width,
+                index as u32 % BACKDROP.width as u32,
+                index as u32 / BACKDROP.width as u32,
                 // BGRA, as everywhere `RenderImage` is built by hand.
                 ImageRgba([pixel[2], pixel[1], pixel[0], 255]),
             );
@@ -500,16 +510,264 @@ fn rasterise(treatment: Treatment, ground: Rgba, ink: Rgba) -> Arc<RenderImage> 
 pub(crate) fn needs_backdrop(kind: DecorationKind) -> bool {
     matches!(
         kind,
-        DecorationKind::Frosted | DecorationKind::Tint | DecorationKind::Aurora
+        DecorationKind::Frosted
+            | DecorationKind::Glass
+            | DecorationKind::Tint
+            | DecorationKind::Aurora
     )
 }
 
 /// The sharp photograph, at the size the blurred copy is placed against.
-pub(crate) fn backdrop() -> impl IntoElement {
+pub(crate) fn backdrop(stage: Stage) -> impl IntoElement {
+    static SHARP: OnceLock<Vec<(bool, Arc<RenderImage>)>> = OnceLock::new();
+    let built = SHARP.get_or_init(|| {
+        [Stage::Photo, Stage::Rule]
+            .into_iter()
+            .map(|which| (which == Stage::Rule, rasterise_stage(which)))
+            .collect()
+    });
+    let image = Arc::clone(
+        &built
+            .iter()
+            .find(|(is_rule, _)| *is_rule == (stage == Stage::Rule))
+            .expect("both stages are built")
+            .1,
+    );
     div()
         .absolute()
         .inset_0()
-        .child(photograph().w(px(BACKDROP.width)).h(px(BACKDROP.height)))
+        .child(img(image).w(px(BACKDROP.width)).h(px(BACKDROP.height)))
+}
+
+/// One stage's pixels as an image, drawn at exactly the size sampled.
+fn rasterise_stage(stage: Stage) -> Arc<RenderImage> {
+    let pixels = stage_pixels(stage);
+    {
+        let mut buffer = ImageBuffer::new(BACKDROP.width as u32, BACKDROP.height as u32);
+        for (index, pixel) in pixels.as_chunks::<3>().0.iter().enumerate() {
+            buffer.put_pixel(
+                index as u32 % BACKDROP.width as u32,
+                index as u32 / BACKDROP.width as u32,
+                ImageRgba([pixel[2], pixel[1], pixel[0], 255]),
+            );
+        }
+        Arc::new(RenderImage::new([Frame::new(buffer)]))
+    }
+}
+
+/// The backdrop resampled to exactly the size it is drawn at.
+///
+/// Everything that reads the backdrop — the blurred copy, the lens — samples
+/// this rather than the original file, so there is no `object_fit` arithmetic
+/// between what is sampled and what is shown. One buffer, one size, no way for
+/// the two to disagree.
+/// What a state puts behind the card.
+///
+/// Two, for a reason worth stating: refraction is only visible on something
+/// straight. A photograph has no straight lines, so a lens over one bends
+/// nothing you can see and reads as a magnifier. Ruled lines are what make a
+/// material legible — which is why every glass demo worth looking at, bezel's
+/// included, has a switcher full of rulers and text rather than photographs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stage {
+    /// The photograph. What blur is best shown against.
+    Photo,
+    /// Ruled lines. What refraction is best shown against.
+    Rule,
+}
+
+/// Which backdrop a state wants behind it.
+pub(crate) fn stage_for(kind: DecorationKind) -> Stage {
+    match kind {
+        DecorationKind::Glass => Stage::Rule,
+        _ => Stage::Photo,
+    }
+}
+
+/// Evenly ruled lines, the width of the stage.
+fn ruled_pixels() -> &'static Vec<u8> {
+    static RULE: OnceLock<Vec<u8>> = OnceLock::new();
+    RULE.get_or_init(|| {
+        let (width, height) = (BACKDROP.width as usize, BACKDROP.height as usize);
+        let mut out = vec![0u8; width * height * 3];
+        for y in 0..height {
+            // Close enough together that the rim crosses several of them, so
+            // the bend is read as a curve rather than as one line moved.
+            let horizontal = y % 13 < 2;
+            for x in 0..width {
+                let vertical = x % 78 < 2;
+                let value: u8 = match (horizontal, vertical) {
+                    (true, _) => 208,
+                    (_, true) => 120,
+                    _ => 16,
+                };
+                let at = (y * width + x) * 3;
+                out[at..at + 3].copy_from_slice(&[value, value, value]);
+            }
+        }
+        out
+    })
+}
+
+fn stage_pixels(stage: Stage) -> &'static Vec<u8> {
+    if stage == Stage::Rule {
+        return ruled_pixels();
+    }
+    static STAGE: OnceLock<Vec<u8>> = OnceLock::new();
+    STAGE.get_or_init(|| {
+        let photo = photo();
+        let (width, height) = (BACKDROP.width as usize, BACKDROP.height as usize);
+        let mut out = vec![0u8; width * height * 3];
+        for y in 0..height {
+            for x in 0..width {
+                let from = (
+                    x as f32 * photo.width as f32 / width as f32,
+                    y as f32 * photo.height as f32 / height as f32,
+                );
+                let pixel = sample_rgb(&photo.rgb, photo.width, photo.height, from.0, from.1);
+                let at = (y * width + x) * 3;
+                out[at..at + 3].copy_from_slice(&pixel);
+            }
+        }
+        out
+    })
+}
+
+/// Bilinear sample of an RGB buffer, clamped at the edges.
+fn sample_rgb(data: &[u8], width: u32, height: u32, x: f32, y: f32) -> [u8; 3] {
+    let x = x.clamp(0.0, width as f32 - 1.001);
+    let y = y.clamp(0.0, height as f32 - 1.001);
+    let (x0, y0) = (x.floor() as usize, y.floor() as usize);
+    let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+    let (x1, y1) = (
+        (x0 + 1).min(width as usize - 1),
+        (y0 + 1).min(height as usize - 1),
+    );
+    let mut out = [0u8; 3];
+    for channel in 0..3 {
+        let at = |cx: usize, cy: usize| f32::from(data[(cy * width as usize + cx) * 3 + channel]);
+        let top = at(x0, y0) * (1.0 - fx) + at(x1, y0) * fx;
+        let bottom = at(x0, y1) * (1.0 - fx) + at(x1, y1) * fx;
+        out[channel] = (top * (1.0 - fy) + bottom * fy) as u8;
+    }
+    out
+}
+
+/// Signed distance from `p` to a rounded rectangle centred on the origin.
+///
+/// Negative inside. The whole lens is built on this: how deep a pixel sits
+/// under the surface is what decides how much the glass bends what is under
+/// it, and the shape of a card is a rounded rectangle, not a circle.
+fn rounded_rect_sdf(px: f32, py: f32, half_w: f32, half_h: f32, radius: f32) -> f32 {
+    let qx = px.abs() - (half_w - radius);
+    let qy = py.abs() - (half_h - radius);
+    let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+    outside + qx.max(qy).min(0.0) - radius
+}
+
+/// How thick the lensed rim is, in pixels.
+const BEVEL: f32 = 20.0;
+
+/// Refractive index of the glass. Air is 1.
+const INDEX: f32 = 1.5;
+
+/// How far, at most, a ray is pushed sideways at the rim.
+const LENS_REACH: f32 = 42.0;
+
+/// How much the glass magnifies what is under it.
+const MAGNIFY: f32 = 1.09;
+
+/// The backdrop as seen through a lens the shape of the card.
+///
+/// This is the part that makes it glass rather than a blur. Following the
+/// construction in <https://kube.io/blog/liquid-glass-css-svg/>: a convex
+/// bevel gives the surface a height, its derivative gives a normal, Snell's
+/// law bends the ray across that normal, and the pixel is sampled from where
+/// the bent ray lands instead of from straight down. Deep inside the card the
+/// surface is flat and nothing bends; within [`BEVEL`] of the edge the normal
+/// tips over and the view compresses, which is the lensing you see at the rim
+/// of anything actually made of glass.
+///
+/// Rasterised once, because none of it depends on the theme.
+fn lensed() -> Arc<RenderImage> {
+    static LENSED: OnceLock<Arc<RenderImage>> = OnceLock::new();
+    Arc::clone(LENSED.get_or_init(|| {
+        let stage = stage_pixels(Stage::Rule);
+        let (stage_w, stage_h) = (BACKDROP.width as u32, BACKDROP.height as u32);
+        let (card_w, card_h) = (CARD.width, CARD.height);
+        let (half_w, half_h) = (card_w / 2.0, card_h / 2.0);
+        let radius = 12.0;
+        // Up and to the left, so the lit rim reads as lit from above.
+        let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+        let (light_x, light_y) = (-diagonal, -diagonal);
+        let mut buffer = ImageBuffer::new(card_w as u32, card_h as u32);
+        for y in 0..card_h as u32 {
+            for x in 0..card_w as u32 {
+                let (px, py) = (x as f32 + 0.5 - half_w, y as f32 + 0.5 - half_h);
+                let depth = -rounded_rect_sdf(px, py, half_w, half_h, radius);
+                // 0 at the rim, 1 once the surface has flattened out.
+                let across = (depth / BEVEL).clamp(0.0, 1.0);
+                // Convex circle: the profile that keeps rays inside the glass.
+                let height = |t: f32| (1.0 - (1.0 - t).powi(2)).max(0.0).sqrt();
+                let step = 0.002;
+                let slope = (height(across + step) - height(across - step)) / (2.0 * step);
+                // The incident ray is straight down, so the angle it makes
+                // with the normal is the angle the surface has tipped.
+                let incidence = slope.atan();
+                let refracted = (incidence.sin() / INDEX).asin();
+                let bend = (incidence - refracted).tan() * LENS_REACH;
+                // Outward normal of the shape, by central difference.
+                let grad =
+                    |dx: f32, dy: f32| rounded_rect_sdf(px + dx, py + dy, half_w, half_h, radius);
+                let (nx, ny) = (
+                    grad(0.5, 0.0) - grad(-0.5, 0.0),
+                    grad(0.0, 0.5) - grad(0.0, -0.5),
+                );
+                let len = (nx * nx + ny * ny).sqrt().max(1e-5);
+                let (nx, ny) = (nx / len, ny / len);
+                // Sample from further out than the pixel sits: the rim shows a
+                // squeezed view of what lies just beyond the glass.
+                let sx = px / MAGNIFY + nx * bend;
+                let sy = py / MAGNIFY + ny * bend;
+                let pixel = sample_rgb(
+                    stage,
+                    stage_w,
+                    stage_h,
+                    sx + half_w + CARD_INSET.width,
+                    sy + half_h + CARD_INSET.height,
+                );
+                // A rim light, from the same normal the refraction used.
+                let facing = (nx * light_x + ny * light_y).max(0.0);
+                let rim = (1.0 - across).powi(2) * facing;
+                let lift = |channel: u8| {
+                    let value = f32::from(channel) / 255.0;
+                    ((value + rim * 1.15).min(1.0) * 255.0) as u8
+                };
+                buffer.put_pixel(
+                    x,
+                    y,
+                    ImageRgba([lift(pixel[2]), lift(pixel[1]), lift(pixel[0]), 255]),
+                );
+            }
+        }
+        Arc::new(RenderImage::new([Frame::new(buffer)]))
+    }))
+}
+
+/// Glass: the backdrop lensed at the rim rather than merely blurred.
+fn glass_panel(cx: &App) -> impl IntoElement {
+    div()
+        .size_full()
+        .child(img(lensed()).absolute().inset_0())
+        // A breath of the panel's own ground, and the lit top edge. Glass is
+        // not colourless; it lifts what is under it.
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .bg(cx.theme().background.opacity(0.16)),
+        )
+        .child(edge_light(cx))
 }
 
 /// The blurred backdrop, placed so it lines up with the sharp one behind.
@@ -602,17 +860,17 @@ const AURORA: [Hsla; 4] = [
 ///
 /// The perimeter walked as one loop, so a light travels corner to corner at an
 /// even pace instead of jumping between edges.
-fn on_perimeter(phase: f32, width: f32, height: f32) -> (f32, f32) {
+fn on_perimeter(phase: f32, width: f32, height: f32) -> (f32, f32, bool) {
     let perimeter = (width + height) * 2.0;
     let along = phase.rem_euclid(1.0) * perimeter;
     if along < width {
-        (along, 0.0)
+        (along, 0.0, true)
     } else if along < width + height {
-        (width, along - width)
+        (width, along - width, false)
     } else if along < width * 2.0 + height {
-        (width - (along - width - height), height)
+        (width - (along - width - height), height, true)
     } else {
-        (0.0, height - (along - width * 2.0 - height))
+        (0.0, height - (along - width * 2.0 - height), false)
     }
 }
 
@@ -646,12 +904,12 @@ fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
                 // Smoothstep on the radius: no hard edge at the rim, and a
                 // shoulder near the centre so the light has a core.
                 let distance = (dx * dx + dy * dy).sqrt().min(1.0);
-                // Cubed rather than smoothstepped: a small bright core with
-                // a long faint tail, which is what a light looks like.
-                // Smoothstep holds half its alpha out to half its radius and
-                // reads as a coloured ball with an edge.
+                // Smoothstepped, and stretched by whoever draws it. Cubed
+                // leaves only a small bright core, which is a point of light;
+                // an edge that is lit needs the energy spread along it, and
+                // the shape of the box does the rest.
                 let fade = 1.0 - distance;
-                let alpha = fade * fade * fade;
+                let alpha = fade * fade * (3.0 - 2.0 * fade);
                 // Premultiplied. `RenderImage` is composited as premultiplied
                 // BGRA, so straight alpha renders every partly transparent
                 // pixel darker than it should be — which draws a dark ring at
@@ -680,15 +938,35 @@ fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
 /// An outer shadow on a transparent element is the silhouette blurred and
 /// drawn behind it — a filled glow, which is wrong for a wavefront and exactly
 /// right for this.
-fn aurora_light(x: f32, y: f32, colour: Hsla, size: f32, alpha: f32) -> gpui::Div {
+fn aurora_light(
+    x: f32,
+    y: f32,
+    colour: Hsla,
+    along_edge: bool,
+    reach: f32,
+    alpha: f32,
+) -> gpui::Div {
+    // Stretched along the edge it is riding and squeezed across it. A round
+    // glow on a border reads as a ball travelling a track; light on an edge
+    // reads as an edge that is lit, which is the thing being imitated. The
+    // sprite is a circle, so the shape comes from the box it is drawn into.
+    let (w, h) = if along_edge {
+        (reach * SMEAR, reach)
+    } else {
+        (reach, reach * SMEAR)
+    };
     div()
         .absolute()
-        .left(px(x - size / 2.0))
-        .top(px(y - size / 2.0))
-        .size(px(size))
+        .left(px(x - w / 2.0))
+        .top(px(y - h / 2.0))
+        .w(px(w))
+        .h(px(h))
         .opacity(alpha)
-        .child(img(glow_sprite(colour)).size(px(size)))
+        .child(img(glow_sprite(colour)).w(px(w)).h(px(h)))
 }
+
+/// How much longer a light is along its edge than across it.
+const SMEAR: f32 = 3.2;
 
 /// The half of the aurora that falls inside the component.
 ///
@@ -702,8 +980,8 @@ fn aurora_inside(cx: &App) -> impl IntoElement {
             .size_full()
             .children(AURORA.iter().enumerate().map(move |(index, colour)| {
                 let phase = delta + index as f32 / AURORA.len() as f32;
-                let (x, y) = on_perimeter(phase, CARD.width, CARD.height);
-                aurora_light(x, y, *colour, 170.0, 0.9)
+                let (x, y, along) = on_perimeter(phase, CARD.width, CARD.height);
+                aurora_light(x, y, *colour, along, 84.0, 0.7)
             }))
     })
 }
@@ -728,13 +1006,14 @@ pub(crate) fn aurora_around() -> impl IntoElement {
                 .inset_0()
                 .children(AURORA.iter().enumerate().map(move |(index, colour)| {
                     let phase = delta + index as f32 / AURORA.len() as f32;
-                    let (x, y) = on_perimeter(phase, CARD.width, CARD.height);
+                    let (x, y, along) = on_perimeter(phase, CARD.width, CARD.height);
                     aurora_light(
                         x + CARD_INSET.width,
                         y + CARD_INSET.height,
                         *colour,
-                        210.0,
-                        0.8,
+                        along,
+                        150.0,
+                        0.7,
                     )
                 }))
         },
