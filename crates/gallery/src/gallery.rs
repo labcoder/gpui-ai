@@ -2176,31 +2176,23 @@ impl Render for DecorationsStory {
                     // Fixed sizes, unusually for this gallery, and that is the
                     // honest shape of it: lining a blurred copy up with its
                     // original means both are placed by the same arithmetic.
-                    let aurora = kind == crate::decorations::DecorationKind::Aurora;
+                    let border = crate::decorations::border_for(kind);
                     div()
                         .relative()
-                        // The aurora's lights are wider than the stage at the
-                        // corners, and drawing a blurred shadow off the edge
-                        // of the world leaves shards behind it. The stage is
-                        // the page as far as this effect is concerned.
                         .overflow_hidden()
                         .w(px(crate::decorations::BACKDROP.width))
                         .h(px(crate::decorations::BACKDROP.height))
                         .flex()
                         .items_center()
                         .justify_center()
-                        // The aurora gets a dark stage rather than the
-                        // photograph. Coloured light is read against what is
-                        // behind it, and a bright nebula leaves nothing for it
-                        // to be brighter than.
-                        .when(aurora, |stage| stage.bg(cx.theme().background))
-                        .when(!aurora, |stage| {
+                        // A border effect gets a plain dark stage. A lit edge
+                        // is read against what is behind it, and a bright
+                        // nebula leaves nothing for it to be brighter than.
+                        .when(border.is_some(), |stage| stage.bg(cx.theme().background))
+                        .when(border.is_none(), |stage| {
                             stage.child(crate::decorations::backdrop(
                                 crate::decorations::stage_for(kind),
                             ))
-                        })
-                        .when(aurora, |stage| {
-                            stage.child(crate::decorations::aurora_around())
                         })
                         .child(
                             // The card is pinned to the size the decoration
@@ -2220,6 +2212,12 @@ impl Render for DecorationsStory {
                                     card.bg(gpui::transparent_black())
                                 }),
                         )
+                        // After the card, so the stroke sits on its border
+                        // rather than under it. A border effect is astride the
+                        // component's edge, which is why it is out here at all.
+                        .when_some(border, |stage, border| {
+                            stage.child(crate::decorations::border_effect(border))
+                        })
                         .into_any_element()
                 } else {
                     card.into_any_element()

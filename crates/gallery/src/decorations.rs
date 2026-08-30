@@ -27,10 +27,10 @@
 //! `RenderImage` handed to `img()`.
 
 use gpui::{
-    App, Hsla, IntoElement, ParentElement as _, Rgba, Styled as _, div, img, linear_color_stop,
-    linear_gradient, px, relative,
+    App, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels, Rgba, Styled as _, Window,
+    canvas, div, img, linear_color_stop, linear_gradient, point, px, relative,
 };
-use gpui::{BoxShadow, RenderImage, point};
+use gpui::{BoxShadow, RenderImage};
 use gpui::{ObjectFit, StyledImage as _};
 use gpui_ai::prelude::{Decoration, decoration};
 use gpui_component::ActiveTheme as _;
@@ -49,8 +49,10 @@ pub(crate) enum DecorationKind {
     Glass,
     /// Translucency with no blur — the cheap look, named for what it is.
     Tint,
-    /// Coloured light orbiting the frame, painted by the parent and the slot.
-    Aurora,
+    /// A bright segment travelling the frame, drawn as a stroked path.
+    Beam,
+    /// A metallic sheen turning around the frame.
+    Metal,
     /// The same photograph under a fixed dark scrim, so the text is readable.
     Scrim,
     /// A photograph reduced to four inks by an ordered dither.
@@ -75,7 +77,8 @@ impl DecorationKind {
         Self::Frosted,
         Self::Glass,
         Self::Tint,
-        Self::Aurora,
+        Self::Beam,
+        Self::Metal,
         Self::Scrim,
         Self::Dither,
         Self::PopArt,
@@ -91,7 +94,8 @@ impl DecorationKind {
         ("frosted", "Frosted"),
         ("glass", "Glass"),
         ("tint", "Tint"),
-        ("aurora", "Aurora"),
+        ("beam", "Border beam"),
+        ("metal", "Liquid metal"),
         ("scrim", "Photo + scrim"),
         ("dither", "Dither"),
         ("pop-art", "Pop art"),
@@ -128,10 +132,16 @@ impl DecorationKind {
                 "Translucency and an edge highlight, no blur. Cheaper, honest \
                  about it, and what most panels actually need."
             }
-            Self::Aurora => {
-                "Coloured light travelling the frame. The parent paints the \
-                 half that bleeds outside, the slot paints the half that \
-                 falls inside — the slot clips, so neither could do it alone."
+            Self::Beam => {
+                "A bright segment travelling the frame, stroked along the \
+                 rounded path itself rather than positioned near it — so it \
+                 turns the corners instead of cutting them. Ninety-six flat \
+                 pieces, because a GPUI gradient carries two stops."
+            }
+            Self::Metal => {
+                "The same stroke with a metallic ramp instead of a beam. Metal \
+                 is not a light: it snaps from dark to bright and back, \
+                 because it reflects a small bright thing rather than emitting."
             }
             Self::Scrim => {
                 "The same photograph under a fixed dark scrim — a flat black                  at sixty per cent, chosen by hand and identical in every                  theme. The commonest thing anyone will actually want."
@@ -173,7 +183,6 @@ impl DecorationKind {
             Self::Frosted => Decoration::behind(frosted_panel(cx)),
             Self::Glass => Decoration::behind(glass_panel(cx)),
             Self::Tint => Decoration::behind(tint_panel(cx)),
-            Self::Aurora => Decoration::behind(aurora_inside(cx)),
             Self::Scrim => Decoration::behind(
                 div()
                     .size_full()
@@ -188,6 +197,10 @@ impl DecorationKind {
             Self::Halftone => Decoration::behind(under_content(halftone(cx), cx)),
             Self::Ripple => Decoration::behind(rings(ripple, cx)),
             Self::Pulse => Decoration::behind(pulse(cx)),
+            // Nothing in the slot. A stroke sits astride the component's
+            // edge, and the slot clips to the component — so the whole effect
+            // is the parent's, and saying so here is the point.
+            Self::Beam | Self::Metal => Decoration::default(),
             Self::Veil => Decoration::above(veil(cx)),
         }
     }
@@ -513,7 +526,8 @@ pub(crate) fn needs_backdrop(kind: DecorationKind) -> bool {
         DecorationKind::Frosted
             | DecorationKind::Glass
             | DecorationKind::Tint
-            | DecorationKind::Aurora
+            | DecorationKind::Beam
+            | DecorationKind::Metal
     )
 }
 
@@ -555,6 +569,239 @@ fn rasterise_stage(stage: Stage) -> Arc<RenderImage> {
     }
 }
 
+/// A point on the perimeter of a rounded rectangle, at `t` of the way round.
+///
+/// Walked as one loop — four straights and four quarter arcs, in order — so a
+/// beam travels at an even pace and turns the corners instead of jumping
+/// between edges. This is the whole reason the border effects are drawn as
+/// paths rather than positioned as boxes: a box can be put near a corner, but
+/// only a path goes round one.
+fn perimeter_point(t: f32, w: f32, h: f32, r: f32) -> (f32, f32) {
+    let straight_x = (w - r * 2.0).max(0.0);
+    let straight_y = (h - r * 2.0).max(0.0);
+    let quarter = std::f32::consts::FRAC_PI_2 * r;
+    let total = (straight_x + straight_y + quarter * 2.0) * 2.0;
+    let mut along = t.rem_euclid(1.0) * total;
+
+    let arc = |centre_x: f32, centre_y: f32, from: f32, span: f32, along: f32| {
+        let angle = from + span * (along / quarter);
+        (centre_x + r * angle.cos(), centre_y + r * angle.sin())
+    };
+    let pi = std::f32::consts::PI;
+
+    if along < straight_x {
+        return (r + along, 0.0);
+    }
+    along -= straight_x;
+    if along < quarter {
+        return arc(w - r, r, -pi / 2.0, pi / 2.0, along);
+    }
+    along -= quarter;
+    if along < straight_y {
+        return (w, r + along);
+    }
+    along -= straight_y;
+    if along < quarter {
+        return arc(w - r, h - r, 0.0, pi / 2.0, along);
+    }
+    along -= quarter;
+    if along < straight_x {
+        return (w - r - along, h);
+    }
+    along -= straight_x;
+    if along < quarter {
+        return arc(r, h - r, pi / 2.0, pi / 2.0, along);
+    }
+    along -= quarter;
+    if along < straight_y {
+        return (0.0, h - r - along);
+    }
+    along -= straight_y;
+    arc(r, r, pi, pi / 2.0, along)
+}
+
+/// How many pieces the border is stroked in.
+///
+/// Each piece is one flat colour. GPUI's gradients carry exactly two stops —
+/// `colors: [LinearColorStop; 2]`, a fixed array handed to the shader — so a
+/// ramp of more colours than that has to be built out of pieces. Ninety-six
+/// is fine enough that the seams are invisible at any size a card is.
+const BORDER_STEPS: usize = 96;
+
+/// Strokes one piece of the perimeter in a flat colour.
+fn stroke_piece(
+    window: &mut Window,
+    box_: gpui::Bounds<Pixels>,
+    radius: f32,
+    from: f32,
+    to: f32,
+    width: f32,
+    colour: Hsla,
+) {
+    let origin = (f32::from(box_.origin.x), f32::from(box_.origin.y));
+    let size = (f32::from(box_.size.width), f32::from(box_.size.height));
+    if colour.a <= 0.002 || width <= 0.0 {
+        return;
+    }
+    let mut path = PathBuilder::stroke(px(width));
+    // Sampled rather than arced: a piece is a ninety-sixth of the way round,
+    // so three points already describe it to well under a pixel, and this
+    // needs no reasoning about arc flags at the corners.
+    for step in 0..=3 {
+        let t = from + (to - from) * step as f32 / 3.0;
+        let (x, y) = perimeter_point(t, size.0, size.1, radius);
+        let at = point(px(origin.0 + x), px(origin.1 + y));
+        if step == 0 {
+            path.move_to(at);
+        } else {
+            path.line_to(at);
+        }
+    }
+    if let Ok(path) = path.build() {
+        window.paint_path(path, colour);
+    }
+}
+
+/// Which border effect a state is drawing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Border {
+    /// A short bright segment travelling the frame.
+    Beam,
+    /// A metallic sheen turning around the frame.
+    Metal,
+}
+
+/// How much of the perimeter the beam occupies.
+const BEAM_LENGTH: f32 = 0.22;
+
+/// The colours the beam runs through, head to tail.
+const BEAM_COLOURS: [Hsla; 4] = [
+    Hsla {
+        h: 0.86,
+        s: 0.90,
+        l: 0.70,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.74,
+        s: 0.85,
+        l: 0.68,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.58,
+        s: 0.85,
+        l: 0.65,
+        a: 1.0,
+    },
+    Hsla {
+        h: 0.42,
+        s: 0.80,
+        l: 0.62,
+        a: 1.0,
+    },
+];
+
+/// Reads the beam palette at `along`, 0 at the tail and 1 at the head.
+fn beam_colour(along: f32) -> Hsla {
+    let scaled = along.clamp(0.0, 1.0) * (BEAM_COLOURS.len() - 1) as f32;
+    let index = (scaled.floor() as usize).min(BEAM_COLOURS.len() - 2);
+    let mix = scaled - index as f32;
+    let (from, to) = (BEAM_COLOURS[index], BEAM_COLOURS[index + 1]);
+    Hsla {
+        h: from.h + (to.h - from.h) * mix,
+        s: from.s + (to.s - from.s) * mix,
+        l: from.l + (to.l - from.l) * mix,
+        a: 1.0,
+    }
+}
+
+/// The metallic ramp: two bright bands a half turn apart, on a dark body.
+///
+/// What makes a surface read as metal rather than as a light is the falloff.
+/// A lamp fades smoothly; polished metal snaps from dark to bright and back,
+/// because it is reflecting a small bright thing rather than emitting.
+fn metal_colour(along: f32) -> Hsla {
+    let turns = along.rem_euclid(1.0) * 2.0 * std::f32::consts::TAU;
+    let sheen = (turns.cos() * 0.5 + 0.5).powi(6);
+    Hsla {
+        h: 0.62,
+        s: 0.10,
+        l: 0.28 + sheen * 0.68,
+        a: 1.0,
+    }
+}
+
+/// Draws the whole border for one frame.
+fn paint_border(window: &mut Window, bounds: gpui::Bounds<Pixels>, kind: Border, phase: f32) {
+    let radius = 12.0;
+    let resting = Hsla {
+        h: 0.0,
+        s: 0.0,
+        l: 1.0,
+        a: 0.10,
+    };
+    for step in 0..BORDER_STEPS {
+        let from = step as f32 / BORDER_STEPS as f32;
+        // A hair past the next piece's start, so the seams do not show as gaps
+        // on the outside of a corner.
+        let to = (step as f32 + 1.08) / BORDER_STEPS as f32;
+        let mut piece = |width: f32, colour: Hsla| {
+            stroke_piece(window, bounds, radius, from, to, width, colour);
+        };
+        match kind {
+            Border::Beam => {
+                // The rest of the frame stays drawn: a beam is a bright part
+                // of a border, not a light with no border under it.
+                piece(1.0, resting);
+                let behind = (phase - from).rem_euclid(1.0);
+                if behind < BEAM_LENGTH {
+                    let along = 1.0 - behind / BEAM_LENGTH;
+                    let colour = beam_colour(along);
+                    // Fades at both ends, so the beam has a head and a tail
+                    // rather than two cut edges.
+                    let strength = (along * (1.0 - along) * 4.0).clamp(0.0, 1.0);
+                    piece(9.0, colour.opacity(strength * 0.16));
+                    piece(4.0, colour.opacity(strength * 0.45));
+                    piece(1.6, colour.opacity(strength));
+                }
+            }
+            Border::Metal => {
+                piece(1.0, resting);
+                let colour = metal_colour(from - phase);
+                piece(5.0, colour.opacity(0.14));
+                piece(1.8, colour.opacity(0.95));
+            }
+        }
+    }
+}
+
+/// A border effect, drawn by the parent around the component it frames.
+///
+/// Out here rather than in the slot because a stroke sits astride the edge —
+/// half of it falls outside the component, and the slot clips to the
+/// component's shape. An application owns the layout around its own
+/// components, so this is where a border belongs.
+pub(crate) fn border_effect(kind: Border) -> impl IntoElement {
+    let (id, period) = match kind {
+        Border::Beam => ("border-beam", Duration::from_millis(3200)),
+        Border::Metal => ("border-metal", Duration::from_millis(5200)),
+    };
+    div()
+        .absolute()
+        .left(px(CARD_INSET.width))
+        .top(px(CARD_INSET.height))
+        .w(px(CARD.width))
+        .h(px(CARD.height))
+        .child(decoration::animated(id, period, move |delta| {
+            canvas(
+                |_, _, _| (),
+                move |bounds, (), window, _| paint_border(window, bounds, kind, delta),
+            )
+            .size_full()
+        }))
+}
+
 /// The backdrop resampled to exactly the size it is drawn at.
 ///
 /// Everything that reads the backdrop — the blurred copy, the lens — samples
@@ -581,6 +828,15 @@ pub(crate) fn stage_for(kind: DecorationKind) -> Stage {
     match kind {
         DecorationKind::Glass => Stage::Rule,
         _ => Stage::Photo,
+    }
+}
+
+/// The border effect a state draws around its component, if any.
+pub(crate) fn border_for(kind: DecorationKind) -> Option<Border> {
+    match kind {
+        DecorationKind::Beam => Some(Border::Beam),
+        DecorationKind::Metal => Some(Border::Metal),
+        _ => None,
     }
 }
 
@@ -825,198 +1081,6 @@ fn edge_light(cx: &App) -> impl IntoElement {
         180.0,
         linear_color_stop(cx.theme().foreground.opacity(0.14), 0.0),
         linear_color_stop(cx.theme().foreground.opacity(0.0), 0.22),
-    ))
-}
-
-/// The colours the aurora cycles through, in order.
-const AURORA: [Hsla; 4] = [
-    Hsla {
-        h: 0.45,
-        s: 0.85,
-        l: 0.60,
-        a: 1.0,
-    },
-    Hsla {
-        h: 0.62,
-        s: 0.85,
-        l: 0.62,
-        a: 1.0,
-    },
-    Hsla {
-        h: 0.80,
-        s: 0.80,
-        l: 0.65,
-        a: 1.0,
-    },
-    Hsla {
-        h: 0.95,
-        s: 0.85,
-        l: 0.66,
-        a: 1.0,
-    },
-];
-
-/// Where a light sits on the frame at `phase`, as a fraction of each edge.
-///
-/// The perimeter walked as one loop, so a light travels corner to corner at an
-/// even pace instead of jumping between edges.
-fn on_perimeter(phase: f32, width: f32, height: f32) -> (f32, f32, bool) {
-    let perimeter = (width + height) * 2.0;
-    let along = phase.rem_euclid(1.0) * perimeter;
-    if along < width {
-        (along, 0.0, true)
-    } else if along < width + height {
-        (width, along - width, false)
-    } else if along < width * 2.0 + height {
-        (width - (along - width - height), height, true)
-    } else {
-        (0.0, height - (along - width * 2.0 - height), false)
-    }
-}
-
-/// A soft round glow, as an image.
-///
-/// GPUI has no radial gradient, and the obvious substitute — a big blurred
-/// box-shadow on a transparent circle — paints the silhouette blurred, which
-/// is a filled glow and very nearly right. Very nearly: at these sizes its
-/// shader leaves a faint ring at the blur's edge, and four of them overlapping
-/// on a dark stage draws visible arcs. A sprite has no such edge, costs one
-/// small rasterisation per colour for the life of the process, and gives the
-/// falloff curve to choose rather than inherit.
-fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
-    thread_local! {
-        static SPRITES: RefCell<Vec<(u32, Arc<RenderImage>)>> = const { RefCell::new(Vec::new()) };
-    }
-    const SIZE: u32 = 128;
-    let rgba = Rgba::from(colour);
-    let key = packed(rgba);
-    SPRITES.with(|sprites| {
-        let mut sprites = sprites.borrow_mut();
-        if let Some((_, sprite)) = sprites.iter().find(|(cached, _)| *cached == key) {
-            return Arc::clone(sprite);
-        }
-        let mut buffer = ImageBuffer::new(SIZE, SIZE);
-        let centre = f32::from(SIZE as u16) / 2.0;
-        for y in 0..SIZE {
-            for x in 0..SIZE {
-                let dx = (x as f32 + 0.5 - centre) / centre;
-                let dy = (y as f32 + 0.5 - centre) / centre;
-                // Smoothstep on the radius: no hard edge at the rim, and a
-                // shoulder near the centre so the light has a core.
-                let distance = (dx * dx + dy * dy).sqrt().min(1.0);
-                // Smoothstepped, and stretched by whoever draws it. Cubed
-                // leaves only a small bright core, which is a point of light;
-                // an edge that is lit needs the energy spread along it, and
-                // the shape of the box does the rest.
-                let fade = 1.0 - distance;
-                let alpha = fade * fade * (3.0 - 2.0 * fade);
-                // Premultiplied. `RenderImage` is composited as premultiplied
-                // BGRA, so straight alpha renders every partly transparent
-                // pixel darker than it should be — which draws a dark ring at
-                // exactly the radius where the falloff passes through the
-                // middle, and is visible as an outline around each light.
-                buffer.put_pixel(
-                    x,
-                    y,
-                    ImageRgba([
-                        (rgba.b * alpha * 255.0) as u8,
-                        (rgba.g * alpha * 255.0) as u8,
-                        (rgba.r * alpha * 255.0) as u8,
-                        (alpha * 255.0) as u8,
-                    ]),
-                );
-            }
-        }
-        let sprite = Arc::new(RenderImage::new([Frame::new(buffer)]));
-        sprites.push((key, Arc::clone(&sprite)));
-        sprite
-    })
-}
-
-/// One soft coloured light, centred on a point.
-///
-/// An outer shadow on a transparent element is the silhouette blurred and
-/// drawn behind it — a filled glow, which is wrong for a wavefront and exactly
-/// right for this.
-fn aurora_light(
-    x: f32,
-    y: f32,
-    colour: Hsla,
-    along_edge: bool,
-    reach: f32,
-    alpha: f32,
-) -> gpui::Div {
-    // Stretched along the edge it is riding and squeezed across it. A round
-    // glow on a border reads as a ball travelling a track; light on an edge
-    // reads as an edge that is lit, which is the thing being imitated. The
-    // sprite is a circle, so the shape comes from the box it is drawn into.
-    let (w, h) = if along_edge {
-        (reach * SMEAR, reach)
-    } else {
-        (reach, reach * SMEAR)
-    };
-    div()
-        .absolute()
-        .left(px(x - w / 2.0))
-        .top(px(y - h / 2.0))
-        .w(px(w))
-        .h(px(h))
-        .opacity(alpha)
-        .child(img(glow_sprite(colour)).w(px(w)).h(px(h)))
-}
-
-/// How much longer a light is along its edge than across it.
-const SMEAR: f32 = 3.2;
-
-/// The half of the aurora that falls inside the component.
-///
-/// Clipped to the component's shape by the slot, which is what keeps it off
-/// the corners. The other half is [`aurora_around`], and neither is the whole
-/// effect.
-fn aurora_inside(cx: &App) -> impl IntoElement {
-    let _ = cx;
-    decoration::animated("aurora-inside", Duration::from_millis(4200), |delta| {
-        div()
-            .size_full()
-            .children(AURORA.iter().enumerate().map(move |(index, colour)| {
-                let phase = delta + index as f32 / AURORA.len() as f32;
-                let (x, y, along) = on_perimeter(phase, CARD.width, CARD.height);
-                aurora_light(x, y, *colour, along, 84.0, 0.7)
-            }))
-    })
-}
-
-/// The half of the aurora that bleeds outside the component.
-///
-/// Drawn by the parent, because the decoration slot clips to the component and
-/// a glow that leaves its edge cannot come from inside it. An application owns
-/// the layout around its own components, so this is where it belongs — and the
-/// pair of them is the answer to how far the slot reaches.
-pub(crate) fn aurora_around() -> impl IntoElement {
-    // Absolute here, not at the call site: `decoration::animated` returns an
-    // in-flow `div().size_full()`, which is right inside the slot — the slot
-    // positions it — and wrong out here, where it is a sibling of the
-    // component and would take layout space from it.
-    div().absolute().inset_0().child(decoration::animated(
-        "aurora-around",
-        Duration::from_millis(4200),
-        |delta| {
-            div()
-                .absolute()
-                .inset_0()
-                .children(AURORA.iter().enumerate().map(move |(index, colour)| {
-                    let phase = delta + index as f32 / AURORA.len() as f32;
-                    let (x, y, along) = on_perimeter(phase, CARD.width, CARD.height);
-                    aurora_light(
-                        x + CARD_INSET.width,
-                        y + CARD_INSET.height,
-                        *colour,
-                        along,
-                        150.0,
-                        0.7,
-                    )
-                }))
-        },
     ))
 }
 
