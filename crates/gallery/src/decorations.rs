@@ -142,14 +142,15 @@ impl DecorationKind {
                  trail: five you could count, thirty sum into a band."
             }
             Self::BeamInward => {
-                "The same trails with the light pushed into the panel. A lamp \
-                 behind frosted glass rather than a tube around it — the same \
-                 code, one argument different."
+                "The same trails, keeping only the light that falls inside the \
+                 frame. A lamp behind frosted glass rather than a tube around \
+                 it — and exact, because every light is a point and a point \
+                 can be asked which side it is on."
             }
             Self::BeamOutward => {
-                "And pushed the other way, which is neon. Worth having all \
-                 three: the trail is the cheap part, and where its light \
-                 falls is what decides what the frame is made of."
+                "And only the light that falls outside, which is neon. The \
+                 trail is the cheap part; where its light lands is what \
+                 decides what the frame appears to be made of."
             }
             Self::Metal => {
                 "The same stroke with a metallic ramp instead of a beam. Metal \
@@ -831,10 +832,10 @@ fn glow_sprite(colour: Hsla) -> Arc<RenderImage> {
 
 /// Where a beam's glow is allowed to fall.
 ///
-/// The same trail reads as three different materials depending on this, which
-/// is why it is a choice rather than a constant: light thrown into the panel
-/// is a lamp behind frosted glass, light thrown outward is a neon tube, and
-/// light confined to the line is an LED strip.
+/// The same trail reads as a different material depending on this, which is
+/// why it is a choice rather than a constant: light kept inside the panel is a
+/// lamp behind frosted glass, light kept outside it is a neon tube, and both
+/// at once is the frame itself glowing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Spill {
     /// Into the component and out of it, evenly.
@@ -845,52 +846,77 @@ pub(crate) enum Spill {
     Outward,
 }
 
-/// How many lights make up one trail's glow.
+/// How many lights along a trail, and how many across it.
 ///
-/// The number is the whole difference between a glow and a row of spotlights.
-/// Five lights spaced along a fifth of the perimeter are five circles you can
-/// count; thirty at the same total length overlap by most of their width, and
-/// what you see is where they sum — a continuous band whose colour slides
-/// along it, which is what the reference actually shows.
-const TRAIL_LIGHTS: usize = 30;
+/// The glow is a cloud rather than a row, because a row of lights on a line is
+/// a line of lights: it needs width to read as something the frame is giving
+/// off. Forty-eight along by four across is dense enough that neighbours
+/// overlap by most of their size and what shows is where they sum.
+const TRAIL_ALONG: usize = 48;
+const TRAIL_ACROSS: usize = 4;
+
+/// One light's size, and how far the cloud reaches either side of the frame.
+const TRAIL_LIGHT: f32 = 40.0;
+const TRAIL_SPREAD: f32 = 30.0;
 
 /// The glow one trail throws.
+///
+/// Every light is a point, and a point can be asked whether it is inside the
+/// frame. That is the whole of `Spill`: inward keeps the ones inside, outward
+/// keeps the ones outside, and both keeps all of them. No clipping, no bias,
+/// no approximation — the answer is exact because the question is asked of a
+/// position rather than of a shape that has to be cut.
+///
+/// It is also the same rule the halftone and the pulse follow, which is worth
+/// more than the effect itself: anything drawn into a frame here decides for
+/// itself whether it belongs, and nothing anywhere is relying on a clip that
+/// GPUI does not have.
 fn trail_glow(head: f32, radius: f32, spill: Spill) -> impl IntoElement {
-    const REACH: f32 = 96.0;
     div()
         .absolute()
         .inset_0()
-        .children((0..TRAIL_LIGHTS).map(move |light| {
-            let along = light as f32 / (TRAIL_LIGHTS - 1) as f32;
+        .children((0..TRAIL_ALONG * TRAIL_ACROSS).filter_map(move |index| {
+            let (step, band) = (index / TRAIL_ACROSS, index % TRAIL_ACROSS);
+            let along = step as f32 / (TRAIL_ALONG - 1) as f32;
             let t = head - BEAM_LENGTH * (1.0 - along);
             let (x, y) = perimeter_point(t, CARD.width, CARD.height, radius);
-            // Brightest at the head and gone at the tail, so the trail has a
-            // direction rather than being a lit arc.
-            let strength = along * along * along;
-            // Pushed off the line for the one-sided spills. A light centred on
-            // the border spills equally; moved half its own width inward, the
-            // frame's own clip takes most of the outward half.
             let (nx, ny) = outward_normal(x, y, CARD.width, CARD.height);
-            // Most of a light's own width, not a third of it. At a third the
-            // three states were indistinguishable, which is worse than not
-            // offering them. This is a bias and not a confinement: keeping
-            // light strictly to one side of a line needs clipping GPUI does
-            // not have, and pretending otherwise is how the last three
-            // corner fixes went.
-            let shift = match spill {
-                Spill::Both => 0.0,
-                Spill::Inward => -REACH * 0.72,
-                Spill::Outward => REACH * 0.72,
+            // Spread across the frame's edge, so the cloud has thickness.
+            let across = band as f32 / (TRAIL_ACROSS - 1) as f32 - 0.5;
+            let offset = across * 2.0 * TRAIL_SPREAD;
+            let (lx, ly) = (x + nx * offset, y + ny * offset);
+
+            let inside = rounded_rect_sdf(
+                lx - CARD.width / 2.0,
+                ly - CARD.height / 2.0,
+                CARD.width / 2.0,
+                CARD.height / 2.0,
+                radius,
+            ) <= 0.0;
+            let wanted = match spill {
+                Spill::Both => true,
+                Spill::Inward => inside,
+                Spill::Outward => !inside,
             };
-            let (cx_, cy_) = (x + nx * shift, y + ny * shift);
-            let alpha = strength * 0.5;
-            div()
-                .absolute()
-                .left(px(cx_ - REACH / 2.0))
-                .top(px(cy_ - REACH / 2.0))
-                .size(px(REACH))
-                .opacity(alpha)
-                .child(img(glow_sprite(beam_colour(along))).size(px(REACH)))
+            if !wanted {
+                return None;
+            }
+
+            // Brightest at the head and at the frame, so the trail has a
+            // direction and the cloud has a centre.
+            let strength = along * along * along * (1.0 - across.abs() * 1.6).max(0.0);
+            if strength <= 0.01 {
+                return None;
+            }
+            Some(
+                div()
+                    .absolute()
+                    .left(px(lx - TRAIL_LIGHT / 2.0))
+                    .top(px(ly - TRAIL_LIGHT / 2.0))
+                    .size(px(TRAIL_LIGHT))
+                    .opacity(strength * 0.5)
+                    .child(img(glow_sprite(beam_colour(along))).size(px(TRAIL_LIGHT))),
+            )
         }))
 }
 
