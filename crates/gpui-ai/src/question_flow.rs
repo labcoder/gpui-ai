@@ -82,16 +82,6 @@ impl Question {
         self.optional = optional;
         self
     }
-
-    /// Returns the stable question identifier.
-    pub fn id(&self) -> &SharedString {
-        &self.id
-    }
-
-    /// Returns the answer, if this question has one.
-    pub fn answer_id(&self) -> Option<&SharedString> {
-        self.answer.as_ref()
-    }
 }
 
 /// What a question flow reports.
@@ -251,7 +241,7 @@ impl RenderOnce for QuestionFlow {
         let flow = self.id.clone();
         let handler = self.on_event;
         let card_title = self.title.clone();
-        let debug_id = self.id.to_string();
+        let debug_id = self.id.clone();
 
         let Some(question) = self.questions.into_iter().nth(shown) else {
             // A flow with nothing to ask draws nothing rather than an empty

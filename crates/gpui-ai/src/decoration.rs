@@ -70,30 +70,19 @@ impl Decoration {
         self
     }
 
-    /// Adds the layer painted under the content.
-    pub fn and_behind(mut self, element: impl IntoElement) -> Self {
-        self.behind = Some(element.into_any_element());
-        self
-    }
-
-    /// Whether anything at all is painted.
-    pub fn is_empty(&self) -> bool {
-        self.behind.is_none() && self.above.is_none()
-    }
-
     /// Takes the under layer, wrapped in the frame's own shape.
-    fn take_under(&mut self, radius: Pixels) -> Option<impl IntoElement + use<>> {
+    fn take_under(&mut self, radius: Pixels) -> Option<impl IntoElement> {
         self.behind.take().map(|layer| clipped(layer, radius))
     }
 
     /// Takes the over layer, wrapped in the frame's own shape.
-    fn take_over(&mut self, radius: Pixels) -> Option<impl IntoElement + use<>> {
+    fn take_over(&mut self, radius: Pixels) -> Option<impl IntoElement> {
         self.above.take().map(|layer| clipped(layer, radius))
     }
 }
 
 /// A layer filling its frame and clipped to the frame's corners.
-fn clipped(layer: AnyElement, radius: Pixels) -> impl IntoElement + use<> {
+fn clipped(layer: AnyElement, radius: Pixels) -> impl IntoElement {
     div()
         .absolute()
         .inset_0()

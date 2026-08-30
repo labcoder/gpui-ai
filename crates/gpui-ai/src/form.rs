@@ -57,16 +57,6 @@ impl ChoiceOption {
         self.disabled = disabled;
         self
     }
-
-    /// Returns the stable option identifier.
-    pub fn id(&self) -> &SharedString {
-        &self.id
-    }
-
-    /// Returns the visible label.
-    pub fn label(&self) -> &SharedString {
-        &self.label
-    }
 }
 
 /// What a choice group reports.
@@ -157,11 +147,6 @@ impl ChoiceGroup {
         self.on_event = Some(std::rc::Rc::new(handler));
         self
     }
-
-    /// Returns the chosen option, if one is.
-    pub fn selection_id(&self) -> Option<&SharedString> {
-        self.selected.as_ref()
-    }
 }
 
 impl Styled for ChoiceGroup {
@@ -240,7 +225,10 @@ fn choice_row(
     let tokens = cx.theme().semantic_tokens();
     let row_id = ElementId::from((root_id.clone(), option.id.clone()));
     let press_id = ElementId::from((row_id.clone(), "press"));
-    let debug_id = format!("choice-{group}-{}", option.id);
+    // Built inside the selector, never for it: `debug_selector` drops its
+    // closure unread in release, and a `SharedString` clone is a refcount bump.
+    let debug_group = group.clone();
+    let debug_option = option.id.clone();
     let event = ChoiceEvent::Chosen {
         group: group.clone(),
         option: option.id.clone(),
@@ -270,7 +258,7 @@ fn choice_row(
             accesskit::Toggled::False
         })
         .aria_position_in_set(position + 1)
-        .debug_selector(move || debug_id.clone())
+        .debug_selector(move || format!("choice-{debug_group}-{debug_option}"))
         .child(crate::surface::leading_glyph_slot(
             ring,
             div()
@@ -442,7 +430,7 @@ fn toggle_button(toggle: Toggle, window: &mut Window, cx: &mut App) -> gpui_base
     let tokens = cx.theme().semantic_tokens();
     let row_id = ElementId::from(toggle.id.clone());
     let press_id = ElementId::from((row_id.clone(), "press"));
-    let debug_id = format!("toggle-{}", toggle.id);
+    let debug_id = toggle.id.clone();
     let event = ToggleEvent::Toggled {
         id: toggle.id.clone(),
         on: !toggle.on,
@@ -476,7 +464,7 @@ fn toggle_button(toggle: Toggle, window: &mut Window, cx: &mut App) -> gpui_base
         } else {
             accesskit::Toggled::False
         })
-        .debug_selector(move || debug_id.clone())
+        .debug_selector(move || format!("toggle-{debug_id}"))
         .refine_style(&toggle.style)
         .child(crate::surface::leading_glyph_slot(slot, indicator))
         .child(
