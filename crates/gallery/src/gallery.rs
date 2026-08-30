@@ -32,7 +32,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 // Catalog keyboard actions: page and jump navigation for the story feed.
 actions!(
     catalog,
-    [PageUp, PageDown, ScrollHome, ScrollEnd, CancelAutoscroll]
+    [
+        PageUp,
+        PageDown,
+        ScrollHome,
+        ScrollEnd,
+        CancelAutoscroll,
+        ToggleMetrics
+    ]
 );
 
 /// Distance scrolled by one Page Up/Down, as a fraction of the catalog
@@ -4087,6 +4094,20 @@ impl ResolvedLayoutKey {
 pub struct Gallery {
     selected: StoryId,
     chrome: GalleryChrome,
+    /// What the catalog's keybindings are dispatched through.
+    ///
+    /// GPUI routes a keystroke down the focus path, so a window with nothing
+    /// focused hears nothing: the page and jump bindings were unreachable
+    /// without this, whatever context they named.
+    focus: FocusHandle,
+    /// Whether the window has been given its opening focus.
+    ///
+    /// Once only, and never in the embed: a reader who has clicked into a
+    /// composer must keep the caret they put there, and the web host has its
+    /// own reasons not to be focused from inside a demo.
+    focused_on_open: bool,
+    /// Frame timings, collected only while the meter is open.
+    metrics: Option<crate::metrics::FrameMeter>,
     /// Bumped by [`Gallery::reset_story`], and part of the key of every story
     /// entity the window holds.
     ///
@@ -4184,6 +4205,7 @@ impl Gallery {
         theme: Option<GalleryTheme>,
         cx: &mut Context<Self>,
     ) -> Self {
+        let focus = cx.focus_handle();
         let catalog_list = ListState::new(StoryId::ALL.len(), ListAlignment::Top, px(320.))
             .with_uniform_item_height(px(320.));
         let gallery = cx.weak_entity();
@@ -4204,6 +4226,9 @@ impl Gallery {
 
         Self {
             selected,
+            focus,
+            focused_on_open: false,
+            metrics: None,
             catalog_list,
             story_floors: Rc::new(RefCell::new(CatalogFloors::default())),
             resolved_layout: ResolvedLayoutKey::default(),
@@ -6352,9 +6377,32 @@ impl Render for Gallery {
             });
         }
 
+        // The catalog's keys are dispatched through this, and the embed is
+        // deliberately left alone: `GalleryChrome::Embedded` is set before the
+        // first frame, so a demo on the website never takes focus from it.
+        if self.chrome == GalleryChrome::Full && !self.focused_on_open {
+            self.focused_on_open = true;
+            cx.defer_in(window, |gallery, window, cx| {
+                window.focus(&gallery.focus, cx);
+            });
+        }
+
+        if let Some(meter) = self.metrics.as_mut() {
+            meter.record(std::time::Instant::now());
+            // Nothing else may be moving, and a meter that reads zero for a
+            // still picture answers the wrong question. See metrics.rs.
+            window.request_animation_frame();
+        }
+
         let content = if self.selected == StoryId::All {
             div()
                 .id("gallery-scroll")
+                .track_focus(&self.focus)
+                // The keybindings below are scoped to this name. Without the
+                // context to match, every one of them was unreachable: the
+                // predicate can only be satisfied by a `key_context`, and an
+                // element id is not one.
+                .key_context("gallery-scroll")
                 .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
                 .min_h_0()
@@ -6410,6 +6458,9 @@ impl Render for Gallery {
                 .on_action(cx.listener(|this, _: &CancelAutoscroll, _, cx| {
                     this.cancel_autoscroll(cx);
                 }))
+                .on_action(cx.listener(|this, _: &ToggleMetrics, _, cx| {
+                    this.toggle_metrics(cx);
+                }))
                 .child(
                     story_list_frame()
                         .size_full()
@@ -6427,6 +6478,11 @@ impl Render for Gallery {
             let story = self.render_story(self.selected, window, cx);
             div()
                 .id("gallery-scroll")
+                .track_focus(&self.focus)
+                .key_context("gallery-scroll")
+                .on_action(cx.listener(|this, _: &ToggleMetrics, _, cx| {
+                    this.toggle_metrics(cx);
+                }))
                 .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
                 .min_h_0()
@@ -6471,6 +6527,13 @@ impl Render for Gallery {
                 )
             })
             .child(content)
+            .when_some(self.metrics.as_ref(), |frame, meter| {
+                // Last child, so it paints over the story: GPUI has no
+                // z-index, and paint order is child order.
+                frame
+                    .relative()
+                    .child(crate::metrics::overlay(meter.reading(), cx))
+            })
     }
 }
 
@@ -6484,6 +6547,18 @@ impl Gallery {
             return;
         }
         self.chrome = chrome;
+        cx.notify();
+    }
+
+    /// Shows or hides the frame meter (F3).
+    ///
+    /// Dropped rather than hidden when off, so a closed meter costs nothing
+    /// and an old reading can never be shown for new content.
+    fn toggle_metrics(&mut self, cx: &mut Context<Self>) {
+        self.metrics = match self.metrics {
+            Some(_) => None,
+            None => Some(crate::metrics::FrameMeter::default()),
+        };
         cx.notify();
     }
 
@@ -6528,6 +6603,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("home", ScrollHome, Some("gallery-scroll")),
         KeyBinding::new("end", ScrollEnd, Some("gallery-scroll")),
         KeyBinding::new("escape", CancelAutoscroll, Some("gallery-scroll")),
+        KeyBinding::new("f3", ToggleMetrics, Some("gallery-scroll")),
     ]);
 }
 
@@ -6858,6 +6934,56 @@ mod tests {
             super::apply_gallery_theme(tokyo, None, cx);
             assert_eq!(cx.theme().dark_theme.name.as_ref(), "Tokyo Night");
         });
+    }
+
+    /// Every one of the catalog's keybindings named a context nothing set, and
+    /// the window focused nothing to dispatch through, so none of them ever
+    /// fired. Both halves are needed: this fails without either.
+    #[gpui::test]
+    fn page_down_scrolls_the_catalog(cx: &mut TestAppContext) {
+        let (gallery, cx) = all_stories(cx);
+        let before = gallery.read_with(cx, |gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        cx.simulate_keystrokes("pagedown");
+        cx.run_until_parked();
+        let after = gallery.read_with(cx, |gallery, _| {
+            gallery.catalog_list.logical_scroll_top().item_ix
+        });
+        assert_ne!(before, after, "Page Down must move the catalog");
+    }
+
+    #[gpui::test]
+    fn f3_opens_and_closes_the_frame_meter(cx: &mut TestAppContext) {
+        let (gallery, cx) = all_stories(cx);
+        assert!(
+            gallery.read_with(cx, |gallery, _| gallery.metrics.is_none()),
+            "the meter costs a redraw a frame, so it starts closed"
+        );
+
+        cx.simulate_keystrokes("f3");
+        cx.run_until_parked();
+        assert!(gallery.read_with(cx, |gallery, _| gallery.metrics.is_some()));
+
+        cx.simulate_keystrokes("f3");
+        cx.run_until_parked();
+        assert!(
+            gallery.read_with(cx, |gallery, _| gallery.metrics.is_none()),
+            "closing it must stop the continuous redraw, not just hide the box"
+        );
+    }
+
+    /// A single story is where a decoration is actually judged, and it is a
+    /// different element from the catalog with its own dispatch setup.
+    #[gpui::test]
+    fn f3_opens_the_frame_meter_on_a_single_story(cx: &mut TestAppContext) {
+        cx.update(super::init);
+        let (gallery, cx) = cx.add_window_view(|_, cx| Gallery::new(StoryId::Decorations, cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_keystrokes("f3");
+        cx.run_until_parked();
+        assert!(gallery.read_with(cx, |gallery, _| gallery.metrics.is_some()));
     }
 
     #[gpui::test]

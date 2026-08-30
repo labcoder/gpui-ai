@@ -5,6 +5,7 @@ pub mod catalog_performance;
 mod decorations;
 mod dock_composition;
 mod gallery;
+mod metrics;
 mod motion_lab;
 pub mod performance;
 mod sim;
