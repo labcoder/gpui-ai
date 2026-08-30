@@ -410,7 +410,9 @@ fn story_changed_by_delta(story: StoryId, delta: sim::SimulationDelta) -> bool {
         | StoryId::FilterTable
         | StoryId::ComparisonTable
         | StoryId::PromptBar
-        | StoryId::SelectionActions => false,
+        | StoryId::SelectionActions
+        | StoryId::Form
+        | StoryId::QuestionFlow => false,
     }
 }
 
@@ -1859,6 +1861,232 @@ impl Render for PromptBarStory {
                     format!("**Last typed event.** {}", self.last_event),
                 )
                 .selectable(true),
+            )
+    }
+}
+
+/// Which control family the form story is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum FormStoryState {
+    #[default]
+    Choices,
+    Toggles,
+}
+
+impl StoryStates for FormStoryState {
+    const ALL: &'static [Self] = &[Self::Choices, Self::Toggles];
+    const LABELS: &'static [(&'static str, &'static str)] = crate::story::FORM_STORY_VARIANTS;
+}
+
+struct FormStory {
+    active_state: FormStoryState,
+    flavour: Option<SharedString>,
+    stream: bool,
+    cite: bool,
+    last_event: SharedString,
+}
+
+impl FormStory {
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
+        Self {
+            active_state: FormStoryState::default(),
+            flavour: Some("five".into()),
+            stream: true,
+            cite: false,
+            last_event: "Choose an option or throw a switch.".into(),
+        }
+    }
+
+    fn set_active_state(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(state) = FormStoryState::ALL.get(index).copied() else {
+            return;
+        };
+        if self.active_state != state {
+            self.active_state = state;
+            cx.notify();
+        }
+    }
+}
+
+impl Render for FormStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        let state = self.active_state;
+        let body: AnyElement = match state {
+            FormStoryState::Choices => {
+                // snippet:start(form-controls)
+                ChoiceGroup::new("flavours", "How many flavours ship first?")
+                    .options([
+                        ChoiceOption::new("three", "Three")
+                            .description("The core line, and the fastest to stock"),
+                        ChoiceOption::new("five", "Five").description("The full case"),
+                        ChoiceOption::new("one", "Just one hero"),
+                        ChoiceOption::new("none", "Undecided").disabled(true),
+                    ])
+                    // snippet:end
+                    .selection(self.flavour.clone())
+                    .on_event(cx.listener(|story, event, _, cx| {
+                        let ChoiceEvent::Chosen { option, .. } = event;
+                        story.flavour = Some(option.clone());
+                        story.last_event = format!("Chose {option}").into();
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            }
+            FormStoryState::Toggles => v_flex()
+                .gap(tokens.spacing.xs)
+                .child(
+                    Toggle::new("stream", "Stream the answer")
+                        .description("Show tokens as they arrive rather than all at once")
+                        .shape(ToggleShape::Switch)
+                        .on(self.stream)
+                        .on_event(cx.listener(|story, event, _, cx| {
+                            let ToggleEvent::Toggled { on, .. } = event;
+                            story.stream = *on;
+                            story.last_event = format!("Streaming {on}").into();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Toggle::new("cite", "Include citations")
+                        .shape(ToggleShape::Check)
+                        .on(self.cite)
+                        .on_event(cx.listener(|story, event, _, cx| {
+                            let ToggleEvent::Toggled { on, .. } = event;
+                            story.cite = *on;
+                            story.last_event = format!("Citations {on}").into();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Toggle::new("locked", "Use the shared workspace")
+                        .description("Set by your administrator")
+                        .shape(ToggleShape::Check)
+                        .on(true)
+                        .disabled(true),
+                )
+                .into_any_element(),
+        };
+
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(story_state_switcher(
+                cx.weak_entity(),
+                "form",
+                FormStoryState::LABELS,
+                state.index(),
+                Self::set_active_state,
+            ))
+            .child(body)
+            .child(
+                div()
+                    .id("form-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last form event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
+            )
+    }
+}
+
+struct QuestionFlowStory {
+    step: usize,
+    answers: HashMap<SharedString, SharedString>,
+    last_event: SharedString,
+}
+
+impl QuestionFlowStory {
+    fn new(_: &mut Window, _: &mut Context<Self>) -> Self {
+        Self {
+            step: 0,
+            answers: HashMap::new(),
+            last_event: "Answer a question to move on.".into(),
+        }
+    }
+
+    fn questions(&self) -> Vec<Question> {
+        [
+            (
+                "flavours",
+                "How many flavours should we launch?",
+                vec![
+                    ChoiceOption::new("three", "Three").description("The core line"),
+                    ChoiceOption::new("five", "Five").description("The full case"),
+                    ChoiceOption::new("one", "Just one hero"),
+                ],
+            ),
+            (
+                "mixins",
+                "Which mix-ins should we stock?",
+                vec![
+                    ChoiceOption::new("chips", "Chocolate chips"),
+                    ChoiceOption::new("waffle", "Waffle bits"),
+                    ChoiceOption::new("sprinkles", "Sprinkles"),
+                ],
+            ),
+            (
+                "market",
+                "Which market do we enter first?",
+                vec![
+                    ChoiceOption::new("trucks", "Food trucks"),
+                    ChoiceOption::new("freezers", "Grocery freezers"),
+                    ChoiceOption::new("shops", "Scoop shops"),
+                ],
+            ),
+        ]
+        .into_iter()
+        .map(|(id, prompt, options)| {
+            Question::new(id, prompt)
+                .options(options)
+                .answered(self.answers.get(id).cloned())
+        })
+        .collect()
+    }
+}
+
+impl Render for QuestionFlowStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = cx.theme().semantic_tokens();
+        v_flex()
+            .gap(tokens.spacing.md)
+            .child(
+                // snippet:start(question-flow)
+                QuestionFlow::new("launch", "Before I draft the launch plan")
+                    .questions(self.questions())
+                    // snippet:end
+                    .step(self.step)
+                    .on_event(cx.listener(|story, event, _, cx| {
+                        match event {
+                            QuestionFlowEvent::Answered {
+                                question, option, ..
+                            } => {
+                                story.answers.insert(question.clone(), option.clone());
+                                story.last_event = format!("Answered {question}: {option}").into();
+                            }
+                            QuestionFlowEvent::Skipped { question, .. } => {
+                                story.step += 1;
+                                story.last_event = format!("Skipped {question}").into();
+                            }
+                            QuestionFlowEvent::Advanced { step, .. } => {
+                                story.step = *step;
+                                story.last_event = format!("Moved to question {}", step + 1).into();
+                            }
+                            QuestionFlowEvent::Completed { .. } => {
+                                story.last_event = "Finished — the agent has what it needs".into();
+                            }
+                        }
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .id("question-flow-event")
+                    .role(Role::Status)
+                    .aria_label(format!("Last question-flow event: {}", self.last_event))
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("Last event: {}", self.last_event)),
             )
     }
 }
@@ -5977,6 +6205,22 @@ impl Gallery {
                 },
                 cx,
             ),
+            StoryId::Form => {
+                let form = window.use_keyed_state(
+                    ("form-story-state", self.generation),
+                    cx,
+                    FormStory::new,
+                );
+                self.section(story, "Form controls", || form, cx)
+            }
+            StoryId::QuestionFlow => {
+                let flow = window.use_keyed_state(
+                    ("question-flow-story-state", self.generation),
+                    cx,
+                    QuestionFlowStory::new,
+                );
+                self.section(story, "Question flow", || flow, cx)
+            }
             StoryId::SelectionActions => {
                 let selection_story = window.use_keyed_state(
                     ("selection-actions-story-state", self.generation),
@@ -7836,7 +8080,16 @@ mod tests {
         for _ in StoryId::ALL {
             scroll(cx, -10_000.);
         }
-        assert!(cx.debug_bounds("story-selection-actions").is_some());
+        // Whichever story ends the catalog, not a named one: this is about
+        // the last row being reached and static, and naming a story here
+        // breaks the test every time the catalog gains one.
+        let last = StoryId::ALL.last().expect("the catalog has stories");
+        let last_selector: &'static str =
+            Box::leak(format!("story-{}", last.slug()).into_boxed_str());
+        assert!(
+            cx.debug_bounds(last_selector).is_some(),
+            "scrolling to the end should reach {last_selector}"
+        );
 
         let (paused_at, task_running) = gallery.read_with(cx, |gallery, _| {
             (gallery.sim.elapsed(), gallery.simulation_task.is_some())

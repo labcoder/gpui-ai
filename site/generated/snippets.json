@@ -19,6 +19,12 @@
     "fine-tune": {
       "default": "FineTuneCard::new(\n    \"gallery-fine-tune-populated\",\n    populated_values.clone(),\n    gallery_typefaces(),\n    window,\n    cx,\n)"
     },
+    "form-controls": {
+      "default": "ChoiceGroup::new(\"flavours\", \"How many flavours ship first?\")\n    .options([\n        ChoiceOption::new(\"three\", \"Three\")\n            .description(\"The core line, and the fastest to stock\"),\n        ChoiceOption::new(\"five\", \"Five\").description(\"The full case\"),\n        ChoiceOption::new(\"one\", \"Just one hero\"),\n        ChoiceOption::new(\"none\", \"Undecided\").disabled(true),\n    ])"
+    },
+    "question-flow": {
+      "default": "QuestionFlow::new(\"launch\", \"Before I draft the launch plan\")\n    .questions(self.questions())"
+    },
     "selection-actions": {
       "default": "SelectionActions::new(\n    \"gallery-selection-actions\",\n    \"## Weekly flavor review\\n\\nMint Chip demand softened while Vanilla recovered. Select any phrase in this readable analysis, then choose an action. Native **Ctrl/Cmd+A** and copy remain available.\",\n    window,\n    cx,\n)"
     },

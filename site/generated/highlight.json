@@ -1840,6 +1840,212 @@
         ]
       ]
     },
+    "form-controls": {
+      "default": [
+        [
+          [
+            "ChoiceGroup",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"flavours\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"How many flavours ship first?\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    .options(["
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ChoiceOption",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"three\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Three\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .description("
+          ],
+          [
+            "\"The core line, and the fastest to stock\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ChoiceOption",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"five\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Five\"",
+            "string"
+          ],
+          [
+            ").description("
+          ],
+          [
+            "\"The full case\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ChoiceOption",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"one\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Just one hero\"",
+            "string"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "ChoiceOption",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"none\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Undecided\"",
+            "string"
+          ],
+          [
+            ").disabled("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "    ])"
+          ]
+        ]
+      ]
+    },
+    "question-flow": {
+      "default": [
+        [
+          [
+            "QuestionFlow",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"launch\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Before I draft the launch plan\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    .questions("
+          ],
+          [
+            "self",
+            "keyword"
+          ],
+          [
+            ".questions())"
+          ]
+        ]
+      ]
+    },
     "selection-actions": {
       "default": [
         [

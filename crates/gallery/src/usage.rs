@@ -49,4 +49,6 @@ example!(INSIGHT_CARD() -> InsightCard = InsightCard::new("retention", "Retentio
 example!(PROMPT_BAR(window: &mut Window, cx: &mut Context<PromptBar>) -> PromptBar = PromptBar::new("agent-prompt", window, cx));
 example!(VOICE_CONTROLS() -> VoiceControls = VoiceControls::new("voice", VoiceState::Idle));
 example!(MESSAGE_QUEUE(queued: Vec<QueuedMessage>) -> MessageQueue = MessageQueue::new("queue").items(queued));
+example!(CHOICE_GROUP() -> ChoiceGroup = ChoiceGroup::new("flavours", "How many flavours?").options([ChoiceOption::new("three", "Three"), ChoiceOption::new("five", "Five")]));
+example!(QUESTION_FLOW() -> QuestionFlow = QuestionFlow::new("launch", "Before I draft the plan").questions([Question::new("flavours", "How many flavours?").options([ChoiceOption::new("three", "Three")])]));
 example!(SELECTION_ACTIONS(markdown: SharedString, window: &mut Window, cx: &mut Context<SelectionActions>) -> SelectionActions = SelectionActions::new("answer-actions", markdown, window, cx));

@@ -77,6 +77,10 @@ pub enum StoryId {
     Queue,
     /// Actions anchored to a readable text selection.
     SelectionActions,
+    /// Single-choice groups and toggles.
+    Form,
+    /// A short sequence of questions asked before acting.
+    QuestionFlow,
     /// The website's scripted hero.
     ///
     /// Addressable like any story, but deliberately absent from
@@ -134,6 +138,9 @@ pub const COMMAND_SEARCH_STORY_VARIANTS: &[(&str, &str)] = &[
     ("empty", "Empty catalog"),
     ("no-results", "No results"),
 ];
+
+/// Variants the form story switches between.
+pub const FORM_STORY_VARIANTS: &[(&str, &str)] = &[("choices", "Choices"), ("toggles", "Toggles")];
 
 /// Variants every table story switches between.
 pub const TABLE_STORY_VARIANTS: &[(&str, &str)] = &[
@@ -275,6 +282,8 @@ impl StoryId {
         Self::Voice,
         Self::Queue,
         Self::SelectionActions,
+        Self::Form,
+        Self::QuestionFlow,
     ];
 
     /// Stable URL slug for this selection.
@@ -316,6 +325,8 @@ impl StoryId {
             Self::Voice => "voice",
             Self::Queue => "queue",
             Self::SelectionActions => "selection-actions",
+            Self::Form => "form-controls",
+            Self::QuestionFlow => "question-flow",
             Self::GuidedDemo => "guided-demo",
             Self::MotionLab => "motion-lab",
             Self::ThemesTrio => "themes-trio",
@@ -362,6 +373,8 @@ impl StoryId {
             Self::Voice => "Voice controls",
             Self::Queue => "Message queue",
             Self::SelectionActions => "Selection actions",
+            Self::Form => "Form controls",
+            Self::QuestionFlow => "Question flow",
             Self::GuidedDemo => "Guided demo",
             Self::ThemesTrio => "Themes trio",
             Self::DockComposition => "Dock composition",
@@ -735,6 +748,26 @@ impl StoryId {
                 width: StoryWidth::Column,
                 overflow: Overflow::Wide,
             },
+            Self::Form => StoryMeta {
+                category: "Human in the loop",
+                summary: "Single-choice groups and toggles in the library's own grammar.",
+                module: "form",
+                api: "ChoiceGroup",
+                usage: crate::usage::CHOICE_GROUP,
+                height: 300,
+                width: StoryWidth::Column,
+                overflow: Overflow::Vertical,
+            },
+            Self::QuestionFlow => StoryMeta {
+                category: "Human in the loop",
+                summary: "A short sequence of questions an agent asks before it acts.",
+                module: "question_flow",
+                api: "QuestionFlow",
+                usage: crate::usage::QUESTION_FLOW,
+                height: 336,
+                width: StoryWidth::Column,
+                overflow: Overflow::Vertical,
+            },
         })
     }
 
@@ -746,6 +779,7 @@ impl StoryId {
             Self::Chat => CHAT_STORY_VARIANTS,
             Self::PromptBar => PROMPT_BAR_STORY_VARIANTS,
             Self::CommandSearch => COMMAND_SEARCH_STORY_VARIANTS,
+            Self::Form => FORM_STORY_VARIANTS,
             Self::RecordsTable | Self::DiffTable | Self::FilterTable | Self::ComparisonTable => {
                 TABLE_STORY_VARIANTS
             }

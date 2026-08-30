@@ -63,7 +63,7 @@ let _subscription = cx.subscribe(&prompt, |_, _, event: &PromptBarEvent, _| {
 
 ## Components
 
-The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 35 components with source code and live WebAssembly demos. The catalog groups them into:
+The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 37 components with source code and live WebAssembly demos. The catalog groups them into:
 
 - responses, progress, code, and diffs
 - tools, plans, approvals, and tasks
@@ -71,7 +71,7 @@ The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 
 - search, context, tables, navigation, and utility controls
 
 <details>
-<summary>View all 35 components</summary>
+<summary>View all 37 components</summary>
 
 | Component | Kind | What it does |
 |---|---|---|
@@ -106,6 +106,8 @@ The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 
 | [`ThreadList`](https://labcoder.github.io/gpui-ai/components/thread-list/) | entity | Grouped conversation list with search, archive, rename, and delete actions |
 | [`FineTuneCard`](https://labcoder.github.io/gpui-ai/components/fine-tune/) | entity | Design property editor for size, radius, opacity, and typeface |
 | [`SelectionActions`](https://labcoder.github.io/gpui-ai/components/selection-actions/) | entity | Selection actions for asking, explaining, and rewriting |
+| [`ChoiceGroup` / `Toggle`](https://labcoder.github.io/gpui-ai/components/form-controls/) | stateless | Single-choice groups and toggles in the library's own grammar |
+| [`QuestionFlow`](https://labcoder.github.io/gpui-ai/components/question-flow/) | stateless | A short sequence of questions asked one at a time before acting |
 | [`RecordsTable`](https://labcoder.github.io/gpui-ai/components/records-table/) | entity | Virtualized, sortable data grid |
 | [`DiffTable`](https://labcoder.github.io/gpui-ai/components/diff-table/) | entity | Proposed edits over tabular data |
 | [`FilterTable`](https://labcoder.github.io/gpui-ai/components/filter-table/) | entity | Filterable, reorderable table |

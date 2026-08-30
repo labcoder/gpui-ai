@@ -15,7 +15,8 @@
     "Navigation",
     "Data tables",
     "Decisions",
-    "Evidence"
+    "Evidence",
+    "Human in the loop"
   ],
   "components": [
     {
@@ -1041,6 +1042,66 @@
         "interaction": "Interactive intent is reported through the typed SelectionActionsEvent contract and stable application IDs.",
         "semantics": "Ask, explain, and rewrite actions anchored to selected Markdown.",
         "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+      }
+    },
+    {
+      "sequence": 36,
+      "slug": "form-controls",
+      "title": "Form controls",
+      "compactLabel": "Form controls",
+      "category": "Human in the loop",
+      "summary": "Single-choice groups and toggles in the library's own grammar.",
+      "source": "crates/gpui-ai/src/form.rs",
+      "api": "ChoiceGroup",
+      "usage": "ChoiceGroup::new(\"flavours\",\n\"How many flavours?\").options([ChoiceOption::new(\"three\", \"Three\"),\nChoiceOption::new(\"five\", \"Five\")])",
+      "height": 300,
+      "windowTitle": "Form controls — gpui-ai",
+      "variants": [
+        {
+          "id": "choices",
+          "label": "Choices"
+        },
+        {
+          "id": "toggles",
+          "label": "Toggles"
+        }
+      ],
+      "events": [
+        "ChoiceEvent",
+        "ToggleEvent"
+      ],
+      "event": "ChoiceEvent",
+      "limitation": "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.",
+      "behavior": {
+        "ownership": "ChoiceGroup renders state supplied by the application; it does not own durable work.",
+        "interaction": "Interactive intent is reported through the typed ChoiceEvent and ToggleEvent contracts and stable application IDs.",
+        "semantics": "Single-choice groups and toggles in the library's own grammar.",
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
+      }
+    },
+    {
+      "sequence": 37,
+      "slug": "question-flow",
+      "title": "Question flow",
+      "compactLabel": "Question flow",
+      "category": "Human in the loop",
+      "summary": "A short sequence of questions an agent asks before it acts.",
+      "source": "crates/gpui-ai/src/question_flow.rs",
+      "api": "QuestionFlow",
+      "usage": "QuestionFlow::new(\"launch\",\n\"Before I draft the plan\").questions([Question::new(\"flavours\",\n\"How many flavours?\").options([ChoiceOption::new(\"three\", \"Three\")])])",
+      "height": 336,
+      "windowTitle": "Question flow — gpui-ai",
+      "variants": [],
+      "events": [
+        "QuestionFlowEvent"
+      ],
+      "event": "QuestionFlowEvent",
+      "limitation": "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.",
+      "behavior": {
+        "ownership": "QuestionFlow renders state supplied by the application; it does not own durable work.",
+        "interaction": "Interactive intent is reported through the typed QuestionFlowEvent contract and stable application IDs.",
+        "semantics": "A short sequence of questions an agent asks before it acts.",
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     }
   ],
