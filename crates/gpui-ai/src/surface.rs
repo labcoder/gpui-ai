@@ -15,7 +15,7 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 use gpui_base::{Button, StyledExt as _};
-use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, v_flex};
+use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, tooltip::Tooltip, v_flex};
 
 /// The card's own surface: background, hairline border, and the card
 /// radius — the three properties that make a thing look like a card,
@@ -412,8 +412,9 @@ pub(crate) fn initial_of(text: &str) -> String {
 
 /// A quiet, square icon-only button with an accessible name.
 ///
-/// Rests muted, lifts to the foreground on hover, and shows the theme ring on
-/// keyboard focus. Used for message actions and card toolbars.
+/// Rests muted, lifts to the foreground on hover, shows the theme ring on
+/// keyboard focus, and names itself on hover. Used for message actions and
+/// card toolbars.
 pub(crate) fn icon_button(
     id: impl Into<ElementId>,
     icon: impl IconNamed,
@@ -442,7 +443,15 @@ pub(crate) fn icon_button_turned(
     let id = id.into();
     // One read of the press ramp, shared by the tint and the glyph.
     let (pressed, fade) = crate::control::press_release_state(&id, window, cx);
-    composed_button(id.clone(), accessibility_label)
+    let name = accessibility_label.into();
+    // The name it already carries, made visible. A control with no label is
+    // only guessable from its glyph, and the guess is wrong often enough that
+    // every desktop application shows the name on hover - so the screen reader
+    // and the pointer are told the same thing, from one argument, and no
+    // caller has to remember to say it twice.
+    let tooltip = name.clone();
+    composed_button(id.clone(), name)
+        .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
         .flex()
         .flex_none()
         .items_center()
