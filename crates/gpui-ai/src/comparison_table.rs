@@ -16,7 +16,7 @@ use gpui_component::{
 
 use crate::scrolling::PolicyScrollbarExt as _;
 use crate::{
-    control::outlined_control_with_label,
+    control::outlined_control_with_wrapping_label,
     motion::{MotionTokens, VisibleAnimationExt as _},
     records_table::escape_markdown_text,
     resolved_layout::ResolvedLayoutKey,
@@ -786,7 +786,7 @@ fn comparison_item_control(
     cx: &mut App,
 ) -> gpui_base::Button {
     let debug_id: SharedString = format!("comparison-item-control:{table_id}:{}", item.id).into();
-    outlined_control_with_label(
+    outlined_control_with_wrapping_label(
         debug_id.clone(),
         format!("Select {}", item.label),
         item.label.clone(),
@@ -885,6 +885,11 @@ impl ComparisonTable {
 
         comparison_feature_row_frame(&self.id, &feature)
             .flex()
+            // A virtualized row is measured on its own, so it has to be told
+            // it spans the grid; without that its columns have no width to
+            // divide and each falls back to its floor, leaving the body
+            // narrower than the header above it.
+            .w_full()
             .border_t_1()
             .border_color(cx.theme().border)
             .child(
@@ -920,8 +925,11 @@ impl ComparisonTable {
                     .map(|value| value.display.clone())
                     .unwrap_or_else(|| "Not specified".into());
                 comparison_cell_frame(&self.id, &feature.id, item, display.clone())
-                    .w(item_width)
-                    .flex_none()
+                    // Fluid, and for the reason the header gives: a cell holds
+                    // the column its header names, so the two divide the width
+                    // by the same rule or they stop lining up.
+                    .flex_1()
+                    .min_w(item_width)
                     .p(tokens.spacing.sm)
                     .border_l_1()
                     .border_color(cx.theme().border)
@@ -1181,9 +1189,20 @@ impl Render for ComparisonTable {
                                                 comparison_item_header_frame(
                                                     &self.id, item, selected,
                                                 )
-                                                .w(item_width)
+                                                // Fluid: the columns divide
+                                                // whatever width the table is
+                                                // given, rather than each
+                                                // taking a fixed slice and
+                                                // leaving the remainder as a
+                                                // band of empty table beside
+                                                // them. The fixed width stays
+                                                // on as the floor, so a narrow
+                                                // viewport scrolls sideways
+                                                // instead of squeezing the
+                                                // columns past reading.
+                                                .flex_1()
+                                                .min_w(item_width)
                                                 .min_h(header_height)
-                                                .flex_none()
                                                 .p(tokens.spacing.sm)
                                                 .border_l_1()
                                                 .border_color(cx.theme().border)
@@ -1487,6 +1506,51 @@ mod tests {
     /// Worst-case content for a bounded shape: every item and every feature
     /// carries a description, so each row builds the most selectable Markdown
     /// views the contract allows, and every cell has a value to render.
+    /// Item columns divide the table's width, and a cell sits under its own
+    /// header.
+    ///
+    /// The columns were fixed slices: three plans in a table with room for
+    /// five left a band of empty table beside them, which reads as a table
+    /// that failed to draw rather than one with room to spare. They divide
+    /// what they are given now, and the same rule has to reach the rows -
+    /// they are virtualized and measured apart from the header, so getting
+    /// this wrong shows up as a body narrower than the header above it.
+    #[gpui::test]
+    fn item_columns_fill_the_table_and_cells_line_up_with_their_header(cx: &mut TestAppContext) {
+        let (table, cx) = measured_table(cx);
+        draw_shape(&table, cx, 3, 3);
+        redraw(&table, cx);
+
+        let frame = cx
+            .debug_bounds("comparison-table-root:measured")
+            .expect("the table should render");
+        let last = cx
+            .debug_bounds("comparison-item-header:measured:item-2")
+            .expect("the last column header should render");
+        let cell = cx
+            .debug_bounds("comparison-cell:measured:feature-0:item-2")
+            .expect("the last column's first cell should render");
+
+        // The frame's own border is the only thing that may stand between the
+        // last column and the edge of the table.
+        assert_eq!(
+            frame.right() - last.right(),
+            px(1.),
+            "the columns leave a band of empty table: header ends {:?} short of the frame",
+            frame.right() - last.right()
+        );
+        assert!(
+            last.size.width > comparison_layout_item_width(cx),
+            "a column that fills is wider than the floor it may not go below: {:?}",
+            last.size.width
+        );
+        assert_eq!(
+            (cell.left(), cell.right()),
+            (last.left(), last.right()),
+            "a cell must sit under the header of its own column: cell {cell:?}, header {last:?}"
+        );
+    }
+
     #[gpui::test]
     fn selecting_a_column_keeps_the_header_height_and_acknowledges_once(cx: &mut TestAppContext) {
         let (table, cx) = measured_table(cx);
@@ -1600,6 +1664,11 @@ mod tests {
     }
 
     /// A table in a window sized to [`MEASURED_VIEWPORT`], ready to be drawn.
+    /// The width one item column may not go below, for the fluid-column test.
+    fn comparison_layout_item_width(cx: &mut VisualTestContext) -> gpui::Pixels {
+        cx.update(|_, cx| comparison_layout(cx).1)
+    }
+
     fn measured_table(
         cx: &mut TestAppContext,
     ) -> (Entity<ComparisonTable>, &mut VisualTestContext) {

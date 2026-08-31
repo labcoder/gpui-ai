@@ -4008,7 +4008,11 @@ impl ComparisonTableStory {
                     .text_xs()
                     .child(title),
             )
-            .child(div().h(px(220.)).child(table))
+            // Tall enough for the header and all three features. The old
+            // height cut the third row in half, which read as a table with
+            // rows out of reach when in fact there were none: scrolling is
+            // what the constrained state is for.
+            .child(div().h(px(250.)).child(table))
     }
 }
 

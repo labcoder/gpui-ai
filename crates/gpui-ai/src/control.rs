@@ -253,6 +253,34 @@ pub(crate) fn outlined_control_with_label(
         .child(div().min_w_0().truncate().child(visible_label.into()))
 }
 
+/// The same compact control, with a label that wraps rather than truncating.
+///
+/// [`outlined_control_with_label`] cuts a long title to keep it inside a
+/// fixed-width column, which is right where the column cannot grow. A column
+/// that takes its share of the table's width can grow, and there a plan named
+/// "Enterprise with dedicated support" is a name the reader needs whole rather
+/// than an ellipsis they have to hover to resolve.
+///
+/// So the label wraps onto a second line and the control grows with it: the
+/// family's one height becomes a floor instead of a ceiling, and the row of
+/// headers stretches to the tallest of them, which keeps the columns level.
+pub(crate) fn outlined_control_with_wrapping_label(
+    id: impl Into<ElementId>,
+    accessibility_label: impl Into<SharedString>,
+    visible_label: impl Into<SharedString>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Button {
+    let height = SizeTokens::read(cx).control_sm();
+    let padding = cx.theme().semantic_tokens().spacing.xxs;
+    outlined_control_bare(id, accessibility_label, window, cx)
+        .h(gpui::Length::Auto)
+        .min_h(height)
+        .py(padding)
+        .text_center()
+        .child(div().min_w_0().child(visible_label.into()))
+}
+
 /// The compact control frame every outlined control shares, without its
 /// children: one height from the size policy, one radius, one text style,
 /// the interaction ramp, and the disabled recipe.
