@@ -31,6 +31,7 @@ use gpui::{
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window,
     div, list, prelude::FluentBuilder as _,
 };
+use gpui_base::StyledExt as _;
 use gpui_component::{
     ActiveTheme as _, IconName, h_flex,
     input::{Input, InputEvent, InputState},
@@ -671,6 +672,13 @@ impl RenderOnce for ThreadActionsMenu {
 /// # }
 /// ```
 pub struct ThreadList {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     sections: Arc<[ThreadSection]>,
     active: Option<SharedString>,
@@ -721,6 +729,7 @@ impl ThreadList {
                 }
             });
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             sections: Arc::from([]),
             active: None,
@@ -1001,6 +1010,12 @@ impl Focusable for ThreadList {
     }
 }
 
+impl gpui::Styled for ThreadList {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for ThreadList {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Measured row heights are only valid for the rem they were laid out
@@ -1184,6 +1199,7 @@ impl Render for ThreadList {
                         }),
                 ),
             )
+            .refine_style(&self.style)
     }
 }
 

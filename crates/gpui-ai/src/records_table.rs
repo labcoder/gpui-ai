@@ -1,5 +1,6 @@
 //! Controlled record-grid values and presentation.
 
+use gpui_base::StyledExt as _;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -619,6 +620,13 @@ fn records_inline_state_frame(
 /// Applications own columns, records, progress, sorting, and the selected row
 /// ID. The entity retains only upstream focus and scrolling state.
 pub struct RecordsTable {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     label: SharedString,
     columns: Arc<[RecordColumn]>,
@@ -674,6 +682,7 @@ impl RecordsTable {
         resolved_layout.observe(rem_size);
 
         Self {
+            style: gpui::StyleRefinement::default(),
             id,
             label: label.into(),
             columns: Arc::from([]),
@@ -1261,6 +1270,12 @@ impl Focusable for RecordsTable {
     }
 }
 
+impl gpui::Styled for RecordsTable {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for RecordsTable {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         // A column width given in rems is only as current as the rem it was
@@ -1311,6 +1326,7 @@ impl Render for RecordsTable {
                     .min_h_0()
                     .child(DataTable::new(&self.table).stripe(true).bordered(true)),
             )
+            .refine_style(&self.style)
     }
 }
 

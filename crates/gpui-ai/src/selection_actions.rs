@@ -11,6 +11,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
     prelude::FluentBuilder as _,
 };
+use gpui_base::StyledExt as _;
 use gpui_base::{Align, Placement, Positioner};
 use gpui_component::{
     ActiveTheme as _,
@@ -272,6 +273,13 @@ fn defer_selection_settle(
 /// # }
 /// ```
 pub struct SelectionActions {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     markdown: SharedString,
     text: Entity<TextViewState>,
@@ -326,6 +334,7 @@ impl SelectionActions {
             }
         });
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             markdown,
             text,
@@ -549,6 +558,12 @@ impl SelectionActions {
 
 impl EventEmitter<SelectionActionsEvent> for SelectionActions {}
 
+impl gpui::Styled for SelectionActions {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for SelectionActions {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -644,6 +659,7 @@ impl Render for SelectionActions {
                 !self.drag_active && !self.selected_text.is_empty() && !self.actions.is_empty(),
                 |surface| surface.child(self.toolbar(window, cx)),
             )
+            .refine_style(&self.style)
     }
 }
 

@@ -1,5 +1,6 @@
 //! Stable-ID command search composed over gpui-component's native command palette.
 
+use gpui_base::StyledExt as _;
 use std::sync::Arc;
 
 use gpui::{
@@ -258,6 +259,13 @@ fn upstream_item(search_id: &SharedString, item: &CommandSearchItem) -> CommandI
 /// # }
 /// ```
 pub struct CommandSearch {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     items: Arc<[CommandSearchItem]>,
     upstream_items: Arc<[CommandItem]>,
@@ -272,6 +280,7 @@ impl CommandSearch {
     /// Create an empty command search with native input and focus state.
     pub fn new(id: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             items: Arc::from([]),
             upstream_items: Arc::from([]),
@@ -439,6 +448,12 @@ impl Focusable for CommandSearch {
     }
 }
 
+impl gpui::Styled for CommandSearch {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for CommandSearch {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let id = self.id.clone();
@@ -528,6 +543,7 @@ impl Render for CommandSearch {
                 });
             })
             .child(command)
+            .refine_style(&self.style)
     }
 }
 

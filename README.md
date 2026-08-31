@@ -117,6 +117,53 @@ The [live catalog](https://labcoder.github.io/gpui-ai/components/) contains all 
 
 Components use `Progressive<T>` and `ProgressState` for streamed work. Stateful controls expose typed events; stateless controls use fluent builders.
 
+## Styling
+
+Every component takes styles the same way a `div` does, and the words you write
+win over the component's own defaults:
+
+```rust
+use gpui_ai::prelude::*;
+use gpui::prelude::*;
+
+ApprovalCard::new("gate", "Publish the launch plan?")
+    .border_color(cx.theme().border)   // over the component's warning ring
+    .text_color(gpui::white())         // reaches the title and the description
+```
+
+The same on a stateful component, where the style goes on at construction:
+
+```rust
+let threads = cx.new(|cx| ThreadList::new("threads", window, cx).w(px(240.)));
+```
+
+This is a frame-level thing, not a wrapper: a background, a border, a radius, or
+an ink set on a surrounding `div` paints around a component rather than on it.
+
+Component defaults come from the active theme, so overriding is for the cases a
+theme cannot know about — a card over a photograph, a panel that has to match
+something outside the library.
+
+### Decorations
+
+Cards take a layer under their content and a layer over it, for the surfaces a
+component cannot own:
+
+```rust
+use gpui_ai::prelude::{Decoration, decoration};
+
+ApprovalCard::new("gate", "Publish?").decoration(
+    Decoration::behind(img("nebula.jpg").rounded(decoration::frame_radius(cx)))
+        .and_above(div().size_full().bg(scrim)),
+)
+```
+
+A layer that paints to the edge rounds itself by `decoration::frame_radius`,
+because GPUI's content mask is a rectangle and nothing can clip a subtree to a
+corner radius on your behalf. A layer that never reaches a corner needs nothing.
+`decoration::animated` drives one from a looping 0…1 that stops when the
+component scrolls out of view or the reader has asked for less motion.
+
 ## Themes
 
 Every component reads gpui-component theme tokens. The gallery includes 55 themes, and the [themes page](https://labcoder.github.io/gpui-ai/themes/) lets you preview or download each JSON file.

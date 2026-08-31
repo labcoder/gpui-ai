@@ -18,6 +18,7 @@ mod rows;
 #[cfg(test)]
 mod tests;
 
+use gpui_base::StyledExt as _;
 use std::{cell::Cell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
@@ -250,6 +251,13 @@ pub enum SidebarNavPresentation {
 /// # }
 /// ```
 pub struct SidebarNav {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     sections: Arc<[SidebarSection]>,
     active_item: Option<SharedString>,
@@ -290,6 +298,7 @@ impl SidebarNav {
                 }
             });
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             sections: Arc::from([]),
             active_item: None,
@@ -455,6 +464,12 @@ impl SidebarNav {
 
 impl EventEmitter<SidebarNavEvent> for SidebarNav {}
 
+impl gpui::Styled for SidebarNav {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for SidebarNav {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Measured row heights are only valid for the rem they were laid out
@@ -492,16 +507,18 @@ impl Render for SidebarNav {
         } else {
             expansion_fade
         };
-        self.render_shell(expansion, cx).child(
-            div()
-                .flex()
-                .flex_col()
-                .h_full()
-                .min_h_0()
-                .w_full()
-                .opacity(settle)
-                .children(content),
-        )
+        self.render_shell(expansion, cx)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .h_full()
+                    .min_h_0()
+                    .w_full()
+                    .opacity(settle)
+                    .children(content),
+            )
+            .refine_style(&self.style)
     }
 }
 

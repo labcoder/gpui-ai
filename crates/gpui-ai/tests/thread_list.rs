@@ -71,6 +71,55 @@ impl Render for Probe {
     }
 }
 
+/// A caller's styles reach a stateful component's own frame.
+///
+/// The half of the library that is an entity used to have no way to take them:
+/// `Styled` was implemented by every fluent builder and by none of the
+/// entities, so `.w()` on a `ThreadList` did not compile and the only recourse
+/// was a wrapper — which sizes the space around a component and not the
+/// component. This narrows the list itself and reads a row inside it, because
+/// a wrapper would leave the row exactly as wide as it was.
+#[gpui::test]
+fn a_caller_can_style_a_stateful_component(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (_, cx) = cx.add_window_view(|window, cx| {
+        let threads = cx.new(|cx| {
+            let mut list = ThreadList::new("styled", window, cx);
+            list.set_sections(sections(), cx);
+            list
+        });
+        StyledProbe { threads }
+    });
+    cx.simulate_resize(size(px(320.), px(480.)));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let row = cx
+        .debug_bounds("thread-row-supplier")
+        .expect("a row should render");
+    assert!(
+        row.size.width <= px(NARROW),
+        "a width set on the component must reach its rows, not stop at a wrapper: \
+         row is {:?} wide in a {NARROW}px list",
+        row.size.width
+    );
+}
+
+const NARROW: f32 = 180.;
+
+struct StyledProbe {
+    threads: Entity<ThreadList>,
+}
+
+impl Render for StyledProbe {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        // The style goes on the component, in a window three times as wide.
+        self.threads.update(cx, |threads, _| {
+            threads.style().size.width = Some(px(NARROW).into());
+        });
+        div().size_full().child(self.threads.clone())
+    }
+}
+
 fn harness(
     cx: &mut TestAppContext,
     height: f32,

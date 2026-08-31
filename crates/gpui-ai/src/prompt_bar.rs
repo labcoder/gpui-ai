@@ -18,6 +18,7 @@ use gpui::{
     Render, Role, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Subscription,
     Window, deferred, div, prelude::FluentBuilder as _,
 };
+use gpui_base::StyledExt as _;
 use gpui_base::{Align, Button, POPUP_PRIORITY, Positioner};
 use gpui_component::{
     ActiveTheme as _, ElementExt as _, Icon, IconName, Sizable as _, h_flex,
@@ -398,6 +399,13 @@ fn prompt_control_shell(
 /// # }
 /// ```
 pub struct PromptBar {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     editor: Entity<TextareaState>,
     models: Vec<PromptModel>,
@@ -448,6 +456,7 @@ impl PromptBar {
             }
         });
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             editor,
             models: Vec::new(),
@@ -854,6 +863,12 @@ impl Focusable for PromptBar {
     }
 }
 
+impl gpui::Styled for PromptBar {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for PromptBar {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -1155,6 +1170,7 @@ impl Render for PromptBar {
             .when(self.model_menu_open, |this| {
                 this.child(self.render_model_picker(&root_id, window, cx))
             })
+            .refine_style(&self.style)
     }
 }
 

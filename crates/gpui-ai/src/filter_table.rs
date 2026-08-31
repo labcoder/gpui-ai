@@ -1,5 +1,6 @@
 //! Controlled filter-table values and animated stable-row presentation.
 
+use gpui_base::StyledExt as _;
 use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
@@ -132,6 +133,13 @@ pub enum FilterTableEvent {
 /// to their new positions through GPUI's finite keyed transition facility.
 /// Reduced-motion mode snaps directly to the new order.
 pub struct FilterTable {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     label: SharedString,
     filters: Arc<[FilterDefinition]>,
@@ -186,6 +194,7 @@ impl FilterTable {
             }),
         ];
         Self {
+            style: gpui::StyleRefinement::default(),
             id,
             label,
             filters: Arc::from([]),
@@ -504,6 +513,12 @@ impl Focusable for FilterTable {
     }
 }
 
+impl gpui::Styled for FilterTable {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for FilterTable {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -576,6 +591,7 @@ impl Render for FilterTable {
                     .child(result_label),
             )
             .child(div().flex_1().min_h_0().child(self.records_table.clone()))
+            .refine_style(&self.style)
     }
 }
 

@@ -5,6 +5,7 @@ mod render;
 mod tests;
 mod transcript;
 
+use gpui_base::StyledExt as _;
 use render::{chat_frame, jump_to_latest_button, transcript_frame};
 use transcript::{message_ids_are_unique, structural_splice};
 
@@ -569,6 +570,13 @@ pub enum ChatEvent {
 /// # }
 /// ```
 pub struct Chat {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     prompt_bar: Entity<PromptBar>,
     messages: Arc<[ChatMessage]>,
@@ -634,6 +642,7 @@ impl Chat {
         );
 
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             prompt_bar,
             messages: Arc::from([]),
@@ -1110,6 +1119,12 @@ impl Chat {
 
 impl EventEmitter<ChatEvent> for Chat {}
 
+impl gpui::Styled for Chat {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for Chat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         self.render_jump(window, cx);
@@ -1191,5 +1206,6 @@ impl Render for Chat {
                     .flex_none()
                     .child(self.prompt_bar.clone()),
             )
+            .refine_style(&self.style)
     }
 }

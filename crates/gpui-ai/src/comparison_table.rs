@@ -1,5 +1,6 @@
 //! Bounded, feature-oriented comparison table values and presentation.
 
+use gpui_base::StyledExt as _;
 use std::{collections::HashSet, sync::Arc};
 
 use gpui::{
@@ -365,6 +366,13 @@ impl ComparisonConstructionCounts {
 /// vertically; both they and the rows stay on one horizontally scrolled
 /// canvas, which is what keeps a column aligned with its cells.
 pub struct ComparisonTable {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     label: SharedString,
     snapshot: Progressive<ComparisonSnapshot>,
@@ -404,6 +412,7 @@ impl ComparisonTable {
             }),
         ];
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             label: label.into(),
             snapshot: Progressive::pending(empty),
@@ -933,6 +942,12 @@ impl ComparisonTable {
     }
 }
 
+impl gpui::Styled for ComparisonTable {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for ComparisonTable {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         #[cfg(test)]
@@ -1292,6 +1307,7 @@ impl Render for ComparisonTable {
                 ScrollableMask::new(Axis::Horizontal, &self.horizontal_scroll)
                     .id((ElementId::from(self.id.clone()), "horizontal-scroll-mask")),
             )
+            .refine_style(&self.style)
     }
 }
 

@@ -1,5 +1,6 @@
 //! Controlled fine-tune inspector for design properties.
 
+use gpui_base::StyledExt as _;
 use std::sync::Arc;
 
 use gpui::Hsla;
@@ -269,6 +270,13 @@ enum NumericProperty {
 
 /// A consumer-controlled design-property inspector.
 pub struct FineTuneCard {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     values: FineTuneValues,
     typefaces: Arc<[FineTuneTypeface]>,
@@ -382,6 +390,7 @@ impl FineTuneCard {
             },
         );
         Self {
+            style: gpui::StyleRefinement::default(),
             id: id.into(),
             local_width: values.width,
             local_height: values.height,
@@ -948,6 +957,12 @@ fn numeric_field(
         ))
 }
 
+impl gpui::Styled for FineTuneCard {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for FineTuneCard {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tokens = cx.theme().semantic_tokens();
@@ -1196,12 +1211,17 @@ impl Render for FineTuneCard {
             )
             .child(div().hidden());
 
-        div().relative().size_full().child(card).child(
-            ScrollableMask::new(Axis::Vertical, &self.scroll_handle).id((
-                gpui::ElementId::from(self.id.clone()),
-                "content-scroll-mask",
-            )),
-        )
+        div()
+            .relative()
+            .size_full()
+            .child(card)
+            .child(
+                ScrollableMask::new(Axis::Vertical, &self.scroll_handle).id((
+                    gpui::ElementId::from(self.id.clone()),
+                    "content-scroll-mask",
+                )),
+            )
+            .refine_style(&self.style)
     }
 }
 

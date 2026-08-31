@@ -1,5 +1,6 @@
 //! Controlled before/after proposals for tabular data.
 
+use gpui_base::StyledExt as _;
 use std::{
     collections::HashSet,
     sync::{
@@ -282,6 +283,13 @@ pub enum DiffTableEvent {
 /// proposal decisions. The entity composes [`RecordsTable`] for focus,
 /// virtualization, and scrolling, and retains no application work.
 pub struct DiffTable {
+    /// Styles the caller put on this component, applied to its own frame.
+    ///
+    /// Last, so a caller outranks the component's defaults - the same rule the
+    /// builder components follow. A wrapper `div` cannot stand in for this:
+    /// a background, a border, or an ink set on a wrapper paints around the
+    /// component rather than on it.
+    style: gpui::StyleRefinement,
     id: SharedString,
     label: SharedString,
     columns: Arc<[DiffColumn]>,
@@ -320,6 +328,7 @@ impl DiffTable {
         });
 
         Self {
+            style: gpui::StyleRefinement::default(),
             id,
             label,
             columns: Arc::from([]),
@@ -556,6 +565,12 @@ impl Focusable for DiffTable {
     }
 }
 
+impl gpui::Styled for DiffTable {
+    fn style(&mut self) -> &mut gpui::StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl Render for DiffTable {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         let selected = self.selected_row_id.as_ref().and_then(|selected| {
@@ -653,6 +668,7 @@ impl Render for DiffTable {
                         ),
                 )
             })
+            .refine_style(&self.style)
     }
 }
 
