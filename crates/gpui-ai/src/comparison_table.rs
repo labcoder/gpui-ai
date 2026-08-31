@@ -9,6 +9,7 @@ use gpui::{
     Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
     Window, div, list, prelude::FluentBuilder as _,
 };
+use gpui_base::InteractiveElementExt as _;
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex, scroll::ScrollableMask, text::TextView,
 };
@@ -994,7 +995,7 @@ impl Render for ComparisonTable {
                     .flex()
                     .flex_col()
                     .overflow_x_scroll()
-                    .restrict_scroll_to_axis()
+                    .lock_scroll_axis()
                     .track_scroll(&self.horizontal_scroll)
                     .policy_horizontal_scrollbar(&self.horizontal_scroll, cx)
                     .when_some(status, |surface, (role, label): (Role, SharedString)| {

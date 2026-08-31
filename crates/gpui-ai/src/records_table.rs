@@ -1321,10 +1321,17 @@ impl Render for RecordsTable {
             .on_action(cx.listener(Self::activate_selected))
             .when_some(inline_status, |this, status| this.child(status))
             .child(
+                // Shrink to fit, never grow to fill. Upstream pads a striped
+                // table with empty rows to cover whatever space is left over,
+                // so a table stretched to a container taller than its rows
+                // grows a band of blank stripes with the last one clipped by
+                // the edge - which reads as rows that are there and cannot be
+                // reached. Four rows now end after four rows, and a hundred
+                // still shrink into the space and scroll.
                 div()
                     .flex_1()
                     .min_h_0()
-                    .child(DataTable::new(&self.table).stripe(true).bordered(true)),
+                    .child(DataTable::new(&self.table).stripe(false).bordered(true)),
             )
             .refine_style(&self.style)
     }

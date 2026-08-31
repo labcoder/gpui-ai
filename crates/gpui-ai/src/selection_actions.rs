@@ -11,6 +11,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled, Subscription, Window, div, point,
     prelude::FluentBuilder as _,
 };
+use gpui_base::InteractiveElementExt as _;
 use gpui_base::StyledExt as _;
 use gpui_base::{Align, Placement, Positioner};
 use gpui_component::{
@@ -137,7 +138,7 @@ fn selection_toolbar_frame(
                 .max_w_full()
                 .min_w_0()
                 .overflow_x_scroll()
-                .restrict_scroll_to_axis()
+                .lock_scroll_axis()
                 .track_scroll(scroll_handle)
                 .flex()
                 .items_center()

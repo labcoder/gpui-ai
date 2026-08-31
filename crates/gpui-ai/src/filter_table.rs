@@ -9,6 +9,7 @@ use gpui::{
     Stateful, StatefulInteractiveElement as _, Styled as _, Subscription, Window, accesskit, div,
     prelude::FluentBuilder as _,
 };
+use gpui_base::InteractiveElementExt as _;
 use gpui_component::{ActiveTheme as _, scroll::ScrollableMask};
 
 use crate::scrolling::PolicyScrollbarExt as _;
@@ -547,7 +548,7 @@ impl Render for FilterTable {
                             .items_center()
                             .gap(tokens.spacing.xs)
                             .overflow_x_scroll()
-                            .restrict_scroll_to_axis()
+                            .lock_scroll_axis()
                             .track_scroll(&self.filter_scroll)
                             .policy_horizontal_scrollbar(&self.filter_scroll, cx)
                             .children(self.filters.iter().map(|filter| {
