@@ -55,17 +55,22 @@ fn harness(
     (events, cx)
 }
 
-/// A button centres the part of its label anyone can actually see.
+/// A control centres the part of its label anyone can actually see.
 ///
-/// Not the line box — that one is easy to centre and looks wrong. GPUI centres
+/// Not the line box - that one is easy to centre and looks wrong. GPUI centres
 /// a line's ascent-to-descent box, and a font's ascent reserves room for
-/// accents that `Approve` never uses, so centring it hangs the word low: eight
-/// pixels above the caps and three below the descender, on a button that is
-/// twenty-four tall. What has to end up centred is the band from the cap
-/// height to the descent, which is the ink, and this measures that band from
-/// the same metrics the label offsets itself by.
+/// accents that `Approve` never uses, so centring it hangs the word low. What
+/// has to end up centred is the band from the cap height to the descent, which
+/// is the ink, and this measures that band from the same metrics the control
+/// offsets itself by.
+///
+/// The offset belongs to the control rather than the label, because only the
+/// control knows how much room it has to give: the ascent is where the ring of
+/// an `Å` lives, and a control too short to spare it must not move. So this
+/// also checks the other side - that whatever the control took, the accents
+/// still clear its frame.
 #[gpui::test]
-fn a_button_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
+fn a_control_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
     let (_, cx) = harness(ProbeKind::Pending, cx);
     let (ascent, descent, cap, leading) = cx.update(|window, cx| {
         let body = cx.theme().typography_tokens().sm;
@@ -73,7 +78,9 @@ fn a_button_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
         let font = text.resolve_font(&window.text_style().font());
         (
             text.ascent(font, body.size),
-            text.descent(font, body.size),
+            // A depth rather than an offset: GPUI hands back the font file's
+            // own sign, which is negative below the baseline.
+            -text.descent(font, body.size),
             text.cap_height(font, body.size),
             body.line_height,
         )
@@ -89,14 +96,20 @@ fn a_button_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
             .debug_bounds(label)
             .unwrap_or_else(|| panic!("{label} should render"));
         // Where GPUI puts the baseline inside the line box, which starts at
-        // the top of the label's box because the padding that raises it is
-        // all underneath.
+        // the top of the label's box.
         let baseline = label.top() + (leading - ascent - descent) / 2.0 + ascent;
         let above = baseline - cap - button.top();
         let below = button.bottom() - (baseline + descent);
         assert!(
             (above - below).abs() <= px(1.0),
-            "a button must centre its label's ink: {above:?} above the caps,              {below:?} below the descent"
+            "a control must centre its label's ink: {above:?} above the caps, \
+             {below:?} below the descent"
+        );
+        let accents = baseline - ascent - button.top();
+        assert!(
+            accents >= px(1.0),
+            "a control must leave its tall accents clear of its frame, not \
+             {accents:?}"
         );
     }
 }

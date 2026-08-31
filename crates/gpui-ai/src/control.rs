@@ -195,10 +195,44 @@ impl<E: gpui::Styled + Sized> ControlMetricsExt for E {
     fn control_metrics(self, cx: &App) -> Self {
         let tokens = cx.theme().semantic_tokens();
         let sizes = SizeTokens::read(cx);
-        self.h(sizes.control_sm())
-            .px(sizes.control_padding_sm())
+        let height = sizes.control_md();
+        self.h(height)
+            .px(sizes.control_padding_md())
             .rounded(tokens.radius.md)
+            // Padding below, so centring the shortened content box raises the
+            // label by half of it.
+            .pb(optical_lift(height, cx) * 2.0)
     }
+}
+
+/// How far a control raises its own label so that the ink reads as centred.
+///
+/// GPUI centres a line's ascent-to-descent box, and a font's ascent reserves
+/// room for accents and tall diacritics that a word like `Approve` never uses.
+/// Centre that box and the word hangs low inside it: measured on a control of
+/// this family, eight pixels above the caps and three below the descender.
+/// What the eye centres on is the band from the cap height to the descent, and
+/// all of the layout box's excess over that band sits on top, so half of the
+/// excess is the correction. Two cached metric reads, no measured layout, and
+/// no number anyone tuned - it follows the theme's typeface and size.
+///
+/// It lives here rather than in the label because **the label cannot know what
+/// is spare**. The room above the ascent box is a function of the control's
+/// height, and the ascent is not free space: it is where the ring of an `Å`
+/// and the bar of a `Ђ` live. Spending all of it on a compact control puts
+/// them on the border, which is how the real-font raster test found this the
+/// first time. So the control spends at most half of its own room, and a
+/// control too short to afford the correction simply does not make it.
+fn optical_lift(height: gpui::Pixels, cx: &App) -> gpui::Pixels {
+    let body = cx.theme().typography_tokens().sm;
+    let text = cx.text_system();
+    let font = text.resolve_font(&gpui::font(cx.theme().font_family.clone()));
+    // GPUI signs descent the way a font file does: below the baseline is
+    // negative, so this subtracts to the full layout box.
+    let layout_box = text.ascent(font, body.size) - text.descent(font, body.size);
+    let room = (height - layout_box) / 2.0;
+    let excess = text.ascent(font, body.size) - text.cap_height(font, body.size);
+    (excess / 2.0).min(room / 2.0).max(gpui::Pixels::ZERO)
 }
 
 pub(crate) fn outlined_control(

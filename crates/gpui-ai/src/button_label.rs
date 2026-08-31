@@ -1,8 +1,8 @@
 //! Theme-aware text labels for composed gpui-component buttons.
 
 use gpui::{
-    App, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, RenderOnce,
-    SharedString, Styled as _, Window, div, relative,
+    App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    Styled as _, Window, div, relative,
 };
 use gpui_component::{ActiveTheme as _, button::Button};
 
@@ -41,11 +41,20 @@ struct ButtonText {
 }
 
 impl RenderOnce for ButtonText {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let body = cx.theme().typography_tokens().sm;
         // A relative leading follows every upstream Button size and rem zoom.
         // In particular, do not use Button::label's one-em overflow mask: on
         // DirectWrite it cuts off the bottom of y/g/p and tall accented glyphs.
+        //
+        // And nothing here offsets the label optically. It is tempting: GPUI
+        // centres a line's ascent-to-descent box, so a word with no tall
+        // accents hangs low inside it, and half the ascent's excess over the
+        // cap height would centre what the eye actually sees. Measured, it is
+        // 2.29px at this size - and a 24px control has only 2.9px above that
+        // box, so spending it puts the ring of an Å on the border. The label
+        // cannot know the control's height, so it cannot know what is spare.
+        // Room is the control's to give: see `ControlMetricsExt`.
         // Named after what it says, so a geometry test can find it. Dropped
         // unread outside cfg(test), so the name costs nothing to carry.
         let named = self.label.clone();
@@ -54,37 +63,8 @@ impl RenderOnce for ButtonText {
             .min_w_0()
             .truncate()
             .line_height(relative(f32::from(body.line_height) / f32::from(body.size)))
-            // Padding below, so centring the taller box raises the glyphs by
-            // half of it. Growing the box is the only lever here: the button
-            // centres whatever it is given, and a line box cannot say where
-            // its baseline should land.
-            .pb(cap_lift(window, cx, body.size) * 2.0)
             .child(self.label)
     }
-}
-
-/// How far a label has to rise for its ink to sit in the middle of a control.
-///
-/// GPUI centres a line's **ascent-to-descent** box: `padding_top` is
-/// `(line_height - ascent - descent) / 2` and the baseline follows the ascent.
-/// That box is not what anyone looks at. A font's ascent reserves room for
-/// accents and tall diacritics that a word like `Approve` never uses, so the
-/// glyphs hang low inside it — measured on a 24px button, eight pixels above
-/// the caps and three below the descender.
-///
-/// The box people actually see runs from the cap height to the descent, and
-/// all of the ascent-to-descent box's excess over it sits on top. Removing
-/// half of that excess centres the visible one. Descenders keep hanging below
-/// the baseline, which is what descenders are for, but they stop touching the
-/// edge.
-///
-/// It is a font metric rather than a chosen number, so it follows the theme's
-/// typeface and size without anyone re-tuning it — and it costs two cached
-/// metric reads per label, not a measured layout.
-fn cap_lift(window: &Window, cx: &App, size: Pixels) -> Pixels {
-    let text = cx.text_system();
-    let font = text.resolve_font(&window.text_style().font());
-    ((text.ascent(font, size) - text.cap_height(font, size)) / 2.0).max(Pixels::ZERO)
 }
 
 #[cfg(test)]

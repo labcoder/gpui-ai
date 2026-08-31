@@ -100,7 +100,7 @@
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
       "usage": "ToolCall::new(&call_progress)",
-      "height": 650,
+      "height": 654,
       "windowTitle": "Tool calls — gpui-ai",
       "variants": [],
       "events": [
@@ -779,7 +779,7 @@
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
-      "height": 469,
+      "height": 477,
       "windowTitle": "Code diff — gpui-ai",
       "variants": [],
       "events": [
@@ -804,7 +804,7 @@
       "source": "crates/gpui-ai/src/approval.rs",
       "api": "ApprovalCard",
       "usage": "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
-      "height": 449,
+      "height": 457,
       "windowTitle": "Approval card — gpui-ai",
       "variants": [],
       "events": [
@@ -829,7 +829,7 @@
       "source": "crates/gpui-ai/src/plan.rs",
       "api": "PlanCard",
       "usage": "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
-      "height": 402,
+      "height": 406,
       "windowTitle": "Plan card — gpui-ai",
       "variants": [],
       "events": [
@@ -854,7 +854,7 @@
       "source": "crates/gpui-ai/src/recommendation.rs",
       "api": "RecommendationCard",
       "usage": "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
-      "height": 262,
+      "height": 266,
       "windowTitle": "Recommendation card — gpui-ai",
       "variants": [],
       "events": [
@@ -1004,7 +1004,7 @@
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
       "usage": "MessageQueue::new(\"queue\").items(queued)",
-      "height": 238,
+      "height": 242,
       "windowTitle": "Message queue — gpui-ai",
       "variants": [],
       "events": [
@@ -1089,7 +1089,7 @@
       "source": "crates/gpui-ai/src/question_flow.rs",
       "api": "QuestionFlow",
       "usage": "QuestionFlow::new(\"launch\",\n\"Before I draft the plan\").questions([Question::new(\"flavours\",\n\"How many flavours?\").options([ChoiceOption::new(\"three\", \"Three\")])])",
-      "height": 336,
+      "height": 340,
       "windowTitle": "Question flow — gpui-ai",
       "variants": [],
       "events": [
