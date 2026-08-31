@@ -143,3 +143,55 @@ fn every_option_keeps_one_text_inset(cx: &mut TestAppContext) {
         "the described option is the taller one, so this compares the two cases"
     );
 }
+
+/// An indicator sits on the middle of the label's first line.
+///
+/// The test above checks the left edge, which is what the 0.4.0 audit was
+/// about, and it passed while every indicator in this file sat two pixels
+/// above the words beside it. The seat was a square the size of the *control*
+/// - sixteen pixels - where it should have been the height of the *line* the
+/// control belongs to, which is twenty. So this measures the one thing the
+/// other does not: the middle of the seat against the middle of the first
+/// line, for an option with a second line and for an option without, because
+/// a seat centred on the whole option drifts only when there is one.
+#[gpui::test]
+fn an_indicator_sits_on_the_middle_of_the_first_line(cx: &mut TestAppContext) {
+    cx.update(gpui_ai::init);
+    let (_, cx) = cx.add_window_view(|_, _| ChoiceProbe {
+        chosen: Arc::new(Mutex::new(Vec::new())),
+    });
+    let cx: &mut VisualTestContext = cx;
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    for (option, seat_name, label_name) in [
+        (
+            "three",
+            "choice-seat-flavours-three",
+            "choice-label-flavours-three",
+        ),
+        (
+            "five",
+            "choice-seat-flavours-five",
+            "choice-label-flavours-five",
+        ),
+    ] {
+        let seat = cx
+            .debug_bounds(seat_name)
+            .unwrap_or_else(|| panic!("{option} renders a seat"));
+        let label = cx
+            .debug_bounds(label_name)
+            .unwrap_or_else(|| panic!("{option} renders a label"));
+
+        assert!(
+            (seat.center().y - label.center().y).abs() <= px(0.5),
+            "{option}'s indicator must sit on its first line: seat centred at {:?}, the line \
+             at {:?}",
+            seat.center().y,
+            label.center().y
+        );
+        assert_eq!(
+            seat.size.height, label.size.height,
+            "{option}'s seat must be the line it sits on, not the control it holds"
+        );
+    }
+}

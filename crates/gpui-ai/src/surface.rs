@@ -196,21 +196,37 @@ where
 
 /// Seats a glyph beside wrappable text, centered on the text's first line.
 ///
-/// The slot is a fixed square box whose side equals the first line's
-/// line-height (the size policy's slot tokens name the two the crate
-/// uses), so the row itself stays `items_start` and the glyph holds to
-/// the first line however far the text wraps. Centering a bare glyph
-/// against a whole text block is the misalignment class the 0.4.0 audit
-/// found across eight components; a row that can wrap composes this
-/// instead.
+/// A square box whose side equals the first line's line-height (the size
+/// policy's slot tokens name the ones the crate uses), so the row itself stays
+/// `items_start` and the glyph holds to the first line however far the text
+/// wraps. Centering a bare glyph against a whole text block is the
+/// misalignment class the 0.4.0 audit found across eight components; a row
+/// that can wrap composes this instead.
 pub(crate) fn leading_glyph_slot(slot: Pixels, glyph: impl IntoElement) -> Div {
+    leading_control_slot(slot, slot, glyph)
+}
+
+/// The same seat for a control that is not square.
+///
+/// Two dimensions because a switch is not a glyph: its track is wider than it
+/// is tall, and a square seat crushed it to the width of a checkbox - which is
+/// what turned the library's only switch into a dot with its thumb outside the
+/// track. `line` is still the first line's line-height, because that is what
+/// holds the control against the text; `width` is the widest control the
+/// column can hold, so a mixed column of switches and boxes keeps one text
+/// inset and one left edge.
+///
+/// Left-aligned rather than centered, for that left edge: a checkbox centered
+/// in a switch's width would sit five pixels in from every switch above it.
+pub(crate) fn leading_control_slot(line: Pixels, width: Pixels, control: impl IntoElement) -> Div {
     div()
         .flex_none()
-        .size(slot)
+        .w(width)
+        .h(line)
         .flex()
         .items_center()
-        .justify_center()
-        .child(glyph)
+        .justify_start()
+        .child(control)
 }
 
 /// A compact inset panel placed *inside* a card (payloads, code, previews).
@@ -315,14 +331,21 @@ impl RenderOnce for Quiet {
 }
 
 /// The supporting ink to use while `ink` is the ink in force.
+///
+/// While the ink is the theme's own, the theme's own muted ink - authored per
+/// theme, and not the foreground at lower alpha in any of the fifty-five.
+///
+/// Once someone has changed it, theirs, unsoftened. Softening it was tried and
+/// is wrong: an override is a deliberate act for a background the theme could
+/// not know about - white over a photograph - and dimming it to seventy-two
+/// per cent spends the legibility it was chosen for. The hierarchy does not
+/// need the colour anyway: supporting text is already a size and a weight
+/// below the words above it, which is what still tells them apart here.
 fn quiet_ink(ink: Hsla, cx: &App) -> Hsla {
     if ink == cx.theme().foreground {
         cx.theme().muted_foreground
     } else {
-        // Every theme's muted ink sits between a half and four fifths of the
-        // way from its background to its foreground; this is the middle of
-        // that, and it is only reached for inks the theme never authored.
-        ink.opacity(0.72)
+        ink
     }
 }
 

@@ -202,12 +202,35 @@ impl RenderOnce for ChoiceGroup {
     }
 }
 
-/// The diameter of a choice's indicator ring.
+/// The diameter of a choice's indicator ring, and the side of a check box.
 ///
-/// A glyph slot rather than a fresh number: the ring sits on the label's
-/// first line exactly as every other leading glyph in the library does.
+/// A glyph slot rather than a fresh number, and deliberately not the seat it
+/// sits in: the control is sixteen pixels, the seat is the label's own line,
+/// and conflating the two put every indicator in this file two pixels above
+/// the text it belongs to.
 fn indicator_size(cx: &App) -> Pixels {
     crate::sizing::slot_sm(cx)
+}
+
+/// The seat every control in this file sits in.
+///
+/// As tall as the label's first line, so the control is centred on the words
+/// rather than on the whole option - an option with a description is two lines
+/// tall, and a control centred on both floats between them. As wide as the
+/// widest control the file draws, which is the switch's track, so a column
+/// mixing switches and boxes keeps one left edge and one text inset.
+fn control_seat(control: impl IntoElement, cx: &App) -> gpui::Div {
+    let tokens = cx.theme().semantic_tokens();
+    crate::surface::leading_control_slot(
+        tokens.typography.sm.line_height,
+        switch_track_width(indicator_size(cx)),
+        control,
+    )
+}
+
+/// How wide a switch's track is, for the seat and for the switch itself.
+fn switch_track_width(slot: Pixels) -> Pixels {
+    slot * 1.6
 }
 
 /// One option: an indicator, its label, and whatever it says about itself.
@@ -259,33 +282,43 @@ fn choice_row(
         })
         .aria_position_in_set(position + 1)
         .debug_selector(move || format!("choice-{debug_group}-{debug_option}"))
-        .child(crate::surface::leading_glyph_slot(
-            ring,
-            div()
-                .flex()
-                .items_center()
-                .justify_center()
-                .size(ring)
-                .rounded_full()
-                .border_1()
-                .border_color(if chosen {
-                    cx.theme().primary
-                } else {
-                    cx.theme().border
-                })
-                .child(
-                    div()
-                        .size(ring * 0.5 * fill)
-                        .rounded_full()
-                        .bg(cx.theme().primary),
-                ),
-        ))
+        .child(
+            control_seat(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(ring)
+                    .rounded_full()
+                    .border_1()
+                    .border_color(if chosen {
+                        cx.theme().primary
+                    } else {
+                        cx.theme().border
+                    })
+                    .child(
+                        div()
+                            .size(ring * 0.5 * fill)
+                            .rounded_full()
+                            .bg(cx.theme().primary),
+                    ),
+                cx,
+            )
+            .debug_selector({
+                let (group, option) = (group.clone(), option.id.clone());
+                move || format!("choice-seat-{group}-{option}")
+            }),
+        )
         .child(
             v_flex()
                 .min_w_0()
                 .gap(tokens.spacing.xxs)
                 .child(
                     div()
+                        .debug_selector({
+                            let (group, option) = (group.clone(), option.id.clone());
+                            move || format!("choice-label-{group}-{option}")
+                        })
                         .text_token(tokens.typography.sm)
                         .text_color(cx.theme().foreground)
                         .child(option.label.clone()),
@@ -466,7 +499,7 @@ fn toggle_button(toggle: Toggle, window: &mut Window, cx: &mut App) -> gpui_base
         })
         .debug_selector(move || format!("toggle-{debug_id}"))
         .refine_style(&toggle.style)
-        .child(crate::surface::leading_glyph_slot(slot, indicator))
+        .child(control_seat(indicator, cx))
         .child(
             v_flex()
                 .min_w_0()
@@ -520,7 +553,7 @@ fn switch_indicator(slot: Pixels, travel: f32, cx: &App) -> AnyElement {
     let tokens = cx.theme().semantic_tokens();
     // Every number here is the slot or a spacing token: a switch that grows
     // with the size policy rather than one drawn at a fixed size.
-    let track_width = slot * 1.6;
+    let track_width = switch_track_width(slot);
     let track_height = slot * 0.75;
     let inset = tokens.spacing.xxs;
     let thumb = track_height - inset * 2.0;
