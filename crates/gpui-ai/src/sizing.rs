@@ -46,7 +46,6 @@ pub struct SizeTokens {
     control_lg: Pixels,
     control_padding_sm: Pixels,
     control_padding_md: Pixels,
-    control_padding_lg: Pixels,
     slot_xs: Pixels,
     slot_sm: Pixels,
     slot_md: Pixels,
@@ -75,9 +74,13 @@ impl SizeTokens {
         // text wedged into a pill. The upstream button's own eight pixels
         // are what the 0.4.0 feel review saw as tight; these are the ramp
         // shadcn and the reference sites settle on, scaled to our tiers.
+        //
+        // Two tiers rather than three: the controls at the large height are
+        // pills and header rails that take their inset from the spacing scale
+        // for stated reasons, so a large padding tier was a knob that read
+        // back whatever was written to it and changed nothing on screen.
         control_padding_sm: px(12.),
         control_padding_md: px(14.),
-        control_padding_lg: px(18.),
         slot_xs: STATUS_INDICATOR_SLOT,
         slot_sm: px(16.),
         slot_md: px(20.),
@@ -123,11 +126,6 @@ impl SizeTokens {
         self.control_padding_md
     }
 
-    /// Horizontal padding inside a control that rails with an input.
-    pub const fn control_padding_lg(&self) -> Pixels {
-        self.control_padding_lg
-    }
-
     /// Replaces [`control_padding_sm`](Self::control_padding_sm).
     pub const fn with_control_padding_sm(mut self, padding: Pixels) -> Self {
         self.control_padding_sm = padding;
@@ -137,12 +135,6 @@ impl SizeTokens {
     /// Replaces [`control_padding_md`](Self::control_padding_md).
     pub const fn with_control_padding_md(mut self, padding: Pixels) -> Self {
         self.control_padding_md = padding;
-        self
-    }
-
-    /// Replaces [`control_padding_lg`](Self::control_padding_lg).
-    pub const fn with_control_padding_lg(mut self, padding: Pixels) -> Self {
-        self.control_padding_lg = padding;
         self
     }
 
@@ -271,6 +263,6 @@ mod tests {
         assert!(tokens.control_md() < tokens.control_lg());
         assert!(tokens.slot_xs() < tokens.slot_sm());
         assert!(tokens.slot_sm() < tokens.slot_md());
-        assert!(tokens.control_padding_sm() < tokens.control_padding_lg());
+        assert!(tokens.control_padding_sm() < tokens.control_padding_md());
     }
 }

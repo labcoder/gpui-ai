@@ -134,13 +134,6 @@ const EXCEPTIONS: &[Exception] = &[
         rationale: "the size policy's own default control paddings; pixels feed the token",
     },
     Exception {
-        file: "sizing.rs",
-        expression: "px(18.)",
-        context: "control_padding_lg",
-        category: Category::ThemeDefinition,
-        rationale: "the size policy's own default control paddings; pixels feed the token",
-    },
-    Exception {
         file: "status.rs",
         expression: "gpui::px(6.)",
         context: "INDICATOR_DOT",

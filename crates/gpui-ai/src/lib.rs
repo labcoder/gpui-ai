@@ -140,11 +140,13 @@ pub mod prelude {
         RecordSortDirection, RecordStatusTone, RecordsTable, RecordsTableEvent, RowActionPlacement,
         RowActionVisibility,
     };
+    // The types, not the tuning. A wheel accelerator's five coefficients are
+    // reachable at `gpui_ai::scrolling::*` for anyone reproducing its feel;
+    // a prelude is for the names an application writes every day, and
+    // `WHEEL_ACCEL_DECAY_SECONDS` is not one of them.
     pub use crate::scrolling::{
-        AUTOSCROLL_FULL_SPEED_DISTANCE_PX, Autoscroll, LINE_HEIGHT_PX,
-        MAX_AUTOSCROLL_SPEED_PX_PER_SEC, ScrollRoom, WHEEL_ACCEL_DECAY_SECONDS,
-        WHEEL_ACCEL_MAX_MULTIPLIER, WHEEL_ACCEL_NOTCHES_TO_FULL, WHEEL_FAST_SENSITIVITY,
-        WHEEL_SENSITIVITY, WheelAccelerator,
+        AUTOSCROLL_FULL_SPEED_DISTANCE_PX, Autoscroll, MAX_AUTOSCROLL_SPEED_PX_PER_SEC, ScrollRoom,
+        WheelAccelerator,
     };
     pub use crate::search_results::{SearchResult, SearchResults, SearchResultsEvent};
     pub use crate::selection_actions::{SelectionAction, SelectionActions, SelectionActionsEvent};
