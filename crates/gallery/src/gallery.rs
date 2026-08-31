@@ -6447,7 +6447,15 @@ impl Render for Gallery {
         // The catalog's keys are dispatched through this, and the embed is
         // deliberately left alone: `GalleryChrome::Embedded` is set before the
         // first frame, so a demo on the website never takes focus from it.
-        if self.chrome == GalleryChrome::Full && !self.focused_on_open {
+        //
+        // The tracking below is gated the same way, and was not. A focusable
+        // container around an embedded story is not idle: a tap on the margin
+        // beside a composer moved focus *to the container* rather than out of
+        // the story, and the composer's draft did not survive the round trip.
+        // The keys it exists to dispatch are catalog affordances - the frame
+        // meter, the scroll actions - which an embed does not offer anyway.
+        let owns_focus = self.chrome == GalleryChrome::Full;
+        if owns_focus && !self.focused_on_open {
             self.focused_on_open = true;
             cx.defer_in(window, |gallery, window, cx| {
                 window.focus(&gallery.focus, cx);
@@ -6464,12 +6472,15 @@ impl Render for Gallery {
         let content = if self.selected == StoryId::All {
             div()
                 .id("gallery-scroll")
-                .track_focus(&self.focus)
                 // The keybindings below are scoped to this name. Without the
                 // context to match, every one of them was unreachable: the
                 // predicate can only be satisfied by a `key_context`, and an
                 // element id is not one.
-                .key_context("gallery-scroll")
+                .when(owns_focus, |region| {
+                    region
+                        .track_focus(&self.focus)
+                        .key_context("gallery-scroll")
+                })
                 .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
                 .min_h_0()
@@ -6545,11 +6556,14 @@ impl Render for Gallery {
             let story = self.render_story(self.selected, window, cx);
             div()
                 .id("gallery-scroll")
-                .track_focus(&self.focus)
-                .key_context("gallery-scroll")
-                .on_action(cx.listener(|this, _: &ToggleMetrics, _, cx| {
-                    this.toggle_metrics(cx);
-                }))
+                .when(owns_focus, |region| {
+                    region
+                        .track_focus(&self.focus)
+                        .key_context("gallery-scroll")
+                        .on_action(cx.listener(|this, _: &ToggleMetrics, _, cx| {
+                            this.toggle_metrics(cx);
+                        }))
+                })
                 .debug_selector(|| "gallery-scroll".into())
                 .flex_1()
                 .min_h_0()
