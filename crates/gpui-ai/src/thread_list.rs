@@ -1165,7 +1165,11 @@ impl Render for ThreadList {
                         // The gutter every row stands on. A virtual list
                         // positions its items itself, so the inset is the
                         // scroll region's, not each row's.
-                        .px(row_gutter(cx))
+                        .pl(row_gutter(cx))
+                        // And the trailing side keeps the overlaid bar's lane
+                        // clear, because these rows carry a menu at that edge
+                        // and a bar drawn over it is a target nobody can hit.
+                        .pr(row_gutter(cx).max(crate::scrolling::control_lane(cx)))
                         .track_focus(&self.list_focus)
                         .tab_stop(true)
                         .on_key_down(cx.listener(Self::on_key_down))
@@ -1433,6 +1437,45 @@ mod tests {
             ThreadItem::new("two", "Two"),
             ThreadItem::new("three", "Three"),
         ])]
+    }
+
+    /// A row's trailing control never sits under the scrollbar.
+    ///
+    /// The bar is sixteen pixels and overlaid by default, taking no layout
+    /// space - which is right for prose, and wrong for the menu at a row's
+    /// trailing edge. The row's gutter was eight, so the bar reached half its
+    /// width into the row and covered a target nobody could then hit. On a
+    /// list whose bar is always shown, that is the resting state.
+    ///
+    /// Measured against the scroll frame rather than the row, because the bar
+    /// is positioned from the frame's trailing edge and that is the only edge
+    /// the arithmetic can be anchored to.
+    #[gpui::test]
+    fn a_row_keeps_its_controls_clear_of_the_scrollbar(cx: &mut TestAppContext) {
+        let (threads, cx) = measured_list(cx);
+        cx.update(|_, cx| {
+            threads.update(cx, |threads, cx| threads.set_sections(glide_sections(), cx));
+        });
+        let _ = redraw(&threads, cx);
+        let _ = redraw(&threads, cx);
+
+        let frame = bounds_of(cx, "thread-list-scroll".to_owned()).expect("the list scrolls");
+        let row = bounds_of(cx, "thread-row-one".to_owned()).expect("a row renders");
+        let bar = gpui_base::Scrollbar::width();
+        let gutter = cx.update(|_, cx| super::row_gutter(cx));
+
+        assert!(
+            frame.right() - row.right() >= bar,
+            "the bar covers this row's trailing edge: row ends {:?} from the frame, bar is {bar:?}",
+            frame.right() - row.right()
+        );
+        // And the reading column keeps what it had: the lane comes off the
+        // trailing side only.
+        assert_eq!(
+            row.left() - frame.left(),
+            gutter,
+            "the leading gutter is unchanged"
+        );
     }
 
     /// The lag probe: a fresh hover seats the highlight on its row with no

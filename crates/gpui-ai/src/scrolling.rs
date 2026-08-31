@@ -189,6 +189,31 @@ fn scrollbar_gutter(cx: &gpui::App) -> Pixels {
     gpui_base::Theme::global(cx).tokens.spacing.lg
 }
 
+/// The trailing space a row keeps clear so an overlaid bar cannot cover its
+/// controls.
+///
+/// An overlay bar takes no layout space, which is the point of it: prose runs
+/// the full width and slides under a translucent track, and nothing is lost
+/// because text reflows and stays readable. A control is different. A row's
+/// overflow menu sitting under the bar is a target you cannot hit, and on a
+/// list that always shows its bar that is the resting state rather than a
+/// hover accident.
+///
+/// So a list whose rows carry trailing controls reserves the bar's own width
+/// at its trailing edge, and nothing else changes: the reading column keeps
+/// what it had, no surface without controls pays anything, and an application
+/// that switches the policy to [`ScrollbarPlacement::Gutter`] gets zero here
+/// because the gutter has already moved the bar out of the way.
+///
+/// Read from upstream rather than restated, so it cannot drift from the bar it
+/// is measured against.
+pub(crate) fn control_lane(cx: &gpui::App) -> Pixels {
+    match ScrollbarTokens::read(cx).placement() {
+        ScrollbarPlacement::Overlay => gpui_base::Scrollbar::width(),
+        ScrollbarPlacement::Gutter => Pixels::ZERO,
+    }
+}
+
 /// Mounts a vertical scrollbar under the crate's policy.
 ///
 /// Upstream's convenience helper takes the theme's own mode; this routes
