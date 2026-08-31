@@ -685,7 +685,7 @@ impl SidebarNav {
             {
                 let frame = div().relative().w_full().flex_1().min_h_0();
                 match &glide {
-                    Some(state) => crate::glide::glide_frame(frame, state).when_some(
+                    Some(state) => crate::glide::glide_frame(frame, state).child(
                         crate::glide::glide_highlight(
                             (ElementId::from(self.id.clone()), "row-glide").into(),
                             state,
@@ -694,7 +694,6 @@ impl SidebarNav {
                             window,
                             cx,
                         ),
-                        |frame, highlight| frame.child(highlight),
                     ),
                     None => frame,
                 }

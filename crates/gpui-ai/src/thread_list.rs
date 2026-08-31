@@ -1140,7 +1140,7 @@ impl Render for ThreadList {
                     // The gliding highlight paints beneath the rows; the
                     // frame's bounds anchor its coordinates.
                     match &glide {
-                        Some(glide) => crate::glide::glide_frame(frame, glide).when_some(
+                        Some(glide) => crate::glide::glide_frame(frame, glide).child(
                             crate::glide::glide_highlight(
                                 root_id.clone(),
                                 glide,
@@ -1153,7 +1153,6 @@ impl Render for ThreadList {
                                 window,
                                 cx,
                             ),
-                            |frame, highlight| frame.child(highlight),
                         ),
                         None => frame,
                     }

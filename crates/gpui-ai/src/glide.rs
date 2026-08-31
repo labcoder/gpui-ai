@@ -16,13 +16,39 @@
 
 use std::collections::HashMap;
 
+use gpui::canvas;
 use gpui::{
-    App, Bounds, Div, ElementId, Entity, InteractiveElement as _, Pixels, SharedString,
-    StatefulInteractiveElement, Styled as _, Window, div, px,
+    App, Bounds, Div, ElementId, Entity, InteractiveElement as _, ParentElement as _, Pixels,
+    SharedString, StatefulInteractiveElement, Styled as _, Window, div, px,
 };
-use gpui_base::ElementExt as _;
 use gpui_base::motion::{Transition, transition};
 use gpui_component::ActiveTheme as _;
+
+/// One element's box, in window coordinates, every frame it is painted.
+///
+/// Not `ElementExt::on_prepaint`, which measures a `size_full` child and so
+/// reports the **content** box - inside the element's border *and* its
+/// padding. The highlight has to cover a row, not a row's text: measured that
+/// way, a model option with eight pixels of left padding put the highlight
+/// nine pixels in and ten pixels short, and the row's own selection fill sat
+/// somewhere else entirely.
+///
+/// `inset_0` reports the padding box instead, which is the element's own box
+/// less its border. Both the layer and the rows go through here, so what is
+/// left is one border width on each, and it cancels in the subtraction.
+fn capture<E: gpui::ParentElement>(
+    element: E,
+    mut record: impl FnMut(Bounds<Pixels>, &mut Window, &mut App) + 'static,
+) -> E {
+    element.child(
+        canvas(
+            move |bounds, window, cx| record(bounds, window, cx),
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .inset_0(),
+    )
+}
 
 /// One row's last painted geometry, stamped with the frame that painted it.
 #[derive(Clone, Copy)]
@@ -34,7 +60,21 @@ struct RowGeometry {
 /// Window-keyed hover state shared by one list's rows and its highlight.
 pub(crate) struct GlideHover {
     rows: HashMap<SharedString, RowGeometry>,
-    container: Option<Bounds<Pixels>>,
+    /// Where the highlight's own coordinate space starts, in window
+    /// coordinates.
+    ///
+    /// Captured from the layer the highlight sits in rather than from the
+    /// list's frame, and those are not the same box. A frame carries a
+    /// border and padding; an absolutely positioned child is placed inside
+    /// them. Subtracting the frame's origin from a row's therefore left the
+    /// highlight off by whatever inset the frame happened to have - three
+    /// pixels up and five across on the model picker, enough to clip the
+    /// group label above it, and one pixel on a list with only a border.
+    ///
+    /// The layer is `absolute inset_0`, so it *is* the box the highlight is
+    /// positioned in, whatever GPUI resolves that to. The arithmetic stops
+    /// depending on knowing.
+    layer: Option<Bounds<Pixels>>,
     hovered: Option<SharedString>,
     /// Bumps when hovering starts from nothing or the hovered row moves
     /// beneath the pointer; a fresh generation keys fresh transition
@@ -55,7 +95,7 @@ impl GlideHover {
     fn new() -> Self {
         Self {
             rows: HashMap::new(),
-            container: None,
+            layer: None,
             hovered: None,
             generation: 0,
             epoch: 0,
@@ -73,16 +113,19 @@ pub(crate) fn glide_hover_state(
     window.use_keyed_state((list, "glide-hover"), cx, |_, _| GlideHover::new())
 }
 
-/// Captures the container's bounds so the highlight can position itself in
-/// the container's own coordinates. The container must be `relative()`.
+/// Keeps the row bookkeeping honest for one list. The frame must be
+/// `relative()`, so the highlight's layer resolves against it.
+///
+/// It no longer captures where anything is: the highlight's layer does that
+/// for itself, because the layer is the only box whose origin the highlight's
+/// own coordinates are measured from.
 pub(crate) fn glide_frame<E>(frame: E, state: &Entity<GlideHover>) -> E
 where
     E: gpui::ParentElement,
 {
     let state = state.clone();
-    frame.on_prepaint(move |bounds, window, cx| {
+    capture(frame, move |_, window, cx| {
         state.update(cx, |state, cx| {
-            state.container = Some(bounds);
             // Rows stamp the epoch this container hands them, so anything
             // still carrying the previous stamp was not painted last
             // frame. Dropping those is what keeps the map bounded over a
@@ -124,7 +167,7 @@ where
     let bounds_state = state.clone();
     let bounds_key = key.clone();
     let hover_state = state.clone();
-    row.on_prepaint(move |bounds, window, cx| {
+    capture(row, move |bounds, window, cx| {
         let moved = bounds_state.update(cx, |state, _| {
             let epoch = state.epoch;
             let previous = state.rows.insert(
@@ -187,26 +230,14 @@ pub(crate) fn glide_highlight(
     debug_selector: &'static str,
     window: &mut Window,
     cx: &mut App,
-) -> Option<Div> {
-    let (target, generation) = {
-        let state = state.read(cx);
-        let container = state.container?;
-        let hovered = state.hovered.as_ref()?;
-        // Only geometry from the frame just painted. A row that has left
-        // the tree keeps an older stamp, and rendering happens before the
-        // prepaint that prunes it — so the stamp, not the map, is what
-        // decides whether there is still a row to highlight.
-        let row = state
-            .rows
-            .get(hovered)
-            .filter(|row| row.painted == state.epoch)?
-            .bounds;
-        (
-            Bounds::new(row.origin - container.origin, row.size),
-            state.generation,
-        )
+) -> Div {
+    let placed = placement(state, cx);
+    let Some((target, generation)) = placed else {
+        // No layer yet, or nothing hovered. The layer still mounts: it is what
+        // measures the box the highlight will be placed in, so it has to be on
+        // screen for a frame before there is anything to place.
+        return highlight_layer(state);
     };
-
     // Between rows the highlight tweens on the glide tempo and the strong
     // ease-out; reduced motion collapses the tween to a snap. A fresh
     // generation keys fresh clocks that begin settled at the target.
@@ -229,7 +260,7 @@ pub(crate) fn glide_highlight(
     let w = channel("w", f32::from(target.size.width));
     let h = channel("h", f32::from(target.size.height));
 
-    Some(
+    highlight_layer(state).child(
         div()
             .absolute()
             .left(px(x))
@@ -240,4 +271,52 @@ pub(crate) fn glide_highlight(
             .bg(cx.theme().list_hover)
             .debug_selector(move || debug_selector.to_owned()),
     )
+}
+
+/// Where the highlight goes, once there is a hovered row and a layer to
+/// measure it against.
+fn placement(state: &Entity<GlideHover>, cx: &App) -> Option<(Bounds<Pixels>, u64)> {
+    let state = state.read(cx);
+    let layer = state.layer?;
+    let hovered = state.hovered.as_ref()?;
+    // Only geometry from the frame just painted. A row that has left the tree
+    // keeps an older stamp, and rendering happens before the prepaint that
+    // prunes it - so the stamp, not the map, is what decides whether there is
+    // still a row to highlight.
+    let row = state
+        .rows
+        .get(hovered)
+        .filter(|row| row.painted == state.epoch)?
+        .bounds;
+    Some((
+        Bounds::new(row.origin - layer.origin, row.size),
+        state.generation,
+    ))
+}
+
+/// The box the highlight's coordinates are measured from.
+///
+/// `absolute inset_0`, so it fills whatever GPUI treats as the positioning
+/// box for an absolute child of the list's frame — which is the same box the
+/// highlight inside it is placed in. Capturing its origin rather than the
+/// frame's is what makes `row.origin - layer.origin` exact instead of off by
+/// the frame's border and padding.
+fn highlight_layer(state: &Entity<GlideHover>) -> Div {
+    let state = state.clone();
+    capture(div().absolute().inset_0(), move |bounds, window, cx| {
+        let moved = state.update(cx, |state, _| {
+            let moved = state
+                .layer
+                .is_some_and(|layer| layer.origin != bounds.origin);
+            state.layer = Some(bounds);
+            moved
+        });
+        // The list moved under a highlight that is already up - a popover
+        // flipping to the other side, a pane resizing. The position was
+        // computed against the old origin, so the corrected one needs a frame
+        // of its own.
+        if moved {
+            window.request_animation_frame();
+        }
+    })
 }

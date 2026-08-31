@@ -398,6 +398,61 @@ fn unmatched_token_does_not_capture_native_multiline_up(cx: &mut TestAppContext)
     assert!(after < before, "native multiline up should move the caret");
 }
 
+/// The hover highlight sits on the row, not on the row's text.
+///
+/// It did not. The highlight is placed by subtracting one measured box from
+/// another, and the two were being measured differently: `on_prepaint` reports
+/// a `size_full` child, which is the **content** box - inside the border and
+/// the padding both. A model option carries eight pixels of left padding, so
+/// the highlight landed nine pixels in and ten short, clipping the group
+/// heading above it and missing the row's own selection fill entirely.
+///
+/// The picker is the case that catches it because its rows are padded and its
+/// frame is padded too; a list whose rows have neither looked fine throughout.
+#[gpui::test]
+fn the_glide_highlight_covers_the_row_it_is_on(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let (harness, cx) =
+        cx.add_window_view(move |window, cx| PromptHarness::with_models(events, false, window, cx));
+    draw(cx);
+    harness.update(cx, |harness, cx| {
+        harness.prompt.update(cx, |prompt, cx| {
+            prompt.model_menu_open = true;
+            cx.notify();
+        });
+    });
+    draw(cx);
+    draw(cx);
+
+    let row = cx
+        .debug_bounds("prompt-bar-model-option-balanced")
+        .expect("the menu renders its rows");
+    cx.simulate_mouse_move(row.center(), None, gpui::Modifiers::default());
+    draw(cx);
+    draw(cx);
+
+    let glide = cx
+        .debug_bounds("prompt-bar-model-glide")
+        .expect("hovering a row mounts the highlight");
+
+    // One border width in on every side, which is what "on the row" means for
+    // a fill that must not paint over the frame around it.
+    let inset = px(1.);
+    assert_eq!(glide.origin.y, row.origin.y + inset, "highlight top");
+    assert_eq!(glide.origin.x, row.origin.x + inset, "highlight left");
+    assert_eq!(
+        glide.size.height,
+        row.size.height - inset * 2.,
+        "highlight height"
+    );
+    assert_eq!(
+        glide.size.width,
+        row.size.width - inset * 2.,
+        "highlight width"
+    );
+}
+
 #[gpui::test]
 fn empty_model_catalog_closes_the_menu(cx: &mut TestAppContext) {
     cx.update(crate::init);

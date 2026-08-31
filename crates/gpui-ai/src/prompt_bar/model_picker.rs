@@ -363,21 +363,18 @@ impl PromptBar {
         }));
         let surface = crate::popup::popover_surface(surface, cx);
         let surface = crate::glide::glide_frame(surface, &glide)
-            .when_some(
-                crate::glide::glide_highlight(
-                    (gpui::ElementId::from(root_id.clone()), "model-glide").into(),
-                    &glide,
-                    crate::surface::nested_radius(
-                        cx.theme().radius,
-                        tokens.spacing.xs,
-                        tokens.radius.sm,
-                    ),
-                    "prompt-bar-model-glide",
-                    window,
-                    cx,
+            .child(crate::glide::glide_highlight(
+                (gpui::ElementId::from(root_id.clone()), "model-glide").into(),
+                &glide,
+                crate::surface::nested_radius(
+                    cx.theme().radius,
+                    tokens.spacing.xs,
+                    tokens.radius.sm,
                 ),
-                |surface, highlight| surface.child(highlight),
-            )
+                "prompt-bar-model-glide",
+                window,
+                cx,
+            ))
             .children(model_options);
 
         // The side comes from the crate's popup policy; the positioner
