@@ -143,7 +143,6 @@ impl RenderOnce for SearchResults {
         // Taken once: each layer is placed at most once, and a
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
-        let decoration_radius = tokens.radius.lg;
         let header: SharedString = if self.searching {
             format!("Searching \u{201c}{}\u{201d}\u{2026}", self.query).into()
         } else {
@@ -181,7 +180,7 @@ impl RenderOnce for SearchResults {
             .role(Role::Search)
             .aria_label(header.clone())
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration)
             .overflow_hidden()
             .child(
                 h_flex()
@@ -321,7 +320,7 @@ impl RenderOnce for SearchResults {
                         })),
                 )
             })
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration)
             .refine_style(&self.style)
     }
 }

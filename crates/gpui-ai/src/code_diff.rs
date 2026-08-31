@@ -545,7 +545,6 @@ impl RenderOnce for CodeDiff {
         // Taken once: each layer is placed at most once, and a
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
-        let decoration_radius = tokens.radius.lg;
         let file = self.file;
         let handler = self.on_event;
         let path = file.path.clone();
@@ -666,7 +665,7 @@ impl RenderOnce for CodeDiff {
             .w_full()
             .min_w_0()
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration)
             .overflow_hidden()
             .child(header)
             .when(showing, |this| {
@@ -680,7 +679,7 @@ impl RenderOnce for CodeDiff {
                         .children(hunks),
                 )
             })
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration)
             .refine_style(&self.style)
     }
 }

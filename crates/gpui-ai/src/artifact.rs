@@ -379,7 +379,6 @@ impl RenderOnce for ArtifactPanel {
         // Taken once: each layer is placed at most once, and a
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
-        let decoration_radius = tokens.radius.lg;
         let artifact = self.artifact;
         let handler = self.on_event;
         let artifact_id = artifact.id.clone();
@@ -676,13 +675,13 @@ impl RenderOnce for ArtifactPanel {
             .min_w_0()
             .min_h_0()
             .card_frame(cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration)
             .overflow_hidden()
             .child(header)
             .children(tabs)
             .child(body)
             .children(footer)
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration)
             .refine_style(&self.style)
     }
 }

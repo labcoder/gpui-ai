@@ -40,7 +40,6 @@ use std::{cell::RefCell, sync::Arc, sync::OnceLock, time::Duration};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum DecorationKind {
     /// The photograph as it is, with nothing between it and the content.
-    #[default]
     Photo,
     /// Real frosted glass: the backdrop blurred, lined up with what is behind.
     Frosted,
@@ -49,6 +48,7 @@ pub(crate) enum DecorationKind {
     /// Translucency with no blur — the cheap look, named for what it is.
     Tint,
     /// A fixed field of colour with light sweeping through it.
+    #[default]
     Beam,
     /// A metallic sheen turning around the frame.
     Metal,
@@ -190,7 +190,13 @@ impl DecorationKind {
                     .child(photograph(cx))
                     // Fixed, not from the theme: this is what an application
                     // reaches for when it wants one look everywhere.
-                    .child(div().absolute().inset_0().rounded(shape(cx)).bg(SCRIM)),
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded(decoration::frame_radius(cx))
+                            .bg(SCRIM),
+                    ),
             ),
             Self::Dither => Decoration::behind(processed(Treatment::Dither, cx)),
             Self::PopArt => Decoration::behind(processed(Treatment::PopArt, cx)),
@@ -410,24 +416,9 @@ fn shaped_crop(pixels: &[u8], radius: f32) -> Arc<RenderImage> {
     Arc::new(RenderImage::new([Frame::new(buffer)]))
 }
 
-/// The photograph as it was taken, in its own colours.
-///
-/// No quantising and no cache: GPUI decodes and holds this one itself, which
-/// is all an application needs when it is not processing the pixels.
-/// The radius a decoration layer has to round itself to.
-///
-/// The slot clips rectangularly, because GPUI's content mask is a `Bounds` and
-/// there is no rounded one to ask for. So every layer here that paints to the
-/// edge carries the component's own radius: an image and a background both
-/// clip themselves in the shader, which is the only rounded clipping actually
-/// on offer. A layer that never reaches a corner does not need it.
-fn shape(cx: &App) -> Pixels {
-    cx.theme().semantic_tokens().radius.lg
-}
-
 fn photograph(cx: &App) -> impl IntoElement {
     static SHAPED: OnceLock<Arc<RenderImage>> = OnceLock::new();
-    let radius = f32::from(shape(cx));
+    let radius = f32::from(decoration::frame_radius(cx));
     let image = Arc::clone(SHAPED.get_or_init(|| shaped_crop(stage_pixels(Stage::Photo), radius)));
     img(image).absolute().inset_0()
 }
@@ -445,7 +436,12 @@ fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
         {
             return Arc::clone(image);
         }
-        let built = rasterise(treatment, ground, ink, f32::from(shape(cx)));
+        let built = rasterise(
+            treatment,
+            ground,
+            ink,
+            f32::from(decoration::frame_radius(cx)),
+        );
         *last = Some((key.0, key.1, key.2, Arc::clone(&built)));
         built
     });
@@ -468,20 +464,17 @@ fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
 /// example worth copying.
 fn under_content(layer: impl IntoElement, cx: &App) -> impl IntoElement {
     let ground = cx.theme().background;
-    div()
-        .size_full()
-        .child(layer)
-        .child(
-            div()
-                .absolute()
-                .inset_0()
-                .rounded(shape(cx))
-                .bg(linear_gradient(
-                    90.0,
-                    linear_color_stop(ground.opacity(0.94), 0.0),
-                    linear_color_stop(ground.opacity(0.55), 1.0),
-                )),
-        )
+    div().size_full().child(layer).child(
+        div()
+            .absolute()
+            .inset_0()
+            .rounded(decoration::frame_radius(cx))
+            .bg(linear_gradient(
+                90.0,
+                linear_color_stop(ground.opacity(0.94), 0.0),
+                linear_color_stop(ground.opacity(0.55), 1.0),
+            )),
+    )
 }
 
 /// A colour as one comparable number, so a cache key is cheap and exact.
@@ -1421,14 +1414,18 @@ fn lensed(shape_radius: f32) -> Arc<RenderImage> {
 fn glass_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
-        .child(img(lensed(f32::from(shape(cx)))).absolute().inset_0())
+        .child(
+            img(lensed(f32::from(decoration::frame_radius(cx))))
+                .absolute()
+                .inset_0(),
+        )
         // A breath of the panel's own ground, and the lit top edge. Glass is
         // not colourless; it lifts what is under it.
         .child(
             div()
                 .absolute()
                 .inset_0()
-                .rounded(shape(cx))
+                .rounded(decoration::frame_radius(cx))
                 .bg(cx.theme().background.opacity(0.16)),
         )
         .child(edge_light(cx))
@@ -1457,7 +1454,9 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
             // Deliberately unrounded: this one is larger than the slot and
             // positioned by offset, so its corners are nowhere near the
             // frame's. The wash and the edge light above it carry the shape.
-            img(frosted(f32::from(shape(cx)))).absolute().inset_0(),
+            img(frosted(f32::from(decoration::frame_radius(cx))))
+                .absolute()
+                .inset_0(),
         )
         // Frost is not only blur: a little of the panel's own ground, and a
         // lit top edge where the light catches the bevel.
@@ -1465,7 +1464,7 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
             div()
                 .absolute()
                 .inset_0()
-                .rounded(shape(cx))
+                .rounded(decoration::frame_radius(cx))
                 .bg(ground.opacity(0.45)),
         )
         .child(edge_light(cx))
@@ -1482,7 +1481,7 @@ fn tint_panel(cx: &App) -> impl IntoElement {
             div()
                 .absolute()
                 .inset_0()
-                .rounded(shape(cx))
+                .rounded(decoration::frame_radius(cx))
                 .bg(cx.theme().background.opacity(0.55)),
         )
         .child(edge_light(cx))
@@ -1493,7 +1492,7 @@ fn edge_light(cx: &App) -> impl IntoElement {
     div()
         .absolute()
         .inset_0()
-        .rounded(shape(cx))
+        .rounded(decoration::frame_radius(cx))
         .bg(linear_gradient(
             180.0,
             linear_color_stop(cx.theme().foreground.opacity(0.14), 0.0),
@@ -1507,7 +1506,7 @@ fn halftone(cx: &App) -> impl IntoElement {
     const COLUMNS: usize = 22;
     const ROWS: usize = 9;
     let ink = cx.theme().primary.opacity(0.55);
-    let radius = f32::from(shape(cx));
+    let radius = f32::from(decoration::frame_radius(cx));
     decoration::animated("halftone", Duration::from_secs(6), move |delta| {
         // One wave crossing the grid, so a dot's size depends on where it is
         // as well as when it is — a field rather than a pulse.
@@ -1565,7 +1564,7 @@ fn pulse(cx: &App) -> impl IntoElement {
     const POINTS: usize = 110;
     const REACH: f32 = 420.0;
     let ink = cx.theme().primary;
-    let radius = f32::from(shape(cx));
+    let radius = f32::from(decoration::frame_radius(cx));
     decoration::animated("pulse", Duration::from_millis(2600), move |delta| {
         div()
             .size_full()
@@ -1594,12 +1593,15 @@ fn pulse(cx: &App) -> impl IntoElement {
 /// through to everything it covers.
 fn veil(cx: &App) -> impl IntoElement {
     let ink: Hsla = cx.theme().primary;
-    div().size_full().rounded(shape(cx)).bg(linear_gradient(
-        // Down and across, so it reads as light falling rather than a band.
-        135.0,
-        linear_color_stop(ink.opacity(0.0), 0.35),
-        linear_color_stop(ink.opacity(0.42), 1.0),
-    ))
+    div()
+        .size_full()
+        .rounded(decoration::frame_radius(cx))
+        .bg(linear_gradient(
+            // Down and across, so it reads as light falling rather than a band.
+            135.0,
+            linear_color_stop(ink.opacity(0.0), 0.35),
+            linear_color_stop(ink.opacity(0.42), 1.0),
+        ))
 }
 
 #[cfg(test)]

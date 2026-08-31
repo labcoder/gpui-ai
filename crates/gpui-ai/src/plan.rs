@@ -301,7 +301,6 @@ impl RenderOnce for PlanCard {
         // Taken once: each layer is placed at most once, and a
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
-        let decoration_radius = tokens.radius.lg;
         let done = self.done_count();
         let handler = self.on_event;
         let plan_id = self.id.clone();
@@ -447,7 +446,7 @@ impl RenderOnce for PlanCard {
         };
 
         card(self.id.clone(), cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration)
             .role(Role::Group)
             .aria_label(label)
             .when_some(self.description.clone(), |this, text| {
@@ -492,7 +491,7 @@ impl RenderOnce for PlanCard {
                     .children(steps),
             )
             .children(footer)
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration)
             .refine_style(&self.style)
     }
 }

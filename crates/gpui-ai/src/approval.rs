@@ -188,7 +188,6 @@ impl RenderOnce for ApprovalCard {
         // Taken once: each layer is placed at most once, and a
         // component with no decoration adds no elements at all.
         let mut decoration = std::mem::take(&mut self.decoration);
-        let decoration_radius = tokens.radius.lg;
         let has_payload = !self.children.is_empty();
         let handler = self.on_event;
         let approve_event = ApprovalEvent::Approved {
@@ -322,7 +321,7 @@ impl RenderOnce for ApprovalCard {
         // A decision gate is the one card that earns a semantic accent: the
         // warning border says "stop and decide" before any text is read.
         card(self.id.clone(), cx)
-            .decoration_under(&mut decoration, decoration_radius)
+            .decoration_under(&mut decoration)
             .role(Role::Group)
             .aria_label(accessibility_label)
             .when_some(accessibility_description, |this, description| {
@@ -344,7 +343,7 @@ impl RenderOnce for ApprovalCard {
                 )
             })
             .child(footer)
-            .decoration_over(&mut decoration, decoration_radius)
+            .decoration_over(&mut decoration)
             .refine_style(&self.style)
     }
 }
