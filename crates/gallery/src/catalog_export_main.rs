@@ -9,7 +9,7 @@
 //! it described. Event names are read out of `crates/gpui-ai/src` rather than
 //! restated here, so a renamed event enum shows up as a catalog diff.
 
-use gallery::{HERO_HEIGHT, Overflow, StoryId};
+use gallery::{DECORATIONS_HEIGHT, HERO_HEIGHT, Overflow, StoryId, decoration_catalog};
 use serde_json::{Map, Value, json};
 use std::{fs, path::PathBuf};
 
@@ -17,8 +17,11 @@ use std::{fs, path::PathBuf};
 /// that has been verified.
 const LIMITATION: &str = "The live browser specimen requires WebGPU; the native component remains the authoritative runtime.";
 
-/// The single file every snippet marker lives in, as the site should name it.
+/// The file every story's snippet markers live in, as the site should name it.
 const SNIPPET_SOURCE: &str = "crates/gallery/src/gallery.rs";
+
+/// And the file the decorations mark themselves in, which is their own.
+const DECORATION_SOURCE: &str = "crates/gallery/src/decorations.rs";
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -65,22 +68,34 @@ fn join_events(events: &[String]) -> String {
 /// they are joined in source order.
 fn snippets(source: &str) -> Vec<(String, String, String)> {
     let mut collected: Vec<(String, String, String)> = Vec::new();
-    let mut open: Option<(String, String, Vec<&str>)> = None;
+    let mut open: Option<(Vec<(String, String)>, Vec<&str>)> = None;
 
     for line in source.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("// snippet:start(") {
-            let key = rest.strip_suffix(')').unwrap_or(rest);
-            let (slug, variant) = key.split_once('/').unwrap_or((key, "default"));
+            let keys = rest.strip_suffix(')').unwrap_or(rest);
+            // Several keys for one region: the dither, the pop art, and the
+            // engraving are one function with an argument, and each of their
+            // pages should show it rather than a line pointing at it.
+            let keys: Vec<(String, String)> = keys
+                .split(',')
+                .map(str::trim)
+                .map(|key| {
+                    let (slug, variant) = key.split_once('/').unwrap_or((key, "default"));
+                    (slug.to_owned(), variant.to_owned())
+                })
+                .collect();
+            assert!(!keys.is_empty(), "snippet:start names nothing");
             assert!(
                 open.is_none(),
-                "snippet:start inside an open snippet ({slug})"
+                "snippet:start inside an open snippet ({})",
+                keys[0].0
             );
-            open = Some((slug.to_owned(), variant.to_owned(), Vec::new()));
+            open = Some((keys, Vec::new()));
             continue;
         }
         if trimmed == "// snippet:end" {
-            let (slug, variant, body) = open.take().expect("snippet:end without snippet:start");
+            let (keys, body) = open.take().expect("snippet:end without snippet:start");
             let indent = body
                 .iter()
                 .filter(|line| !line.trim().is_empty())
@@ -100,22 +115,24 @@ fn snippets(source: &str) -> Vec<(String, String, String)> {
                 .join("\n")
                 .trim_end()
                 .to_owned();
-            assert!(!code.is_empty(), "{slug} marks an empty snippet");
+            assert!(!code.is_empty(), "{} marks an empty snippet", keys[0].0);
 
-            match collected
-                .iter_mut()
-                .find(|(existing, existing_variant, _)| {
-                    *existing == slug && *existing_variant == variant
-                }) {
-                Some((_, _, existing)) => {
-                    existing.push_str("\n\n");
-                    existing.push_str(&code);
+            for (slug, variant) in keys {
+                match collected
+                    .iter_mut()
+                    .find(|(existing, existing_variant, _)| {
+                        *existing == slug && *existing_variant == variant
+                    }) {
+                    Some((_, _, existing)) => {
+                        existing.push_str("\n\n");
+                        existing.push_str(&code);
+                    }
+                    None => collected.push((slug, variant, code.clone())),
                 }
-                None => collected.push((slug, variant, code)),
             }
             continue;
         }
-        if let Some((_, _, body)) = open.as_mut() {
+        if let Some((_, body)) = open.as_mut() {
             body.push(line);
         }
     }
@@ -235,6 +252,24 @@ fn main() {
             "siteOnly": true,
         }),
     );
+    // Decorations are not components and never will be: they are what an
+    // application paints into a component, and the site documents them as
+    // their own section. Generated from the gallery's own list, so one added
+    // in Rust becomes a page.
+    let decorations: Vec<Value> = decoration_catalog()
+        .into_iter()
+        .map(|(slug, label, note)| json!({ "slug": slug, "label": label, "note": note }))
+        .collect();
+    document.insert(
+        "effects".to_owned(),
+        json!({
+            "story": StoryId::Decorations.slug(),
+            "height": DECORATIONS_HEIGHT,
+            "windowTitle": format!("{} - gpui-ai", StoryId::Decorations.title()),
+            "source": "crates/gallery/src/decorations.rs",
+            "decorations": decorations,
+        }),
+    );
     document.insert("categories".to_owned(), Value::Array(categories));
     document.insert("components".to_owned(), Value::Array(components));
     // The one file every snippet is cut from. A component's own `source` is
@@ -259,12 +294,16 @@ fn main() {
     );
     fs::write(&path, rendered).expect("the catalog must be writable");
 
-    let gallery_source = root.join(SNIPPET_SOURCE);
-    let gallery = fs::read_to_string(&gallery_source).expect("the gallery source must be readable");
+    let mut marked = Vec::new();
+    for source in [SNIPPET_SOURCE, DECORATION_SOURCE] {
+        let text = fs::read_to_string(root.join(source))
+            .unwrap_or_else(|error| panic!("cannot read {source}: {error}"));
+        marked.extend(snippets(&text));
+    }
     let mut by_story: Map<String, Value> = Map::new();
-    for (slug, variant, code) in snippets(&gallery) {
+    for (slug, variant, code) in marked {
         assert!(
-            StoryId::ALL.iter().any(|story| story.slug() == slug),
+            slug.parse::<StoryId>().is_ok(),
             "snippet marker names {slug}, which is not a story"
         );
         by_story

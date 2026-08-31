@@ -7,6 +7,79 @@
     "windowTitle": "Guided demo — gpui-ai",
     "siteOnly": true
   },
+  "effects": {
+    "story": "decorations",
+    "height": 420,
+    "windowTitle": "Decorations - gpui-ai",
+    "source": "crates/gallery/src/decorations.rs",
+    "decorations": [
+      {
+        "slug": "photo",
+        "label": "Photo",
+        "note": "The photograph with nothing between it and the words. Its own colours, not the theme's - a decoration is the application's, and nothing here has to follow the palette. Also the reason the next one exists."
+      },
+      {
+        "slug": "frosted",
+        "label": "Frosted",
+        "note": "Actual frosted glass: the backdrop blurred on the CPU and placed by the same numbers as the sharp copy behind it, so the two line up. GPUI has no backdrop filter — this works because the parent knows where both are."
+      },
+      {
+        "slug": "glass",
+        "label": "Glass",
+        "note": "Glass rather than frost: a convex bevel, Snell's law across its normal, and the view under the rim squeezed where the surface tips over. Frosted blurs what it covers; this lenses it."
+      },
+      {
+        "slug": "tint",
+        "label": "Tint",
+        "note": "Translucency and an edge highlight, no blur. Cheaper, honest about it, and what most panels actually need."
+      },
+      {
+        "slug": "beam",
+        "label": "Border beam",
+        "note": "Nine patches of colour sitting still around the frame, and a window of brightness sweeping over them. The colours never travel - that is the whole difference between light passing through a frame and a coloured head chasing its own tail."
+      },
+      {
+        "slug": "metal",
+        "label": "Liquid metal",
+        "note": "The same stroke with a metallic ramp instead of a beam. Metal is not a light: it snaps from dark to bright and back, because it reflects a small bright thing rather than emitting."
+      },
+      {
+        "slug": "scrim",
+        "label": "Photo + scrim",
+        "note": "The same photograph under a fixed dark scrim — a flat black at sixty per cent, chosen by hand and identical in every theme. The commonest thing anyone will actually want."
+      },
+      {
+        "slug": "dither",
+        "label": "Dither",
+        "note": "A photograph quantised to four inks by an 8x8 ordered dither, in the theme's own colours. Rasterised on a theme change, never while drawing."
+      },
+      {
+        "slug": "pop-art",
+        "label": "Pop art",
+        "note": "The same photograph, flattened to three flat bands with no dither between them — the print the dither is avoiding."
+      },
+      {
+        "slug": "engrave",
+        "label": "Cross-hatch",
+        "note": "Cross-hatching whose density follows the photograph's tone, the way an engraver carries shade — ink laid down or not, never half."
+      },
+      {
+        "slug": "halftone",
+        "label": "Halftone",
+        "note": "A grid of dots on a travelling wave, on the library's motion channel. It stops when the panel scrolls out of view."
+      },
+      {
+        "slug": "pulse",
+        "label": "Pulse",
+        "note": "The same rings on the motion channel instead of a press, so they keep arriving — and stop when the panel scrolls away."
+      },
+      {
+        "slug": "veil",
+        "label": "Veil",
+        "note": "The over layer, not the under one: a gradient across the content, passing every click through to what it covers."
+      }
+    ]
+  },
   "categories": [
     "Progress",
     "Agent work",

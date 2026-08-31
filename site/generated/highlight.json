@@ -2046,6 +2046,3564 @@
         ]
       ]
     },
+    "decorations": {
+      "applying": [
+        [
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " card = "
+          ],
+          [
+            "ApprovalCard",
+            "type"
+          ],
+          [
+            "::new("
+          ],
+          [
+            "\"decorated-gate\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "\"Publish the launch plan?\"",
+            "string"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    .description("
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "\"The card is unchanged. Everything behind and in front of it \\",
+            "string"
+          ]
+        ],
+        [
+          [
+            "         is the application's.\"",
+            "string"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "    )"
+          ]
+        ],
+        [
+          [
+            "    .decoration(kind.build(cx))"
+          ]
+        ]
+      ],
+      "scrim": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " scrim_panel(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .size_full()"
+          ]
+        ],
+        [
+          [
+            "        .child(photograph(cx))"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// Fixed, not from the theme: this is what an application reaches for",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// when it wants one look everywhere.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            div()"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0()"
+          ]
+        ],
+        [
+          [
+            "                .rounded("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))"
+          ]
+        ],
+        [
+          [
+            "                .bg(SCRIM),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "photo": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " photograph(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "static",
+            "keyword"
+          ],
+          [
+            " SHAPED: "
+          ],
+          [
+            "OnceLock",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "<"
+          ],
+          [
+            "RenderImage",
+            "type"
+          ],
+          [
+            ">> = "
+          ],
+          [
+            "OnceLock",
+            "type"
+          ],
+          [
+            "::new();"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " radius = "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx));"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " image = "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(SHAPED.get_or_init(|| shaped_crop(stage_pixels("
+          ],
+          [
+            "Stage",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "Photo",
+            "type"
+          ],
+          [
+            "), radius)));"
+          ]
+        ],
+        [
+          [
+            "    img(image).absolute().inset_0()"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "dither": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " processed(treatment: "
+          ],
+          [
+            "Treatment",
+            "type"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ground = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().background);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().primary);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " key = (treatment, packed(ground), packed(ink));"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " image = LAST.with(|last| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " last = last.borrow_mut();"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((cached_treatment, cached_ground, cached_ink, image)) = last.as_ref()"
+          ]
+        ],
+        [
+          [
+            "            && (*cached_treatment, *cached_ground, *cached_ink) == key"
+          ]
+        ],
+        [
+          [
+            "        {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "return",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(image);"
+          ]
+        ],
+        [
+          [
+            "        }"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " built = rasterise("
+          ]
+        ],
+        [
+          [
+            "            treatment,"
+          ]
+        ],
+        [
+          [
+            "            ground,"
+          ]
+        ],
+        [
+          [
+            "            ink,"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx)),"
+          ]
+        ],
+        [
+          [
+            "        );"
+          ]
+        ],
+        [
+          [
+            "        *last = "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((key."
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "1",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "2",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(&built)));"
+          ]
+        ],
+        [
+          [
+            "        built"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "// Exact size, no fit: the picture was rasterised for this box with the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// frame's shape already in its alpha, so nothing has to clip it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    under_content(img(image).absolute().inset_0(), cx)"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "pop-art": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " processed(treatment: "
+          ],
+          [
+            "Treatment",
+            "type"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ground = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().background);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().primary);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " key = (treatment, packed(ground), packed(ink));"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " image = LAST.with(|last| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " last = last.borrow_mut();"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((cached_treatment, cached_ground, cached_ink, image)) = last.as_ref()"
+          ]
+        ],
+        [
+          [
+            "            && (*cached_treatment, *cached_ground, *cached_ink) == key"
+          ]
+        ],
+        [
+          [
+            "        {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "return",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(image);"
+          ]
+        ],
+        [
+          [
+            "        }"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " built = rasterise("
+          ]
+        ],
+        [
+          [
+            "            treatment,"
+          ]
+        ],
+        [
+          [
+            "            ground,"
+          ]
+        ],
+        [
+          [
+            "            ink,"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx)),"
+          ]
+        ],
+        [
+          [
+            "        );"
+          ]
+        ],
+        [
+          [
+            "        *last = "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((key."
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "1",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "2",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(&built)));"
+          ]
+        ],
+        [
+          [
+            "        built"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "// Exact size, no fit: the picture was rasterised for this box with the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// frame's shape already in its alpha, so nothing has to clip it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    under_content(img(image).absolute().inset_0(), cx)"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "engrave": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " processed(treatment: "
+          ],
+          [
+            "Treatment",
+            "type"
+          ],
+          [
+            ", cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ground = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().background);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink = "
+          ],
+          [
+            "Rgba",
+            "type"
+          ],
+          [
+            "::from(cx.theme().primary);"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " key = (treatment, packed(ground), packed(ink));"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " image = LAST.with(|last| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "mut",
+            "keyword"
+          ],
+          [
+            " last = last.borrow_mut();"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((cached_treatment, cached_ground, cached_ink, image)) = last.as_ref()"
+          ]
+        ],
+        [
+          [
+            "            && (*cached_treatment, *cached_ground, *cached_ink) == key"
+          ]
+        ],
+        [
+          [
+            "        {"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "return",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(image);"
+          ]
+        ],
+        [
+          [
+            "        }"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " built = rasterise("
+          ]
+        ],
+        [
+          [
+            "            treatment,"
+          ]
+        ],
+        [
+          [
+            "            ground,"
+          ]
+        ],
+        [
+          [
+            "            ink,"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx)),"
+          ]
+        ],
+        [
+          [
+            "        );"
+          ]
+        ],
+        [
+          [
+            "        *last = "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "((key."
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "1",
+            "number"
+          ],
+          [
+            ", key."
+          ],
+          [
+            "2",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Arc",
+            "type"
+          ],
+          [
+            "::clone(&built)));"
+          ]
+        ],
+        [
+          [
+            "        built"
+          ]
+        ],
+        [
+          [
+            "    });"
+          ]
+        ],
+        [],
+        [
+          [
+            "    "
+          ],
+          [
+            "// Exact size, no fit: the picture was rasterised for this box with the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// frame's shape already in its alpha, so nothing has to clip it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    under_content(img(image).absolute().inset_0(), cx)"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "beam": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " beam_field(phase: "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ", radius: "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ", dark: "
+          ],
+          [
+            "bool",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// `sizeThemePresets.md`, which is the size a card is.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " (stroke, inner, bloom) = "
+          ],
+          [
+            "if",
+            "keyword"
+          ],
+          [
+            " dark {"
+          ]
+        ],
+        [
+          [
+            "        ("
+          ],
+          [
+            "0.26_",
+            "number"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "0.42_",
+            "number"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ", "
+          ],
+          [
+            "0.24_",
+            "number"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    } "
+          ],
+          [
+            "else",
+            "keyword"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "        ("
+          ],
+          [
+            "0.12",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "0.26",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "0.34",
+            "number"
+          ],
+          [
+            ")"
+          ]
+        ],
+        [
+          [
+            "    };"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// (inside, size). The three layers are three sizes of the same patch,",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// kept close to the spec's own: a tight one that reads as the line, one at",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// full size for the glow, and a slightly wider soft one. Scaling the same",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// blob by three did not work — at two and a half times it is wider than",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// the card and washes the middle instead of hugging the edge.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " layers = [("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ", "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ", stroke), ("
+          ],
+          [
+            "true",
+            "keyword"
+          ],
+          [
+            ", "
+          ],
+          [
+            "1.4",
+            "number"
+          ],
+          [
+            ", inner), ("
+          ],
+          [
+            "false",
+            "keyword"
+          ],
+          [
+            ", "
+          ],
+          [
+            "1.9",
+            "number"
+          ],
+          [
+            ", bloom)];"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .absolute()"
+          ]
+        ],
+        [
+          [
+            "        .inset_0()"
+          ]
+        ],
+        [
+          [
+            "        .children(layers.into_iter().flat_map("
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |(inside, grow, weight)| {"
+          ]
+        ],
+        [
+          [
+            "            ("
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            "..FIELD.len()).map("
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |index| {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " patch = &FIELD[index];"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "// Where this patch sits around the frame decides when the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "// sweep reaches it. The colours stay; the light travels.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " angle = (patch.y - "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ").atan2(patch.x - "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " around = angle / "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "consts",
+            "type"
+          ],
+          [
+            "::TAU + "
+          ],
+          [
+            "0.25",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " lit = sweep(around - phase);"
+          ]
+        ],
+        [
+          [
+            "                div()"
+          ]
+        ],
+        [
+          [
+            "                    .absolute()"
+          ]
+        ],
+        [
+          [
+            "                    .inset_0()"
+          ]
+        ],
+        [
+          [
+            "                    .opacity((lit * weight).clamp("
+          ],
+          [
+            "0.0",
+            "number"
+          ],
+          [
+            ", "
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            "))"
+          ]
+        ],
+        [
+          [
+            "                    .child("
+          ]
+        ],
+        [
+          [
+            "                        img(patch_image(index, inside, radius, grow))"
+          ]
+        ],
+        [
+          [
+            "                            .absolute()"
+          ]
+        ],
+        [
+          [
+            "                            .inset_0(),"
+          ]
+        ],
+        [
+          [
+            "                    )"
+          ]
+        ],
+        [
+          [
+            "            })"
+          ]
+        ],
+        [
+          [
+            "        }))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "metal": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " metal_colour(along: "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "Hsla",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " turns = along.rem_euclid("
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            ") * "
+          ],
+          [
+            "2.0",
+            "number"
+          ],
+          [
+            " * "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "consts",
+            "type"
+          ],
+          [
+            "::TAU;"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// Fourth power rather than sixth: steep enough to read as a reflection",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// rather than a lamp, shallow enough that the ramp is not crossing most",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "// of its range inside one piece.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " sheen = (turns.cos() * "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            " + "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ").powi("
+          ],
+          [
+            "4",
+            "number"
+          ],
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "Hsla",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "        h: "
+          ],
+          [
+            "0.62",
+            "number"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "        s: "
+          ],
+          [
+            "0.10",
+            "number"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "        l: "
+          ],
+          [
+            "0.28",
+            "number"
+          ],
+          [
+            " + sheen * "
+          ],
+          [
+            "0.68",
+            "number"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "        a: "
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "    }"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "glass": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " glass_panel(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .size_full()"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            img(lensed("
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))))"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0(),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// A breath of the panel's own ground, and the lit top edge. Glass is",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// not colourless; it lifts what is under it.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            div()"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0()"
+          ]
+        ],
+        [
+          [
+            "                .rounded("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))"
+          ]
+        ],
+        [
+          [
+            "                .bg(cx.theme().background.opacity("
+          ],
+          [
+            "0.16",
+            "number"
+          ],
+          [
+            ")),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "        .child(edge_light(cx))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "frosted": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " frosted_panel(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ground = cx.theme().background;"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .size_full()"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// Deliberately unrounded: this one is larger than the slot and",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// positioned by offset, so its corners are nowhere near the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// frame's. The wash and the edge light above it carry the shape.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            img(frosted("
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))))"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0(),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// Frost is not only blur: a little of the panel's own ground, and a",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// lit top edge where the light catches the bevel.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            div()"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0()"
+          ]
+        ],
+        [
+          [
+            "                .rounded("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))"
+          ]
+        ],
+        [
+          [
+            "                .bg(ground.opacity("
+          ],
+          [
+            "0.45",
+            "number"
+          ],
+          [
+            ")),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "        .child(edge_light(cx))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "tint": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " tint_panel(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .size_full()"
+          ]
+        ],
+        [
+          [
+            "        .child("
+          ]
+        ],
+        [
+          [
+            "            div()"
+          ]
+        ],
+        [
+          [
+            "                .absolute()"
+          ]
+        ],
+        [
+          [
+            "                .inset_0()"
+          ]
+        ],
+        [
+          [
+            "                .rounded("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))"
+          ]
+        ],
+        [
+          [
+            "                .bg(cx.theme().background.opacity("
+          ],
+          [
+            "0.55",
+            "number"
+          ],
+          [
+            ")),"
+          ]
+        ],
+        [
+          [
+            "        )"
+          ]
+        ],
+        [
+          [
+            "        .child(edge_light(cx))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "halftone": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " halftone(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "const",
+            "keyword"
+          ],
+          [
+            " COLUMNS: "
+          ],
+          [
+            "usize",
+            "type"
+          ],
+          [
+            " = "
+          ],
+          [
+            "22",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "const",
+            "keyword"
+          ],
+          [
+            " ROWS: "
+          ],
+          [
+            "usize",
+            "type"
+          ],
+          [
+            " = "
+          ],
+          [
+            "9",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink = cx.theme().primary.opacity("
+          ],
+          [
+            "0.55",
+            "number"
+          ],
+          [
+            ");"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " radius = "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx));"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::animated("
+          ],
+          [
+            "\"halftone\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Duration",
+            "type"
+          ],
+          [
+            "::from_secs("
+          ],
+          [
+            "6",
+            "number"
+          ],
+          [
+            "), "
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |delta| {"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// One wave crossing the grid, so a dot's size depends on where it is",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// as well as when it is — a field rather than a pulse.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " phase = delta * "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "consts",
+            "type"
+          ],
+          [
+            "::TAU;"
+          ]
+        ],
+        [
+          [
+            "        div()"
+          ]
+        ],
+        [
+          [
+            "            .size_full()"
+          ]
+        ],
+        [
+          [
+            "            .children(("
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            "..ROWS * COLUMNS).filter_map("
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |cell| {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " (row, column) = (cell / COLUMNS, cell % COLUMNS);"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " across = (column "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " / COLUMNS "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ") * "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "consts",
+            "type"
+          ],
+          [
+            "::TAU;"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " wave = (phase + across + row "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " * "
+          ],
+          [
+            "0.6",
+            "number"
+          ],
+          [
+            ").sin() * "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            " + "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " size = "
+          ],
+          [
+            "3.0",
+            "number"
+          ],
+          [
+            " + wave * "
+          ],
+          [
+            "13.0",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " x = (column "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " + "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ") * CARD.width / COLUMNS "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " y = (row "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " + "
+          ],
+          [
+            "0.5",
+            "number"
+          ],
+          [
+            ") * CARD.height / ROWS "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "(dot(x, y, size, radius)?.bg(ink))"
+          ]
+        ],
+        [
+          [
+            "            }))"
+          ]
+        ],
+        [
+          [
+            "    })"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "pulse": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " pulse(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "const",
+            "keyword"
+          ],
+          [
+            " RINGS: "
+          ],
+          [
+            "usize",
+            "type"
+          ],
+          [
+            " = "
+          ],
+          [
+            "3",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "const",
+            "keyword"
+          ],
+          [
+            " POINTS: "
+          ],
+          [
+            "usize",
+            "type"
+          ],
+          [
+            " = "
+          ],
+          [
+            "110",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "const",
+            "keyword"
+          ],
+          [
+            " REACH: "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " = "
+          ],
+          [
+            "420.0",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink = cx.theme().primary;"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " radius = "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::from("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx));"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::animated("
+          ],
+          [
+            "\"pulse\"",
+            "string"
+          ],
+          [
+            ", "
+          ],
+          [
+            "Duration",
+            "type"
+          ],
+          [
+            "::from_millis("
+          ],
+          [
+            "2600",
+            "number"
+          ],
+          [
+            "), "
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |delta| {"
+          ]
+        ],
+        [
+          [
+            "        div()"
+          ]
+        ],
+        [
+          [
+            "            .size_full()"
+          ]
+        ],
+        [
+          [
+            "            .children(("
+          ],
+          [
+            "0",
+            "number"
+          ],
+          [
+            "..RINGS * POINTS).filter_map("
+          ],
+          [
+            "move",
+            "keyword"
+          ],
+          [
+            " |index| {"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " (ring, step) = (index / POINTS, index % POINTS);"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "// Thirds of a cycle apart, so one front is always arriving as",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "// another leaves.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " travel = (delta + ring "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " / RINGS "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            ").fract();"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " reach = "
+          ],
+          [
+            "26.0",
+            "number"
+          ],
+          [
+            " + travel * REACH;"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " angle = step "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " / POINTS "
+          ],
+          [
+            "as",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            " * "
+          ],
+          [
+            "std",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "f32",
+            "type"
+          ],
+          [
+            "::"
+          ],
+          [
+            "consts",
+            "type"
+          ],
+          [
+            "::TAU;"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " size = "
+          ],
+          [
+            "2.0",
+            "number"
+          ],
+          [
+            " + ("
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            " - travel) * "
+          ],
+          [
+            "3.0",
+            "number"
+          ],
+          [
+            ";"
+          ]
+        ],
+        [
+          [
+            "                "
+          ],
+          [
+            "Some",
+            "type"
+          ],
+          [
+            "("
+          ]
+        ],
+        [
+          [
+            "                    dot("
+          ]
+        ],
+        [
+          [
+            "                        CARD.width / "
+          ],
+          [
+            "2.0",
+            "number"
+          ],
+          [
+            " + reach * angle.cos(),"
+          ]
+        ],
+        [
+          [
+            "                        CARD.height / "
+          ],
+          [
+            "2.0",
+            "number"
+          ],
+          [
+            " + reach * angle.sin(),"
+          ]
+        ],
+        [
+          [
+            "                        size,"
+          ]
+        ],
+        [
+          [
+            "                        radius,"
+          ]
+        ],
+        [
+          [
+            "                    )?"
+          ]
+        ],
+        [
+          [
+            "                    .bg(ink.opacity(("
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            " - travel) * "
+          ],
+          [
+            "0.8",
+            "number"
+          ],
+          [
+            ")),"
+          ]
+        ],
+        [
+          [
+            "                )"
+          ]
+        ],
+        [
+          [
+            "            }))"
+          ]
+        ],
+        [
+          [
+            "    })"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ],
+      "veil": [
+        [
+          [
+            "fn",
+            "keyword"
+          ],
+          [
+            " veil(cx: &"
+          ],
+          [
+            "App",
+            "type"
+          ],
+          [
+            ") -> "
+          ],
+          [
+            "impl",
+            "keyword"
+          ],
+          [
+            " "
+          ],
+          [
+            "IntoElement",
+            "type"
+          ],
+          [
+            " {"
+          ]
+        ],
+        [
+          [
+            "    "
+          ],
+          [
+            "let",
+            "keyword"
+          ],
+          [
+            " ink: "
+          ],
+          [
+            "Hsla",
+            "type"
+          ],
+          [
+            " = cx.theme().primary;"
+          ]
+        ],
+        [
+          [
+            "    div()"
+          ]
+        ],
+        [
+          [
+            "        .size_full()"
+          ]
+        ],
+        [
+          [
+            "        .rounded("
+          ],
+          [
+            "decoration",
+            "type"
+          ],
+          [
+            "::frame_radius(cx))"
+          ]
+        ],
+        [
+          [
+            "        .bg(linear_gradient("
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "// Down and across, so it reads as light falling rather than a band.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "            "
+          ],
+          [
+            "135.0",
+            "number"
+          ],
+          [
+            ","
+          ]
+        ],
+        [
+          [
+            "            linear_color_stop(ink.opacity("
+          ],
+          [
+            "0.0",
+            "number"
+          ],
+          [
+            "), "
+          ],
+          [
+            "0.35",
+            "number"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "            linear_color_stop(ink.opacity("
+          ],
+          [
+            "0.42",
+            "number"
+          ],
+          [
+            "), "
+          ],
+          [
+            "1.0",
+            "number"
+          ],
+          [
+            "),"
+          ]
+        ],
+        [
+          [
+            "        ))"
+          ]
+        ],
+        [
+          [
+            "}"
+          ]
+        ]
+      ]
+    },
     "selection-actions": {
       "default": [
         [

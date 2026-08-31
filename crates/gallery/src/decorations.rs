@@ -184,20 +184,7 @@ impl DecorationKind {
             Self::Frosted => Decoration::behind(frosted_panel(cx)),
             Self::Glass => Decoration::behind(glass_panel(cx)),
             Self::Tint => Decoration::behind(tint_panel(cx)),
-            Self::Scrim => Decoration::behind(
-                div()
-                    .size_full()
-                    .child(photograph(cx))
-                    // Fixed, not from the theme: this is what an application
-                    // reaches for when it wants one look everywhere.
-                    .child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .rounded(decoration::frame_radius(cx))
-                            .bg(SCRIM),
-                    ),
-            ),
+            Self::Scrim => Decoration::behind(scrim_panel(cx)),
             Self::Dither => Decoration::behind(processed(Treatment::Dither, cx)),
             Self::PopArt => Decoration::behind(processed(Treatment::PopArt, cx)),
             Self::Engrave => Decoration::behind(processed(Treatment::Engrave, cx)),
@@ -416,14 +403,35 @@ fn shaped_crop(pixels: &[u8], radius: f32) -> Arc<RenderImage> {
     Arc::new(RenderImage::new([Frame::new(buffer)]))
 }
 
+/// The photograph under a fixed dark scrim, so words stay readable on it.
+// snippet:start(decorations/scrim)
+fn scrim_panel(cx: &App) -> impl IntoElement {
+    div()
+        .size_full()
+        .child(photograph(cx))
+        // Fixed, not from the theme: this is what an application reaches for
+        // when it wants one look everywhere.
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .rounded(decoration::frame_radius(cx))
+                .bg(SCRIM),
+        )
+}
+// snippet:end
+
+// snippet:start(decorations/photo)
 fn photograph(cx: &App) -> impl IntoElement {
     static SHAPED: OnceLock<Arc<RenderImage>> = OnceLock::new();
     let radius = f32::from(decoration::frame_radius(cx));
     let image = Arc::clone(SHAPED.get_or_init(|| shaped_crop(stage_pixels(Stage::Photo), radius)));
     img(image).absolute().inset_0()
 }
+// snippet:end
 
 /// The photograph under `treatment`, in the theme's own two colours.
+// snippet:start(decorations/dither, decorations/pop-art, decorations/engrave)
 fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
     let ground = Rgba::from(cx.theme().background);
     let ink = Rgba::from(cx.theme().primary);
@@ -450,6 +458,7 @@ fn processed(treatment: Treatment, cx: &App) -> impl IntoElement {
     // frame's shape already in its alpha, so nothing has to clip it.
     under_content(img(image).absolute().inset_0(), cx)
 }
+// snippet:end
 
 /// Puts a decoration under the content with a wash between the two.
 ///
@@ -571,6 +580,22 @@ pub(crate) fn needs_backdrop(kind: DecorationKind) -> bool {
             | DecorationKind::Beam
             | DecorationKind::Metal
     )
+}
+
+/// Every decoration, as the website needs to describe it.
+///
+/// Slug, label, and the line that says what it is - the same three the gallery
+/// already keeps, handed out in one call so the site's Effects section is
+/// generated from this list rather than from a copy of it. A decoration added
+/// here becomes a page.
+pub(crate) fn catalog() -> Vec<(&'static str, &'static str, &'static str)> {
+    DecorationKind::ALL
+        .iter()
+        .map(|kind| {
+            let (slug, label) = DecorationKind::LABELS[kind.index()];
+            (slug, label, kind.note())
+        })
+        .collect()
 }
 
 /// Whether this state puts a photograph behind the component's words.
@@ -956,6 +981,7 @@ fn patch_image(index: usize, inside: bool, radius: f32, grow: f32) -> Arc<Render
 /// Three layers, and their weights come from the spec's own presets rather
 /// than from taste: a tight bright one on the line, a wide soft one inside,
 /// and a wider softer one outside.
+// snippet:start(decorations/beam)
 fn beam_field(phase: f32, radius: f32, dark: bool) -> impl IntoElement {
     // `sizeThemePresets.md`, which is the size a card is.
     let (stroke, inner, bloom) = if dark {
@@ -992,6 +1018,7 @@ fn beam_field(phase: f32, radius: f32, dark: bool) -> impl IntoElement {
             })
         }))
 }
+// snippet:end
 
 /// Which border effect a state is drawing.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1052,6 +1079,7 @@ fn beam_colour(along: f32) -> Hsla {
 /// What makes a surface read as metal rather than as a light is the falloff.
 /// A lamp fades smoothly; polished metal snaps from dark to bright and back,
 /// because it is reflecting a small bright thing rather than emitting.
+// snippet:start(decorations/metal)
 fn metal_colour(along: f32) -> Hsla {
     let turns = along.rem_euclid(1.0) * 2.0 * std::f32::consts::TAU;
     // Fourth power rather than sixth: steep enough to read as a reflection
@@ -1065,6 +1093,7 @@ fn metal_colour(along: f32) -> Hsla {
         a: 1.0,
     }
 }
+// snippet:end
 
 /// How many pieces the beam's coloured core is cut into.
 ///
@@ -1411,6 +1440,7 @@ fn lensed(shape_radius: f32) -> Arc<RenderImage> {
 }
 
 /// Glass: the backdrop lensed at the rim rather than merely blurred.
+// snippet:start(decorations/glass)
 fn glass_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
@@ -1430,6 +1460,7 @@ fn glass_panel(cx: &App) -> impl IntoElement {
         )
         .child(edge_light(cx))
 }
+// snippet:end
 
 /// The blurred backdrop, placed so it lines up with the sharp one behind.
 ///
@@ -1446,6 +1477,7 @@ fn glass_panel(cx: &App) -> impl IntoElement {
 /// see [`BACKDROP`] and the story's stage. That is also the honest limit — it
 /// works for a backdrop the application can rasterise and position, not for
 /// arbitrary live content underneath.
+// snippet:start(decorations/frosted)
 fn frosted_panel(cx: &App) -> impl IntoElement {
     let ground = cx.theme().background;
     div()
@@ -1469,11 +1501,13 @@ fn frosted_panel(cx: &App) -> impl IntoElement {
         )
         .child(edge_light(cx))
 }
+// snippet:end
 
 /// Translucency with no blur at all.
 ///
 /// The same panel treatment with the blurred copy left out, so the two states
 /// next to each other show exactly what the blur is worth.
+// snippet:start(decorations/tint)
 fn tint_panel(cx: &App) -> impl IntoElement {
     div()
         .size_full()
@@ -1486,6 +1520,7 @@ fn tint_panel(cx: &App) -> impl IntoElement {
         )
         .child(edge_light(cx))
 }
+// snippet:end
 
 /// The lit top edge that makes a translucent panel read as a surface.
 fn edge_light(cx: &App) -> impl IntoElement {
@@ -1502,6 +1537,7 @@ fn edge_light(cx: &App) -> impl IntoElement {
 
 /// Dots on a grid whose size breathes, so the field reads as a texture that
 /// is alive rather than a picture of one.
+// snippet:start(decorations/halftone)
 fn halftone(cx: &App) -> impl IntoElement {
     const COLUMNS: usize = 22;
     const ROWS: usize = 9;
@@ -1524,6 +1560,7 @@ fn halftone(cx: &App) -> impl IntoElement {
             }))
     })
 }
+// snippet:end
 
 /// A dot at `x`, `y`, or nothing at all if it would leave the frame.
 ///
@@ -1559,6 +1596,7 @@ fn dot(x: f32, y: f32, size: f32, radius: f32) -> Option<gpui::Div> {
 /// leaves the frame and a stroke cannot. The dotted front is not a compromise
 /// either — it reads as something propagating rather than as an outline
 /// being scaled up.
+// snippet:start(decorations/pulse)
 fn pulse(cx: &App) -> impl IntoElement {
     const RINGS: usize = 3;
     const POINTS: usize = 110;
@@ -1588,9 +1626,11 @@ fn pulse(cx: &App) -> impl IntoElement {
             }))
     })
 }
+// snippet:end
 
 /// A gradient across the content: the over layer, proving it passes input
 /// through to everything it covers.
+// snippet:start(decorations/veil)
 fn veil(cx: &App) -> impl IntoElement {
     let ink: Hsla = cx.theme().primary;
     div()
@@ -1603,6 +1643,7 @@ fn veil(cx: &App) -> impl IntoElement {
             linear_color_stop(ink.opacity(0.42), 1.0),
         ))
 }
+// snippet:end
 
 #[cfg(test)]
 mod tests {

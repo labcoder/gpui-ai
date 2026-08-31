@@ -2140,12 +2140,14 @@ impl Render for DecorationsStory {
                 Self::set_active_state,
             ))
             .child({
+                // snippet:start(decorations/applying)
                 let card = ApprovalCard::new("decorated-gate", "Publish the launch plan?")
                     .description(
                         "The card is unchanged. Everything behind and in front of it \
                          is the application's.",
                     )
                     .decoration(kind.build(cx))
+                    // snippet:end
                     .on_event(cx.listener(|_, _: &ApprovalEvent, _, cx| {
                         cx.notify();
                     }))
