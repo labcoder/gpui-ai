@@ -15,14 +15,14 @@
       "id": "gpui",
       "label": "gpui",
       "repository": "https://github.com/zed-industries/zed",
-      "commit": "1662f5f3f6497c5f80830ccdca1edfd1fc0c6c6a",
+      "commit": "f66ed399cdde86092af8af3dc7b418abf45f37f8",
       "note": "Zed's UI framework. Pinned through Cargo.lock, not a version."
     },
     {
       "id": "gpui-component",
       "label": "gpui-component",
       "repository": "https://github.com/longbridge/gpui-component",
-      "commit": "b4393e22d3a04a880bc187dfdabca9b1eeee270a",
+      "commit": "c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d",
       "note": "The upstream component library gpui-ai composes."
     }
   ]
