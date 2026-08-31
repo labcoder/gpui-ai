@@ -55,22 +55,24 @@ fn harness(
     (events, cx)
 }
 
-/// A control centres the part of its label anyone can actually see.
+/// A control centres its label's cap height over its baseline.
 ///
-/// Not the line box - that one is easy to centre and looks wrong. GPUI centres
-/// a line's ascent-to-descent box, and a font's ascent reserves room for
-/// accents that `Approve` never uses, so centring it hangs the word low. What
-/// has to end up centred is the band from the cap height to the descent, which
-/// is the ink, and this measures that band from the same metrics the control
-/// offsets itself by.
+/// The rule every desktop toolkit uses, and the one this got wrong twice.
 ///
-/// The offset belongs to the control rather than the label, because only the
-/// control knows how much room it has to give: the ascent is where the ring of
-/// an `Å` lives, and a control too short to spare it must not move. So this
-/// also checks the other side - that whatever the control took, the accents
-/// still clear its frame.
+/// GPUI centres a line's ascent-to-descent box. A font's ascent reserves room
+/// for accents that most words never use, so the first attempt centred the
+/// band from the cap height to the descent instead - and the descent is room
+/// kept for descenders, which `Allow`, `Accept`, `Export` and `Continue` do
+/// not have. Measured, that lifted every one of them four pixels too high,
+/// while `Approve` and `Reject` came out level, which is why a test written
+/// against those two passed it.
+///
+/// So this measures both edges of the band the eye actually reads: the top of
+/// the caps and the baseline. Neither depends on which word is in the button -
+/// the baseline is where the line box puts it - which is what makes the check
+/// hold for `Allow` as much as for the two labels it can reach.
 #[gpui::test]
-fn a_control_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
+fn a_control_centres_its_label_on_the_baseline(cx: &mut TestAppContext) {
     let (_, cx) = harness(ProbeKind::Pending, cx);
     let (ascent, descent, cap, leading) = cx.update(|window, cx| {
         let body = cx.theme().typography_tokens().sm;
@@ -95,21 +97,25 @@ fn a_control_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
         let label = cx
             .debug_bounds(label)
             .unwrap_or_else(|| panic!("{label} should render"));
-        // Where GPUI puts the baseline inside the line box, which starts at
-        // the top of the label's box.
+        // Where GPUI puts the baseline inside the line box, which is centred
+        // in the control because nothing offsets it.
         let baseline = label.top() + (leading - ascent - descent) / 2.0 + ascent;
         let above = baseline - cap - button.top();
-        let below = button.bottom() - (baseline + descent);
+        let below = button.bottom() - baseline;
         assert!(
             (above - below).abs() <= px(1.0),
-            "a control must centre its label's ink: {above:?} above the caps, \
-             {below:?} below the descent"
+            "a control must centre its label's caps over its baseline: {above:?} above the \
+             caps, {below:?} below the baseline"
         );
-        let accents = baseline - ascent - button.top();
+        // A second, different failure: caps level in a control too short to
+        // hold the type it carries. One measurement covers both edges, because
+        // a centred line box leaves the same room above the ascent as below
+        // the descent.
+        let clearance = baseline - ascent - button.top();
         assert!(
-            accents >= px(1.0),
-            "a control must leave its tall accents clear of its frame, not \
-             {accents:?}"
+            clearance >= px(2.0),
+            "a control must leave its accents and descenders clear of its frame, not \
+             {clearance:?}"
         );
     }
 }
