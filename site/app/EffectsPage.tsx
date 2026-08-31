@@ -30,11 +30,7 @@ export function EffectsPage() {
         story={effects.story}
         title={effects.windowTitle}
         height={effects.height}
-        variants={decorations.map((decoration) => ({
-          id: decoration.slug,
-          label: decoration.label,
-        }))}
-        caption="The same card under each decoration. Every state here has a page of its own with the Rust that makes it."
+        caption="The same card under each decoration. The switcher inside the frame is the story's own — and every state it offers has a page here, with the Rust that makes it."
       />
 
       <section aria-labelledby="decorations">
