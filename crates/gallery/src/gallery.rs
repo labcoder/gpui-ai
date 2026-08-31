@@ -2156,7 +2156,17 @@ impl Render for DecorationsStory {
                     // where it is the loudest thing on screen and the subject
                     // is what the decoration does. Overriding it is the
                     // ordinary style path — which is itself worth showing.
-                    .border_color(cx.theme().border);
+                    .border_color(cx.theme().border)
+                    // A photograph is not a palette, so the theme's ink cannot
+                    // be assumed against one. This is a caller styling a
+                    // component — the same path as the border colour above —
+                    // and the card's own title and description now yield to
+                    // it, which they did not before: text colour used to be
+                    // the one property a component pinned where nobody could
+                    // reach it.
+                    .when(crate::decorations::wants_light_ink(kind), |card| {
+                        card.text_color(gpui::white())
+                    });
                 {
                     // Every state is staged, at one fixed size, and that is
                     // the architecture rather than a convenience. A decoration

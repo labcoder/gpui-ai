@@ -157,8 +157,6 @@ pub const DECORATION_STORY_VARIANTS: &[(&str, &str)] = &[
     ("glass", "Glass"),
     ("tint", "Tint"),
     ("beam", "Border beam"),
-    ("beam-inward", "Beam · inward"),
-    ("beam-outward", "Beam · outward"),
     ("metal", "Liquid metal"),
     ("scrim", "Photo + scrim"),
     ("dither", "Dither"),

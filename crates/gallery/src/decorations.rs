@@ -50,10 +50,6 @@ pub(crate) enum DecorationKind {
     Tint,
     /// A fixed field of colour with light sweeping through it.
     Beam,
-    /// The same field, lighting only what falls inside the frame.
-    BeamInward,
-    /// The same field, lighting only what falls outside it.
-    BeamOutward,
     /// A metallic sheen turning around the frame.
     Metal,
     /// The same photograph under a fixed dark scrim, so the text is readable.
@@ -79,8 +75,6 @@ impl DecorationKind {
         Self::Glass,
         Self::Tint,
         Self::Beam,
-        Self::BeamInward,
-        Self::BeamOutward,
         Self::Metal,
         Self::Scrim,
         Self::Dither,
@@ -97,8 +91,6 @@ impl DecorationKind {
         ("glass", "Glass"),
         ("tint", "Tint"),
         ("beam", "Border beam"),
-        ("beam-inward", "Beam · inward"),
-        ("beam-outward", "Beam · outward"),
         ("metal", "Liquid metal"),
         ("scrim", "Photo + scrim"),
         ("dither", "Dither"),
@@ -117,7 +109,10 @@ impl DecorationKind {
     pub(crate) fn note(self) -> &'static str {
         match self {
             Self::Photo => {
-                "The photograph with nothing between it and the words. Its own                  colours, not the theme's — a decoration is the application's,                  and nothing here has to follow the palette. Also the reason                  the next one exists."
+                "The photograph with nothing between it and the words. Its own \
+                 colours, not the theme's - a decoration is the application's, \
+                 and nothing here has to follow the palette. Also the reason \
+                 the next one exists."
             }
             Self::Frosted => {
                 "Actual frosted glass: the backdrop blurred on the CPU and \
@@ -136,21 +131,10 @@ impl DecorationKind {
                  about it, and what most panels actually need."
             }
             Self::Beam => {
-                "Two trails stroked along the rounded path itself rather than \
-                 positioned near it, so they turn the corners instead of \
-                 cutting them. The glow is thirty overlapping lights per \
-                 trail: five you could count, thirty sum into a band."
-            }
-            Self::BeamInward => {
-                "The same trails, keeping only the light that falls inside the \
-                 frame. A lamp behind frosted glass rather than a tube around \
-                 it — and exact, because every light is a point and a point \
-                 can be asked which side it is on."
-            }
-            Self::BeamOutward => {
-                "And only the light that falls outside, which is neon. The \
-                 trail is the cheap part; where its light lands is what \
-                 decides what the frame appears to be made of."
+                "Nine patches of colour sitting still around the frame, and a \
+                 window of brightness sweeping over them. The colours never \
+                 travel - that is the whole difference between light passing \
+                 through a frame and a coloured head chasing its own tail."
             }
             Self::Metal => {
                 "The same stroke with a metallic ramp instead of a beam. Metal \
@@ -158,7 +142,10 @@ impl DecorationKind {
                  because it reflects a small bright thing rather than emitting."
             }
             Self::Scrim => {
-                "The same photograph under a fixed dark scrim — a flat black                  at sixty per cent, chosen by hand and identical in every                  theme. The commonest thing anyone will actually want."
+                "The same photograph under a fixed dark scrim — a flat \
+                 black at sixty per cent, chosen by hand and identical in \
+                 every theme. The commonest thing anyone will actually \
+                 want."
             }
             Self::Dither => {
                 "A photograph quantised to four inks by an 8x8 ordered dither, \
@@ -170,14 +157,18 @@ impl DecorationKind {
                  dither between them — the print the dither is avoiding."
             }
             Self::Engrave => {
-                "Cross-hatching whose density follows the photograph's tone,                  the way an engraver carries shade — ink laid down or not,                  never half."
+                "Cross-hatching whose density follows the photograph's \
+                 tone, the way an engraver carries shade — ink laid down or \
+                 not, never half."
             }
             Self::Halftone => {
                 "A grid of dots on a travelling wave, on the library's motion \
                  channel. It stops when the panel scrolls out of view."
             }
             Self::Pulse => {
-                "The same rings on the motion channel instead of a press, so                  they keep arriving — and stop when the panel scrolls away."
+                "The same rings on the motion channel instead of a press, \
+                 so they keep arriving — and stop when the panel scrolls \
+                 away."
             }
             Self::Veil => {
                 "The over layer, not the under one: a gradient across the \
@@ -209,9 +200,7 @@ impl DecorationKind {
             // Nothing in the slot. A stroke sits astride the component's
             // edge, and the slot clips to the component — so the whole effect
             // is the parent's, and saying so here is the point.
-            Self::Beam | Self::BeamInward | Self::BeamOutward | Self::Metal => {
-                Decoration::default()
-            }
+            Self::Beam | Self::Metal => Decoration::default(),
             Self::Veil => Decoration::above(veil(cx)),
         }
     }
@@ -591,6 +580,28 @@ pub(crate) fn needs_backdrop(kind: DecorationKind) -> bool {
     )
 }
 
+/// Whether this state puts a photograph behind the component's words.
+///
+/// The treatments are not on this list even though they are made from the same
+/// photograph: they redraw it in the theme's own background and primary, so
+/// the theme's own ink still reads against them. These five leave the picture
+/// as it was taken, and no palette can be assumed against a nebula.
+///
+/// What the demo does about it is the ordinary style path — `text_color` on
+/// the component, which the component's own text now yields to. That is the
+/// whole point of showing it here: the fix is a caller's one line, not a
+/// switch the component had to grow.
+pub(crate) fn wants_light_ink(kind: DecorationKind) -> bool {
+    matches!(
+        kind,
+        DecorationKind::Photo
+            | DecorationKind::Scrim
+            | DecorationKind::Frosted
+            | DecorationKind::Glass
+            | DecorationKind::Tint
+    )
+}
+
 /// The sharp photograph, at the size the blurred copy is placed against.
 pub(crate) fn backdrop(stage: Stage) -> impl IntoElement {
     static SHARP: OnceLock<Vec<(bool, Arc<RenderImage>)>> = OnceLock::new();
@@ -779,21 +790,6 @@ fn stroke_run(
     }
 }
 
-/// Where a beam's light is allowed to fall.
-///
-/// Not a filter over one drawing: each of these lights a different set of
-/// layers, which is why the three read as different materials rather than as
-/// one effect with pieces missing.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Spill {
-    /// Inside the frame and out, which is the frame itself glowing.
-    Both,
-    /// Inside only — a lamp behind the panel.
-    Inward,
-    /// Outside only — neon around it.
-    Outward,
-}
-
 /// One patch of colour on the frame, fixed in place.
 ///
 /// The thing that took longest to understand, and the whole difference between
@@ -966,10 +962,8 @@ fn patch_image(index: usize, inside: bool, radius: f32, grow: f32) -> Arc<Render
 ///
 /// Three layers, and their weights come from the spec's own presets rather
 /// than from taste: a tight bright one on the line, a wide soft one inside,
-/// and a wider softer one outside. `Spill` chooses which of the three are
-/// drawn, so inward and outward are their own materials rather than the same
-/// picture with half of it deleted.
-fn beam_field(phase: f32, radius: f32, spill: Spill, dark: bool) -> impl IntoElement {
+/// and a wider softer one outside.
+fn beam_field(phase: f32, radius: f32, dark: bool) -> impl IntoElement {
     // `sizeThemePresets.md`, which is the size a card is.
     let (stroke, inner, bloom) = if dark {
         (0.26_f32, 0.42_f32, 0.24_f32)
@@ -981,22 +975,11 @@ fn beam_field(phase: f32, radius: f32, spill: Spill, dark: bool) -> impl IntoEle
     // full size for the glow, and a slightly wider soft one. Scaling the same
     // blob by three did not work — at two and a half times it is wider than
     // the card and washes the middle instead of hugging the edge.
-    let layers: &[(bool, f32)] = match spill {
-        Spill::Both => &[(true, 0.5), (true, 1.4), (false, 1.9)],
-        Spill::Inward => &[(true, 0.5), (true, 1.6)],
-        Spill::Outward => &[(false, 0.6), (false, 1.9)],
-    };
-    let weights: Vec<f32> = match spill {
-        Spill::Both => vec![stroke, inner, bloom],
-        Spill::Inward => vec![stroke, inner * 1.5],
-        Spill::Outward => vec![stroke * 1.4, bloom * 2.0],
-    };
+    let layers = [(true, 0.5, stroke), (true, 1.4, inner), (false, 1.9, bloom)];
     div()
         .absolute()
         .inset_0()
-        .children(layers.iter().enumerate().flat_map(move |(layer, spec)| {
-            let (inside, grow) = *spec;
-            let weight = weights[layer];
+        .children(layers.into_iter().flat_map(move |(inside, grow, weight)| {
             (0..FIELD.len()).map(move |index| {
                 let patch = &FIELD[index];
                 // Where this patch sits around the frame decides when the
@@ -1020,8 +1003,8 @@ fn beam_field(phase: f32, radius: f32, spill: Spill, dark: bool) -> impl IntoEle
 /// Which border effect a state is drawing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Border {
-    /// Trails travelling the frame, throwing light where `Spill` says.
-    Beam(Spill),
+    /// A fixed field of colour with light sweeping through it.
+    Beam,
     /// A metallic sheen turning around the frame.
     Metal,
 }
@@ -1114,7 +1097,7 @@ fn paint_border(
     stroke_run(window, bounds, radius, 0.0, 0.0, 1.0, 1.0, resting, 320);
 
     match kind {
-        Border::Beam(_) => {
+        Border::Beam => {
             let head = phase;
             let tail = head - BEAM_LENGTH;
             // The core carries the colour, so it is the one thing cut up.
@@ -1174,7 +1157,7 @@ fn paint_border(
 /// components, so this is where a border belongs.
 pub(crate) fn border_effect(kind: Border, radius: f32, dark: bool) -> impl IntoElement {
     let (id, period) = match kind {
-        Border::Beam(_) => ("border-beam", Duration::from_millis(3200)),
+        Border::Beam => ("border-beam", Duration::from_millis(3200)),
         Border::Metal => ("border-metal", Duration::from_millis(5200)),
     };
     div()
@@ -1186,7 +1169,7 @@ pub(crate) fn border_effect(kind: Border, radius: f32, dark: bool) -> impl IntoE
         .child(decoration::animated(id, period, move |delta| {
             let layer = div().size_full();
             let layer = match kind {
-                Border::Beam(spill) => layer.child(beam_field(delta, radius, spill, dark)),
+                Border::Beam => layer.child(beam_field(delta, radius, dark)),
                 Border::Metal => layer,
             };
             layer.child(
@@ -1232,9 +1215,7 @@ pub(crate) fn stage_for(kind: DecorationKind) -> Stage {
 /// The border effect a state draws around its component, if any.
 pub(crate) fn border_for(kind: DecorationKind) -> Option<Border> {
     match kind {
-        DecorationKind::Beam => Some(Border::Beam(Spill::Both)),
-        DecorationKind::BeamInward => Some(Border::Beam(Spill::Inward)),
-        DecorationKind::BeamOutward => Some(Border::Beam(Spill::Outward)),
+        DecorationKind::Beam => Some(Border::Beam),
         DecorationKind::Metal => Some(Border::Metal),
         _ => None,
     }
