@@ -1515,3 +1515,102 @@ pre.code-plain {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Drawer destinations ----------------------------------------------------- */
+
+/* Below the rail's breakpoint this is the only navigation there is, so it
+   carries the whole site rather than one section of it. */
+.drawer-destinations {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.drawer-destinations a {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  text-decoration: none;
+}
+
+.drawer-destinations a:hover,
+.drawer-destinations a[aria-current="page"] {
+  border-color: var(--ai-primary);
+}
+
+.drawer-destinations strong {
+  font-size: 0.9375rem;
+}
+
+.drawer-destinations span {
+  color: var(--ai-muted-text);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.drawer-section {
+  margin: 0 0 var(--space-2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ai-muted-text);
+  border-top: 1px solid var(--ai-border);
+  padding-top: var(--space-4);
+}
+
+/* Underlined rather than recoloured. Colour alone is not a state anyone can
+   rely on, and the primary of at least one bundled theme is 3.1:1 against its
+   own background — readable as an accent, not as text. */
+.masthead-nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+  text-underline-offset: 0.35em;
+}
+
+/* Demo states ------------------------------------------------------------- */
+
+/* Above the window rather than below it, because it is a control on the demo
+   and not a list of what the page contains. Choosing one switches the running
+   story and moves the code further down the page with it. */
+.demo-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.demo-states button {
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius);
+  background: var(--ai-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.demo-states button:hover {
+  border-color: var(--ai-primary);
+}
+
+.demo-states button[aria-pressed="true"] {
+  border-color: var(--ai-primary);
+  background: var(--ai-primary);
+  color: var(--ai-primary-foreground);
+}
+
+.demo-states button:focus-visible {
+  outline: 2px solid var(--ai-primary);
+  outline-offset: 2px;
+}
+
+/* The eyebrow on a decoration page carries a link back to the section. */
+.eyebrow a {
+  color: inherit;
+}

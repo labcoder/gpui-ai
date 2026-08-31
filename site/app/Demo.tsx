@@ -96,11 +96,27 @@ export function Demo({
   title,
   height,
   caption,
+  variants,
+  variant: asked,
+  onVariant,
 }: {
   readonly story: string;
   readonly title: string;
   readonly height: number;
   readonly caption?: string;
+  /**
+   * The states this story offers, as a row of buttons above the frame.
+   *
+   * Given, the demo switches the running story rather than reloading it: the
+   * host answers `set_story_variant`, so a seventeen-megabyte WebAssembly
+   * instance stays up and the card changes underneath. Omitted, the demo is
+   * whatever state the story opens in, which is what most pages want.
+   */
+  readonly variants?: readonly { readonly id: string; readonly label: string }[] | undefined;
+  /** The state to show. Controlled by the page when it has one to name. */
+  readonly variant?: string | undefined;
+  /** Told when the reader picks a state, so the page's code can follow it. */
+  readonly onVariant?: ((id: string) => void) | undefined;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -258,10 +274,50 @@ export function Demo({
   // the pre-render has no address to read, and a frame that differed between
   // the two would be thrown away and rebuilt. The demo does not start until
   // after mount either, so this is known in time to be the state it opens in.
+  //
+  // Which of the two wins depends on whether the reader can move. With a
+  // switcher, the address wins at mount and the page is told, so a shared link
+  // opens on its state *and* the code beneath it follows — then the buttons
+  // take over. Without one, the page's own state wins, because a page with no
+  // switcher is about that state and a stale link should not repaint it as
+  // another.
+  const switchable = Boolean(variants && variants.length > 0);
   useEffect(() => {
-    const asked = new URL(window.location.href).searchParams.get("variant");
-    if (asked) setWanted(asked);
+    const fromLink = new URL(window.location.href).searchParams.get("variant");
+    if (switchable && fromLink) {
+      setWanted(fromLink);
+      onVariant?.(fromLink);
+      return;
+    }
+    if (asked) {
+      setWanted(asked);
+      return;
+    }
+    if (fromLink) setWanted(fromLink);
+    // Once, at mount: after that the buttons and the page own this between
+    // them, and re-reading the address would undo a reader's choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Switching a story that is already up: the host answers this, and the
+  // alternative is rebuilding the whole instance to change one card.
+  const show = useCallback(
+    (id: string) => {
+      setWanted(id);
+      onVariant?.(id);
+      const running = iframe.current?.contentWindow as
+        | (Window & { gpuiAi?: { setVariant?: (id: string) => boolean } })
+        | null
+        | undefined;
+      try {
+        running?.gpuiAi?.setVariant?.(id);
+      } catch {
+        // Same-origin, so this only throws for a frame that is already gone;
+        // `wanted` has it, and a frame that starts later opens on it.
+      }
+    },
+    [onVariant],
+  );
 
   // This demo's claim on one of the machine's live frames. Identity has to
   // outlast a render, or the governor would be tracking a new demo every time
@@ -355,8 +411,26 @@ export function Demo({
     window.setTimeout(() => setLinkState("idle"), 2_400);
   }, [override, variant]);
 
+  // What the row shows as pressed: the reader's choice, then the page's, then
+  // whatever the running story reports about itself.
+  const showing = wanted ?? variant;
+
   return (
     <figure className="demo">
+      {variants && variants.length > 0 ? (
+        <div className="demo-states" role="group" aria-label="States">
+          {variants.map((state) => (
+            <button
+              key={state.id}
+              type="button"
+              aria-pressed={showing === state.id}
+              onClick={() => show(state.id)}
+            >
+              {state.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="demo-window">
         <div className="demo-titlebar">
           <span className="demo-dots" aria-hidden="true">

@@ -30,6 +30,9 @@ import { socialCardName } from "../app/route-path.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../app/theme-resolve.mjs";
 import { docs } from "../app/docs.mjs";
 import catalog from "../generated/catalog.json" with { type: "json" };
+
+/** Every decoration gets a card, because every decoration is a page. */
+const decorations = catalog.effects.decorations;
 import buildInfo from "../generated/build.json" with { type: "json" };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -86,14 +89,35 @@ export function cards() {
       poster: "tool-calls",
     },
     {
-      path: "/extensions/",
-      eyebrow: "Extensions",
+      path: "/start/",
+      eyebrow: "Start",
+      title: "Add it and open a window",
+      summary: "What you need, the dependency lines, and a complete application in eighty lines.",
+      poster: null,
+    },
+    {
+      path: "/effects/",
+      eyebrow: "Effects",
       title: "Paint into any frame",
       summary: "A decoration slot on every framed component, and a motion channel to drive it.",
       // The decorations story, which is the section's own subject: a card
       // showing a component being decorated says what the page is about in
       // the one way prose cannot.
       poster: "decorations",
+    },
+    ...decorations.map((decoration) => ({
+      path: `/effects/${decoration.slug}/`,
+      eyebrow: "Decoration",
+      title: decoration.label,
+      summary: decoration.note,
+      poster: "decorations",
+    })),
+    {
+      path: "/showcase/",
+      eyebrow: "Showcase",
+      title: "Whole compositions",
+      summary: "A conversation, a docked workspace, and the instrument the motion policy is tuned with.",
+      poster: FLAGSHIP,
     },
     {
       path: "/themes/",
@@ -103,15 +127,15 @@ export function cards() {
       poster: null,
     },
     {
-      path: "/docs/",
-      eyebrow: "Documentation",
+      path: "/guides/",
+      eyebrow: "Guides",
       title: "How it fits together",
-      summary: "Installing it, theming it, and who owns what between it and your application.",
+      summary: "Theming it, who owns what between it and your application, and what a demo cannot prove.",
       poster: FLAGSHIP,
     },
     ...docs.map((doc) => ({
-      path: `/docs/${doc.slug}/`,
-      eyebrow: "Documentation",
+      path: `/guides/${doc.slug}/`,
+      eyebrow: "Guide",
       title: doc.title,
       summary: doc.summary,
       // Prose, not a component. A still of Chat beside a page about theming

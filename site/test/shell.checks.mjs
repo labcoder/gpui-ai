@@ -18,6 +18,8 @@ import themeFile from "../generated/themes.json" with { type: "json" };
 // moving into it, the page going inert, Escape putting focus back — is not
 // something HTML can show, and lives in the release browser gate.
 const { components } = catalog;
+/** The decorations, which are listed beside the components in both surfaces. */
+const DECORATIONS = catalog.effects.decorations.length;
 
 const site = sharedSite;
 
@@ -169,17 +171,21 @@ test("the catalog rail lists every component on every page", async () => {
     );
     // Once in the rail and once in the drawer: the same catalog, two
     // presentations, so a narrow screen loses nothing.
+    // The decorations are on it — they are pages like any other, and leaving
+    // them off the one search box on the site is why nobody found them.
     assert.equal(
       count(html, /class="nav-component-link"/g),
-      components.length * 2,
+      (components.length + DECORATIONS) * 2,
       `${route} does not carry the catalog in both the rail and the drawer`,
     );
-    assert.match(html, /<nav aria-label="All components">/);
+    assert.match(html, /<nav aria-label="Components and decorations">/);
   }
 
-  // A component page marks itself in both copies; other pages mark nothing.
+  // A component page marks itself in both copies of the list, and its section
+  // in both copies of the destinations — four, not two, because the drawer now
+  // carries the whole site rather than one part of it.
   const component = await page(`/components/${components[3].slug}/`);
-  assert.equal(count(component, /aria-current="page"/g), 2);
+  assert.equal(count(component, /aria-current="page"/g), 4);
   assert.match(
     component,
     new RegExp(`href="/gpui-ai/components/${components[3].slug}/" aria-current="page"`),
@@ -193,13 +199,13 @@ test("the rail's search is labelled, counted, and distinct from the catalog filt
   for (const prefix of ["rail", "drawer"]) {
     assert.match(
       html,
-      new RegExp(`<label for="${prefix}-component-search">Find a component</label>`),
+      new RegExp(`<label for="${prefix}-component-search">Find a component or decoration</label>`),
       `the ${prefix} search has no label`,
     );
     assert.match(html, new RegExp(`id="${prefix}-component-search"`));
   }
 
-  assert.match(html, new RegExp(`${components.length} shown`));
+  assert.match(html, new RegExp(`${components.length + DECORATIONS} shown`));
 });
 
 test("no page skips a heading level", async () => {

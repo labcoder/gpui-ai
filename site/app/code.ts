@@ -55,8 +55,13 @@ async function load(name: string): Promise<void> {
 /** Loads the code the given route renders; resolves immediately for the rest. */
 export async function preloadCodeFor(route: Route): Promise<void> {
   if (route.kind === "component" && route.slug) return load(route.slug);
-  // Both documentation kinds render hand-written samples from one shared chunk.
-  if (route.kind === "docs" || route.kind === "doc") return load("samples");
+  // Every decoration page shows code cut from the decorations story, so the
+  // one chunk serves all thirteen of them and the section index.
+  if (route.kind === "decoration" || route.kind === "effects") return load("decorations");
+  // The guides and Start render hand-written samples from one shared chunk.
+  if (route.kind === "guides" || route.kind === "guide" || route.kind === "start") {
+    return load("samples");
+  }
 }
 
 /** The copyable Rust for one story variant, cut from the gallery's source. */

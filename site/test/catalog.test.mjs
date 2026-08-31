@@ -96,11 +96,14 @@ test("every component page has a snippet cut from the gallery's own source", () 
     }
   }
 
+  // Every component, plus the decorations story — which is deliberately not a
+  // component and carries the code for each of the thirteen Effects pages.
   assert.equal(
     Object.keys(snippets).length,
-    components.length,
-    "snippets.json should cover exactly the catalog",
+    components.length + 1,
+    "snippets.json should cover the catalog and the decorations story",
   );
+  assert.ok(snippets.decorations, "the decorations story has no snippets");
 });
 
 test("every highlighted snippet is still, exactly, the snippet", () => {

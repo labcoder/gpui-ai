@@ -1,7 +1,8 @@
 import { Code, CodeFrame } from "./CodePanel";
 import { Demo } from "./Demo";
-import { build, components, componentsByCategory, hero, install, themes } from "./data";
+import { build, components, decorations, hero, install, themes } from "./data";
 import { href } from "./links";
+import { destinations } from "./nav.mjs";
 import { useTheme } from "./theme";
 
 /** A mixed sample of the themes available from the full picker. */
@@ -15,7 +16,17 @@ const STRIP = [
   "solstice",
 ] as const;
 
-/** The project overview, install snippet, and guided demo. */
+/**
+ * What the library is, running, and the doors into the rest of the site.
+ *
+ * The demo comes before the prose because it is the argument: everything on
+ * this site is the real Rust on a canvas, and a paragraph saying so is weaker
+ * than the thing doing it.
+ *
+ * The nine category cards that used to sit here all linked to the same page.
+ * They are the catalogue's job; this page's job is to say what the five parts
+ * of the site are, which nothing did.
+ */
 export function HomePage() {
   return (
     <div className="shell home">
@@ -23,46 +34,44 @@ export function HomePage() {
       <p className="lede">
         {`${components.length} components for chat, streamed responses, tool calls, approvals, and more. Built for `}
         <a href="https://gpui.rs/">GPUI</a>
-        {` and gpui-component, with ${themes.length} included themes.`}
+        {` and gpui-component, with ${themes.length} included themes and ${decorations.length} decorations to paint into them.`}
       </p>
-
-      <section className="home-install" aria-labelledby="install">
-        <h2 id="install">Install</h2>
-        <div className="install">
-          <p className="lede">
-            gpui-ai installs from Git because its current GPUI dependencies are not available on
-            crates.io.
-          </p>
-          <CodeFrame file="Cargo.toml" />
-          <Code lines={install.lines} fallback={install.code} />
-        </div>
-      </section>
 
       {hero.height ? (
         <Demo
           story={hero.slug}
           title={hero.windowTitle}
           height={hero.height}
-          caption="Send the question or choose a suggestion. The demo runs a fixed script with tool calls, reasoning, and a streamed reply."
+          caption="Send the question or choose a suggestion. Not a recording: this is the library compiled to WebAssembly, running a fixed script with tool calls, reasoning, and a streamed reply."
         />
       ) : null}
 
-      <ThemeStrip />
-
-      <section aria-labelledby="categories">
-        <h2 id="categories">Components</h2>
+      <section className="home-doors" aria-labelledby="doors">
+        <h2 id="doors">Where to go</h2>
         <ul className="cards">
-          {componentsByCategory().map(([category, entries]) => (
-            <li className="card" key={category}>
-              <a href={href("/components/")}>{category}</a>
-              <p>{`${entries.map((component) => component.title).join(", ")}.`}</p>
-              <p className="card-api">
-                {`${entries.length} component${entries.length === 1 ? "" : "s"}`}
-              </p>
+          {destinations.map((destination) => (
+            <li className="card" key={destination.path}>
+              <a href={href(destination.path)}>{destination.label}</a>
+              <p>{destination.blurb}</p>
             </li>
           ))}
         </ul>
       </section>
+
+      <section className="home-install" aria-labelledby="install">
+        <h2 id="install">Install</h2>
+        <div className="install">
+          <p className="lede">
+            gpui-ai installs from Git because its current GPUI dependencies are not available on
+            crates.io. <a href={href("/start/")}>Start</a> has the rest: the platform features, the
+            two calls at startup, and a complete application in eighty lines.
+          </p>
+          <CodeFrame file="Cargo.toml" />
+          <Code lines={install.lines} fallback={install.code} />
+        </div>
+      </section>
+
+      <ThemeStrip />
 
       <section aria-labelledby="principles">
         <h2 id="principles">How it is built</h2>

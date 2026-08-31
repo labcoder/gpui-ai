@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CodePanel } from "./CodePanel";
 import { snippet } from "./code";
 import { Demo } from "./Demo";
@@ -21,6 +22,11 @@ import { apiHref, demoSrc, href, sourceHref } from "./links";
  * One column, not two. The shell already spends a rail on the catalog, and a
  * second sidebar here would leave the demo narrower than the width its height
  * was measured at — which is the one thing this page has to get right.
+ *
+ * The states are the page's state, not the demo's. A story's switcher used to
+ * be listed below the frame with a block of Rust under each entry — code for
+ * something the reader could not run without leaving the page, beside a demo
+ * pinned to whichever state the story opened in. Now one choice moves both.
  */
 export function ComponentPage({ slug }: { readonly slug: string }) {
   const component = componentBySlug(slug);
@@ -38,6 +44,29 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
 
   const previous = previousComponent(slug);
   const next = nextComponent(slug);
+  return <Body component={component} previous={previous} next={next} />;
+}
+
+function Body({
+  component,
+  previous,
+  next,
+}: {
+  readonly component: Component;
+  readonly previous: Component | undefined;
+  readonly next: Component | undefined;
+}) {
+  const states = component.variants;
+  // The state the page is showing. `undefined` while there is nothing to
+  // choose, and the first state otherwise — which is the one the story opens
+  // in, so the page and the frame agree before anyone touches either.
+  const [showing, setShowing] = useState<string | undefined>(states[0]?.id);
+  const shown = states.find((state) => state.id === showing);
+  // Whether this state has Rust of its own, or shares the story's. Most do
+  // not yet: a story marks one region, and a state that only changes the data
+  // it is given has no separate code to show. Saying which is what stops the
+  // panel from claiming to be something it is not.
+  const ownCode = Boolean(shown && snippet(component.slug, shown.id));
 
   return (
     <div className="shell">
@@ -49,26 +78,35 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
         story={component.slug}
         title={component.windowTitle}
         height={component.height}
+        variants={states.length > 0 ? states : undefined}
+        variant={showing}
+        onVariant={setShowing}
         caption={`Running the real component, compiled to WebAssembly. The frame is ${component.height} px tall, which is what this story measures at the demo width in the default type size — a narrower column or a theme that changes that size will wrap it differently.`}
       />
 
       <Reference component={component} />
 
-      <Variants component={component} />
-
       <section aria-labelledby="code">
         <h2 id="code">Code</h2>
-        <p className="lede">Cut from the gallery story this page runs, so it stays true.</p>
+        <p className="lede">
+          {!shown
+            ? "Cut from the gallery story this page runs, so it stays true."
+            : ownCode
+              ? `Cut from the gallery story this page runs — the ${shown.label} state, which is the one showing above.`
+              : `Cut from the gallery story this page runs. The states above change what the demo is given rather than how it is built, so they share this code.`}
+        </p>
         <CodePanel
           slug={component.slug}
+          variant={ownCode ? shown?.id : undefined}
           label={`the ${component.title} snippet`}
           file={snippetSource}
           actions={[
-            { href: demoSrc(component.slug), text: "Open in the gallery" },
+            { href: demoSrc(component.slug, undefined, shown?.id), text: "Open in the gallery" },
             { href: sourceHref(component, build.repository), text: "Implementation" },
           ]}
         />
       </section>
+
 
       <section aria-labelledby="ownership">
         <h2 id="ownership">Events and ownership</h2>
@@ -185,48 +223,32 @@ function Reference({ component }: { readonly component: Component }) {
   );
 }
 
-/**
- * The states this story can show.
- *
- * Most components have one. Where the gallery offers a switcher, each state is
- * listed with its own snippet if one has been cut for it; D-11 adds the rest,
- * and S-06 wires the switcher to the frame.
- */
-function Variants({ component }: { readonly component: Component }) {
-  if (component.variants.length === 0) return null;
 
+/**
+ * States the story offers that no snippet has been cut for.
+ *
+ * The ones that have code are the switcher above the demo. This is what is
+ * left: named, so the page does not quietly pretend the story has fewer states
+ * than it does, and unswitched, because a button that changes the frame while
+ * the code beneath it stays put is the thing this page just stopped doing.
+ */
+function UnwrittenStates({ component }: { readonly component: Component }) {
   const withCode = component.variants.filter((variant) => snippet(component.slug, variant.id));
+  if (withCode.length > 0 || component.variants.length === 0) return null;
 
   return (
     <section aria-labelledby="variants">
       <h2 id="variants">States</h2>
       <p className="lede">
-        The gallery story switches between these; the demo above starts on the first.
+        The gallery story switches between these; the demo above opens on the first.
       </p>
-      {withCode.length === 0 ? (
-        // A heading over nothing reads as a section that failed to load. Until
-        // D-11 cuts a snippet per state, the states are a list — which is all
-        // the catalog actually knows about them.
-        <ul className="chips">
-          {component.variants.map((variant) => (
-            <li className="chip" key={variant.id}>
-              {variant.label}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        withCode.map((variant) => (
-          <div className="variant" key={variant.id}>
-            <h3>{variant.label}</h3>
-            <CodePanel
-              slug={component.slug}
-              variant={variant.id}
-              label={`the ${variant.label} snippet`}
-              file={snippetSource}
-            />
-          </div>
-        ))
-      )}
+      <ul className="chips">
+        {component.variants.map((variant) => (
+          <li className="chip" key={variant.id}>
+            {variant.label}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

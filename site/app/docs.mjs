@@ -1,10 +1,12 @@
-// The documentation pages, in reading order.
+// The guide pages, in reading order.
 //
 // One list, used by the routes, the index, the previous/next links, and the
 // social-card capture — so a page cannot exist without being reachable, be
-// linked without existing, or claim a card nobody renders. The order is the
-// order someone new reads them in: install it, make it look right, learn who
-// owns what, then the two things that are true of every component.
+// linked without existing, or claim a card nobody renders.
+//
+// Installing is not on this list any more. It is the one thing every visitor
+// needs and it was the fifth link inside a section called Docs; it is now
+// `/start/`, with its own place in the site's navigation.
 //
 // Plain JavaScript, like `route-path.mjs` and `theme-resolve.mjs`, because
 // `site/scripts/capture-og.mjs` reads it and cannot import TypeScript.
@@ -13,11 +15,6 @@
 
 /** @type {readonly Doc[]} */
 export const docs = [
-  {
-    slug: "getting-started",
-    title: "Getting started",
-    summary: "What you need, how to add the dependency, and a window with a component in it.",
-  },
   {
     slug: "theming",
     title: "Theming",

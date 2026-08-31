@@ -24,7 +24,7 @@ export function CodePanel({
   actions,
 }: {
   readonly slug: string;
-  readonly variant?: string;
+  readonly variant?: string | undefined;
   readonly label: string;
   readonly file: string;
   readonly actions?: readonly { readonly href: string; readonly text: string }[];

@@ -49,6 +49,32 @@ export interface Component {
   readonly behavior: Behavior;
 }
 
+/** One decoration an application can paint into a component's frame. */
+export interface DecorationEntry {
+  readonly slug: string;
+  readonly label: string;
+  /** One line on what it is and how it is made. */
+  readonly note: string;
+}
+
+/**
+ * The Effects section, as the exporter describes it.
+ *
+ * Decorations are not components and are not in the catalog: a component is
+ * something the library gives you, and a decoration is something you paint
+ * into one. They share a single gallery story, addressed by state, which is
+ * why one story and one height serve fifteen pages.
+ */
+export interface Effects {
+  /** The gallery story every decoration page runs. */
+  readonly story: string;
+  readonly height: number;
+  readonly windowTitle: string;
+  /** Where the decorations are implemented, for the source link. */
+  readonly source: string;
+  readonly decorations: readonly DecorationEntry[];
+}
+
 /** The site-only hero story, which is deliberately not a component. */
 export interface Hero {
   readonly slug: string;
@@ -110,6 +136,24 @@ export const build = buildJson as BuildInfo;
 export const components = catalogJson.components as readonly Component[];
 export const categories = catalogJson.categories as readonly string[];
 export const hero = catalogJson.hero as Hero;
+export const effects = catalogJson.effects as unknown as Effects;
+export const decorations = effects.decorations;
+
+export function decorationBySlug(slug: string): DecorationEntry | undefined {
+  return decorations.find((decoration) => decoration.slug === slug);
+}
+
+/** The decoration before this one, for prev/next links. */
+export function previousDecoration(slug: string): DecorationEntry | undefined {
+  const index = decorations.findIndex((decoration) => decoration.slug === slug);
+  return index > 0 ? decorations[index - 1] : undefined;
+}
+
+/** The decoration after this one, for prev/next links. */
+export function nextDecoration(slug: string): DecorationEntry | undefined {
+  const index = decorations.findIndex((decoration) => decoration.slug === slug);
+  return index >= 0 && index < decorations.length - 1 ? decorations[index + 1] : undefined;
+}
 
 /**
  * The file every snippet is cut from.

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import buildInfo from "../generated/build.json" with { type: "json" };
+import { redirects } from "../app/redirects.mjs";
 import { socialCardName } from "../app/route-path.mjs";
 
 
@@ -130,6 +131,15 @@ async function generateWithSsr(stageDir, galleryDir, ssrDir) {
     await writeFile(path.join(directory, "index.html"), html);
   }
 
+  // A URL someone bookmarked is not ours to break. These are not routes: no
+  // chrome, no React, and out of the sitemap, because a redirect is not a page
+  // and a search engine told otherwise indexes two of everything.
+  for (const { from, to } of redirects) {
+    const directory = path.join(stageDir, ...from.split("/").filter(Boolean));
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "index.html"), redirect(from, to));
+  }
+
   await writeFile(path.join(stageDir, "sitemap.xml"), sitemap(routes));
   await writeFile(path.join(stageDir, "robots.txt"), robots());
   await writeFile(path.join(stageDir, "404.html"), notFound(template, renderNotFound, preloads));
@@ -190,6 +200,33 @@ export const CARD = { width: 1_200, height: 630 };
  * came from, and writing the build date instead tells a crawler every page
  * changed every time anything did.
  */
+/**
+ * One moved page.
+ *
+ * The canonical link is for anything reading the site rather than browsing it;
+ * the refresh and the link are for a person, in that order, so that a browser
+ * with scripting disabled still has something to click.
+ */
+function redirect(from, to) {
+  const target = `${ORIGIN}${to}`;
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    `<link rel="canonical" href="${target}">`,
+    '<meta name="robots" content="noindex">',
+    `<meta http-equiv="refresh" content="0; url=${target}">`,
+    `<title>Moved to ${escapeHtml(to)}</title>`,
+    "</head>",
+    "<body>",
+    `<p>${escapeHtml(from)} is now <a href="${target}">${escapeHtml(to)}</a>.</p>`,
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
 function sitemap(routes) {
   const urls = routes
     .map((route) => `  <url><loc>${escapeHtml(`${ORIGIN}${route.path}`)}</loc></url>`)

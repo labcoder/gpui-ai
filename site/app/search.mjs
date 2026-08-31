@@ -42,21 +42,25 @@ const FIELDS = [
 const WHOLE_WORD = 2;
 
 /**
- * The searchable text of one component, by field.
+ * The searchable text of one record, by field.
  *
- * Built once per component rather than per keystroke: the strings never change
- * and lowercasing 34 records on every character typed is work for nothing.
+ * Built once per record rather than per keystroke: the strings never change
+ * and lowercasing fifty of them on every character typed is work for nothing.
+ *
+ * A record is a component or a decoration. A decoration has no type name and
+ * no events; those fields come back empty and score nothing, which is what
+ * should happen — someone typing `ToolCall` does not mean the halftone.
  */
-function haystack(component) {
+function haystack(record) {
   return {
-    api: component.api,
-    title: component.title,
-    compactLabel: component.compactLabel,
-    events: component.events.join(" "),
-    category: component.category,
-    summary: component.summary,
-    usage: component.usage,
-    prose: Object.values(component.behavior ?? {}).join(" "),
+    api: record.api,
+    title: record.title,
+    compactLabel: record.compactLabel,
+    events: (record.events ?? []).join(" "),
+    category: record.category,
+    summary: record.summary,
+    usage: record.usage,
+    prose: Object.values(record.behavior ?? {}).join(" "),
   };
 }
 
@@ -66,11 +70,11 @@ function haystack(component) {
  * Returned rather than held in a module variable so a test can index a handful
  * of made-up components without the real catalog being involved.
  */
-export function buildIndex(components) {
-  return components.map((component) => {
-    const fields = haystack(component);
+export function buildIndex(records) {
+  return records.map((record) => {
+    const fields = haystack(record);
     return {
-      component,
+      component: record,
       fields: Object.fromEntries(
         Object.entries(fields).map(([name, text]) => [name, String(text ?? "").toLowerCase()]),
       ),

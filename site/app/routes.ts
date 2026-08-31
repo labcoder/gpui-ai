@@ -1,4 +1,4 @@
-import { components } from "./data";
+import { components, decorations } from "./data";
 import { docs } from "./docs.mjs";
 import { normalizeRoutePath } from "./route-path.mjs";
 
@@ -13,14 +13,17 @@ export interface Route {
   /** Which page component renders it. */
   readonly kind:
     | "home"
+    | "start"
     | "index"
     | "component"
-    | "extensions"
+    | "effects"
+    | "decoration"
+    | "showcase"
     | "themes"
-    | "docs"
-    | "doc"
+    | "guides"
+    | "guide"
     | "missing";
-  /** Present for `kind: "component"` and `kind: "doc"`. */
+  /** Present for `kind: "component"`, `"decoration"`, and `"guide"`. */
   readonly slug?: string;
 }
 
@@ -40,17 +43,40 @@ export const routes: readonly Route[] = [
     kind: "home",
   },
   {
+    path: "/start/",
+    title: "Start · gpui-ai",
+    description:
+      "What you need, how to add the dependency, and a complete window with a component in it.",
+    kind: "start",
+  },
+  {
     path: "/components/",
     title: "Components · gpui-ai",
     description: `All ${components.length} gpui-ai components, grouped by what they are for.`,
     kind: "index",
   },
   {
-    path: "/extensions/",
-    title: "Extensions · gpui-ai",
+    path: "/effects/",
+    title: "Effects · gpui-ai",
     description:
-      "The points where an application changes what gpui-ai looks like: a decoration slot on every framed component, and a motion channel to drive it.",
-    kind: "extensions",
+      "What an application paints into a component rather than around it: a decoration slot on every framed component, and a motion channel to drive it.",
+    kind: "effects",
+  },
+  ...decorations.map(
+    (decoration): Route => ({
+      path: `/effects/${decoration.slug}/`,
+      title: `${decoration.label} · Effects · gpui-ai`,
+      description: decoration.note,
+      kind: "decoration",
+      slug: decoration.slug,
+    }),
+  ),
+  {
+    path: "/showcase/",
+    title: "Showcase · gpui-ai",
+    description:
+      "Whole compositions rather than parts: a conversation, a docked workspace, and an instrument for the motion policy.",
+    kind: "showcase",
   },
   {
     path: "/themes/",
@@ -59,17 +85,18 @@ export const routes: readonly Route[] = [
     kind: "themes",
   },
   {
-    path: "/docs/",
-    title: "Documentation · gpui-ai",
-    description: "Installing gpui-ai, theming it, and who owns what between it and your application.",
-    kind: "docs",
+    path: "/guides/",
+    title: "Guides · gpui-ai",
+    description:
+      "Theming gpui-ai, who owns what between it and your application, and what a browser demo cannot prove.",
+    kind: "guides",
   },
   ...docs.map(
     (doc): Route => ({
-      path: `/docs/${doc.slug}/`,
+      path: `/guides/${doc.slug}/`,
       title: `${doc.title} · gpui-ai`,
       description: doc.summary,
-      kind: "doc",
+      kind: "guide",
       slug: doc.slug,
     }),
   ),

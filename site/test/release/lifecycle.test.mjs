@@ -685,7 +685,9 @@ workflow("mobile drawer traps focus, survives demo startup, and restores focus",
     focused: "Close",
     inertSiblings: true,
     contentUnreachable: true,
-    current: 1,
+    // Two: the section this page belongs to among the destinations, and the
+    // page itself among the components. The drawer carries the whole site now.
+    current: 2,
   });
 
   // A modal is supposed to cycle: Shift+Tab from the first control lands on
@@ -1494,10 +1496,12 @@ workflow("skip-link focus and mobile reference visibility", async ({ cdp, errors
       const install = document.querySelector('.home-install').getBoundingClientRect();
       const demo = document.querySelector('.home .demo').getBoundingClientRect();
       return { left: install.left - demo.left, right: install.right - demo.right,
-        gap: demo.top - install.bottom, width: install.width };
+        gap: install.top - demo.bottom, width: install.width };
     })()`);
     assert.ok(spacing.width > 0 && Math.abs(spacing.left) <= 1 && Math.abs(spacing.right) <= 1,
       `install and demo align at ${width}px: ${JSON.stringify(spacing)}`);
+    // The demo leads now and install follows it, so the gap is measured the
+    // other way round. That they never touch is the part that matters.
     assert.ok(spacing.gap > 0, `install and demo have positive separation at ${width}px`);
   }
   // The skip link is the first thing Tab reaches, and it moves focus rather

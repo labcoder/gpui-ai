@@ -9,6 +9,7 @@ import {
 } from "react";
 import { narrow } from "./CatalogPage";
 import { build, themeGroups } from "./data";
+import { destinationFor, destinations } from "./nav.mjs";
 import { href } from "./links";
 import type { Route } from "./routes";
 import { SYSTEM, paint, useTheme } from "./theme";
@@ -148,6 +149,7 @@ export function Shell({
         onChoice={setChoice}
         drawerOpen={drawerOpen}
         onDrawer={setDrawerOpen}
+        route={route}
       />
 
       <div className="layout">
@@ -181,16 +183,19 @@ export function Shell({
 }
 
 function Masthead({
+  route,
   choice,
   onChoice,
   drawerOpen,
   onDrawer,
 }: {
+  readonly route: Route;
   readonly choice: string;
   readonly onChoice: (choice: string) => void;
   readonly drawerOpen: boolean;
   readonly onDrawer: (open: boolean) => void;
 }) {
+  const current = destinationFor(route.path);
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -202,16 +207,21 @@ function Masthead({
           aria-controls="site-nav-panel"
           onClick={() => onDrawer(!drawerOpen)}
         >
-          Index
+          Menu
         </button>
         <a className="wordmark" href={href("/")}>
           gpui-ai
         </a>
         <nav className="masthead-nav" aria-label="Site">
-          <a href={href("/components/")}>Components</a>
-          <a href={href("/extensions/")}>Extensions</a>
-          <a href={href("/docs/")}>Docs</a>
-          <a href={href("/themes/")}>Themes</a>
+          {destinations.map((destination) => (
+            <a
+              key={destination.path}
+              href={href(destination.path)}
+              aria-current={current?.path === destination.path ? "page" : undefined}
+            >
+              {destination.label}
+            </a>
+          ))}
         </nav>
         <div className="theme-controls">
           <ModeSwitch choice={choice} onChoice={onChoice} />
@@ -400,6 +410,8 @@ function Drawer({
     };
   }, [open, onClose]);
 
+  const current = destinationFor(route.path);
+
   return (
     <div
       id="site-nav-panel"
@@ -417,11 +429,28 @@ function Drawer({
       <div className="nav-backdrop" data-nav-close="" aria-hidden="true" onClick={onClose} />
       <div className="nav-drawer">
         <div className="nav-drawer-head">
-          <h2 id="site-nav-title">Components</h2>
+          <h2 id="site-nav-title">Menu</h2>
           <button type="button" data-nav-close="" ref={closeButton} onClick={onClose}>
             Close
           </button>
         </div>
+        {/* The whole site, because below the rail's breakpoint this is the
+            only navigation there is. It used to hold the component catalogue
+            and nothing else, which left the guides, the effects and the themes
+            with no link anywhere on a narrow screen. */}
+        <nav className="drawer-destinations" aria-label="Site">
+          {destinations.map((destination) => (
+            <a
+              key={destination.path}
+              href={href(destination.path)}
+              aria-current={current?.path === destination.path ? "page" : undefined}
+            >
+              <strong>{destination.label}</strong>
+              <span>{destination.blurb}</span>
+            </a>
+          ))}
+        </nav>
+        <h3 className="drawer-section">Components</h3>
         <ComponentNav route={route} idPrefix="drawer" />
       </div>
     </div>
@@ -450,13 +479,13 @@ function ComponentNav({ route, idPrefix }: { readonly route: Route; readonly idP
   return (
     <div className="component-nav">
       <div className="nav-search">
-        <label htmlFor={searchId}>Find a component</label>
+        <label htmlFor={searchId}>Find a component or decoration</label>
         <input
           id={searchId}
           type="search"
           data-site-search=""
           value={query}
-          placeholder="chat, table, approval…"
+          placeholder="chat, table, approval, halftone…"
           onChange={(event) => setQuery(event.target.value)}
         />
         {/* Only worth telling someone who has a keyboard to press it with, and
@@ -467,21 +496,23 @@ function ComponentNav({ route, idPrefix }: { readonly route: Route; readonly idP
         </kbd>
         <output htmlFor={searchId} aria-live="polite">{`${shown} shown`}</output>
       </div>
-      <nav aria-label="All components">
+      <nav aria-label="Components and decorations">
         {groups.map(([category, entries]) => (
           <section key={category}>
             {grouped ? <h3>{category}</h3> : null}
             <ul>
-              {entries.map((component) => {
-                const current = route.kind === "component" && route.slug === component.slug;
+              {entries.map((entry) => {
+                const current =
+                  (entry.kind === "component" ? route.kind === "component" : route.kind === "decoration") &&
+                  route.slug === entry.slug;
                 return (
-                  <li key={component.slug}>
+                  <li key={entry.path}>
                     <a
                       className="nav-component-link"
-                      href={href(`/components/${component.slug}/`)}
+                      href={href(entry.path)}
                       {...(current ? { "aria-current": "page" as const } : {})}
                     >
-                      {component.compactLabel}
+                      {entry.label}
                     </a>
                   </li>
                 );

@@ -28,12 +28,32 @@ const installSnippet = highlightFile.extras.install;
 const BASE = "/gpui-ai";
 // Written out rather than imported: routes.ts and docs.ts are TypeScript this
 // test cannot read, and stating the pages independently is the point.
-const docSlugs = [
-  "getting-started",
-  "theming",
-  "ownership-and-events",
-  "accessibility-and-motion",
-  "browser-demos",
+const docSlugs = ["theming", "ownership-and-events", "accessibility-and-motion", "browser-demos"];
+/** The decorations, stated here rather than read, for the same reason. */
+const decorationSlugs = [
+  "photo",
+  "frosted",
+  "glass",
+  "tint",
+  "beam",
+  "metal",
+  "scrim",
+  "dither",
+  "pop-art",
+  "engrave",
+  "halftone",
+  "pulse",
+  "veil",
+];
+/** The site's destinations, which every page must offer a way to reach. */
+const DESTINATIONS = [
+  "/start/",
+  "/components/",
+  "/effects/",
+  "/showcase/",
+  "/guides/",
+  "/themes/",
+  "/api/",
 ];
 const ROUTES = ["/", "/components/", "/themes/", `/components/${components[0].slug}/`];
 
@@ -72,7 +92,14 @@ test("the catalog states the count and renders one card per component", async ()
   }
 
   const cards = html.match(/data-component="/g) ?? [];
-  assert.equal(cards.length, components.length, "one card each, no duplicates");
+  // The decorations have cards here too, after the component categories: a
+  // reader looking for "that photo thing" looks on this page, and the search
+  // used to answer that there was no such thing.
+  assert.equal(
+    cards.length,
+    components.length + decorationSlugs.length,
+    "one card each, no duplicates",
+  );
 });
 
 test("the catalog filter is labelled and reports a live result count", async () => {
@@ -84,9 +111,10 @@ test("the catalog filter is labelled and reports a live result count", async () 
   assert.match(html, /<label for="component-filter">Search components<\/label>/);
   assert.match(html, /id="component-filter"/);
   assert.match(html, /aria-live="polite"/);
+  const total = components.length + decorationSlugs.length;
   assert.match(
     html,
-    new RegExp(`${components.length} of ${components.length}`),
+    new RegExp(`${total} of ${total}`),
     "the pre-rendered count must match the unfiltered catalog",
   );
 });
@@ -332,16 +360,25 @@ test("the home page publishes what this build is and where it came from", async 
   assert.match(html, new RegExp(`href="${BASE}/api/"`), "the API docs are not linked");
 });
 
-test("the home page puts installing it above the demo", async () => {
+test("a visitor who has decided already can reach installing it without scrolling", async () => {
   const html = await page("/");
 
-  // The hero is a 706px demo. A visitor who has already decided to try this
-  // should not have to scroll past it to find the two lines that install it.
-  const install = html.indexOf('id="install"');
+  // This used to require the install section itself to sit above the demo: the
+  // hero is a 706px frame, and a visitor who has already decided to try this
+  // should not scroll past it to find the two lines that install it.
+  //
+  // The constraint holds; what satisfies it changed. The page now leads with
+  // the library running, because that is the argument and a Cargo.toml block
+  // is not, and the short path to installing is a link rather than a section —
+  // in the masthead and again in the doors, both above the frame.
   const demo = html.indexOf("data-specimen-frame");
-  assert.ok(install > 0, "the home page has no install section");
+  const install = html.indexOf('id="install"');
   assert.ok(demo > 0, "the home page has no demo");
-  assert.ok(install < demo, `install is at ${install}, below the demo at ${demo}`);
+  assert.ok(install > 0, "the home page has no install section");
+
+  const link = html.indexOf(`href="${BASE}/start/"`);
+  assert.ok(link > 0, "the home page does not link Start");
+  assert.ok(link < demo, `Start is at ${link}, below the demo at ${demo}`);
 });
 
 test("the README links every component, and every site link it makes resolves", async () => {
@@ -544,11 +581,14 @@ test("the sitemap lists every page and nothing else", async () => {
   // site is, instead of the same list compared against itself.
   const expected = [
     "/",
+    "/start/",
     "/components/",
-    "/extensions/",
+    "/effects/",
+    ...decorationSlugs.map((slug) => `/effects/${slug}/`),
+    "/showcase/",
     "/themes/",
-    "/docs/",
-    ...docSlugs.map((slug) => `/docs/${slug}/`),
+    "/guides/",
+    ...docSlugs.map((slug) => `/guides/${slug}/`),
     ...components.map((component) => `/components/${component.slug}/`),
   ].map((route) => `${origin}${route}`);
 
@@ -588,23 +628,23 @@ test("the 404 page is the site's own, and tells crawlers to forget it", async ()
 });
 
 test("every documentation page is reachable from the index and from its neighbours", async () => {
-  const index = await page("/docs/");
+  const index = await page("/guides/");
   for (const slug of docSlugs) {
-    assert.match(index, new RegExp(`href="${BASE}/docs/${slug}/"`), `${slug} is not on the index`);
+    assert.match(index, new RegExp(`href="${BASE}/guides/${slug}/"`), `${slug} is not on the index`);
   }
 
   for (const [position, slug] of docSlugs.entries()) {
-    const html = await page(`/docs/${slug}/`);
+    const html = await page(`/guides/${slug}/`);
     const previous = docSlugs[position - 1];
     const next = docSlugs[position + 1];
 
     if (previous) {
-      assert.match(html, new RegExp(`href="${BASE}/docs/${previous}/" rel="prev"`));
+      assert.match(html, new RegExp(`href="${BASE}/guides/${previous}/" rel="prev"`));
     } else {
       assert.doesNotMatch(html, /rel="prev"/, "the first page has nothing before it");
     }
     if (next) {
-      assert.match(html, new RegExp(`href="${BASE}/docs/${next}/" rel="next"`));
+      assert.match(html, new RegExp(`href="${BASE}/guides/${next}/" rel="next"`));
     } else {
       assert.doesNotMatch(html, /rel="next"/, "the last page has nothing after it");
     }
@@ -613,7 +653,7 @@ test("every documentation page is reachable from the index and from its neighbou
 
 test("the documentation is pre-rendered prose, not an empty shell", async () => {
   for (const slug of docSlugs) {
-    const html = await page(`/docs/${slug}/`);
+    const html = await page(`/guides/${slug}/`);
     const body = /<article class="doc">([\s\S]*?)<\/article>/.exec(html)?.[1] ?? "";
     const words = body
       .replace(/<[^>]+>/g, " ")
@@ -623,15 +663,18 @@ test("the documentation is pre-rendered prose, not an empty shell", async () => 
     // A page that hydrates into its content is a page a crawler and a reader
     // without JavaScript both get nothing from. These are pre-rendered like
     // every other page, so the words are in the HTML.
-    assert.ok(words > 180, `/docs/${slug}/ pre-renders only ${words} words`);
-    assert.match(html, /<h2 id="/, `/docs/${slug}/ has no sections to link to`);
+    assert.ok(words > 180, `/guides/${slug}/ pre-renders only ${words} words`);
+    assert.match(html, /<h2 id="/, `/guides/${slug}/ has no sections to link to`);
   }
 });
 
 test("every documentation sample is real, highlighted code", async () => {
   const shown = new Set();
-  for (const slug of docSlugs) {
-    const html = await page(`/docs/${slug}/`);
+  // Start carries the samples that used to be the first guide, so it is
+  // counted with them: the question is whether this prose shows real code,
+  // not which URL it happens to sit at.
+  for (const slug of [...docSlugs.map((slug) => `/guides/${slug}/`), "/start/"]) {
+    const html = await page(slug);
     for (const match of html.matchAll(/<pre class="code">/g)) shown.add(`${slug}:${match.index}`);
   }
   assert.ok(shown.size >= 6, `only ${shown.size} code blocks across the documentation`);
@@ -662,23 +705,85 @@ test("the documentation counts what the catalog actually holds", async () => {
   // reads as in the source.
   const text = (html) => html.replaceAll("<!-- -->", "");
 
-  const gettingStarted = text(await page("/docs/getting-started/"));
+  const gettingStarted = text(await page("/start/"));
   assert.match(gettingStarted, new RegExp(`All ${components.length} components`));
 
-  const theming = text(await page("/docs/theming/"));
+  const theming = text(await page("/guides/theming/"));
   const themeCount = themeFile.groups.reduce((total, group) => total + group.themes.length, 0);
   assert.match(theming, new RegExp(`${themeCount} bundled themes`));
   assert.match(theming, new RegExp(`${themeCount} themes on the`));
 });
 
-test("the documentation is linked from the masthead of every page", async () => {
-  for (const route of ROUTES) {
+/**
+ * Every destination reachable from every page, at any width.
+ *
+ * This is the regression this section of the site exists to prevent. The
+ * masthead was hidden below 60rem and the drawer that replaced it carried the
+ * component catalogue and nothing else, so on a phone the guides, the effects
+ * and the themes had no link anywhere — the routes answered and nothing
+ * pointed at them.
+ *
+ * Both surfaces are pre-rendered, so both are in the markup and this can check
+ * them without a browser: the masthead nav for a wide window, the drawer for a
+ * narrow one, and the same list in both.
+ */
+test("every destination is reachable from every page, in the masthead and the drawer", async () => {
+  for (const route of [...ROUTES, "/effects/", "/guides/", `/effects/${decorationSlugs[0]}/`]) {
     const html = await page(route);
+    const masthead = html.match(/<nav class="masthead-nav"[^>]*>(.*?)<\/nav>/s)?.[1];
+    const drawer = html.match(/<nav class="drawer-destinations"[^>]*>(.*?)<\/nav>/s)?.[1];
+    assert.ok(masthead, `${route} has no masthead navigation`);
+    assert.ok(drawer, `${route} has no drawer navigation`);
+
+    for (const destination of DESTINATIONS) {
+      const link = new RegExp(`href="${BASE}${destination}"`);
+      assert.match(masthead, link, `${route}'s masthead does not link ${destination}`);
+      assert.match(drawer, link, `${route}'s drawer does not link ${destination}`);
+    }
+  }
+});
+
+/**
+ * The decorations, findable by browsing rather than by knowing the URL.
+ *
+ * All thirteen used to live behind one page called Extensions, absent from the
+ * catalogue, the home page and the search index.
+ */
+test("every decoration has a page, and the section and the rail both link it", async () => {
+  const section = await page("/effects/");
+  const catalog = await page("/components/");
+  for (const slug of decorationSlugs) {
+    const link = new RegExp(`href="${BASE}/effects/${slug}/"`);
+    assert.match(section, link, `${slug} is not listed on the effects page`);
+    assert.match(catalog, link, `${slug} is not listed in the catalogue`);
+    const html = await page(`/effects/${slug}/`);
+    assert.match(html, /<h1>/, `${slug} renders no heading`);
     assert.match(
       html,
-      new RegExp(`<a href="${BASE}/docs/">Docs</a>`),
-      `${route} does not link the documentation`,
+      new RegExp(`href="${BASE}/effects/"`),
+      `${slug} does not link back to the section`,
     );
+  }
+});
+
+/** A URL someone bookmarked still lands, and says where it went. */
+test("the pages that moved leave a redirect behind", async () => {
+  const { outDir } = await site();
+  const origin = buildInfo.homepage.replace(/\/$/, "");
+  const moved = [
+    ["/extensions/", "/effects/"],
+    ["/docs/", "/guides/"],
+    ["/docs/getting-started/", "/start/"],
+    ["/docs/theming/", "/guides/theming/"],
+  ];
+  for (const [from, to] of moved) {
+    const html = await readFile(
+      path.join(outDir, ...from.split("/").filter(Boolean), "index.html"),
+      "utf8",
+    );
+    assert.match(html, new RegExp(`<link rel="canonical" href="${origin}${to}">`), `${from}`);
+    assert.match(html, /content="noindex"/, `${from} would be indexed twice`);
+    assert.match(html, new RegExp(`url=${origin}${to}`), `${from} does not refresh`);
   }
 });
 
@@ -731,12 +836,20 @@ test("route code loads per page instead of riding in every page's bundle", async
   // the states the prompt bar and command search now offer (0.6.0), +2,187
   // bytes for two more components (0.7.0) — the form controls and the question
   // flow — and +3,420 bytes for the Extensions section, which is a route and a
-  // page rather than a catalog row. Story code leaking into the entry is what
-  // the probe above catches; this number catches everything else growing
-  // unreviewed.
+  // page rather than a catalog row.
+  //
+  // +11,772 bytes for the site's restructure (0.8.0), measured and split:
+  // 2,839 of it is the effects data itself, thirteen decorations and the line
+  // that describes each — the same kind of catalog row the components already
+  // carry, and it has to be here because the rail and the search index list
+  // decorations beside components on every page. The rest is four new routes
+  // (Start, Effects, a decoration page, Showcase), the destination list both
+  // navigation surfaces render, and the searchable layer over the two kinds.
+  // Story code leaking into the entry is what the probe above catches; this
+  // number catches everything else growing unreviewed.
   assert.ok(
-    entry.length <= 336_921,
-    `the entry chunk is ${entry.length} bytes; the reviewed cap is 336,921`,
+    entry.length <= 348_693,
+    `the entry chunk is ${entry.length} bytes; the reviewed cap is 348,693`,
   );
 
   // The source-level guard the split lives or dies on.

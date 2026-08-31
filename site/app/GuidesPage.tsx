@@ -6,7 +6,7 @@ import { docBySlug, docs } from "./docs.mjs";
 import { href } from "./links";
 
 /**
- * The five documentation pages, and the index over them.
+ * The guide pages, the index over them, and the body `/start/` renders.
  *
  * Prose, written here rather than generated, because it is the one part of
  * this site that is an argument rather than a description: what the library
@@ -19,7 +19,7 @@ import { href } from "./links";
  * `site/content/samples/`, highlighted by the same tokeniser the component
  * snippets go through, so it re-skins with the page and can be read on its own.
  */
-export function DocsPage({ slug }: { readonly slug: string }) {
+export function GuidePage({ slug }: { readonly slug: string }) {
   const doc = docBySlug(slug);
   if (!doc) return null;
   const index = docs.findIndex((entry) => entry.slug === slug);
@@ -28,7 +28,7 @@ export function DocsPage({ slug }: { readonly slug: string }) {
 
   return (
     <article className="doc">
-      <p className="eyebrow">Documentation</p>
+      <p className="eyebrow">Guide</p>
       <h1>{doc.title}</h1>
       <p className="lede">{doc.summary}</p>
 
@@ -36,7 +36,7 @@ export function DocsPage({ slug }: { readonly slug: string }) {
 
       <nav className="doc-neighbours" aria-label="Other documentation">
         {previous ? (
-          <a href={href(`/docs/${previous.slug}/`)} rel="prev">
+          <a href={href(`/guides/${previous.slug}/`)} rel="prev">
             <span>Previous</span>
             <strong>{previous.title}</strong>
           </a>
@@ -44,7 +44,7 @@ export function DocsPage({ slug }: { readonly slug: string }) {
           <span />
         )}
         {next ? (
-          <a href={href(`/docs/${next.slug}/`)} rel="next">
+          <a href={href(`/guides/${next.slug}/`)} rel="next">
             <span>Next</span>
             <strong>{next.title}</strong>
           </a>
@@ -54,19 +54,20 @@ export function DocsPage({ slug }: { readonly slug: string }) {
   );
 }
 
-/** Every documentation page, listed in reading order. */
-export function DocsIndex() {
+/** Every guide, listed in reading order. */
+export function GuidesIndex() {
   return (
     <div className="shell">
-      <h1>Documentation</h1>
+      <h1>Guides</h1>
       <p className="lede">
-        Five pages: what the library needs, how it is themed, who owns what, and the two things
-        that are true of every component in it.
+        How the library is themed, who owns what between it and your application, and the two
+        things that are true of every component in it. Installing it is over at{" "}
+        <a href={href("/start/")}>Start</a>.
       </p>
 
-      <nav className="doc-index" aria-label="Documentation">
+      <nav className="doc-index" aria-label="Guides">
         {docs.map((doc) => (
-          <a key={doc.slug} href={href(`/docs/${doc.slug}/`)}>
+          <a key={doc.slug} href={href(`/guides/${doc.slug}/`)}>
             <strong>{doc.title}</strong>
             <span>{doc.summary}</span>
           </a>
@@ -78,8 +79,6 @@ export function DocsIndex() {
 
 function Body({ slug }: { readonly slug: string }) {
   switch (slug) {
-    case "getting-started":
-      return <GettingStarted />;
     case "theming":
       return <Theming />;
     case "ownership-and-events":
@@ -121,7 +120,15 @@ function Section({
   );
 }
 
-function GettingStarted() {
+/**
+ * What `/start/` renders.
+ *
+ * It lives here because it is the same kind of writing as the guides and reads
+ * from the same generated numbers; it is exported rather than routed here
+ * because it answers a different question, and a visitor looking for "how do I
+ * get it" should not have to find a section called Docs first.
+ */
+export function StartBody() {
   const gpui = build.upstream.find((entry) => entry.id === "gpui");
   const component = build.upstream.find((entry) => entry.id === "gpui-component");
 
@@ -182,7 +189,7 @@ function GettingStarted() {
         <p>
           <a href={href("/components/")}>All {components.length} components</a>, each with its
           demo, its events, and the exact code its story is cut from. Then{" "}
-          <a href={href("/docs/ownership-and-events/")}>Ownership and events</a>, which is the one
+          <a href={href("/guides/ownership-and-events/")}>Ownership and events</a>, which is the one
           idea the whole library is arranged around.
         </p>
       </Section>
@@ -315,7 +322,7 @@ function Accessibility() {
         <p>
           The demos on this site honour the setting too, and any of them can be pinned either way
           with <code>motion=reduced</code> or <code>motion=full</code> — see{" "}
-          <a href={href("/docs/browser-demos/")}>Browser demo limits</a>.
+          <a href={href("/guides/browser-demos/")}>Browser demo limits</a>.
         </p>
       </Section>
 
@@ -329,7 +336,7 @@ function Accessibility() {
         </p>
         <p>
           One caveat, and it is the browser&rsquo;s:{" "}
-          <a href={href("/docs/browser-demos/")}>keyboard action dispatch is native-only</a> on the
+          <a href={href("/guides/browser-demos/")}>keyboard action dispatch is native-only</a> on the
           pinned GPUI revision under WebAssembly. Pointer activation works in both.
         </p>
       </Section>

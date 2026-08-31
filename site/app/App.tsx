@@ -1,11 +1,14 @@
-import { ExtensionsPage } from "./ExtensionsPage";
 import "./site.css";
 import { CatalogPage } from "./CatalogPage";
 import { ComponentPage } from "./ComponentPage";
-import { DocsIndex, DocsPage } from "./DocsPage";
+import { DecorationPage } from "./DecorationPage";
+import { EffectsPage } from "./EffectsPage";
+import { GuidePage, GuidesIndex } from "./GuidesPage";
 import { HomePage } from "./HomePage";
 import { MissingPage } from "./MissingPage";
 import { Shell } from "./Shell";
+import { ShowcasePage } from "./ShowcasePage";
+import { StartPage } from "./StartPage";
 import { ThemesPage } from "./ThemesPage";
 import type { Route } from "./routes";
 
@@ -22,18 +25,24 @@ function Page({ route }: { readonly route: Route }) {
   switch (route.kind) {
     case "home":
       return <HomePage />;
+    case "start":
+      return <StartPage />;
     case "index":
       return <CatalogPage />;
-    case "extensions":
-      return <ExtensionsPage />;
-    case "themes":
-      return <ThemesPage />;
     case "component":
       return <ComponentPage slug={route.slug ?? ""} />;
-    case "docs":
-      return <DocsIndex />;
-    case "doc":
-      return <DocsPage slug={route.slug ?? ""} />;
+    case "effects":
+      return <EffectsPage />;
+    case "decoration":
+      return <DecorationPage slug={route.slug ?? ""} />;
+    case "showcase":
+      return <ShowcasePage />;
+    case "themes":
+      return <ThemesPage />;
+    case "guides":
+      return <GuidesIndex />;
+    case "guide":
+      return <GuidePage slug={route.slug ?? ""} />;
     case "missing":
       return <MissingPage />;
   }
