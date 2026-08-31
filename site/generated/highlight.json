@@ -6018,6 +6018,29 @@
         ],
         [
           [
+            "// A header, a body, and a bottom that says what is in it. Without the",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// third, a frame taller than its rows reads as rows that were cut off -",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "// and a table is the one surface where that guess is worth ruling out.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "table.set_footer(records_story_summary(records.content()), cx);"
+          ]
+        ],
+        [
+          [
             "table.set_records(records, window, cx);"
           ]
         ],

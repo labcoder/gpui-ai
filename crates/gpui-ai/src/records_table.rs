@@ -542,6 +542,33 @@ pub(crate) fn escape_markdown_text(value: &str) -> String {
     escaped
 }
 
+/// The strip along the bottom of a table.
+///
+/// Outside the table's own border rather than inside it: the border belongs to
+/// the scrolling body, and a summary that scrolled away with the rows would be
+/// a row. Sitting under it it reads as the third part of the table - and gives
+/// a frame taller than its rows a bottom that means something.
+///
+/// Inset to the same column as the first cell above it, so the count sits
+/// under what it counts.
+fn records_table_footer(
+    id: &SharedString,
+    footer: SharedString,
+    cx: &App,
+) -> impl gpui::IntoElement {
+    let tokens = cx.theme().semantic_tokens();
+    let debug_id = id.clone();
+    div()
+        .debug_selector(move || format!("records-table-footer-{debug_id}"))
+        .w_full()
+        .flex_none()
+        .flex()
+        .items_center()
+        .pt(tokens.spacing.xs)
+        .px(tokens.spacing.sm)
+        .child(crate::surface::hint(footer, cx))
+}
+
 fn records_table_frame(id: SharedString, label: SharedString) -> Stateful<Div> {
     let debug_id = id.clone();
     div()
@@ -629,6 +656,14 @@ pub struct RecordsTable {
     style: gpui::StyleRefinement,
     id: SharedString,
     label: SharedString,
+    /// A summary strip along the bottom of the frame, when the application
+    /// gives one.
+    ///
+    /// A table's third part, after its header and its body. It is what stops a
+    /// frame taller than its rows from reading as rows that have been cut off:
+    /// with a bottom that says something - a count, a total - the space above
+    /// it is a body with room left in it, which is what it is.
+    footer: Option<SharedString>,
     columns: Arc<[RecordColumn]>,
     records: Progressive<Arc<[RecordRow]>>,
     /// Rebuilt with `records`; never read against any other snapshot.
@@ -685,6 +720,7 @@ impl RecordsTable {
             style: gpui::StyleRefinement::default(),
             id,
             label: label.into(),
+            footer: None,
             columns: Arc::from([]),
             records: Progressive::pending(Arc::from([])),
             rows_by_id: StableIdIndex::default(),
@@ -763,6 +799,25 @@ impl RecordsTable {
 
     pub(crate) fn animating_row_count(&self, cx: &App) -> usize {
         self.table.read(cx).delegate().row_reorder.animating_len()
+    }
+
+    /// Sets the summary strip along the bottom of the table, or clears it.
+    ///
+    /// Controlled like every other input here: the application owns the text,
+    /// and the table renders whatever it is given. A row count is the usual
+    /// one; a total or a filter summary is as good.
+    ///
+    /// ```
+    /// # use gpui_ai::records_table::RecordsTable;
+    /// # fn example(table: &mut RecordsTable, cx: &mut gpui::Context<RecordsTable>) {
+    /// table.set_footer(Some("4 suppliers".into()), cx);
+    /// # }
+    /// ```
+    pub fn set_footer(&mut self, footer: Option<SharedString>, cx: &mut Context<Self>) {
+        if self.footer != footer {
+            self.footer = footer;
+            cx.notify();
+        }
     }
 
     /// Replaces the controlled column snapshot without rebuilding table state.
@@ -1314,6 +1369,13 @@ impl Render for RecordsTable {
             .flex_col()
             .min_h_0()
             .key_context(RECORDS_TABLE_CONTEXT)
+            // The component's own ink. Everything inside the grid is drawn by
+            // the table, which colours itself, so nothing here needed saying
+            // until the footer put the crate's own text in this frame - and
+            // inherited GPUI's default, which is white, and vanished against
+            // the surface. A component sets the ink it draws in rather than
+            // trusting whatever it was dropped into.
+            .text_color(cx.theme().foreground)
             .border_1()
             .border_color(cx.theme().transparent)
             .track_focus(&self.table.focus_handle(cx))
@@ -1321,18 +1383,29 @@ impl Render for RecordsTable {
             .on_action(cx.listener(Self::activate_selected))
             .when_some(inline_status, |this, status| this.child(status))
             .child(
-                // Shrink to fit, never grow to fill. Upstream pads a striped
-                // table with empty rows to cover whatever space is left over,
-                // so a table stretched to a container taller than its rows
-                // grows a band of blank stripes with the last one clipped by
-                // the edge - which reads as rows that are there and cannot be
-                // reached. Four rows now end after four rows, and a hundred
-                // still shrink into the space and scroll.
+                // Upstream pads a striped table with empty rows to cover
+                // whatever space is left over, so a table stretched to a
+                // container taller than its rows grows a band of blank stripes
+                // with the last one clipped by the edge - rows that appear to
+                // be there and cannot be reached. Unstriped, the leftover
+                // space is plainly leftover space, and the footer below says
+                // where the body ends.
                 div()
                     .flex_1()
                     .min_h_0()
                     .child(DataTable::new(&self.table).stripe(false).bordered(true)),
             )
+            .when_some(self.footer.clone(), |frame, footer| {
+                // Painted after the grid, not merely placed below it.
+                // Upstream draws the grid's horizontal bar in an overlay that
+                // hangs past the bottom of the box the grid was given, and a
+                // strip laid out underneath is drawn over and never seen. A
+                // deferred child keeps its place in the layout and paints last,
+                // which is the whole of what this needs.
+                frame.child(
+                    gpui::deferred(records_table_footer(&self.id, footer, cx)).with_priority(1),
+                )
+            })
             .refine_style(&self.style)
     }
 }

@@ -76,6 +76,66 @@ fn missing_first_column_value_names_the_synthetic_activation_cell() {
     assert_eq!(cell_node.value(), Some("Review Pistachio proposal"));
 }
 
+/// A table with a footer draws one, below the rows and inside the frame.
+///
+/// The third part of a table, and the reason a frame taller than its rows
+/// stops reading as rows that were cut off: the space above a bottom that says
+/// something is a body with room left in it. Asserted by position rather than
+/// existence, because a footer drawn above the rows would be a header.
+#[gpui::test]
+fn a_footer_sits_below_the_rows(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("bottom", "Bottom", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(640.), px(210.)));
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+            records.set_records(
+                Progressive::complete(Arc::from([RecordRow::new("aurora", "Aurora Scoops")])),
+                window,
+                cx,
+            );
+        });
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    assert!(
+        cx.debug_bounds("records-table-footer-bottom").is_none(),
+        "a table given no footer draws none"
+    );
+
+    cx.update(|_, cx| {
+        records.update(cx, |records, cx| {
+            records.set_footer(Some("1 supplier".into()), cx);
+        });
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let frame = cx
+        .debug_bounds("records-table-bottom")
+        .expect("the table renders");
+    let footer = cx
+        .debug_bounds("records-table-footer-bottom")
+        .expect("the footer renders");
+    assert!(
+        footer.size.height > px(0.),
+        "the footer has a height: {footer:?}"
+    );
+    assert!(
+        footer.top() > frame.top(),
+        "the footer is at the bottom of the table, not the top: footer {footer:?}, frame {frame:?}"
+    );
+    assert!(
+        footer.bottom() <= frame.bottom(),
+        "the footer is inside the frame: footer {footer:?}, frame {frame:?}"
+    );
+}
+
 #[gpui::test]
 fn visible_row_reorder_state_is_bounded_and_reduced_motion_snaps(cx: &mut TestAppContext) {
     cx.update(crate::init);

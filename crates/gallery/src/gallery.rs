@@ -2565,9 +2565,25 @@ fn configured_records_table(
     // snippet:start(records-table)
     let mut table = RecordsTable::new(id, label, window, cx);
     table.set_columns(records_story_columns(), window, cx);
+    // A header, a body, and a bottom that says what is in it. Without the
+    // third, a frame taller than its rows reads as rows that were cut off -
+    // and a table is the one surface where that guess is worth ruling out.
+    table.set_footer(records_story_summary(records.content()), cx);
     table.set_records(records, window, cx);
     table
     // snippet:end
+}
+
+/// What a table's footer says about the rows above it.
+///
+/// Counted from the snapshot rather than written per state, so the empty and
+/// the loading tables say the true thing without a story remembering to.
+fn records_story_summary(rows: &Arc<[RecordRow]>) -> Option<gpui::SharedString> {
+    match rows.len() {
+        0 => None,
+        1 => Some("1 supplier".into()),
+        many => Some(format!("{many} suppliers").into()),
+    }
 }
 
 struct RecordsTableStory {
