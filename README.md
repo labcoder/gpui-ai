@@ -35,7 +35,13 @@ Pin `gpui-ai` with a tag or revision. Leave `gpui` without a `rev` so Cargo uses
 
 ## Quick start
 
-Call `gpui_ai::init(cx)` during application setup and wrap the top-level view in `gpui_component::Root`. The [gallery source](crates/gallery/src/gallery.rs) shows each component in a complete window.
+Call `gpui_ai::init(cx)` during application setup and wrap the top-level view in `gpui_component::Root`. [`examples/minimal.rs`](crates/gallery/examples/minimal.rs) is a complete application in eighty lines — window, component, typed events, a style override, and a decoration:
+
+```bash
+cargo run -p gallery --example minimal
+```
+
+The [gallery source](crates/gallery/src/gallery.rs) then shows every component.
 
 <details>
 <summary>Stateless and stateful examples</summary>
