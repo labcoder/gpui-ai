@@ -5,6 +5,7 @@ use gpui::{
     Window, div, px, size,
 };
 use gpui_ai::approval::{ApprovalCard, ApprovalDecision, ApprovalEvent, ApprovalTone};
+use gpui_component::ActiveTheme as _;
 use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone, Copy)]
@@ -52,6 +53,52 @@ fn harness(
     cx.simulate_resize(size(px(640.), px(400.)));
     cx.update(|window, cx| window.draw(cx).clear(cx));
     (events, cx)
+}
+
+/// A button centres the part of its label anyone can actually see.
+///
+/// Not the line box — that one is easy to centre and looks wrong. GPUI centres
+/// a line's ascent-to-descent box, and a font's ascent reserves room for
+/// accents that `Approve` never uses, so centring it hangs the word low: eight
+/// pixels above the caps and three below the descender, on a button that is
+/// twenty-four tall. What has to end up centred is the band from the cap
+/// height to the descent, which is the ink, and this measures that band from
+/// the same metrics the label offsets itself by.
+#[gpui::test]
+fn a_button_centres_the_ink_of_its_label(cx: &mut TestAppContext) {
+    let (_, cx) = harness(ProbeKind::Pending, cx);
+    let (ascent, descent, cap, leading) = cx.update(|window, cx| {
+        let body = cx.theme().typography_tokens().sm;
+        let text = cx.text_system();
+        let font = text.resolve_font(&window.text_style().font());
+        (
+            text.ascent(font, body.size),
+            text.descent(font, body.size),
+            text.cap_height(font, body.size),
+            body.line_height,
+        )
+    });
+    for (button, label) in [
+        ("approval-approve-purge", "button-label-Approve"),
+        ("approval-reject-purge", "button-label-Reject"),
+    ] {
+        let button = cx
+            .debug_bounds(button)
+            .unwrap_or_else(|| panic!("{button} should render"));
+        let label = cx
+            .debug_bounds(label)
+            .unwrap_or_else(|| panic!("{label} should render"));
+        // Where GPUI puts the baseline inside the line box, which starts at
+        // the top of the label's box because the padding that raises it is
+        // all underneath.
+        let baseline = label.top() + (leading - ascent - descent) / 2.0 + ascent;
+        let above = baseline - cap - button.top();
+        let below = button.bottom() - (baseline + descent);
+        assert!(
+            (above - below).abs() <= px(1.0),
+            "a button must centre its label's ink: {above:?} above the caps,              {below:?} below the descent"
+        );
+    }
 }
 
 fn click_center(cx: &mut VisualTestContext, selector: &'static str) {
