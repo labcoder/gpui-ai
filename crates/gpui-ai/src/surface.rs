@@ -9,11 +9,12 @@ use crate::control::{PressReleaseExt as _, composed_button};
 use crate::motion::VisibleAnimationExt as _;
 use crate::theme::SemanticStyledExt as _;
 use gpui::{
-    App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, div,
+    App, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
-use gpui_base::Button;
+use gpui_base::{Button, StyledExt as _};
 use gpui_component::{ActiveTheme as _, Icon, IconNamed, Sizable as _, v_flex};
 
 /// The card's own surface: background, hairline border, and the card
@@ -129,12 +130,7 @@ pub(crate) fn empty_state(
                 .small()
                 .text_color(cx.theme().muted_foreground),
         )
-        .child(
-            div()
-                .text_token(tokens.typography.sm)
-                .text_color(cx.theme().foreground)
-                .child(title.into()),
-        )
+        .child(div().text_token(tokens.typography.sm).child(title.into()))
         .when_some(note, |this, note| this.child(hint(note, cx)))
 }
 
@@ -233,40 +229,112 @@ pub(crate) fn inset(cx: &App) -> Div {
 /// Card or section title.
 pub(crate) fn title(text: impl Into<SharedString>, cx: &App) -> Div {
     let tokens = cx.theme().semantic_tokens();
+    // No ink of its own. The root sets the theme's foreground and every
+    // surface inherits it, so pinning it here changed nothing except that a
+    // caller could no longer say otherwise.
     div()
         .text_token(tokens.typography.md)
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(cx.theme().foreground)
         .child(text.into())
 }
 
 /// Supporting prose under a title.
-pub(crate) fn description(text: impl Into<SharedString>, cx: &App) -> Div {
-    let tokens = cx.theme().semantic_tokens();
-    div()
-        .text_token(tokens.typography.sm)
-        .text_color(cx.theme().muted_foreground)
-        .child(text.into())
+pub(crate) fn description(text: impl Into<SharedString>, cx: &App) -> Quiet {
+    Quiet::new(text, cx.theme().semantic_tokens().typography.sm)
+}
+
+/// Supporting text, in whatever ink the surface around it is written in.
+///
+/// The library's quiet roles — descriptions, hints, eyebrows, metadata — all
+/// want the same thing: to read as softer than the words above them. That was
+/// the theme's `muted_foreground`, painted straight onto the element, and it
+/// made text colour the one style a caller could not influence: a component's
+/// leaf always won, however the component itself was styled.
+///
+/// A `Div` cannot do better, because it fixes its colour when it is built and
+/// the surface has not said what ink is in force yet. So this is an element
+/// instead, and it reads the ink during layout, inside the parent's text
+/// scope — the same window a button's label uses to find its font. It is still
+/// exactly one `div` in the tree, and it is still `Styled`, so every caller
+/// that chains `truncate` or `flex_none` onto a hint keeps working.
+///
+/// The rule it applies: while the ink is the theme's own, use the theme's own
+/// muted ink, which is authored per theme and is not merely the foreground at
+/// lower alpha. Once someone has changed the ink — a card over a photograph,
+/// say — follow them, softened, because their ink is the one that has to stay
+/// readable.
+#[derive(IntoElement)]
+pub(crate) struct Quiet {
+    text: SharedString,
+    token: gpui_base::theme_tokens::TextStyleToken,
+    family: Option<SharedString>,
+    semibold: bool,
+    style: StyleRefinement,
+}
+
+impl Quiet {
+    fn new(text: impl Into<SharedString>, token: gpui_base::theme_tokens::TextStyleToken) -> Self {
+        Self {
+            text: text.into(),
+            token,
+            family: None,
+            semibold: false,
+            style: StyleRefinement::default(),
+        }
+    }
+
+    fn family(mut self, family: SharedString) -> Self {
+        self.family = Some(family);
+        self
+    }
+
+    fn semibold(mut self) -> Self {
+        self.semibold = true;
+        self
+    }
+}
+
+impl Styled for Quiet {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl RenderOnce for Quiet {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        div()
+            .text_token(self.token)
+            .when_some(self.family, |text, family| text.font_family(family))
+            .when(self.semibold, |text| text.font_weight(FontWeight::SEMIBOLD))
+            .text_color(quiet_ink(window.text_style().color, cx))
+            // After the ink, so a caller who names a colour on the role
+            // itself still outranks what the surface implies.
+            .refine_style(&self.style)
+            .child(self.text)
+    }
+}
+
+/// The supporting ink to use while `ink` is the ink in force.
+fn quiet_ink(ink: Hsla, cx: &App) -> Hsla {
+    if ink == cx.theme().foreground {
+        cx.theme().muted_foreground
+    } else {
+        // Every theme's muted ink sits between a half and four fifths of the
+        // way from its background to its foreground; this is the middle of
+        // that, and it is only reached for inks the theme never authored.
+        ink.opacity(0.72)
+    }
 }
 
 /// A short, quiet section label above a group of content.
-pub(crate) fn eyebrow(text: impl Into<SharedString>, cx: &App) -> Div {
-    let tokens = cx.theme().semantic_tokens();
-    div()
-        .text_token(tokens.typography.xs)
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(cx.theme().muted_foreground)
-        .child(text.into())
+pub(crate) fn eyebrow(text: impl Into<SharedString>, cx: &App) -> Quiet {
+    Quiet::new(text, cx.theme().semantic_tokens().typography.xs).semibold()
 }
 
 /// Small monospace metadata (durations, counts, identifiers).
-pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Div {
-    let tokens = cx.theme().semantic_tokens();
-    div()
-        .text_token(tokens.typography.xs)
-        .font_family(cx.theme().mono_font_family.clone())
-        .text_color(cx.theme().muted_foreground)
-        .child(text.into())
+pub(crate) fn meta(text: impl Into<SharedString>, cx: &App) -> Quiet {
+    Quiet::new(text, cx.theme().semantic_tokens().typography.xs)
+        .family(cx.theme().mono_font_family.clone())
 }
 
 /// The library's one disclosure affordance: a chevron that rotates open.
@@ -287,12 +355,8 @@ pub(crate) fn disclosure_chevron(disclosure: f32) -> gpui_component::Icon {
 /// The most-used text role in the library, and the one that had no name —
 /// a domain beside a title, a count beside a label, a hint under a field.
 /// [`meta`] is its monospace sibling for values a reader may compare.
-pub(crate) fn hint(text: impl Into<SharedString>, cx: &App) -> Div {
-    let tokens = cx.theme().semantic_tokens();
-    div()
-        .text_token(tokens.typography.xs)
-        .text_color(cx.theme().muted_foreground)
-        .child(text.into())
+pub(crate) fn hint(text: impl Into<SharedString>, cx: &App) -> Quiet {
+    Quiet::new(text, cx.theme().semantic_tokens().typography.xs)
 }
 
 /// A heading inside a card: small, semibold, in the foreground ink.
@@ -304,7 +368,6 @@ pub(crate) fn subtitle(text: impl Into<SharedString>, cx: &App) -> Div {
     div()
         .text_token(tokens.typography.sm)
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(cx.theme().foreground)
         .child(text.into())
 }
 
@@ -313,7 +376,7 @@ pub(crate) fn subtitle(text: impl Into<SharedString>, cx: &App) -> Div {
 /// A bare string handed to an input's suffix inherits the field's own ink
 /// and size, so the unit reads as part of the number. This gives every
 /// unit in the library one quiet voice instead.
-pub(crate) fn field_unit(unit: impl Into<SharedString>, cx: &App) -> Div {
+pub(crate) fn field_unit(unit: impl Into<SharedString>, cx: &App) -> Quiet {
     hint(unit, cx).flex_none()
 }
 

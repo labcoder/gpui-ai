@@ -332,13 +332,14 @@ impl RenderOnce for QuestionFlow {
                         // The place in the sequence is a status, not a
                         // decoration: it is the only thing that says how much
                         // is left to answer.
-                        meta(counter.clone(), cx)
+                        div()
                             .id(ElementId::from((root_id.clone(), "counter")))
                             .debug_selector(move || {
                                 format!("question-flow-counter-{counter_debug}")
                             })
                             .role(Role::Status)
-                            .aria_label(format!("Question {counter}")),
+                            .aria_label(format!("Question {counter}"))
+                            .child(meta(counter.clone(), cx)),
                     )
                     .child(
                         h_flex()
