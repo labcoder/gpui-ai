@@ -105,8 +105,6 @@ function Body({
       <h1>{component.title}</h1>
       <p className="lede">{component.summary}</p>
 
-      <Lineage lineage={component.lineage} />
-
       <Demo
         story={component.slug}
         title={component.windowTitle}
@@ -116,6 +114,8 @@ function Body({
         onVariant={setShowing}
         caption={`Running the real component, compiled to WebAssembly. The frame is ${component.height} px tall, which is what this story measures at the demo width in the default type size — a narrower column or a theme that changes that size will wrap it differently.`}
       />
+
+      <Lineage lineage={component.lineage} />
 
       <Reference component={component} />
 

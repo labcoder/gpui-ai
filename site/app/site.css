@@ -1669,9 +1669,10 @@ pre.code-plain {
 /* The badge itself, shared by the page and the table. */
 .lineage-tag {
   display: inline-block;
-  padding: 0.1rem 0.5rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.4rem;
   border-radius: 9999px;
   border: 1px solid var(--ai-border);
+  color: var(--ai-foreground);
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1679,22 +1680,24 @@ pre.code-plain {
   white-space: nowrap;
 }
 
+/* The kind is a word first and a colour second, and the colour never carries
+   it alone: a semantic hue that reads well as a rule or an indicator is not
+   readable as eleven-pixel text on a light surface, and there are fifty-five
+   themes for it to be wrong in. The label keeps the foreground's contrast and
+   the hue sits on the edge beside it. */
 .lineage-new > .lineage-head > .lineage-tag,
 .lineage-tag.lineage-new {
-  color: var(--ai-success);
-  border-color: var(--ai-success);
+  border-left: 3px solid var(--ai-success);
 }
 
 .lineage-extends > .lineage-head > .lineage-tag,
 .lineage-tag.lineage-extends {
-  color: var(--ai-warning);
-  border-color: var(--ai-warning);
+  border-left: 3px solid var(--ai-warning);
 }
 
 .lineage-composes > .lineage-head > .lineage-tag,
 .lineage-tag.lineage-composes {
-  color: var(--ai-info);
-  border-color: var(--ai-info);
+  border-left: 3px solid var(--ai-info);
 }
 
 /* The three counts at the top of the guide. */
@@ -1725,16 +1728,16 @@ pre.code-plain {
   min-width: 2ch;
 }
 
-.lineage-counts .lineage-new strong {
-  color: var(--ai-success);
+.lineage-counts .lineage-new {
+  border-left-color: var(--ai-success);
 }
 
-.lineage-counts .lineage-extends strong {
-  color: var(--ai-warning);
+.lineage-counts .lineage-extends {
+  border-left-color: var(--ai-warning);
 }
 
-.lineage-counts .lineage-composes strong {
-  color: var(--ai-info);
+.lineage-counts .lineage-composes {
+  border-left-color: var(--ai-info);
 }
 
 /* The table. Wide by nature, so it scrolls inside its own box rather than
