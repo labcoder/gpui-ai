@@ -44,8 +44,35 @@
      against narrow viewports and the themes that change the base font size. */
   --demo-width: 900px;
   --page-width: 82rem;
-  /* Prose reads at about 72 characters; the demo breaks out past it. */
-  --prose-width: 72ch;
+  /* Prose reads at about 66 characters; the demo breaks out past it. Between
+     45 and 75 is the readable band, and the lower half of it is where a line
+     stops needing a run-up to find its way back to the left margin. */
+  --prose-width: 66ch;
+
+  /* One ratio, a perfect fourth, from the body size up. Three steps of 1.333
+     put a heading, a section head and a page title at 1.333, 1.777 and 2.369
+     rem, and the gap between any two of them is the same gap - which is what
+     makes a ladder read as a ladder rather than as three sizes that happened.
+     The old set climbed 1, 1.375, 2.25: no ratio, and a heading the same size
+     as the paragraph under it. */
+  --type-title: 2.369rem;
+  --type-head: 1.777rem;
+  --type-sub: 1.333rem;
+  --type-lede: 1.125rem;
+
+  /* Leading tightens as type grows: a 38px line needs far less room between
+     baselines than a 16px one, and giving it the same 1.2 leaves a title
+     looking like two separate lines. */
+  --leading-title: 1.08;
+  --leading-head: 1.18;
+  --leading-sub: 1.3;
+
+  /* And tracking tightens with it. Large type sets loose by default - the
+     spacing a face is drawn for at 16px is too much at 38px - so the display
+     sizes pull in, and the smallest heading barely moves. */
+  --tracking-title: -0.022em;
+  --tracking-head: -0.016em;
+  --tracking-sub: -0.008em;
 
   /* The display face. Not a theme token on purpose: body and mono change with
      the theme so the chrome matches the demos, while the title face is the
@@ -53,6 +80,7 @@
      name and no other. */
   --site-font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
 }
+
 
 html {
   font-size: var(--ai-font-size);
@@ -67,6 +95,9 @@ html {
 
 body {
   margin: 0;
+  /* Let the browser look ahead when it breaks lines, so a paragraph does not
+     end on one short word and a heading does not leave one behind. */
+  text-wrap: pretty;
   background: var(--ai-background);
   color: var(--ai-foreground);
   font-family: var(--ai-font-sans);
@@ -93,7 +124,6 @@ pre {
 h1,
 h2,
 h3 {
-  line-height: 1.2;
   text-wrap: balance;
 }
 
@@ -103,21 +133,26 @@ h1,
 h2 {
   font-family: var(--site-font-serif);
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
 h1 {
-  font-size: 2.25rem;
-  margin: 0 0 var(--space-3);
+  font-size: var(--type-title);
+  line-height: var(--leading-title);
+  letter-spacing: var(--tracking-title);
+  margin: 0 0 var(--space-4);
 }
 
 h2 {
-  font-size: 1.375rem;
-  margin: 0 0 var(--space-3);
+  font-size: var(--type-head);
+  line-height: var(--leading-head);
+  letter-spacing: var(--tracking-head);
+  margin: 0 0 var(--space-4);
 }
 
 h3 {
-  font-size: 1rem;
+  font-size: var(--type-sub);
+  line-height: var(--leading-sub);
+  letter-spacing: var(--tracking-sub);
   margin: 0 0 var(--space-2);
 }
 
@@ -191,6 +226,14 @@ h3 {
   padding: 0 var(--space-6);
 }
 
+/* The bars at the top and bottom of the page run its full width, so the
+   wordmark sits over the rail rather than floating in from a margin that no
+   longer exists. */
+.masthead-inner,
+.site-footer .shell {
+  max-width: none;
+}
+
 .site-footer .shell {
   display: flex;
   flex-wrap: wrap;
@@ -221,16 +264,23 @@ h3 {
 
 /* Layout ------------------------------------------------------------------ */
 
+/* Full bleed. The page used to sit in a centred 82rem column with air either
+   side of it; now the rail is flush against the left edge with a rule of its
+   own, and the reading column keeps its measure while the demo grows into the
+   width that opens up. A component page is a guided tour of the thing in use,
+   and the thing wants the room. */
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  max-width: var(--page-width);
-  margin: 0 auto;
-  padding-inline: var(--space-6);
+  max-width: none;
+  margin: 0;
+  padding-inline: 0;
 }
 
-/* The layout already supplies the page's side padding, and capping the width
-   twice would leave the demo narrower than the column it sits in. */
+/* The side padding lives on `main` now rather than on the layout, because the
+   rail draws its own and wants none from the grid. Below the rail's breakpoint
+   this is the only inset the content has - without it the words run into the
+   edge of a phone. */
 .layout .shell {
   max-width: none;
   padding: 0;
@@ -239,7 +289,7 @@ h3 {
 main {
   display: block;
   min-width: 0;
-  padding-block: var(--space-12);
+  padding: var(--space-12) var(--space-6);
 }
 
 /* The skip link's target: focusable so focus really lands here, with no ring
@@ -263,8 +313,20 @@ main [id] {
 
 @media (min-width: 60rem) {
   .layout {
-    grid-template-columns: 15rem minmax(0, 1fr);
-    gap: var(--space-8);
+    grid-template-columns: 17rem minmax(0, 1fr);
+    gap: 0;
+  }
+
+  main {
+    padding: var(--space-12) clamp(var(--space-8), 5vw, var(--space-16));
+  }
+
+  /* The demo takes the room the centring used to spend on margins. Prose keeps
+     its own measure, so the page is wide without the words being. */
+  .demo,
+  .code-panel,
+  .component-reference {
+    max-width: min(72rem, 100%);
   }
 
   .desktop-rail {
@@ -272,6 +334,9 @@ main [id] {
     position: sticky;
     top: 3.5rem;
     align-self: start;
+    padding: var(--space-8) var(--space-6);
+    border-right: 1px solid var(--ai-border);
+    background: var(--ai-surface);
     max-height: calc(100vh - 3.5rem);
     overflow-y: auto;
     padding-block: var(--space-8) var(--space-12);
@@ -344,12 +409,18 @@ main [id] {
   cursor: pointer;
 }
 
+/* The rail reads as a file tree rather than a menu: the category is a ruled
+   label in the mono face, the rows under it sit tight together, and the one
+   you are on is marked in the margin instead of being filled in. What the
+   sections are is the thing to see first. */
 .component-nav h3 {
-  margin: var(--space-6) 0 var(--space-2);
-  font-family: var(--ai-font-sans);
-  font-size: 0.6875rem;
+  margin: var(--space-6) 0 var(--space-1);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--ai-border);
+  font-family: var(--ai-font-mono);
+  font-size: 0.625rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ai-muted-text);
 }
@@ -359,15 +430,14 @@ main [id] {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--space-1);
+  gap: 0;
 }
 
 .nav-component-link {
   display: block;
-  padding: var(--space-1) var(--space-2);
-  margin-left: calc(-1 * var(--space-2));
-  border-radius: var(--ai-radius);
-  font-size: 0.875rem;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border-left: 2px solid transparent;
+  font-size: 0.8125rem;
   text-decoration: none;
   color: var(--ai-muted-text);
 }
@@ -375,11 +445,13 @@ main [id] {
 .nav-component-link:hover {
   color: var(--ai-foreground);
   background: var(--ai-accent);
+  border-left-color: var(--ai-border);
 }
 
 .nav-component-link[aria-current="page"] {
   color: var(--ai-foreground);
   background: var(--ai-accent);
+  border-left-color: var(--ai-primary);
   font-weight: 600;
 }
 
@@ -398,6 +470,11 @@ main [id] {
 .nav-search input {
   font: inherit;
   font-size: 0.875rem;
+  /* Ruled rather than boxed, so the filter reads as part of the tree instead
+     of a control sitting on top of it. */
+  border-radius: 0;
+  border-width: 0 0 1px;
+  background: transparent;
   width: 100%;
   /* Room on the right for the shortcut hint, which sits over the field. */
   padding: var(--space-1) var(--space-8) var(--space-1) var(--space-2);
@@ -524,7 +601,11 @@ main [id] {
 
 .lede {
   color: var(--ai-muted-text);
-  font-size: 1.0625rem;
+  font-size: var(--type-lede);
+  /* Looser than the ladder above it and tighter than the body below: a lede is
+     read at a glance, and one line of it should not sit as far from the next
+     as a paragraph does. */
+  line-height: 1.5;
   margin: 0 0 var(--space-8);
   max-width: var(--prose-width);
 }
