@@ -126,6 +126,14 @@ pub(super) fn sidebar_item_control(
     .border_1()
     .border_color(ring)
     .bg(cx.theme().transparent)
+    // Collapsed, this box is the row: the fill and the icon share it, so the
+    // one cannot sit above the other. The rail shows a parent as active while
+    // its children are unmounted, because the row the reader chose is inside
+    // it and there is nothing else on the rail to say so.
+    .when(collapsed && (row.active || row.contains_active), |this| {
+        this.bg(cx.theme().sidebar_accent)
+            .text_color(cx.theme().sidebar_accent_foreground)
+    })
     // This control blocks pointer input for the whole row — it owns the
     // tooltip and AccessKit activation — so the presentation beneath it
     // can never see hover. Hover is therefore this layer's to paint:
@@ -255,6 +263,11 @@ pub(super) fn render_row(
     let activate_id = row.id.clone();
     let activate_owner = owner.clone();
 
+    // Collapsed, the presentation is ours. Upstream's item draws an empty
+    // padded box for a row with no label and no icon to show - sixteen pixels
+    // of active fill at the top of a row three times that - while the icon it
+    // is not drawing sits centred in the box below. One row cannot have two
+    // geometries, so on the rail there is only the control's.
     let menu_item = SidebarMenuItem::new(row.label.clone())
         .active(active)
         .collapsed(collapsed)
@@ -316,8 +329,10 @@ pub(super) fn render_row(
         .min_w_0()
         // A virtual list places rows itself, so the rhythm between them has to
         // belong to the row. Padding rather than margin, so the measured row
-        // height contains it and neighbours cannot overlap.
-        .pb(tokens.spacing.xxs)
+        // height contains it and neighbours cannot overlap. Two pixels read as
+        // rows stacked against each other rather than a list of them; four is
+        // still dense and lets the tree breathe.
+        .pb(tokens.spacing.xs)
         // Nesting is a per-row guide now that rows are siblings: one stretched
         // rule per ancestor level, at the offset that level would have owned.
         .children((0..row.indent).map(|_| {
@@ -336,15 +351,17 @@ pub(super) fn render_row(
                 // rail's rhythm is the tree's rhythm and icons do not
                 // bunch up when the labels leave.
                 .when(collapsed, |this| this.h(crate::sizing::control_lg(cx)))
-                .child(menu_item.render(
-                    format!("sidebar-nav-menu.{component_id}.{}", row.id),
-                    // SidebarMenuItem owns the pinned presentation. The
-                    // transparent stable control blocks non-scroll pointer
-                    // fallthrough and owns tooltip and AccessKit activation as
-                    // one handler.
-                    window,
-                    cx,
-                ))
+                .when(!collapsed, |this| {
+                    this.child(menu_item.render(
+                        format!("sidebar-nav-menu.{component_id}.{}", row.id),
+                        // SidebarMenuItem owns the pinned presentation. The
+                        // transparent stable control blocks non-scroll pointer
+                        // fallthrough and owns tooltip and AccessKit activation
+                        // as one handler.
+                        window,
+                        cx,
+                    ))
+                })
                 .child(control),
         )
         .into_any_element()
