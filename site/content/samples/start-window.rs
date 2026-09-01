@@ -12,7 +12,6 @@ impl Render for Agent {
 
 fn main() {
     Application::new().run(|cx: &mut App| {
-        gpui_component::init(cx);
         gpui_ai::init(cx);
 
         cx.open_window(WindowOptions::default(), |window, cx| {

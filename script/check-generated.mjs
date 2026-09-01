@@ -6,7 +6,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUTPUTS = ["site/generated", "site/public/themes"];
+const OUTPUTS = [
+  "site/generated",
+  "site/public/themes",
+  "skills/gpui-ai/references/generated",
+];
 
 async function files(directory, prefix = "") {
   const found = [];

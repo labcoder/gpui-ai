@@ -9,14 +9,20 @@ test("freshness catches every output byte and stale/missing files without repair
   const root = await mkdtemp(path.join(tmpdir(), "gpui-ai-freshness-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const expected = path.join(root, "expected"), actual = path.join(root, "actual");
-  const download = "site/public/themes/example.json", pin = "site/generated/build.json";
-  for (const [file, bytes] of [[download, '{"color":"#ffffff"}\n'], [pin, '{"commit":"original"}\n']]) {
+  const download = "site/public/themes/example.json";
+  const pin = "site/generated/build.json";
+  const skill = "skills/gpui-ai/references/generated/components.md";
+  for (const [file, bytes] of [
+    [download, '{"color":"#ffffff"}\n'],
+    [pin, '{"commit":"original"}\n'],
+    [skill, "# Components\n"],
+  ]) {
     await mkdir(path.dirname(path.join(expected, file)), { recursive: true });
     await writeFile(path.join(expected, file), bytes);
   }
   await cp(expected, actual, { recursive: true });
   assert.deepEqual(await compareGenerated(expected, actual), []);
-  for (const file of [download, pin]) {
+  for (const file of [download, pin, skill]) {
     const previous = await readFile(path.join(actual, file));
     await writeFile(path.join(actual, file), "corrupt same-named bytes");
     for (let run = 0; run < 2; run++) {

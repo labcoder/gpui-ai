@@ -746,7 +746,7 @@
     },
     "start-window": {
       "lang": "rust",
-      "code": "use gpui::{App, Application, WindowOptions, prelude::*};\nuse gpui_ai::prelude::*;\nuse gpui_component::Root;\n\nstruct Agent;\n\nimpl Render for Agent {\n    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {\n        ToolChip::new(\"edit\", \"Edit main.rs\").status(ToolStatus::Running)\n    }\n}\n\nfn main() {\n    Application::new().run(|cx: &mut App| {\n        gpui_component::init(cx);\n        gpui_ai::init(cx);\n\n        cx.open_window(WindowOptions::default(), |window, cx| {\n            let agent = cx.new(|_| Agent);\n            // Root owns the theme, the rem size, and the layers dialogs and\n            // popovers are drawn into. Every gpui-component app has one.\n            cx.new(|cx| Root::new(agent.into(), window, cx))\n        })\n        .unwrap();\n    });\n}",
+      "code": "use gpui::{App, Application, WindowOptions, prelude::*};\nuse gpui_ai::prelude::*;\nuse gpui_component::Root;\n\nstruct Agent;\n\nimpl Render for Agent {\n    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {\n        ToolChip::new(\"edit\", \"Edit main.rs\").status(ToolStatus::Running)\n    }\n}\n\nfn main() {\n    Application::new().run(|cx: &mut App| {\n        gpui_ai::init(cx);\n\n        cx.open_window(WindowOptions::default(), |window, cx| {\n            let agent = cx.new(|_| Agent);\n            // Root owns the theme, the rem size, and the layers dialogs and\n            // popovers are drawn into. Every gpui-component app has one.\n            cx.new(|cx| Root::new(agent.into(), window, cx))\n        })\n        .unwrap();\n    });\n}",
       "lines": [
         [
           [
@@ -1045,18 +1045,6 @@
           ],
           [
             "| {"
-          ]
-        ],
-        [
-          [
-            "        "
-          ],
-          [
-            "gpui_component",
-            "type"
-          ],
-          [
-            "::init(cx);"
           ]
         ],
         [

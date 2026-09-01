@@ -311,8 +311,8 @@ export function StartBody() {
 
       <Section id="first-window" title="A window with a component in it">
         <p>
-          Two calls during setup — <code>gpui_component::init</code> and{" "}
-          <code>gpui_ai::init</code> — and a <code>Root</code> around the top-level view.{" "}
+          One call during setup — <code>gpui_ai::init</code>, which initializes
+          gpui-component too — and a <code>Root</code> around the top-level view.{" "}
           <code>Root</code> owns the theme, the rem size, and the layer that dialogs and popovers
           are drawn into; a component rendered outside one has no theme to read.
         </p>

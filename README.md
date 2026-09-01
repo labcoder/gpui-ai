@@ -43,6 +43,11 @@ cargo run -p gallery --example minimal
 
 The [gallery source](crates/gallery/src/gallery.rs) then shows every component.
 
+Agents building an application with the library can use the first-party
+[`gpui-ai` skill](skills/gpui-ai/SKILL.md). It teaches component selection,
+state ownership, typed events, styling, native and WASM constraints, and reads
+its component facts from the same generated catalog as the website.
+
 <details>
 <summary>Stateless and stateful examples</summary>
 

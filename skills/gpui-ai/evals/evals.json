@@ -1,0 +1,23 @@
+{
+  "skill_name": "gpui-ai",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have an existing Rust GPUI desktop app with gpui-component already initialized. Add an agent conversation screen with a retained prompt composer, streamed Markdown answers, visible thinking and tool calls, an approval gate for destructive tools, and queued prompts while a run is active. Messages can be edited and branched. Keep our model client and persistence layer unchanged.",
+      "expected_output": "A version-aware implementation that selects Chat, PromptBar, StreamingText, Thinking, ToolCall, ApprovalCard, and MessageQueue as appropriate; retains entity-backed components; keeps requests, clocks, and state in the application; uses Progressive/StreamedContent, stable domain IDs, and typed events; and verifies accessibility, constrained layout, and real transitions.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Before our coding agent changes a repository, I want it to ask up to four clarification questions one at a time, show the resulting execution plan, then require an explicit approval. Please implement that flow in our existing GPUI app and make it keyboard accessible. The user should be able to go back and revise an earlier answer without losing question identity.",
+      "expected_output": "A controlled QuestionFlow to PlanCard to ApprovalCard application state machine using stable question and option IDs, typed events, visible controlled answers and decisions, keyboard and AccessKit behavior, and no work started merely because the approval component emitted intent.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Our gpui-ai research workspace must run natively and as an embedded WASM canvas on GitHub Pages. Brand its evidence cards and approval panels over a photograph, keep dark and light themes readable, use gentler motion when requested, and fix the browser build where CSS fonts load but canvas text is missing. Popups near the bottom of a narrow phone viewport must remain usable.",
+      "expected_output": "A revision-aware solution that styles components directly, uses theme tokens and Decoration with frame_radius, routes animation through reduced-motion-aware helpers, registers fonts through the GPUI web text/asset path rather than CSS alone, avoids unsupported WASM clocks, uses adaptive popup positioning, and verifies a non-root asset base plus real mobile input and glyph rendering.",
+      "files": []
+    }
+  ]
+}
