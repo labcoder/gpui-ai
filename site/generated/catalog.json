@@ -538,7 +538,7 @@
       "source": "crates/gpui-ai/src/sidebar_nav.rs",
       "api": "SidebarNav",
       "usage": "SidebarNav::new(\"workspace-nav\", window, cx)",
-      "height": 284,
+      "height": 476,
       "windowTitle": "Sidebar navigation — gpui-ai",
       "variants": [],
       "events": [
@@ -550,7 +550,7 @@
         "ownership": "SidebarNav renders state supplied by the application; it does not own durable work.",
         "interaction": "Interactive intent is reported through the typed SidebarNavEvent contract and stable application IDs.",
         "semantics": "Filterable, accessible navigation for growing AI workspaces.",
-        "overflow": "Wide content retains context in a bounded surface; reduced motion preserves a useful state."
+        "overflow": "Growing content remains reachable in a bounded vertical surface; reduced motion preserves a useful state."
       }
     },
     {

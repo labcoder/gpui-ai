@@ -1234,9 +1234,7 @@ pub(crate) fn creamery_sidebar_sections() -> [SidebarSection; 3] {
 }
 
 struct SidebarNavStory {
-    expanded: Entity<SidebarNav>,
-    collapsed: Entity<SidebarNav>,
-    filtered: Entity<SidebarNav>,
+    nav: Entity<SidebarNav>,
     last_event: SharedString,
     _subscriptions: Vec<Subscription>,
 }
@@ -1244,36 +1242,29 @@ struct SidebarNavStory {
 impl SidebarNavStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // snippet:start(sidebar-nav)
-        let expanded = cx.new(|cx| SidebarNav::new("creamery-expanded", window, cx));
-        let collapsed = cx.new(|cx| SidebarNav::new("creamery-collapsed", window, cx));
-        let filtered = cx.new(|cx| SidebarNav::new("creamery-filtered", window, cx));
-        for nav in [&expanded, &collapsed, &filtered] {
-            nav.update(cx, |nav, cx| {
-                nav.set_sections(creamery_sidebar_sections(), cx);
-                nav.set_active_item("all-orders", cx);
-            });
-        }
-        collapsed.update(cx, |nav, cx| nav.set_collapsed(true, cx));
-        filtered.update(cx, |nav, cx| nav.set_query("pistachio", window, cx));
+        let nav = cx.new(|cx| SidebarNav::new("creamery", window, cx));
+        nav.update(cx, |nav, cx| {
+            nav.set_sections(creamery_sidebar_sections(), cx);
+            nav.set_active_item("all-orders", cx);
+        });
         // snippet:end
 
-        let subscriptions = [&expanded, &collapsed, &filtered]
-            .into_iter()
-            .map(|nav| {
-                cx.subscribe(nav, |this, nav, event: &SidebarNavEvent, cx| {
-                    if let SidebarNavEvent::Selected { item_id, .. } = event {
-                        nav.update(cx, |nav, cx| nav.set_active_item(item_id.clone(), cx));
-                    }
-                    this.last_event = format!("{event:?}").into();
-                    cx.notify();
-                })
-            })
-            .collect();
+        // One sidebar, not three pictures of one. Collapsing, filtering and
+        // choosing a row are all things this demo does rather than states it
+        // poses in, so the reader drives them and sees the transitions the
+        // component was built for.
+        let subscriptions = vec![
+            cx.subscribe(&nav, |this, nav, event: &SidebarNavEvent, cx| {
+                if let SidebarNavEvent::Selected { item_id, .. } = event {
+                    nav.update(cx, |nav, cx| nav.set_active_item(item_id.clone(), cx));
+                }
+                this.last_event = format!("{event:?}").into();
+                cx.notify();
+            }),
+        ];
 
         Self {
-            expanded,
-            collapsed,
-            filtered,
+            nav,
             last_event: "Choose a row, filter, collapse, or start a new task.".into(),
             _subscriptions: subscriptions,
         }
@@ -1286,33 +1277,16 @@ impl Render for SidebarNavStory {
         v_flex()
             .gap(tokens.spacing.sm)
             .child(
-                h_flex()
-                    .items_start()
-                    .gap(tokens.spacing.sm)
-                    .child(
-                        div()
-                            .id("sidebar-nav-expanded-host")
-                            .debug_selector(|| "sidebar-nav-expanded-host".into())
-                            .w(tokens.spacing.xxl * 8.)
-                            .h(tokens.spacing.xxl * 7.)
-                            .child(self.expanded.clone()),
-                    )
-                    .child(
-                        div()
-                            .id("sidebar-nav-collapsed-host")
-                            .debug_selector(|| "sidebar-nav-collapsed-host".into())
-                            .h(tokens.spacing.xxl * 7.)
-                            .child(self.collapsed.clone()),
-                    )
-                    .child(
-                        div()
-                            .id("sidebar-nav-filtered-host")
-                            .debug_selector(|| "sidebar-nav-filtered-host".into())
-                            .flex_1()
-                            .min_w_0()
-                            .h(tokens.spacing.xxl * 7.)
-                            .child(self.filtered.clone()),
-                    ),
+                div()
+                    .id("sidebar-nav-host")
+                    .debug_selector(|| "sidebar-nav-host".into())
+                    // Tall enough to hold the tree it is filtering: the old
+                    // host cut the list at four rows, which left the reader
+                    // filtering something they could not see the shape of.
+                    // The rail sizes its own width, so the host gives it
+                    // height and stays out of the way.
+                    .h(tokens.spacing.xxl * 13.)
+                    .child(self.nav.clone()),
             )
             .child(
                 div()

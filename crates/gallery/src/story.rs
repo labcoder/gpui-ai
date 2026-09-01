@@ -602,9 +602,12 @@ impl StoryId {
                 module: "sidebar_nav",
                 api: "SidebarNav",
                 usage: crate::usage::SIDEBAR_NAV,
-                height: 284,
-                width: StoryWidth::Wide,
-                overflow: Overflow::Wide,
+                height: 476,
+                // One sidebar rather than three side by side: it fits the
+                // prose column now, and what it has to prove is that a tree
+                // taller than its frame stays reachable.
+                width: StoryWidth::Column,
+                overflow: Overflow::Vertical,
             },
             Self::ThreadList => StoryMeta {
                 category: "Navigation",

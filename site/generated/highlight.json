@@ -1653,7 +1653,7 @@
             "keyword"
           ],
           [
-            " expanded = cx.new(|cx| "
+            " nav = cx.new(|cx| "
           ],
           [
             "SidebarNav",
@@ -1663,7 +1663,7 @@
             "::new("
           ],
           [
-            "\"creamery-expanded\"",
+            "\"creamery\"",
             "string"
           ],
           [
@@ -1672,79 +1672,17 @@
         ],
         [
           [
-            "let",
-            "keyword"
-          ],
-          [
-            " collapsed = cx.new(|cx| "
-          ],
-          [
-            "SidebarNav",
-            "type"
-          ],
-          [
-            "::new("
-          ],
-          [
-            "\"creamery-collapsed\"",
-            "string"
-          ],
-          [
-            ", window, cx));"
+            "nav.update(cx, |nav, cx| {"
           ]
         ],
         [
           [
-            "let",
-            "keyword"
-          ],
-          [
-            " filtered = cx.new(|cx| "
-          ],
-          [
-            "SidebarNav",
-            "type"
-          ],
-          [
-            "::new("
-          ],
-          [
-            "\"creamery-filtered\"",
-            "string"
-          ],
-          [
-            ", window, cx));"
+            "    nav.set_sections(creamery_sidebar_sections(), cx);"
           ]
         ],
         [
           [
-            "for",
-            "keyword"
-          ],
-          [
-            " nav "
-          ],
-          [
-            "in",
-            "keyword"
-          ],
-          [
-            " [&expanded, &collapsed, &filtered] {"
-          ]
-        ],
-        [
-          [
-            "    nav.update(cx, |nav, cx| {"
-          ]
-        ],
-        [
-          [
-            "        nav.set_sections(creamery_sidebar_sections(), cx);"
-          ]
-        ],
-        [
-          [
-            "        nav.set_active_item("
+            "    nav.set_active_item("
           ],
           [
             "\"all-orders\"",
@@ -1756,36 +1694,7 @@
         ],
         [
           [
-            "    });"
-          ]
-        ],
-        [
-          [
-            "}"
-          ]
-        ],
-        [
-          [
-            "collapsed.update(cx, |nav, cx| nav.set_collapsed("
-          ],
-          [
-            "true",
-            "keyword"
-          ],
-          [
-            ", cx));"
-          ]
-        ],
-        [
-          [
-            "filtered.update(cx, |nav, cx| nav.set_query("
-          ],
-          [
-            "\"pistachio\"",
-            "string"
-          ],
-          [
-            ", window, cx));"
+            "});"
           ]
         ]
       ]
