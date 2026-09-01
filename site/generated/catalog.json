@@ -437,7 +437,7 @@
         "kind": "composes",
         "label": "Composes",
         "basis": "Textarea, list",
-        "note": "A virtualized, controlled transcript: unread reconciliation, jump to latest, and an anchor that survives messages arriving off screen."
+        "note": "A virtualized, controlled transcript: unread reconciliation, jump to latest, and an anchor that survives messages arriving off screen. Upstream now has a MessageScroller that follows the tail and holds the anchor too; what it leaves to the application is the meaning of unread, and what this adds above it is the transcript itself - streaming answers, tool calls, and the prompt bar under them."
       },
       "usage": "Chat::new(\"conversation\", prompt, window, cx)",
       "height": 595,
@@ -508,7 +508,7 @@
         "kind": "new",
         "label": "New",
         "basis": "",
-        "note": "Files on their way into a prompt, with upload progress and failure shown per item."
+        "note": "Files on their way into a prompt, with upload progress and failure shown per item. Upstream ships an Attachment of its own now, and is explicit that it is a composition primitive: it lays out a preview, a title and actions, and leaves upload state, retry and selection to the application. This owns that lifecycle, which is the part an agent surface cannot avoid."
       },
       "usage": "AttachmentStrip::new(\"files\").items(attachments)",
       "height": 486,

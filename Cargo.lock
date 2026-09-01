@@ -2394,17 +2394,21 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d#c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d"
+source = "git+https://github.com/longbridge/gpui-component?rev=71e677c178f77727f321fd80db15bd3dca16a087#71e677c178f77727f321fd80db15bd3dca16a087"
 dependencies = [
  "aho-corasick",
  "anyhow",
  "async-channel",
  "chrono",
+ "futures",
  "gpui",
  "gpui_macros",
  "gpui_platform",
+ "html5ever",
  "instant",
  "lsp-types",
+ "markdown",
+ "markup5ever_rcdom",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -2426,25 +2430,22 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d#c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d"
+source = "git+https://github.com/longbridge/gpui-component?rev=71e677c178f77727f321fd80db15bd3dca16a087#71e677c178f77727f321fd80db15bd3dca16a087"
 dependencies = [
  "anyhow",
  "chrono",
  "core-text",
  "enum-iterator",
- "futures",
  "gpui",
  "gpui-base",
  "gpui-component-assets",
  "gpui-component-macros",
  "gpui_macros",
- "html5ever",
  "instant",
  "itertools 0.13.0",
  "log",
  "lsp-types",
  "markdown",
- "markup5ever_rcdom",
  "notify",
  "num-traits",
  "objc2 0.6.4",
@@ -2480,7 +2481,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-assets"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d#c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d"
+source = "git+https://github.com/longbridge/gpui-component?rev=71e677c178f77727f321fd80db15bd3dca16a087#71e677c178f77727f321fd80db15bd3dca16a087"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2494,7 +2495,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d#c6a68e0cfd5f8b694a5f1a31d33abaad56226a4d"
+source = "git+https://github.com/longbridge/gpui-component?rev=71e677c178f77727f321fd80db15bd3dca16a087#71e677c178f77727f321fd80db15bd3dca16a087"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -121,6 +121,11 @@ function Differences() {
         and stop it.
       </p>
       <p>
+        The line between the two moves, and this page moves with it: gpui-component has since grown
+        chat parts of its own — a message scroller, an attachment surface, bubbles and markers — and
+        where they meet something here, the row below says so rather than leaving you to find out.
+      </p>
+      <p>
         Every component below says which of three things it is. The words are the library&rsquo;s own,
         exported from the same place its API documentation comes from.
       </p>
@@ -188,7 +193,7 @@ function Differences() {
                           {component.lineage.basis ? (
                             <code>{component.lineage.basis}</code>
                           ) : (
-                            <span className="lineage-none">no upstream counterpart</span>
+                            <span className="lineage-none">not built on one</span>
                           )}
                         </td>
                         <td>{component.lineage.note}</td>

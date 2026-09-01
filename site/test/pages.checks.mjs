@@ -855,9 +855,14 @@ test("route code loads per page instead of riding in every page's bundle", async
   // others and rides in the entry for the same reason, because the badge is on
   // every component page. The rest is the guide that gathers them, which is a
   // route and a page rather than data.
+  //
+  // +600 bytes for two of those notes growing, when upstream shipped an
+  // attachment surface and a message scroller of its own and the components
+  // they meet had to say so. Prose in a catalog row, which is where the answer
+  // to "why this one" belongs.
   assert.ok(
-    entry.length <= 361_715,
-    `the entry chunk is ${entry.length} bytes; the reviewed cap is 361,715`,
+    entry.length <= 362_315,
+    `the entry chunk is ${entry.length} bytes; the reviewed cap is 362,315`,
   );
 
   // The source-level guard the split lives or dies on.

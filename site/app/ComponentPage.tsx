@@ -67,7 +67,7 @@ function Lineage({ lineage }: { readonly lineage: LineageEntry }) {
             gpui-component <code>{lineage.basis}</code>
           </span>
         ) : (
-          <span className="lineage-basis">no upstream counterpart</span>
+          <span className="lineage-basis">not built on an upstream component</span>
         )}
       </p>
       <p className="lineage-note">{lineage.note}</p>
