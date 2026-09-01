@@ -516,9 +516,206 @@ fn column_width_builders_carry_their_own_unit() {
     );
 }
 
+/// A named row height is the height the rows are drawn at.
+///
+/// The table's own rhythm comes from the size policy; an application that has
+/// measured its content may say the number itself, and clearing it hands the
+/// rhythm back rather than freezing whatever was last set.
+#[gpui::test]
+fn a_named_row_height_is_the_height_rows_are_drawn_at(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("tall", "Tall", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(640.), px(400.)));
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns([RecordColumn::new("name", "Name")], window, cx);
+            records.set_records(
+                Progressive::complete(Arc::from([
+                    RecordRow::new("only", "Only").cells([RecordCell::new("name", "Only")])
+                ])),
+                window,
+                cx,
+            );
+        });
+    });
+    let draw = |cx: &mut VisualTestContext| {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    };
+    let row_height = |cx: &mut VisualTestContext| {
+        cx.debug_bounds("records-row-4:tallonly")
+            .expect("the row should paint")
+            .size
+            .height
+    };
+
+    draw(cx);
+    let policy_height = row_height(cx);
+
+    cx.update(|_, cx| {
+        records.update(cx, |records, cx| {
+            records.set_row_height(Some(px(56.)), cx);
+        });
+    });
+    draw(cx);
+    assert_eq!(row_height(cx), px(56.), "the named height is what rows get");
+
+    cx.update(|_, cx| {
+        records.update(cx, |records, cx| records.set_row_height(None, cx));
+    });
+    draw(cx);
+    assert_eq!(
+        row_height(cx),
+        policy_height,
+        "clearing it returns the rows to the table's own rhythm"
+    );
+}
+
+/// The division itself, without a window: every rule the fit mode has, read
+/// off one function.
+#[test]
+fn columns_divide_the_surplus_and_never_shrink() {
+    let base = |width| RecordColumn::new("c", "C").width(px(width));
+    let columns = [base(100.), base(200.)];
+
+    assert_eq!(
+        &*resolve_column_widths(&columns, ColumnFit::Intrinsic, Some(px(900.)), px(16.)),
+        &[px(100.), px(200.)],
+        "intrinsic columns keep exactly what they asked for"
+    );
+    assert_eq!(
+        &*resolve_column_widths(&columns, ColumnFit::Fill, None, px(16.)),
+        &[px(100.), px(200.)],
+        "a table that has not been measured yet has no surplus to divide"
+    );
+    assert_eq!(
+        &*resolve_column_widths(&columns, ColumnFit::Fill, Some(px(150.)), px(16.)),
+        &[px(100.), px(200.)],
+        "a table narrower than its columns scrolls; it never shrinks them"
+    );
+    assert_eq!(
+        &*resolve_column_widths(&columns, ColumnFit::Fill, Some(px(600.)), px(16.)),
+        &[px(200.), px(400.)],
+        "with nobody asking, the surplus goes round in proportion to the bases"
+    );
+
+    let asked = [base(100.), base(200.).fill(1.)];
+    assert_eq!(
+        &*resolve_column_widths(&asked, ColumnFit::Fill, Some(px(600.)), px(16.)),
+        &[px(100.), px(500.)],
+        "the moment one column asks, it takes the surplus and the rest stay exact"
+    );
+
+    let shares = [base(100.).fill(1.), base(100.).fill(3.)];
+    assert_eq!(
+        &*resolve_column_widths(&shares, ColumnFit::Fill, Some(px(600.)), px(16.)),
+        &[px(200.), px(400.)],
+        "three shares against one takes three quarters of the surplus"
+    );
+
+    let unset = [RecordColumn::new("a", "A"), RecordColumn::new("b", "B")];
+    assert_eq!(
+        &*resolve_column_widths(&unset, ColumnFit::Fill, Some(px(600.)), px(16.)),
+        &[px(300.), px(300.)],
+        "a column that named no width still divides the table"
+    );
+}
+
+/// A filling table ends where its frame ends, and follows the frame when it
+/// moves.
+///
+/// The width the grid was given is what a column divides, so this measures the
+/// painted headers rather than the configured widths: the point is that the
+/// last column reaches the far edge, not that an arithmetic returned a number.
+#[gpui::test]
+fn a_filling_table_reaches_its_own_edge(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let (records, cx) =
+        cx.add_window_view(|window, cx| RecordsTable::new("fills", "Fills", window, cx));
+    let cx: &mut VisualTestContext = cx;
+    cx.simulate_resize(size(px(900.), px(300.)));
+    cx.update(|window, cx| {
+        records.update(cx, |records, cx| {
+            records.set_columns(
+                [
+                    RecordColumn::new("name", "Name").width(px(120.)),
+                    RecordColumn::new("notes", "Notes").width(px(120.)).fill(1.),
+                ],
+                window,
+                cx,
+            );
+            records.set_records(
+                Progressive::complete(Arc::from([RecordRow::new("only", "Only").cells([
+                    RecordCell::new("name", "Only"),
+                    RecordCell::new("notes", "Notes"),
+                ])])),
+                window,
+                cx,
+            );
+        });
+    });
+    let draw = |cx: &mut VisualTestContext| {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    };
+    // The widths the grid consumes, plus the box it was measured in: a table
+    // fills when those add up.
+    // The widths the grid consumes, and the room the columns had to divide:
+    // the box the grid was given, less the lane the overlaid bar is drawn in.
+    let columns = |cx: &mut VisualTestContext| {
+        records.read_with(cx, |records, cx| {
+            let delegate = records.table.read(cx).delegate();
+            (
+                delegate.column(0, cx).width,
+                delegate.column(1, cx).width,
+                records.measured_width.expect("the grid should be measured")
+                    - crate::scrolling::control_lane(cx),
+            )
+        })
+    };
+
+    draw(cx);
+    let (exact, filling, available) = columns(cx);
+    assert_eq!(
+        exact,
+        px(120.),
+        "a column nobody asked to grow keeps the width it asked for"
+    );
+    assert_eq!(
+        exact + filling,
+        available,
+        "the columns divide the whole of the room they were given, and no more:          a column drawn under the scrollbar is a column with a bar over its text"
+    );
+
+    let wide = filling;
+    cx.simulate_resize(size(px(600.), px(300.)));
+    draw(cx);
+    let (exact, filling, available) = columns(cx);
+    assert_eq!(exact, px(120.), "the exact column does not move");
+    assert!(
+        filling < wide,
+        "a narrower frame gives the filling column less: {filling:?} was {wide:?}"
+    );
+    assert_eq!(
+        exact + filling,
+        available,
+        "and it still divides the whole of it"
+    );
+}
+
 /// A rem-scaled width follows the reader's type scale and a pixel width
 /// does not, in one table, through the widths the grid actually consumes
 /// and the header it actually paints.
+///
+/// Measured with the columns intrinsic, because a table that divides its width
+/// adds the same surplus to both and the question here is what each one asked
+/// for, not what it was given on top.
 #[gpui::test]
 fn rem_column_widths_resolve_against_the_readers_type_size(cx: &mut TestAppContext) {
     cx.update(crate::init);
@@ -528,6 +725,7 @@ fn rem_column_widths_resolve_against_the_readers_type_size(cx: &mut TestAppConte
     cx.simulate_resize(size(px(900.), px(300.)));
     cx.update(|window, cx| {
         records.update(cx, |records, cx| {
+            records.set_column_fit(ColumnFit::Intrinsic, cx);
             records.set_columns(
                 [
                     RecordColumn::new("pixel", "Pixel").width(px(220.)),

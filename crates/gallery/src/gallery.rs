@@ -2457,7 +2457,12 @@ fn records_story_columns() -> Vec<RecordColumn> {
         RecordColumn::new("region", "Region")
             .sortable(true)
             .width(px(120.)),
-        RecordColumn::new("products", "Products").width(px(190.)),
+        // The one that takes the room. Every other column here is exactly as
+        // wide as its content needs, and the products - a list of chips whose
+        // length nobody can predict - take whatever the table has left over.
+        RecordColumn::new("products", "Products")
+            .width(px(190.))
+            .fill(1.),
         RecordColumn::new("unit_cost", "Unit cost")
             .sortable(true)
             .alignment(RecordColumnAlignment::Right)

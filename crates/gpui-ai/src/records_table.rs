@@ -186,6 +186,118 @@ impl RecordColumnWidth {
     }
 }
 
+/// How a table divides the width it is given.
+///
+/// A table is nearly always given more width than the columns asked for, and
+/// what it does with the remainder is the difference between a table and a
+/// picture of one. HTML settled this a long time ago: a table fills its box,
+/// specified widths are honoured, and the surplus goes to whoever will take
+/// it. This is that rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColumnFit {
+    /// Columns divide the table's whole width; the default.
+    ///
+    /// The surplus over what the columns asked for goes to the columns that
+    /// asked to grow with [`RecordColumn::fill`], or - when none did - to all
+    /// of them in proportion to the widths they already have. Either way the
+    /// table ends where its frame ends rather than leaving a band of nothing
+    /// beside the last column.
+    #[default]
+    Fill,
+    /// Columns keep exactly the widths they were given.
+    ///
+    /// The table ends where its columns end, and the reader may drag a column
+    /// edge: a width the table computes cannot also be a width the reader
+    /// chooses, so dragging belongs to this mode alone.
+    Intrinsic,
+}
+
+/// Measures the box the grid is drawn in, so its columns can divide it.
+///
+/// A canvas rather than a wrapper, so nothing is added to the layout: it
+/// reports the box it was placed in and draws nothing. The owning table
+/// ignores a width it has already seen, so the frame this asks for on a resize
+/// is one frame, not every frame.
+fn measured_grid_width(owner: gpui::WeakEntity<RecordsTable>) -> impl gpui::IntoElement {
+    gpui::canvas(
+        move |bounds, _, cx| {
+            let _ = owner.update(cx, |table, cx| table.observe_width(bounds.size.width, cx));
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
+}
+
+/// Every column's pixel width, for a table with this much room.
+///
+/// The rule, in three lines: a column's base is the width it asked for; the
+/// surplus over the sum of those bases belongs to the columns that asked to
+/// grow, or to all of them in proportion when none did; and a table with no
+/// surplus is a table whose columns are exactly their bases, which is where
+/// the horizontal scroll takes over.
+///
+/// `available` is the room the columns may occupy, which is not the whole of
+/// the box the grid was given: see [`RecordsTable::push_column_widths`] for
+/// what comes off it first.
+///
+/// Nothing here can shrink a column, so nothing here can collapse one. That is
+/// the whole reason the floor needs no separate setting - the collapse other
+/// libraries guard against with a minimum width is not reachable from here.
+fn resolve_column_widths(
+    columns: &[RecordColumn],
+    fit: ColumnFit,
+    available: Option<Pixels>,
+    rem_size: Pixels,
+) -> Arc<[Pixels]> {
+    let bases = columns
+        .iter()
+        .map(|column| {
+            column
+                .width
+                .resolve(rem_size)
+                .unwrap_or_else(default_column_width)
+        })
+        .collect::<Vec<_>>();
+    let (ColumnFit::Fill, Some(available)) = (fit, available) else {
+        return bases.into();
+    };
+    let asked_for = bases.iter().fold(Pixels::ZERO, |total, base| total + *base);
+    let surplus = available - asked_for;
+    if surplus <= Pixels::ZERO {
+        return bases.into();
+    }
+    // Whoever asked, or everyone in proportion. A share of zero is a column
+    // saying it will stay where it is while its neighbours grow.
+    let asked = columns.iter().any(|column| column.fill.is_some());
+    let shares = columns
+        .iter()
+        .zip(&bases)
+        .map(|(column, base)| match (asked, column.fill) {
+            (true, Some(share)) => share,
+            (true, None) => 0.,
+            (false, _) => f32::from(*base),
+        })
+        .collect::<Vec<_>>();
+    let total: f32 = shares.iter().sum();
+    if total <= 0. {
+        return bases.into();
+    }
+    bases
+        .iter()
+        .zip(&shares)
+        .map(|(base, share)| *base + surplus * (share / total))
+        .collect()
+}
+
+/// The width a column that named none is given.
+///
+/// Read from upstream rather than restated, so the width a column falls back to
+/// here and the width the grid would have drawn cannot drift apart.
+fn default_column_width() -> Pixels {
+    gpui_component::table::Column::default().width
+}
+
 /// One stable column in a [`RecordsTable`].
 ///
 /// Visible labels need not be unique. Events and row lookup always use the
@@ -196,6 +308,9 @@ pub struct RecordColumn {
     label: SharedString,
     sortable: bool,
     width: RecordColumnWidth,
+    /// The share of the table's surplus width this column takes, when it asked
+    /// for one. `None` is a column that did not ask.
+    fill: Option<f32>,
     alignment: RecordColumnAlignment,
     fixed: bool,
     description: Option<SharedString>,
@@ -209,6 +324,7 @@ impl RecordColumn {
             label: label.into(),
             sortable: false,
             width: RecordColumnWidth::Unset,
+            fill: None,
             alignment: RecordColumnAlignment::Left,
             fixed: false,
             description: None,
@@ -235,6 +351,29 @@ impl RecordColumn {
     /// not. Columns of one table may mix the two, and the later call wins.
     pub fn width_in_rems(mut self, width: f32) -> Self {
         self.width = RecordColumnWidth::Rems(rems(width));
+        self
+    }
+
+    /// Takes a share of the width left over once every column has the width
+    /// it asked for.
+    ///
+    /// The width set by [`RecordColumn::width`] is a floor rather than a
+    /// ceiling here: the surplus is added to it, so a column that fills can
+    /// never collapse and there is no separate minimum to remember. A column
+    /// with twice the share of another takes twice as much of the surplus.
+    ///
+    /// The moment one column asks, it and its fellow askers divide the surplus
+    /// and every other column keeps exactly what it asked for - which is how a
+    /// table gets one exact column beside one that stretches.
+    ///
+    /// ```
+    /// # use gpui::px;
+    /// # use gpui_ai::records_table::RecordColumn;
+    /// let exact = RecordColumn::new("cost", "Unit cost").width(px(120.));
+    /// let stretches = RecordColumn::new("notes", "Notes").width(px(180.)).fill(1.);
+    /// ```
+    pub fn fill(mut self, share: f32) -> Self {
+        self.fill = Some(share.max(0.));
         self
     }
 
@@ -664,6 +803,20 @@ pub struct RecordsTable {
     /// with a bottom that says something - a count, a total - the space above
     /// it is a body with room left in it, which is what it is.
     footer: Option<SharedString>,
+    /// How the table divides the width it is given.
+    fit: ColumnFit,
+    /// The height every row is drawn at, when the application names one.
+    row_height: Option<Pixels>,
+    /// The width the grid was last drawn at, which is the only thing a filling
+    /// column has to divide.
+    ///
+    /// Kept apart from [`ResolvedLayoutKey`], which is for what the *window*
+    /// resolves: a rem change invalidates every measured row height in the
+    /// crate, while this invalidates one table's column widths.
+    measured_width: Option<Pixels>,
+    /// The width the columns in force were divided from, so a frame can tell
+    /// whether the division it is looking at is the current one.
+    divided_width: Option<Pixels>,
     columns: Arc<[RecordColumn]>,
     records: Progressive<Arc<[RecordRow]>>,
     /// Rebuilt with `records`; never read against any other snapshot.
@@ -721,6 +874,10 @@ impl RecordsTable {
             id,
             label: label.into(),
             footer: None,
+            fit: ColumnFit::default(),
+            row_height: None,
+            measured_width: None,
+            divided_width: None,
             columns: Arc::from([]),
             records: Progressive::pending(Arc::from([])),
             rows_by_id: StableIdIndex::default(),
@@ -820,6 +977,111 @@ impl RecordsTable {
         }
     }
 
+    /// Sets how the table divides the width it is given.
+    ///
+    /// [`ColumnFit::Fill`] by default, which is what a reader expects of a
+    /// table: it ends where its frame ends. [`ColumnFit::Intrinsic`] keeps
+    /// every column at exactly the width it was given and hands column widths
+    /// back to the reader's own drag.
+    ///
+    /// ```
+    /// # use gpui_ai::records_table::{ColumnFit, RecordsTable};
+    /// # fn example(table: &mut RecordsTable, cx: &mut gpui::Context<RecordsTable>) {
+    /// table.set_column_fit(ColumnFit::Intrinsic, cx);
+    /// # }
+    /// ```
+    pub fn set_column_fit(&mut self, fit: ColumnFit, cx: &mut Context<Self>) {
+        if self.fit == fit {
+            return;
+        }
+        self.fit = fit;
+        self.divide_columns(cx);
+    }
+
+    /// Returns how the table divides the width it is given.
+    pub fn column_fit(&self) -> ColumnFit {
+        self.fit
+    }
+
+    /// Sets the height every row is drawn at, or restores the table's own.
+    ///
+    /// A row's height is the table's rhythm, and an application that has
+    /// measured its own content may name it exactly. `None` returns the rows
+    /// to the height the size policy gives them.
+    ///
+    /// ```
+    /// # use gpui::px;
+    /// # use gpui_ai::records_table::RecordsTable;
+    /// # fn example(table: &mut RecordsTable, cx: &mut gpui::Context<RecordsTable>) {
+    /// table.set_row_height(Some(px(44.)), cx);
+    /// # }
+    /// ```
+    pub fn set_row_height(&mut self, row_height: Option<Pixels>, cx: &mut Context<Self>) {
+        if self.row_height == row_height {
+            return;
+        }
+        self.row_height = row_height;
+        cx.notify();
+    }
+
+    /// Returns the height every row is drawn at, when one was named.
+    pub fn row_height(&self) -> Option<Pixels> {
+        self.row_height
+    }
+
+    /// Hands the grid the width every column should now be drawn at.
+    ///
+    /// Upstream caches column widths in pixels when it builds its column
+    /// groups, so a width that changed only reaches layout through a refresh.
+    fn push_column_widths(&mut self, cx: &mut Context<Self>) {
+        let columns = self.columns.clone();
+        let (fit, measured) = (self.fit, self.measured_width);
+        self.table.update(cx, |table, cx| {
+            // The overlaid bar's lane comes off the top. It has to: a bar that
+            // takes no layout space would otherwise sit over the last column's
+            // content, and columns that divide the box exactly leave the grid
+            // balanced on the edge of needing a horizontal scrollbar, which it
+            // then decides again every frame and never settles. Under a gutter
+            // policy this is zero, because the gutter has already taken it.
+            let lane = crate::scrolling::control_lane(cx);
+            let available = measured.map(|measured| measured - lane);
+            let rem_size = table.delegate().rem_size;
+            table.delegate_mut().column_widths =
+                resolve_column_widths(&columns, fit, available, rem_size);
+            table.delegate_mut().fit = fit;
+            table.refresh(cx);
+            cx.notify();
+        });
+    }
+
+    /// Records the width the grid was drawn at.
+    ///
+    /// Called from the grid's own prepaint, where it may record and nothing
+    /// else. Dividing the columns here would rebuild the grid's column groups
+    /// in the middle of the frame that is measuring them, and the frame never
+    /// settles: nineteen thousand prepaints for one draw, which is how this was
+    /// found. The division is deferred out of the frame instead, the same way
+    /// a new rem is, and the width that was divided is remembered so the next
+    /// frame knows there is nothing left to do.
+    fn observe_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
+        if self.measured_width == Some(width) {
+            return;
+        }
+        self.measured_width = Some(width);
+        cx.notify();
+    }
+
+    /// Whether the columns have been divided from the width last measured.
+    fn columns_are_divided(&self) -> bool {
+        self.fit == ColumnFit::Intrinsic || self.divided_width == self.measured_width
+    }
+
+    /// Divides the columns from the width last measured.
+    fn divide_columns(&mut self, cx: &mut Context<Self>) {
+        self.divided_width = self.measured_width;
+        self.push_column_widths(cx);
+    }
+
     /// Replaces the controlled column snapshot without rebuilding table state.
     ///
     /// A snapshot containing duplicate stable column IDs is ignored atomically.
@@ -874,6 +1136,9 @@ impl RecordsTable {
             }
             cx.notify();
         });
+        // New columns, new division: the widths cached above belong to the
+        // snapshot that just left.
+        self.divide_columns(cx);
     }
 
     /// Replaces the controlled progressive record snapshot.
@@ -1151,13 +1416,14 @@ impl RecordsTable {
             .columns
             .iter()
             .any(|column| matches!(column.width, RecordColumnWidth::Rems(_)));
-        self.table.update(cx, |table, cx| {
+        self.table.update(cx, |table, _| {
             table.delegate_mut().rem_size = rem_size;
-            if widths_follow_the_rem {
-                table.refresh(cx);
-                cx.notify();
-            }
         });
+        // A filling table divides again whatever its columns are measured in:
+        // the bases moved, so the surplus did.
+        if widths_follow_the_rem || self.fit == ColumnFit::Fill {
+            self.divide_columns(cx);
+        }
     }
 
     fn handle_table_event(&mut self, event: &TableEvent, cx: &mut Context<Self>) {
@@ -1342,6 +1608,13 @@ impl Render for RecordsTable {
                 table.resolve_layout(rem_size, cx);
             });
         }
+        // And the same for the width the columns divide, for the same reason:
+        // reading it here mutates nothing.
+        if !self.columns_are_divided() {
+            cx.defer_in(window, move |table, _, cx| {
+                table.divide_columns(cx);
+            });
+        }
 
         let inline_status = (!self.records.content().is_empty())
             .then(|| match self.records.state() {
@@ -1393,7 +1666,26 @@ impl Render for RecordsTable {
                 div()
                     .flex_1()
                     .min_h_0()
-                    .child(DataTable::new(&self.table).stripe(false).bordered(true)),
+                    // The frame around the grid is drawn here rather than by
+                    // the grid, in the same ink and radius upstream would have
+                    // used. It has to be ours because the measurement below is
+                    // taken inside it: a column dividing the box the border is
+                    // drawn on divides two pixels the grid never gets, and the
+                    // table would overflow itself by exactly its own edge.
+                    .rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    // What a filling column divides: the box the grid is given,
+                    // and the only one a column can be a share of.
+                    .child(measured_grid_width(cx.weak_entity()))
+                    .child(
+                        DataTable::new(&self.table)
+                            .stripe(false)
+                            .bordered(false)
+                            .when_some(self.row_height, |grid, height| {
+                                grid.with_size(Size::Size(height))
+                            }),
+                    ),
             )
             .when_some(self.footer.clone(), |frame, footer| {
                 // Painted after the grid, not merely placed below it.

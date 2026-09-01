@@ -5739,6 +5739,33 @@
             "        "
           ],
           [
+            "// The one that takes the room. Every other column here is exactly as",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// wide as its content needs, and the products - a list of chips whose",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
+            "// length nobody can predict - take whatever the table has left over.",
+            "comment"
+          ]
+        ],
+        [
+          [
+            "        "
+          ],
+          [
             "RecordColumn",
             "type"
           ],
@@ -5757,14 +5784,31 @@
             "string"
           ],
           [
-            ").width(px("
+            ")"
+          ]
+        ],
+        [
+          [
+            "            .width(px("
           ],
           [
             "190",
             "number"
           ],
           [
-            ".)),"
+            ".))"
+          ]
+        ],
+        [
+          [
+            "            .fill("
+          ],
+          [
+            "1",
+            "number"
+          ],
+          [
+            ".),"
           ]
         ],
         [

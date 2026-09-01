@@ -27,10 +27,10 @@ use crate::{
 };
 
 use super::{
-    RecordCell, RecordCellKind, RecordCellProvider, RecordColumn, RecordColumnAlignment, RecordRow,
-    RecordSortDirection, RecordStatusTone, RecordsTable, RowActionPlacement, RowActionVisibility,
-    escape_markdown_text, records_state_glyph, records_state_text, reorder::RowReorderState,
-    scoped_records_id,
+    ColumnFit, RecordCell, RecordCellKind, RecordCellProvider, RecordColumn, RecordColumnAlignment,
+    RecordRow, RecordSortDirection, RecordStatusTone, RecordsTable, RowActionPlacement,
+    RowActionVisibility, escape_markdown_text, records_state_glyph, records_state_text,
+    reorder::RowReorderState, scoped_records_id,
 };
 
 #[derive(Clone)]
@@ -38,6 +38,14 @@ pub(super) struct RecordsDelegate {
     owner: WeakEntity<RecordsTable>,
     component_id: SharedString,
     pub(super) columns: Arc<[RecordColumn]>,
+    /// The pixel width each column is drawn at, divided by the owning table
+    /// from the width the grid was last given. Shorter than `columns` only
+    /// before the first division, where a column falls back to its own.
+    pub(super) column_widths: Arc<[Pixels]>,
+    /// How the owning table divides its width, which decides whether a reader
+    /// may drag a column edge: a width the table computes is not one the reader
+    /// can also choose.
+    pub(super) fit: ColumnFit,
     pub(super) records: Progressive<Arc<[RecordRow]>>,
     pub(super) cell_provider: Option<Arc<dyn RecordCellProvider>>,
     pub(super) selected_row_id: Option<SharedString>,
@@ -63,6 +71,8 @@ impl RecordsDelegate {
             owner,
             component_id,
             columns: Arc::from([]),
+            column_widths: Arc::from([]),
+            fit: ColumnFit::default(),
             records: Progressive::pending(Arc::from([])),
             cell_provider: None,
             selected_row_id: None,
@@ -99,9 +109,17 @@ impl TableDelegate for RecordsDelegate {
             .map(|column| {
                 let alignment = column.alignment;
                 let fixed = column.fixed;
-                let width = column.width.resolve(self.rem_size);
+                // The divided width when the table has divided one, and the
+                // column's own until it has - which is the first frame, before
+                // anything has been measured to divide.
+                let width = self
+                    .column_widths
+                    .get(col_ix)
+                    .copied()
+                    .or_else(|| column.width.resolve(self.rem_size));
                 let column = Column::new(column.id.clone(), column.label.clone());
                 let column = column.when_some(width, |column, width| column.width(width));
+                let column = column.resizable(self.fit == ColumnFit::Intrinsic);
                 let column = if fixed { column.fixed_left() } else { column };
                 match alignment {
                     RecordColumnAlignment::Left => column,
