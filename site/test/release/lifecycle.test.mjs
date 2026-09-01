@@ -2139,7 +2139,8 @@ workflow("the canvas draws glyphs, not just its furniture", async ({ cdp, errors
     ink > 5_000,
     `the canvas drew ${ink} pixels of ink where a page of text belongs. ` +
       "The fonts the theme names are probably not registered: GPUI's web " +
-      "platform no longer bundles them, so gallery-web has to add them itself.",
+      "platform no longer bundles them. The fix, and the faces to vendor, are " +
+      "in the ponytail comment beside `run_embedded` in gallery-web/src/lib.rs.",
   );
 });
 

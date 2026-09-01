@@ -296,6 +296,16 @@ pub fn run(
         cx.activate(true);
     };
 
+    // ponytail: the demos draw in fonts GPUI's web platform embeds, and upstream
+    // is moving that bundle into the application - a browser build will start
+    // with an empty font database. When it lands, the release test "the canvas
+    // draws glyphs, not just its furniture" goes red, and the fix is here:
+    // vendor IBM Plex Sans Regular/SemiBold/Italic and Lilex Regular beside this
+    // file and, inside `launch` before the window opens,
+    // `cx.text_system().add_fonts(..)` with their bytes. Four faces, ~784 KB,
+    // which is half of what the platform bundles today; our themes set no bold
+    // or italic syntax, so the other four buy nothing. Not vendored yet because
+    // until that day their bytes would sit in the binary beside upstream's.
     #[cfg(target_family = "wasm")]
     APPLICATION.with(|stored| {
         *stored.borrow_mut() = Some(application.run_embedded(launch));
