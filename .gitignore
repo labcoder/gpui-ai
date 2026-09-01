@@ -26,3 +26,9 @@ dist/
 # A GPU-drawn WebP is not byte-reproducible, so checking them in would make the
 # generated-output check in CI fail on runs that changed nothing.
 /site/public/posters/
+
+# Agent skill installers drop shared skills here. Nothing in this repository
+# depends on one, and a skill is somebody else's instructions: it does not
+# belong in the history of a library that people build against.
+.agents/
+skills-lock.json
