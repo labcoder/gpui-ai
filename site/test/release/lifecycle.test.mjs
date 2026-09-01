@@ -1223,9 +1223,23 @@ workflow("demo first paint, wheel ownership, touch, override, reset, and share l
     describe: GALLERY_DIAGNOSIS,
     errors,
   });
-  const engagedAt = await scrollY();
-  await wheelAt(overDemo.x, overDemo.y, 400);
-  assert.equal(await scrollY(), engagedAt, "a demo that has been clicked into must keep the wheel");
+  // The step that used to sit here - wheel once more, assert the page stayed
+  // still - cannot be run in this harness at all, and pretending otherwise is
+  // what made it a tripwire. Neither CDP input API delivers a wheel into a
+  // child frame: `dispatchMouseEvent` scrolls the root document without
+  // hit-testing into one, and `synthesizeScrollGesture` refuses the
+  // coordinates. So the wheel scrolls the page, the page carries the frame out
+  // from under a pointer that has not moved, and the demo gives the wheel back
+  // - which is correct behaviour, and unobservable as anything but a failure.
+  // It went red twice on layout changes that never touched the wheel.
+  //
+  // The decision is held still instead in
+  // `crates/gallery-web/www/src/wheel.test.mjs`, event by event: the page's
+  // wheel while nobody has clicked in, this frame's after a pointerdown, given
+  // straight back on pointerleave or blur. What stays here is everything the
+  // browser can actually see - that an untouched demo does not claim the
+  // wheel, that the page scrolls over one, that a click hands it over, and
+  // that moving away returns it.
 
   // And moving away gives it straight back, so nothing is held that was not
   // asked for.

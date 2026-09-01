@@ -12,6 +12,7 @@ import {
 } from './query.js';
 import { schemeFor } from './scheme.js';
 import { shareTheVariant } from './variant.js';
+import { CAPTURED, shareTheWheel as shareWheelWith } from './wheel.js';
 
 /**
  * Whether the page this example is embedded in is showing a dark theme.
