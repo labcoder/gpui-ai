@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Code, CodeFrame } from "./CodePanel";
 import { sample } from "./code";
 import { build, components, install, themes } from "./data";
@@ -79,6 +79,8 @@ export function GuidesIndex() {
 
 function Body({ slug }: { readonly slug: string }) {
   switch (slug) {
+    case "differences":
+      return <Differences />;
     case "theming":
       return <Theming />;
     case "ownership-and-events":
@@ -90,6 +92,138 @@ function Body({ slug }: { readonly slug: string }) {
     default:
       return null;
   }
+}
+
+/**
+ * What this library is, relative to the one it is built on.
+ *
+ * The prose is an argument; the table under it is not written here at all.
+ * Every row comes from the same exported catalog the component pages read, so
+ * a component cannot say one thing on its own page and another here, and a
+ * component added in Rust arrives in this table without anyone remembering it.
+ */
+function Differences() {
+  const counted = (kind: string) =>
+    components.filter((component) => component.lineage.kind === kind).length;
+  const categories: string[] = [];
+  for (const component of components) {
+    if (!categories.includes(component.category)) categories.push(component.category);
+  }
+
+  return (
+    <>
+      <p>
+        gpui-ai is built on <a href="https://github.com/longbridge/gpui-component">gpui-component</a>,
+        and is not a replacement for it. If you need a button, an input, a dialog or a dock, that is
+        the library to reach for — this one does not wrap them and does not re-export them. What it
+        adds is the layer above: the surfaces an application grows when a model is doing the work,
+        where the data arrives while it is being drawn and a person has to be able to follow, check
+        and stop it.
+      </p>
+      <p>
+        Every component below says which of three things it is. The words are the library&rsquo;s own,
+        exported from the same place its API documentation comes from.
+      </p>
+
+      <ul className="lineage-counts">
+        <li className="lineage-new">
+          <strong>{counted("new")}</strong>
+          <span>
+            <b>New.</b> Built from primitives. Upstream has no component for the thing at all, or has
+            one whose look cannot be brought into line with this library&rsquo;s.
+          </span>
+        </li>
+        <li className="lineage-extends">
+          <strong>{counted("extends")}</strong>
+          <span>
+            <b>Extends.</b> Upstream&rsquo;s component does the work; this adds what an agent surface
+            needs and hands the rest back.
+          </span>
+        </li>
+        <li className="lineage-composes">
+          <strong>{counted("composes")}</strong>
+          <span>
+            <b>Composes.</b> An upstream component is mounted inside a surface upstream has no
+            equivalent for — you could not reach it by configuring anything it ships.
+          </span>
+        </li>
+      </ul>
+
+      <p>
+        There is no fourth kind. Nothing in the catalogue is an upstream component under a new name:
+        the library re-exports none of them, so every page you can open is one of the three above.
+        Button, icon, spinner and text rendering count as primitives here — nearly everything uses
+        them, and counting them would put every component in one bucket and tell you nothing.
+      </p>
+
+      <Section id="every-component" title="Every component">
+        <div className="lineage-table-scroll">
+          <table className="lineage-table">
+            <thead>
+              <tr>
+                <th scope="col">Component</th>
+                <th scope="col">Kind, and what it stands on</th>
+                <th scope="col">What it adds, and why it is here</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category) => (
+                <Fragment key={category}>
+                  <tr className="lineage-category">
+                    <th scope="colgroup" colSpan={3}>
+                      {category}
+                    </th>
+                  </tr>
+                  {components
+                    .filter((component) => component.category === category)
+                    .map((component) => (
+                      <tr key={component.slug}>
+                        <th scope="row">
+                          <a href={href(`/components/${component.slug}/`)}>{component.api}</a>
+                        </th>
+                        <td className="lineage-kind-cell">
+                          <span className={`lineage-tag lineage-${component.lineage.kind}`}>
+                            {component.lineage.label}
+                          </span>
+                          {component.lineage.basis ? (
+                            <code>{component.lineage.basis}</code>
+                          ) : (
+                            <span className="lineage-none">no upstream counterpart</span>
+                          )}
+                        </td>
+                        <td>{component.lineage.note}</td>
+                      </tr>
+                    ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section id="one-more" title="One extension that is not a component">
+        <p>
+          <code>ButtonLabelExt</code> is the one place the library extends an upstream{" "}
+          <em>primitive</em> in public API. Upstream&rsquo;s label squeezes its glyphs into a one-em
+          box; this composes the button&rsquo;s child slot instead, so descenders and accents keep the
+          theme&rsquo;s leading. Everything else about the button — sizes, colours, focus, activation,
+          disabled states — stays upstream&rsquo;s.
+        </p>
+      </Section>
+
+      <Section id="which-one" title="Which library you want">
+        <p>
+          If you are building an application interface — settings, forms, panels, menus — gpui-component
+          is the whole answer and this library has nothing to add to it. If your interface has a model
+          in it, the difference is not decoration: a grid that has to draw while its rows are still
+          arriving, a transcript that keeps its place as messages land off screen, a tool call a person
+          can allow or deny, a reasoning trace that folds itself away when it settles. Those are the
+          {" "}
+          {components.length} surfaces here, and each one names above what it is standing on.
+        </p>
+      </Section>
+    </>
+  );
 }
 
 /** A code sample from `site/content/samples/`, with the file strip above it. */

@@ -23,6 +23,24 @@ export interface Behavior {
   readonly overflow: string;
 }
 
+/**
+ * Where a component stands relative to gpui-component.
+ *
+ * On every component page, and gathered on `/guides/differences/`: a reader
+ * choosing between this library and the one it is built on should not have to
+ * read the source to find out which of the two they are looking at.
+ */
+export interface LineageEntry {
+  /** `new`, `extends`, or `composes` — what the page styles and filters on. */
+  readonly kind: string;
+  /** The one-word label a reader sees. */
+  readonly label: string;
+  /** The upstream component it is built on, empty where there is none. */
+  readonly basis: string;
+  /** What it adds, and why it is here rather than upstream. */
+  readonly note: string;
+}
+
 /** One component, as the exporter describes it. */
 export interface Component {
   readonly sequence: number;
@@ -33,6 +51,7 @@ export interface Component {
   readonly summary: string;
   readonly source: string;
   readonly api: string;
+  readonly lineage: LineageEntry;
   readonly usage: string;
   /**
    * The story's measured natural height in pixels.

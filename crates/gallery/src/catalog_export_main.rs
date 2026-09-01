@@ -193,6 +193,16 @@ fn main() {
             "summary": meta.summary,
             "source": source,
             "api": meta.api,
+            // What a reader deciding between this library and the one it is
+            // built on needs per component, rather than only in prose
+            // somewhere else: where it stands, what it stands on, and why it
+            // is here.
+            "lineage": {
+                "kind": meta.lineage.id(),
+                "label": meta.lineage.label(),
+                "basis": meta.lineage_basis,
+                "note": meta.lineage_note,
+            },
             "usage": meta.usage,
             "height": meta.height,
             // The window frame the site draws around each demo.

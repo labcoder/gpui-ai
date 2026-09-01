@@ -16,6 +16,12 @@
 /** @type {readonly Doc[]} */
 export const docs = [
   {
+    slug: "differences",
+    title: "Differences from gpui-component",
+    summary:
+      "This library is built on gpui-component. Here is what is new, what extends it, and what is upstream's own work inside something new.",
+  },
+  {
     slug: "theming",
     title: "Theming",
     summary: "Every colour, radius, and type style comes from the active theme, including yours.",

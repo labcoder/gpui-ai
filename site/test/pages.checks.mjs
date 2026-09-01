@@ -28,7 +28,7 @@ const installSnippet = highlightFile.extras.install;
 const BASE = "/gpui-ai";
 // Written out rather than imported: routes.ts and docs.ts are TypeScript this
 // test cannot read, and stating the pages independently is the point.
-const docSlugs = ["theming", "ownership-and-events", "accessibility-and-motion", "browser-demos"];
+const docSlugs = ["differences", "theming", "ownership-and-events", "accessibility-and-motion", "browser-demos"];
 /** The decorations, stated here rather than read, for the same reason. */
 const decorationSlugs = [
   "photo",
@@ -847,9 +847,17 @@ test("route code loads per page instead of riding in every page's bundle", async
   // navigation surfaces render, and the searchable layer over the two kinds.
   // Story code leaking into the entry is what the probe above catches; this
   // number catches everything else growing unreviewed.
+  //
+  // +13,022 bytes for the lineage every component now carries (0.8.0),
+  // measured and split: 7,438 of it is the data itself — for each of the 37
+  // components, where it stands relative to gpui-component, what it stands on,
+  // and the sentence saying what it adds. That is a catalog row like the
+  // others and rides in the entry for the same reason, because the badge is on
+  // every component page. The rest is the guide that gathers them, which is a
+  // route and a page rather than data.
   assert.ok(
-    entry.length <= 348_693,
-    `the entry chunk is ${entry.length} bytes; the reviewed cap is 348,693`,
+    entry.length <= 361_715,
+    `the entry chunk is ${entry.length} bytes; the reviewed cap is 361,715`,
   );
 
   // The source-level guard the split lives or dies on.

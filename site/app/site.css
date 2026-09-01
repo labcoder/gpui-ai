@@ -1614,3 +1614,193 @@ pre.code-plain {
 .eyebrow a {
   color: inherit;
 }
+
+/* --------------------------------------------------------------- lineage ---
+   Where a component stands relative to the library it is built on: a badge on
+   its own page, and the table on /guides/differences/ that gathers all of
+   them. The three kinds take the theme's own semantic colours rather than
+   fixed ones, so they re-skin with everything else. */
+
+.lineage {
+  margin: calc(var(--space-2) * -1) 0 var(--space-8);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ai-border);
+  border-left: 3px solid var(--ai-border);
+  border-radius: var(--ai-radius-lg);
+  background: var(--ai-surface);
+  max-width: var(--demo-width);
+  font-size: 0.875rem;
+}
+
+.lineage-new {
+  border-left-color: var(--ai-success);
+}
+
+.lineage-extends {
+  border-left-color: var(--ai-warning);
+}
+
+.lineage-composes {
+  border-left-color: var(--ai-info);
+}
+
+.lineage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.lineage-basis {
+  color: var(--ai-muted-text);
+  font-size: 0.8125rem;
+}
+
+.lineage-note {
+  margin: 0;
+}
+
+.lineage-more {
+  margin: var(--space-2) 0 0;
+  font-size: 0.8125rem;
+}
+
+/* The badge itself, shared by the page and the table. */
+.lineage-tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ai-border);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lineage-new > .lineage-head > .lineage-tag,
+.lineage-tag.lineage-new {
+  color: var(--ai-success);
+  border-color: var(--ai-success);
+}
+
+.lineage-extends > .lineage-head > .lineage-tag,
+.lineage-tag.lineage-extends {
+  color: var(--ai-warning);
+  border-color: var(--ai-warning);
+}
+
+.lineage-composes > .lineage-head > .lineage-tag,
+.lineage-tag.lineage-composes {
+  color: var(--ai-info);
+  border-color: var(--ai-info);
+}
+
+/* The three counts at the top of the guide. */
+.lineage-counts {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-6) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lineage-counts li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ai-border);
+  border-left: 3px solid var(--ai-border);
+  border-radius: var(--ai-radius-lg);
+  background: var(--ai-surface);
+  font-size: 0.875rem;
+}
+
+.lineage-counts strong {
+  font-size: 1.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+}
+
+.lineage-counts .lineage-new strong {
+  color: var(--ai-success);
+}
+
+.lineage-counts .lineage-extends strong {
+  color: var(--ai-warning);
+}
+
+.lineage-counts .lineage-composes strong {
+  color: var(--ai-info);
+}
+
+/* The table. Wide by nature, so it scrolls inside its own box rather than
+   pushing the page sideways. */
+.lineage-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--ai-border);
+  border-radius: var(--ai-radius-lg);
+}
+
+.lineage-table {
+  border-collapse: collapse;
+  width: 100%;
+  /* Narrow enough to sit inside the prose column on a desktop, so the table
+     scrolls sideways only where a phone would have forced it to anyway. */
+  min-width: 32rem;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.lineage-table th,
+.lineage-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--ai-border);
+  vertical-align: top;
+  font-weight: 400;
+}
+
+.lineage-table thead th {
+  color: var(--ai-muted-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lineage-table tbody tr:last-child th,
+.lineage-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.lineage-table tbody th[scope="row"] {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.lineage-category th {
+  background: var(--ai-surface);
+  color: var(--ai-muted-text);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The badge and what it stands on, stacked: two columns of their own would
+   have pushed the note column below reading width. */
+.lineage-kind-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.lineage-none {
+  color: var(--ai-muted-text);
+  font-size: 0.75rem;
+}

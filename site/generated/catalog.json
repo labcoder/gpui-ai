@@ -101,6 +101,12 @@
       "summary": "A token-driven pixel field for work whose duration is not yet known.",
       "source": "crates/gpui-ai/src/loading.rs",
       "api": "LoadingState",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "An animated pixel grid with elapsed time, for waits long enough that a spinner stops meaning anything."
+      },
       "usage": "LoadingState::new().label(\"Thinking\")",
       "height": 52,
       "windowTitle": "Loading state — gpui-ai",
@@ -124,6 +130,12 @@
       "summary": "One status pill for every lifecycle, swapping states in a fixed slot.",
       "source": "crates/gpui-ai/src/status.rs",
       "api": "StatusBadge",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "One status vocabulary - pending, running, completed, failed - mapped onto the theme's semantic colours once and shared by chips, task rows, tool calls and plan steps. Upstream's badge is a pill with no lifecycle in it."
+      },
       "usage": "StatusBadge::new(\"review\", \"Needs review\")",
       "height": 84,
       "windowTitle": "Status badge — gpui-ai",
@@ -147,6 +159,12 @@
       "summary": "Compact, typed status for tool calls without hiding their lifecycle.",
       "source": "crates/gpui-ai/src/chip.rs",
       "api": "ToolChip",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The compact form of the same thing, for a transcript that should not become a list of cards."
+      },
       "usage": "ToolChip::new(\"edit\", \"edit main.rs\")",
       "height": 84,
       "windowTitle": "Tool chips — gpui-ai",
@@ -172,6 +190,12 @@
       "summary": "Collapsible tool-call cards with input, output, approval, and a shimmering group.",
       "source": "crates/gpui-ai/src/tool_call.rs",
       "api": "ToolCall",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "One invocation: name, summary, status, and on expansion the input sent, the output returned or the reason it failed, with Allow and Deny where a person has to decide. Groups fold a burst of them."
+      },
       "usage": "ToolCall::new(&call_progress)",
       "height": 654,
       "windowTitle": "Tool calls — gpui-ai",
@@ -198,6 +222,12 @@
       "summary": "Progressive task rows with stable identity and readable state.",
       "source": "crates/gpui-ai/src/task.rs",
       "api": "TaskRow",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Live status for long-running agent work."
+      },
       "usage": "TaskRow::new(&task_progress)",
       "height": 144,
       "windowTitle": "Task rows — gpui-ai",
@@ -221,6 +251,12 @@
       "summary": "Expandable reasoning traces in structured step and prose forms.",
       "source": "crates/gpui-ai/src/thinking.rs",
       "api": "Thinking",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "A reasoning trace that opens itself while it runs, follows the newest steps, holds the reader's place when they scroll back, and collapses to a single line when it settles."
+      },
       "usage": "Thinking::new(\"reasoning\", &trace_progress)",
       "height": 306,
       "windowTitle": "Thinking — gpui-ai",
@@ -246,6 +282,12 @@
       "summary": "A reduced-motion-aware ambient signal for background AI activity.",
       "source": "crates/gpui-ai/src/orbs.rs",
       "api": "Orbs",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Ambient motion for the moments when a model is alive but has nothing to show yet: one dot lattice, several choreographed personalities."
+      },
       "usage": "Orbs::new()",
       "height": 195,
       "windowTitle": "Orbs — gpui-ai",
@@ -269,6 +311,12 @@
       "summary": "Search results with readable citations, metadata, and progressive state.",
       "source": "crates/gpui-ai/src/search_results.rs",
       "api": "SearchResults",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Web-search tool output: the query, its results, and the sources behind them."
+      },
       "usage": "SearchResults::new(\"research\", \"GPUI components\")",
       "height": 161,
       "windowTitle": "Web search — gpui-ai",
@@ -294,6 +342,12 @@
       "summary": "A stable-ID checklist for plans that change while an agent works.",
       "source": "crates/gpui-ai/src/todo_list.rs",
       "api": "TodoList",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The plan an agent is working through, with completion arriving item by item."
+      },
       "usage": "TodoList::new(\"release-plan\")",
       "height": 234,
       "windowTitle": "To-do list — gpui-ai",
@@ -319,6 +373,12 @@
       "summary": "Image generation progress, preview, and error states in one frame.",
       "source": "crates/gpui-ai/src/image_generation.rs",
       "api": "ImageGeneration",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "A picture revealed as it is produced rather than swapped in when it is done."
+      },
       "usage": "ImageGeneration::new(\"hero-art\").progress(0.64)",
       "height": 212,
       "windowTitle": "Image generation — gpui-ai",
@@ -342,6 +402,12 @@
       "summary": "Selectable streaming Markdown with citations, sources, and follow-ups.",
       "source": "crates/gpui-ai/src/streaming_text.rs",
       "api": "StreamingText",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "TextView, HoverCard, Link",
+        "note": "Markdown that arrives a token at a time, with citations that resolve on hover and follow-up suggestions underneath. Upstream renders markdown it already has."
+      },
       "usage": "StreamingText::new(\"answer\", &content)",
       "height": 426,
       "windowTitle": "Streaming text — gpui-ai",
@@ -367,6 +433,12 @@
       "summary": "A virtualized controlled conversation with tail-follow, unread behavior, in-place edit, and branch versions.",
       "source": "crates/gpui-ai/src/chat.rs",
       "api": "Chat",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "Textarea, list",
+        "note": "A virtualized, controlled transcript: unread reconciliation, jump to latest, and an anchor that survives messages arriving off screen."
+      },
       "usage": "Chat::new(\"conversation\", prompt, window, cx)",
       "height": 595,
       "windowTitle": "Chat — gpui-ai",
@@ -401,6 +473,12 @@
       "summary": "Starter and follow-up prompt chips that ripple in and report stable IDs.",
       "source": "crates/gpui-ai/src/suggestions.rs",
       "api": "Suggestions",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The prompts an assistant offers before it has been asked anything."
+      },
       "usage": "Suggestions::new(\"starters\")",
       "height": 132,
       "windowTitle": "Suggestions — gpui-ai",
@@ -426,6 +504,12 @@
       "summary": "Composer and message attachments with thumbnails, kinds, upload state, and typed open or remove events.",
       "source": "crates/gpui-ai/src/attachment.rs",
       "api": "AttachmentStrip",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Files on their way into a prompt, with upload progress and failure shown per item."
+      },
       "usage": "AttachmentStrip::new(\"files\").items(attachments)",
       "height": 486,
       "windowTitle": "Attachment previews — gpui-ai",
@@ -451,6 +535,12 @@
       "summary": "A side panel for generated documents and code with preview and source views, versions, actions, and streaming state.",
       "source": "crates/gpui-ai/src/artifact.rs",
       "api": "ArtifactPanel",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "tab::TabBar",
+        "note": "A generated document beside the conversation, with preview and source, a version switcher, and streamed content so the panel renders while the agent is still writing."
+      },
       "usage": "ArtifactPanel::new(\"doc\", &artifact)",
       "height": 504,
       "windowTitle": "Artifact panel — gpui-ai",
@@ -476,6 +566,12 @@
       "summary": "Context-window usage as a ring, bar, or text with severity tones and a breakdown.",
       "source": "crates/gpui-ai/src/context_meter.rs",
       "api": "ContextMeter",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "ProgressCircle, HoverCard",
+        "note": "How much of the model's context window a conversation has spent, as a ring, a bar or plain text, with the tone changing as it fills and the numbers exposed semantically so the level never depends on colour alone."
+      },
       "usage": "ContextMeter::new(\"context\", &usage)",
       "height": 120,
       "windowTitle": "Context meter — gpui-ai",
@@ -499,6 +595,12 @@
       "summary": "Keyboard-first command discovery backed by stable application IDs.",
       "source": "crates/gpui-ai/src/command_search.rs",
       "api": "CommandSearch",
+      "lineage": {
+        "kind": "extends",
+        "label": "Extends",
+        "basis": "command::CommandState",
+        "note": "Stable-ID items over the native palette, so a result keeps its identity as the ranking moves under it and the selection does not jump to whatever now sits at that index."
+      },
       "usage": "CommandSearch::new(\"commands\", window, cx)",
       "height": 387,
       "windowTitle": "Command search — gpui-ai",
@@ -537,6 +639,12 @@
       "summary": "Filterable, accessible navigation for growing AI workspaces.",
       "source": "crates/gpui-ai/src/sidebar_nav.rs",
       "api": "SidebarNav",
+      "lineage": {
+        "kind": "extends",
+        "label": "Extends",
+        "basis": "sidebar::SidebarMenuItem",
+        "note": "Flattens the tree into one virtualized list, so a section holding ten thousand items costs what the viewport shows rather than what the section holds. Adds a retained filter input, roving focus with tree semantics, and a rail that glides between its widths."
+      },
       "usage": "SidebarNav::new(\"workspace-nav\", window, cx)",
       "height": 476,
       "windowTitle": "Sidebar navigation — gpui-ai",
@@ -562,6 +670,12 @@
       "summary": "A grouped conversation list with search, archived threads, and typed row actions.",
       "source": "crates/gpui-ai/src/thread_list.rs",
       "api": "ThreadList",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "Input, Popover, PopupMenu",
+        "note": "Conversations grouped into sections, with search, an archive toggle and a per-row overflow menu. Every intent goes back to the application rather than being acted on here."
+      },
       "usage": "ThreadList::new(\"threads\", window, cx)",
       "height": 436,
       "windowTitle": "Thread list — gpui-ai",
@@ -587,6 +701,12 @@
       "summary": "A controlled property inspector for precise model and design settings.",
       "source": "crates/gpui-ai/src/fine_tune.rs",
       "api": "FineTuneCard",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "ColorPicker, Slider, Input",
+        "note": "Upstream's own controls arranged as one controlled inspector that reports every change rather than owning it."
+      },
       "usage": "FineTuneCard::new(\"controls\", values, typefaces, window, cx)",
       "height": 738,
       "windowTitle": "Fine-tune card — gpui-ai",
@@ -612,6 +732,12 @@
       "summary": "A controlled virtualized records grid for large, changing datasets.",
       "source": "crates/gpui-ai/src/records_table.rs",
       "api": "RecordsTable",
+      "lineage": {
+        "kind": "extends",
+        "label": "Extends",
+        "basis": "table::DataTable",
+        "note": "Adds controlled snapshots with stable row IDs, so a row keeps its identity when the data is replaced; progressive states drawn inside the grid; columns that divide the table's width; and a footer. Upstream's grid draws data that has arrived, and an agent's grid has to draw while it is still arriving."
+      },
       "usage": "RecordsTable::new(\"accounts\", \"Accounts\", window, cx)",
       "height": 288,
       "windowTitle": "Records table — gpui-ai",
@@ -666,6 +792,12 @@
       "summary": "A virtualized before-and-after proposal grid with explicit change state.",
       "source": "crates/gpui-ai/src/diff_table.rs",
       "api": "DiffTable",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "RecordsTable",
+        "note": "Before and after values for one proposal, with accept and reject per row. Reviewing a change an agent wants to make is a different surface from browsing data, even though both are grids."
+      },
       "usage": "DiffTable::new(\"proposal\", \"Proposed changes\", window, cx)",
       "height": 288,
       "windowTitle": "Diff table — gpui-ai",
@@ -720,6 +852,12 @@
       "summary": "A controlled task grid with typed filters and stable-row reorder motion.",
       "source": "crates/gpui-ai/src/filter_table.rs",
       "api": "FilterTable",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "RecordsTable",
+        "note": "Filter chips over a grid whose rows animate to their new places rather than cutting, so a reader can see what the filter did to the set they were looking at."
+      },
       "usage": "FilterTable::new(\"tasks\", \"Tasks\", window, cx)",
       "height": 288,
       "windowTitle": "Filter table — gpui-ai",
@@ -774,6 +912,12 @@
       "summary": "A bounded feature matrix with semantic values and sticky context.",
       "source": "crates/gpui-ai/src/comparison_table.rs",
       "api": "ComparisonTable",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "A matrix rather than a data grid: rows are features, columns are the things compared, and every column header carries its own control. Bounded and virtualized, with columns that divide the width and titles that wrap."
+      },
       "usage": "ComparisonTable::new(\"plans\", \"Plans\", window, cx)",
       "height": 432,
       "windowTitle": "Comparison table — gpui-ai",
@@ -828,6 +972,12 @@
       "summary": "Selectable code with language context and progressive reveal.",
       "source": "crates/gpui-ai/src/code_block.rs",
       "api": "CodeBlock",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "highlighter, Clipboard",
+        "note": "Upstream's highlighting with a streaming reveal, so a block can be syntax-coloured while the model is still writing it, and copied while it is."
+      },
       "usage": "CodeBlock::new(\"patch\", source).language(\"rust\")",
       "height": 223,
       "windowTitle": "Code block — gpui-ai",
@@ -851,6 +1001,12 @@
       "summary": "A unified patch with line gutters, change tints, per-hunk accept or reject, and a copyable source.",
       "source": "crates/gpui-ai/src/code_diff.rs",
       "api": "CodeDiff",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "highlighter, Clipboard",
+        "note": "The same, as a reviewable patch: accept and reject per hunk, with the decision handed back to the application."
+      },
       "usage": "CodeDiff::new(\"patch\", &file).reviewable(true)",
       "height": 477,
       "windowTitle": "Code diff — gpui-ai",
@@ -876,6 +1032,12 @@
       "summary": "An explicit, keyboard-operable human gate with destructive and always-allow variants and resolved states.",
       "source": "crates/gpui-ai/src/approval.rs",
       "api": "ApprovalCard",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "One decision about something already proposed, with the consequence stated and the tone matched to how far it reaches."
+      },
       "usage": "ApprovalCard::new(\"deploy\", \"Deploy production?\")",
       "height": 457,
       "windowTitle": "Approval card — gpui-ai",
@@ -901,6 +1063,12 @@
       "summary": "An agent's proposed steps with typed per-step status, approve or reject while proposed, and resolved states.",
       "source": "crates/gpui-ai/src/plan.rs",
       "api": "PlanCard",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The steps an agent intends, each carrying the shared status vocabulary as it runs."
+      },
       "usage": "PlanCard::new(\"rollout\", \"Switch bulk orders\")",
       "height": 406,
       "windowTitle": "Plan card — gpui-ai",
@@ -926,6 +1094,12 @@
       "summary": "A focused recommendation with rationale and typed actions.",
       "source": "crates/gpui-ai/src/recommendation.rs",
       "api": "RecommendationCard",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "A suggested next step with its reasoning, which a reader accepts or dismisses."
+      },
       "usage": "RecommendationCard::new(\"next-step\", \"Ship the fix\")",
       "height": 266,
       "windowTitle": "Recommendation card — gpui-ai",
@@ -951,6 +1125,12 @@
       "summary": "Compact source context that preserves provenance and readable detail.",
       "source": "crates/gpui-ai/src/context_card.rs",
       "api": "ContextCard",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The document, file or record an answer drew on, shown beside the answer."
+      },
       "usage": "ContextCard::new(\"design-doc\", \"Architecture\")",
       "height": 216,
       "windowTitle": "Context cards — gpui-ai",
@@ -976,6 +1156,12 @@
       "summary": "Paged analytical findings with chart-ready, semantic values.",
       "source": "crates/gpui-ai/src/insight.rs",
       "api": "InsightCard",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "chart::LineChart",
+        "note": "Metrics and a time series in a paged card, so an analytical answer arrives as evidence rather than as a paragraph about numbers."
+      },
       "usage": "InsightCard::new(\"retention\", \"Retention improved\")",
       "height": 452,
       "windowTitle": "Insight card — gpui-ai",
@@ -1001,6 +1187,12 @@
       "summary": "A hybrid-controlled composer with mentions, commands, models, and attachments.",
       "source": "crates/gpui-ai/src/prompt_bar.rs",
       "api": "PromptBar",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "Textarea, Positioner",
+        "note": "Native text editing with the apparatus around it that makes a prompt: attachments, a context meter, a slash-command popup and a queue."
+      },
       "usage": "PromptBar::new(\"agent-prompt\", window, cx)",
       "height": 432,
       "windowTitle": "Prompt bar — gpui-ai",
@@ -1051,6 +1243,12 @@
       "summary": "Dictate and speak controls with a live level meter and interim transcript, as typed intent.",
       "source": "crates/gpui-ai/src/voice.rs",
       "api": "VoiceControls",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Idle, listening, transcribing, speaking: a lifecycle no upstream control models."
+      },
       "usage": "VoiceControls::new(\"voice\", VoiceState::Idle)",
       "height": 90,
       "windowTitle": "Voice controls — gpui-ai",
@@ -1076,6 +1274,12 @@
       "summary": "Prompts waiting while the agent runs, with reorder, edit, send-now, remove, and clear by stable ID.",
       "source": "crates/gpui-ai/src/queue.rs",
       "api": "MessageQueue",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "Messages typed while the model was busy, and the means to clear them."
+      },
       "usage": "MessageQueue::new(\"queue\").items(queued)",
       "height": 242,
       "windowTitle": "Message queue — gpui-ai",
@@ -1101,6 +1305,12 @@
       "summary": "Ask, explain, and rewrite actions anchored to selected Markdown.",
       "source": "crates/gpui-ai/src/selection_actions.rs",
       "api": "SelectionActions",
+      "lineage": {
+        "kind": "composes",
+        "label": "Composes",
+        "basis": "TextViewState, Positioner",
+        "note": "Actions anchored to a selection inside rendered Markdown, which needs the text view's own selection state rather than a copy of it."
+      },
       "usage": "SelectionActions::new(\"answer-actions\", markdown, window, cx)",
       "height": 288,
       "windowTitle": "Selection actions — gpui-ai",
@@ -1126,6 +1336,12 @@
       "summary": "Single-choice groups and toggles in the library's own grammar.",
       "source": "crates/gpui-ai/src/form.rs",
       "api": "ChoiceGroup",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "One choice from a set, and one switch between two states. Upstream's radio and checkbox are styled on their outer frame only - the box, its radius, its fill and its size are fixed inside render - so a wrapped one arrives with a look no styling can bring into line with the controls beside it."
+      },
       "usage": "ChoiceGroup::new(\"flavours\",\n\"How many flavours?\").options([ChoiceOption::new(\"three\", \"Three\"),\nChoiceOption::new(\"five\", \"Five\")])",
       "height": 300,
       "windowTitle": "Form controls — gpui-ai",
@@ -1161,6 +1377,12 @@
       "summary": "A short sequence of questions an agent asks before it acts.",
       "source": "crates/gpui-ai/src/question_flow.rs",
       "api": "QuestionFlow",
+      "lineage": {
+        "kind": "new",
+        "label": "New",
+        "basis": "",
+        "note": "The short sequence an agent asks before it acts: one question at a time, the place in the sequence stated, and a way past a question that does not apply."
+      },
       "usage": "QuestionFlow::new(\"launch\",\n\"Before I draft the plan\").questions([Question::new(\"flavours\",\n\"How many flavours?\").options([ChoiceOption::new(\"three\", \"Three\")])])",
       "height": 340,
       "windowTitle": "Question flow — gpui-ai",

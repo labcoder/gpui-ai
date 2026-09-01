@@ -9,6 +9,7 @@ import {
   previousComponent,
   snippetSource,
   type Component,
+  type LineageEntry,
 } from "./data";
 import { apiHref, demoSrc, href, sourceHref } from "./links";
 
@@ -47,6 +48,36 @@ export function ComponentPage({ slug }: { readonly slug: string }) {
   return <Body component={component} previous={previous} next={next} />;
 }
 
+/**
+ * Where this component stands relative to the library it is built on.
+ *
+ * High on the page, under the summary, because it answers the question a
+ * reader arrives with when they already have gpui-component: is this a thing
+ * that library does not have, or a thing it does have with additions? The
+ * words are the exporter's, so a component cannot claim one thing here and
+ * another in the guide that gathers them all.
+ */
+function Lineage({ lineage }: { readonly lineage: LineageEntry }) {
+  return (
+    <aside className={`lineage lineage-${lineage.kind}`}>
+      <p className="lineage-head">
+        <span className="lineage-tag">{lineage.label}</span>
+        {lineage.basis ? (
+          <span className="lineage-basis">
+            gpui-component <code>{lineage.basis}</code>
+          </span>
+        ) : (
+          <span className="lineage-basis">no upstream counterpart</span>
+        )}
+      </p>
+      <p className="lineage-note">{lineage.note}</p>
+      <p className="lineage-more">
+        <a href={href("/guides/differences/")}>How every component compares</a>
+      </p>
+    </aside>
+  );
+}
+
 function Body({
   component,
   previous,
@@ -73,6 +104,8 @@ function Body({
       <p className="eyebrow">{component.category}</p>
       <h1>{component.title}</h1>
       <p className="lede">{component.summary}</p>
+
+      <Lineage lineage={component.lineage} />
 
       <Demo
         story={component.slug}
