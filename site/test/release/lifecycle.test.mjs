@@ -14,6 +14,7 @@ import {
 } from "../../scripts/capture-posters.mjs";
 import { captureSocialCards } from "../../scripts/capture-og.mjs";
 import { CARD } from "../../scripts/build.mjs";
+import { inkInFrame } from "./rendered-frame.mjs";
 import { DEFAULT as DEFAULT_THEME } from "../../app/theme-resolve.mjs";
 import catalog from "../../generated/catalog.json" with { type: "json" };
 import snippetFile from "../../generated/snippets.json" with { type: "json" };
@@ -2082,6 +2083,65 @@ workflow("cold throttled font loading does not move page content", async ({ cdp,
   });
   await cdp.send("Network.setCacheDisabled", { cacheDisabled: false });
 }, { noGpu: true });
+
+workflow("the canvas draws glyphs, not just its furniture", async ({ cdp, errors, openPage, settleTheme, embed }) => {
+  // The demos draw their text with fonts GPUI's web platform embeds, and the
+  // theme asks for them by name: "IBM Plex Sans" and "Lilex", set in
+  // `gallery-web` for the WASM build. Upstream is moving that bundle out of
+  // the platform and into the application - a browser build will start with an
+  // empty font database and register its own faces - and the day that lands
+  // here, every demo would paint its borders, its fills and its rules exactly
+  // as before, with nothing written on them.
+  //
+  // Nothing else here would say so. A blank-frame check passes, because the
+  // furniture is still drawn; the contrast audit passes, because text that is
+  // not painted cannot fail a contrast ratio. So this counts the ink inside
+  // the canvas alone - the window chrome around it is HTML and would keep its
+  // own text either way - on a story that is almost entirely words.
+  const specimen = catalog.components.find((component) => component.slug === "streaming-text");
+  assert.ok(specimen, "streaming-text must be in the catalog");
+
+  await openPage(`/components/${specimen.slug}/`, 1280, 900);
+  await settleTheme();
+  await waitForValue(
+    cdp,
+    `getComputedStyle(document.querySelector('[data-specimen-frame] iframe').contentDocument.querySelector('canvas')).opacity === '1'`,
+    { label: "the demo to finish appearing", describe: GALLERY_DIAGNOSIS, errors },
+  );
+  // The story streams in, so its words arrive over a few seconds.
+  await delay(4_000);
+
+  // The canvas, inset past its own edge so a border cannot be counted as a
+  // letter.
+  const clip = await cdp.evaluate(`(() => {
+    const rect = document
+      .querySelector('[data-specimen-frame] iframe')
+      .getBoundingClientRect();
+    return {
+      x: Math.round(rect.left + 8),
+      y: Math.round(rect.top + 8),
+      width: Math.round(rect.width - 16),
+      height: Math.round(rect.height - 16),
+      scale: 1,
+    };
+  })()`);
+  const ink = await inkInFrame(cdp, clip);
+
+  // Measured, not guessed: this story draws 17,304 pixels of text into that box
+  // today. The floor is well under a third of it, so rewrapping, restyling or
+  // a shorter fixture will not cross it - and an empty font database cannot
+  // reach it, because with no face registered there is no ink in there at all.
+  //
+  // That last case cannot be staged locally: naming a family that does not
+  // exist falls back to the platform's default rather than drawing nothing, so
+  // the only way to see this fire is the change that prompted it.
+  assert.ok(
+    ink > 5_000,
+    `the canvas drew ${ink} pixels of ink where a page of text belongs. ` +
+      "The fonts the theme names are probably not registered: GPUI's web " +
+      "platform no longer bundles them, so gallery-web has to add them itself.",
+  );
+});
 
 workflow("owned theme contrast passes; upstream theme contrast is reported", async ({ cdp, errors, openPage, settleTheme, embed }) => {
   const own = new Set(
