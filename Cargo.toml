@@ -8,7 +8,7 @@ members = [
 default-members = ["crates/gpui-ai", "crates/gallery", "crates/gallery-web"]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 license = "MIT"
 publish = false  # all crates stay unpublished while GPUI dependencies come from Git
@@ -27,9 +27,9 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
     "wayland",
     "runtime_shaders",
 ] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "5cb094628d27acbd557a1c22fd830417a702f0e5" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "5cb094628d27acbd557a1c22fd830417a702f0e5" }
-gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "5cb094628d27acbd557a1c22fd830417a702f0e5" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
+gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
 
 anyhow = "1"
 console_error_panic_hook = "0.1"

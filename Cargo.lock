@@ -2099,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "gallery"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2115,7 +2115,7 @@ dependencies = [
 
 [[package]]
 name = "gallery-web"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "console_error_panic_hook",
  "gallery",
@@ -2383,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-ai"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "gpui",
  "gpui-base",
@@ -2394,7 +2394,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=5cb094628d27acbd557a1c22fd830417a702f0e5#5cb094628d27acbd557a1c22fd830417a702f0e5"
+source = "git+https://github.com/longbridge/gpui-component?rev=0c746dff2a70f19e3c348961326b502a0008417a#0c746dff2a70f19e3c348961326b502a0008417a"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2430,7 +2430,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component?rev=5cb094628d27acbd557a1c22fd830417a702f0e5#5cb094628d27acbd557a1c22fd830417a702f0e5"
+source = "git+https://github.com/longbridge/gpui-component?rev=0c746dff2a70f19e3c348961326b502a0008417a#0c746dff2a70f19e3c348961326b502a0008417a"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2481,7 +2481,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-assets"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=5cb094628d27acbd557a1c22fd830417a702f0e5#5cb094628d27acbd557a1c22fd830417a702f0e5"
+source = "git+https://github.com/longbridge/gpui-component?rev=0c746dff2a70f19e3c348961326b502a0008417a#0c746dff2a70f19e3c348961326b502a0008417a"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2495,7 +2495,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component?rev=5cb094628d27acbd557a1c22fd830417a702f0e5#5cb094628d27acbd557a1c22fd830417a702f0e5"
+source = "git+https://github.com/longbridge/gpui-component?rev=0c746dff2a70f19e3c348961326b502a0008417a#0c746dff2a70f19e3c348961326b502a0008417a"
 dependencies = [
  "proc-macro2",
  "quote",
