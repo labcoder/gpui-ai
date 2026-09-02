@@ -6,7 +6,7 @@ use gpui::{
 };
 use gpui_component::{ActiveTheme as _, button::Button};
 
-/// Adds a text label without squeezing its glyphs into a one-em clipping box.
+/// Adds a text label with the theme's leading rather than a one-em line box.
 ///
 /// This composes the upstream button's child slot: sizes, colors, focus,
 /// activation, icons, and disabled states remain owned by gpui-component.
@@ -15,8 +15,8 @@ pub trait ButtonLabelExt {
     /// Sets the visible text and accessible name. Use instead of `Button::label`.
     ///
     /// A later `accessibility_label` call can supply a different spoken name.
-    /// Long labels still truncate horizontally; descenders and accents retain
-    /// the theme's line-height clearance. Call once per button.
+    /// A long label still ends in an ellipsis; descenders and accents keep the
+    /// theme's line-height clearance. Call once per button.
     ///
     /// ```
     /// use gpui_ai::ButtonLabelExt as _;
@@ -44,8 +44,16 @@ impl RenderOnce for ButtonText {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let body = cx.theme().typography_tokens().sm;
         // A relative leading follows every upstream Button size and rem zoom.
-        // In particular, do not use Button::label's one-em overflow mask: on
-        // DirectWrite it cuts off the bottom of y/g/p and tall accented glyphs.
+        // `Button::label` sets a one-em line box, which is the whole reason to
+        // compose this slot instead: at leading 1.0 there is no room under the
+        // baseline, and on DirectWrite the bottom of y/g/p and tall accented
+        // glyphs goes with it.
+        //
+        // No mask. `truncate()` is `overflow_hidden` plus nowrap plus ellipsis,
+        // and the hidden overflow was doing the same clipping this label exists
+        // to avoid - hidden only because a taller line box left the descenders
+        // room inside it. Upstream removed the same mask from its own label in
+        // #2921 for the same reason; the ellipsis needs the other two.
         //
         // And nothing here offsets the label optically. It is tempting: GPUI
         // centres a line's ascent-to-descent box, so a word with no tall
@@ -61,7 +69,8 @@ impl RenderOnce for ButtonText {
         div()
             .debug_selector(move || format!("button-label-{named}"))
             .min_w_0()
-            .truncate()
+            .whitespace_nowrap()
+            .text_ellipsis()
             .line_height(relative(f32::from(body.line_height) / f32::from(body.size)))
             .child(self.label)
     }
