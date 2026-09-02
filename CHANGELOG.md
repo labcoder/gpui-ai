@@ -9,6 +9,26 @@ revision.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-02
+
+A label that stopped clipping itself, and the upstream revision behind it.
+
+### Fixed
+
+- **`ButtonLabelExt` no longer masks the glyphs it exists to protect.** The
+  label is composed rather than passed to `Button::label` because upstream sets
+  a one-em line box, and at leading 1.0 there is no room under the baseline for
+  the bottom of y, g and p. That reason still holds — but the label reached for
+  `truncate()`, which is `overflow_hidden` plus nowrap plus ellipsis, so it
+  carried the same clipping mask it was written to avoid. It went unseen only
+  because the taller line box left descenders room inside the mask. The ellipsis
+  needs the other two properties and never needed the mask.
+
+### Changed
+
+- Follows gpui-component to `0c746dff`, which removed the same mask from its own
+  button and tab labels, and left every GPUI revision unchanged.
+
 ## [0.7.0] - 2026-08-29
 
 Visual expression, and the controls a person answers with.
@@ -655,7 +675,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/labcoder/gpui-ai/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/labcoder/gpui-ai/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/labcoder/gpui-ai/compare/v0.4.0...v0.5.0
