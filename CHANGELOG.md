@@ -5,9 +5,60 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The crate is pre-1.0: the public API can change in any release, so pin a
-revision.
+version.
 
 ## [Unreleased]
+
+## [0.8.0] - 2026-09-03
+
+The library is on crates.io, because the whole stack under it now is.
+
+### Added
+
+- **gpui-ai is on [crates.io](https://crates.io/crates/gpui-ai).** `cargo add
+  gpui-ai` is the whole install, and the API documentation is on
+  [docs.rs](https://docs.rs/gpui-ai). What blocked this was never a decision:
+  Cargo cannot publish a crate whose graph reaches a Git dependency, and GPUI
+  had no release worth building on. GPUI Kit publishes the whole stack now,
+  GPUI included.
+- **The browser build carries its own fonts.** GPUI's web platform moved its
+  font bundle out of the platform and into the application, so a canvas now
+  starts on an empty font database — and a canvas cannot read the page's
+  `@font-face` rules. Four faces (IBM Plex Sans regular, semibold and italic;
+  Lilex regular) are vendored under `crates/gallery-web/fonts/` and registered
+  before the first frame. Four rather than upstream's eight: no theme here sets
+  a bold or italic syntax style, so the other four were 800 KB nothing asked
+  for.
+
+### Changed
+
+- **The whole upstream stack comes from crates.io.** `gpui-component` 0.6.0,
+  `gpui-base` 0.6.0, `gpui-kit-assets` 0.6.0 (renamed from
+  `gpui-component-assets`), and GPUI itself as `gpui-pre` 0.3.3 — a snapshot of
+  Zed's crate, 113 commits ahead of the revision this repository pinned. The
+  package renames are declared once in the workspace manifest, so every
+  `use gpui::` and `use gpui_component::` path is untouched, and the migration
+  needed no source change at all.
+- **Upstream moves by version now, not by revision.** `script/update-upstream.sh`
+  and its lockfile-agreement check are gone; a bump is `cargo update --precise`
+  on the five upstream crates as one set. `npm run vendor:themes` re-vendors the
+  theme pack, which is not in the published crate, from the tag matching the
+  locked version.
+
+### Known limitations
+
+- **Touch: leaving a text input and returning to it does not bring the keyboard
+  back.** New in GPUI's web backend and not in this library. `gpui_web` now
+  skips its virtual-keyboard sync whenever the same input accepted text before
+  and after a tap and the application prevented the default; but the tap that
+  left the input has already blurred the hidden IME element and set it
+  read-only *without* moving GPUI's own focus, so the tap that should open a
+  new session is exactly the one that gets skipped. The reader's draft survives
+  and a reload restores typing. It affects every GPUI web application on
+  `gpui-pre` 0.3.3 equally, and is unfixed on Zed's `main` at the time of this
+  release; requiring a live IME element in that guard fixes it, which the mobile
+  suite confirms. `site/test/release/mobile.test.mjs` pins the defect and goes
+  red the day upstream repairs it.
 
 ## [0.7.1] - 2026-09-02
 
@@ -675,7 +726,8 @@ theme tokens.
 - **Browser demos require WebGPU.** Without it the gallery falls back quietly
   instead of rendering.
 
-[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/labcoder/gpui-ai/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/labcoder/gpui-ai/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/labcoder/gpui-ai/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/labcoder/gpui-ai/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/labcoder/gpui-ai/compare/v0.5.0...v0.6.0
