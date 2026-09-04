@@ -57,9 +57,12 @@ check(
 const body = releaseNotes('0.1.0', '--release-body');
 check(body.status === 0, `release-body exited ${body.status}: ${body.stderr}`);
 check(body.stdout.includes('# gpui-ai 0.1.0'), 'The release body did not resolve the version.');
-check(body.stdout.includes('tag = "v0.1.0"'), 'The release body did not resolve the install tag.');
-check(body.stdout.includes('gpui-component = { git ='), 'The release body omitted gpui-component.');
-check(body.stdout.includes('gpui_platform = { git ='), 'The release body omitted gpui_platform.');
+check(
+  body.stdout.includes('cargo add gpui-ai@0.1.0'),
+  'The release body did not resolve the install version.',
+);
+check(body.stdout.includes('gpui-component = "'), 'The release body omitted gpui-component.');
+check(body.stdout.includes('package = "gpui-pre-platform"'), 'The release body omitted gpui_platform.');
 check(body.stdout.includes('Rust 1.89 or newer'), 'The release body has the wrong Rust floor.');
 check(body.stdout.includes('## Tested platforms'), 'The release body omitted tested platforms.');
 check(body.stdout.includes('## Known limitations'), 'The release body omitted current limitations.');
@@ -68,10 +71,20 @@ check(
   body.stdout.includes('### Known limitations'),
   'The release body did not include the changelog section.',
 );
-check(
-  (body.stdout.match(/\b[0-9a-f]{40}\b/g) ?? []).length === 2,
-  'The release body must name the gpui-component and zed revisions.',
-);
+// Each upstream version is named twice: once in the install snippet, once in
+// the table. A resolver that quietly stopped filling one would still pass a
+// "contains a version" check.
+const lockfile = readFileSync(new URL('../Cargo.lock', import.meta.url), 'utf8');
+for (const crate of ['gpui-component', 'gpui-pre']) {
+  const locked = new RegExp(`\\[\\[package\\]\\]\\nname = "${crate}"\\nversion = "([^"]+)"`).exec(
+    lockfile,
+  );
+  check(locked !== null, `Cargo.lock does not lock ${crate}.`);
+  check(
+    body.stdout.split(locked[1]).length - 1 >= 2,
+    `The release body must name the locked ${crate} version in the snippet and the table.`,
+  );
+}
 check(!body.stdout.includes('<!--'), 'The release body left an unfilled template marker.');
 
 const unknownOption = releaseNotes('0.1.0', '--publish');

@@ -280,11 +280,6 @@ export function StartBody() {
           optimisation. On Linux that means the usual X11 or Wayland development packages, which is
           what the <code>x11</code> and <code>wayland</code> features below pull in.
         </p>
-        <p>
-          Git, because this is not on crates.io. Publishing there requires every dependency to
-          carry a crates.io version, and the released <code>gpui</code> predates everything this
-          library is built on.
-        </p>
       </Section>
 
       <Section id="install" title="Adding the dependency">
@@ -295,17 +290,24 @@ export function StartBody() {
         </p>
         <Sample name="install" file="Cargo.toml" />
         <p>
-          Pin <code>gpui-ai</code> to a tag or a revision. Leave <code>gpui</code> without a{" "}
-          <code>rev</code>: <code>gpui-component</code> declares the same dependency and Cargo has
-          to resolve both to one source. This release was built against{" "}
-          <a href={`${gpui?.repository}/commit/${gpui?.commit}`}>
-            <code>{gpui?.commit.slice(0, 7)}</code>
+          GPUI is on crates.io under another name: GPUI Kit publishes a snapshot of Zed&rsquo;s
+          crate as <code>{gpui?.crate}</code>, so the dependency carries a <code>package</code>{" "}
+          rename and every <code>use gpui::</code> path in your application keeps working. This
+          release was built against{" "}
+          <a href={gpui?.repository}>
+            <code>
+              {gpui?.crate} {gpui?.version}
+            </code>
           </a>{" "}
-          of Zed and{" "}
-          <a href={`${component?.repository}/commit/${component?.commit}`}>
-            <code>{component?.commit.slice(0, 7)}</code>
-          </a>{" "}
-          of gpui-component; every release records the pair it was built against.
+          and{" "}
+          <a href={component?.repository}>
+            <code>
+              {component?.crate} {component?.version}
+            </code>
+          </a>
+          . They are one compatible set: a different <code>{gpui?.crate}</code> underneath{" "}
+          <code>gpui-component</code> gives you two copies of GPUI&rsquo;s types, and nothing
+          shared between them will compile.
         </p>
       </Section>
 

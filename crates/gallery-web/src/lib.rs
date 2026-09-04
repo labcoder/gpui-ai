@@ -1,6 +1,8 @@
 use gallery::{Gallery, GalleryTheme, StoryId, StoryLookupError};
 use gpui::{App, ApplicationHandle, Entity};
 use gpui_component::theme::{Theme, ThemeMode, ThemeRegistry};
+#[cfg(target_family = "wasm")]
+use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 
@@ -33,6 +35,31 @@ pub fn validate_story(story: Option<String>) -> Result<(), JsValue> {
     parse_story(story)
         .map(|_| ())
         .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Hands the browser build the faces its themes name.
+///
+/// GPUI's web platform starts on an empty font database - a canvas cannot see
+/// the page's `@font-face` rules, so the only way in is the bytes. Without
+/// this the demos draw their furniture and not one glyph. Native keeps the
+/// system's own fonts and wants none of this.
+#[cfg(target_family = "wasm")]
+fn register_web_fonts(cx: &mut App) {
+    // The faces `apply_theme` asks for by name. See `fonts/README.md` for why
+    // these four and not upstream's eight.
+    const FONTS: [&[u8]; 4] = [
+        include_bytes!("../fonts/IBMPlexSans-Regular.ttf"),
+        include_bytes!("../fonts/IBMPlexSans-SemiBold.ttf"),
+        include_bytes!("../fonts/IBMPlexSans-Italic.ttf"),
+        include_bytes!("../fonts/Lilex-Regular.ttf"),
+    ];
+
+    // A failure here is bad bytes in `fonts/`, and there is no drawing without
+    // them. The panic hook is already set, so the console gets the reason
+    // rather than a blank canvas nobody can explain.
+    cx.text_system()
+        .add_fonts(FONTS.iter().copied().map(Cow::Borrowed).collect())
+        .expect("the vendored faces must parse");
 }
 
 fn apply_theme(mode: ThemeMode, cx: &mut App) {
@@ -276,8 +303,9 @@ pub fn run(
     let application = application.with_assets(gpui_component_assets::Assets::new(
         asset_base.unwrap_or_else(|| "/".to_owned()),
     ));
-
     let launch = move |cx: &mut App| {
+        #[cfg(target_family = "wasm")]
+        register_web_fonts(cx);
         gallery::init(cx);
         let mode = if theme.is_dark() {
             ThemeMode::Dark
@@ -296,16 +324,6 @@ pub fn run(
         cx.activate(true);
     };
 
-    // ponytail: the demos draw in fonts GPUI's web platform embeds, and upstream
-    // is moving that bundle into the application - a browser build will start
-    // with an empty font database. When it lands, the release test "the canvas
-    // draws glyphs, not just its furniture" goes red, and the fix is here:
-    // vendor IBM Plex Sans Regular/SemiBold/Italic and Lilex Regular beside this
-    // file and, inside `launch` before the window opens,
-    // `cx.text_system().add_fonts(..)` with their bytes. Four faces, ~784 KB,
-    // which is half of what the platform bundles today; our themes set no bold
-    // or italic syntax, so the other four buy nothing. Not vendored yet because
-    // until that day their bytes would sit in the binary beside upstream's.
     #[cfg(target_family = "wasm")]
     APPLICATION.with(|stored| {
         *stored.borrow_mut() = Some(application.run_embedded(launch));

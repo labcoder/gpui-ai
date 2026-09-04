@@ -110,12 +110,14 @@ export interface Hero {
   readonly siteOnly: true;
 }
 
-/** One upstream repository this release is pinned against. */
+/** One upstream crate this release is built against. */
 export interface UpstreamPin {
   readonly id: string;
   readonly label: string;
+  /** The name on crates.io, which is not always the name in `use` paths. */
+  readonly crate: string;
   readonly repository: string;
-  readonly commit: string;
+  readonly version: string;
   readonly note: string;
 }
 

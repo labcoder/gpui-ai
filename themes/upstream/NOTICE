@@ -3,10 +3,10 @@ which is licensed under Apache-2.0. They are vendored so the gallery and the
 website can offer the upstream theme set without a network fetch, and so a
 reviewer can see palette changes when the pinned revision moves.
 
-Source: https://github.com/longbridge/gpui-component (themes/)
+Source: https://github.com/longbridge/gpui-kit (themes/ at v0.6.0)
 License: Apache-2.0 (see the upstream LICENSE-APACHE)
-Revision: pinned by this repository's Cargo.lock
-Regenerate: node script/vendor-themes.mjs (run by script/update-upstream.sh)
+Version: the gpui-component version this repository's Cargo.lock pins
+Regenerate: npm run vendor:themes
 
 Do not edit these by hand — a regeneration overwrites them. gpui-ai's own
 themes live in ../gpui-ai.

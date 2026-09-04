@@ -8,28 +8,28 @@ members = [
 default-members = ["crates/gpui-ai", "crates/gallery", "crates/gallery-web"]
 
 [workspace.package]
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 license = "MIT"
-publish = false  # all crates stay unpublished while GPUI dependencies come from Git
+publish = false  # the gallery crates are demos; `gpui-ai` overrides this
 
 [workspace.dependencies]
 gpui-ai = { path = "crates/gpui-ai" }
 
-# GPUI must come from the Zed repository (the crates.io release is outdated).
-# Do NOT add a `rev` field here: gpui-component declares this dependency
-# without one, and differing git specs make Cargo duplicate the crate.
-# The commit is pinned via Cargo.lock — see "Dependency policy" in AGENTS.md.
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
+# GPUI Kit publishes the whole stack, GPUI included: `gpui-pre` is a snapshot
+# of Zed's crate, and the layers move together by semver. The package renames
+# keep every `use gpui::`, `use gpui_component::`, and `gpui_component_assets::`
+# path in this workspace pointing at the same names it always did.
+gpui = { package = "gpui-pre", version = "0.3.3" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.3", features = [
     "font-kit",
     "x11",
     "wayland",
     "runtime_shaders",
 ] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
-gpui-base = { git = "https://github.com/longbridge/gpui-component", rev = "0c746dff2a70f19e3c348961326b502a0008417a" }
+gpui-component = "0.6.0"
+gpui-component-assets = { package = "gpui-kit-assets", version = "0.6.0" }
+gpui-base = "0.6.0"
 
 anyhow = "1"
 console_error_panic_hook = "0.1"

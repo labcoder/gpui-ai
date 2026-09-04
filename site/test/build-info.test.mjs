@@ -12,20 +12,18 @@ test("the build facts match the manifests the crate is actually built from", asy
   const lock = await readFile(path.join(repositoryRoot, "Cargo.lock"), "utf8");
   const workspace = await readFile(path.join(repositoryRoot, "Cargo.toml"), "utf8");
 
-  // The home page tells a visitor which commits this release is pinned to.
-  // That is the only reproducible thing about a Git dependency, so a stale
-  // number here is worse than no number.
+  // The home page and the install block tell a visitor which versions this
+  // release was built against. gpui-ai, gpui-component, and GPUI move as one
+  // set, so a stale number here is worse than no number: it compiles into two
+  // copies of GPUI's types.
   assert.match(workspace, new RegExp(`^version = "${build.version}"`, "m"));
-  assert.equal(build.upstream.length, 2, "both upstream repositories must be published");
+  assert.equal(build.upstream.length, 2, "both upstream crates must be published");
 
   for (const pin of build.upstream) {
-    assert.match(pin.commit, /^[0-9a-f]{40}$/, `${pin.id} has no resolved commit`);
-    // A `rev` spec puts a query string between the URL and the commit, so
-    // match the resolved commit against the repository rather than the whole
-    // source string.
+    assert.match(pin.version, /^\d+\.\d+\.\d+/, `${pin.id} has no resolved version`);
     assert.ok(
-      new RegExp(`git\\+${pin.repository}[^#"]*#${pin.commit}`).test(lock),
-      `${pin.id} is pinned to ${pin.commit}, which Cargo.lock does not resolve`,
+      new RegExp(`\\[\\[package\\]\\]\\nname = "${pin.crate}"\\nversion = "${pin.version}"`).test(lock),
+      `${pin.id} is published as ${pin.crate} ${pin.version}, which Cargo.lock does not resolve`,
     );
     assert.match(pin.note, /\S.*\S/, `${pin.id} needs a line explaining what it is`);
   }

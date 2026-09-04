@@ -172,6 +172,7 @@ export function Shell({
         <div className="shell">
           <span>{`gpui-ai v${build.version} · ${build.license}`}</span>
           <nav aria-label="Repository">
+            <a href={`https://crates.io/crates/gpui-ai/${build.version}`}>crates.io</a>
             <a href={build.repository}>Source</a>
             <a href={`${build.repository}/releases/tag/v${build.version}`}>Release notes</a>
             <a href={href("/api/")}>API documentation</a>

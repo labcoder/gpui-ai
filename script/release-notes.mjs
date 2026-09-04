@@ -60,17 +60,20 @@ function changelogSection(version) {
   return { body: body.join("\n"), date: heading.match[2]?.trim() ?? "" };
 }
 
-// The gpui-component/zed pair a release supports, read from the pinned graph.
+// The upstream versions a release supports, read from the resolved graph.
+// `Cargo.lock` rather than the manifest, because the manifest states a
+// requirement ("0.6") and the lockfile states what was actually built.
 function upstreamPin() {
-  const component = /gpui-component\s*=\s*\{[^}]*rev\s*=\s*"([0-9a-f]{40})"/.exec(
-    readFileSync(MANIFEST, "utf8"),
-  );
-  const zed = /git\+https:\/\/github\.com\/zed-industries\/zed[^#"]*#([0-9a-f]{40})/.exec(
-    readFileSync(LOCKFILE, "utf8"),
-  );
-  if (!component || !zed) fail("could not read the upstream revision pair from Cargo.toml/Cargo.lock");
+  const lockfile = readFileSync(LOCKFILE, "utf8");
+  const locked = (name) => {
+    const found = new RegExp(`\\[\\[package\\]\\]\\nname = "${name}"\\nversion = "([^"]+)"`).exec(
+      lockfile,
+    );
+    if (!found) fail(`could not read the locked ${name} version from Cargo.lock`);
+    return found[1];
+  };
 
-  return { component: component[1], zed: zed[1] };
+  return { component: locked("gpui-component"), gpui: locked("gpui-pre") };
 }
 
 const { version, releaseBody } = parseArguments(process.argv.slice(2));
@@ -89,10 +92,12 @@ if (!releaseBody) {
   const filled = readFileSync(TEMPLATE, "utf8")
     .replace(/<!-- version -->/g, version)
     .replace(/<!-- release-notes -->/g, section.body)
-    .replace(/<!-- gpui-component-rev -->/g, pin.component)
-    .replace(/<!-- zed-rev -->/g, pin.zed);
+    .replace(/<!-- gpui-component-version -->/g, pin.component)
+    .replace(/<!-- gpui-pre-version -->/g, pin.gpui);
 
-  const unfilled = /<!-- (version|release-notes|gpui-component-rev|zed-rev) -->/.exec(filled);
+  const unfilled = /<!-- (version|release-notes|gpui-component-version|gpui-pre-version) -->/.exec(
+    filled,
+  );
   if (unfilled) fail(`release template still contains ${unfilled[0]}`);
 
   process.stdout.write(filled.endsWith("\n") ? filled : `${filled}\n`);

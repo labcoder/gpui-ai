@@ -7,7 +7,7 @@
 // `<endpoint>/assets/icons/<name>.svg`. The pages set `data-asset-base` to
 // `./upstream`, so the files have to land under `public/upstream/assets/icons`.
 // They are build output, not sources: the directory is git-ignored and this
-// script reproduces it from whatever revision Cargo.lock pins.
+// script reproduces it from whatever version Cargo.lock pins.
 
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -31,10 +31,13 @@ if (metadata.status !== 0) {
   fail(`cargo metadata failed: ${metadata.stderr?.trim() || metadata.error?.message || "unknown error"}`);
 }
 
+// The package name, not the name this workspace imports it under: our manifest
+// renames `gpui-kit-assets` to `gpui-component-assets`, and `cargo metadata`
+// reports what upstream published.
 const assetsPackage = JSON.parse(metadata.stdout).packages.find(
-  (entry) => entry.name === "gpui-component-assets",
+  (entry) => entry.name === "gpui-kit-assets",
 );
-if (!assetsPackage) fail("gpui-component-assets is not in the dependency graph");
+if (!assetsPackage) fail("gpui-kit-assets is not in the dependency graph");
 
 const source = join(dirname(assetsPackage.manifest_path), "assets", "icons");
 let icons;

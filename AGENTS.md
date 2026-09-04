@@ -24,20 +24,16 @@ A layer of AI-native components above gpui-component: the surfaces an AI applica
 
 ## Dependency policy (read before touching any Cargo.toml)
 
-GPUI's crates.io release is outdated; the real work lives in the Zed repository. All gpui crates come from git:
+The whole upstream stack is on crates.io. GPUI Kit publishes GPUI itself as
+`gpui-pre` — a snapshot of Zed's crate — and moves the layers together by
+semver, so ordinary version requirements are all this workspace needs:
 
-- Declare gpui exactly as `{ git = "https://github.com/zed-industries/zed" }` with **no `rev` field**. gpui-component declares it the same way; adding `rev` makes Cargo treat it as a different source, which produces two incompatible copies of gpui and breaks every shared type.
-- The actual commit is pinned in `Cargo.lock`, and it must match the revision gpui-component's own `Cargo.lock` pins. To set or fix it:
-
-  ```sh
-  cargo update -p gpui --precise <rev-from-gpui-component-lock>
-  ```
-
-  The current component and Zed revisions are authoritative in `Cargo.toml` and `Cargo.lock`; `npm run check:upstream` verifies that they agree with the selected upstream lockfile.
-- To bump upstream, run `npm run update:upstream` — it resolves the latest `gpui-component` commit, updates `gpui-component` and `gpui-component-assets` as one exact pair, reads the gpui revision from *their* `Cargo.lock`, updates our `Cargo.toml` + `Cargo.lock`, and runs `cargo check`. (`script/update-upstream.sh` is the implementation; pass a full revision with `npm run update:upstream -- <rev>`.) Commit `Cargo.toml` and `Cargo.lock` together.
-- `Cargo.lock` is tracked in git — it is the pinning mechanism. Never delete it casually.
+- Every upstream crate is a plain version requirement in the root `[workspace.dependencies]`. The package renames there (`gpui` → `gpui-pre`, `gpui-component-assets` → `gpui-kit-assets`) keep every `use gpui::` and `use gpui_component::` path pointing at the name it always had; do not rename them in source.
+- Bump the stack the way you bump anything else: `cargo update -p gpui-component --precise <version>` and the same for its siblings, then `cargo check --workspace`. The four upstream crates (`gpui-pre`, `gpui-pre-platform`, `gpui-component`, `gpui-kit-assets`, `gpui-base`) are one compatible set — move them together, never one at a time.
+- After a `gpui-component` bump run `npm run vendor:themes`. The theme pack is not in the published crate, so the script fetches it from the tag matching the locked version; a palette change should be visible to a reviewer.
+- `Cargo.lock` is tracked in git and pins the exact versions. Never delete it casually.
 - Do not add new dependencies without need; prefer what gpui, gpui-component, and the standard library already provide.
-- Keep workspace packages unpublished while required GPUI dependencies come from Git. Revisit registry publication only when Cargo can package the complete dependency graph from accepted registry sources.
+- `gpui-ai` publishes to crates.io. Anything it depends on must be a registry dependency — a git or path dependency in the library crate makes it unpublishable. The gallery crates are `publish = false` and may use path dependencies freely.
 
 ## Code standards
 

@@ -237,20 +237,25 @@ It stays separate from the mock-renderer tests in `npm run check`.
 
 ## Dependency changes
 
-GPUI comes from git, and the revision is pinned in `Cargo.lock`. To move it:
+The upstream stack is on crates.io — GPUI Kit publishes GPUI itself as
+`gpui-pre` — so a bump is an ordinary version bump:
 
 ```sh
-npm run update:upstream          # or: npm run update:upstream -- <full-rev>
+cargo update -p gpui-component --precise <version>   # and its siblings
+cargo check --workspace
+npm run vendor:themes                                # after a component bump
 ```
 
-That resolves gpui-component and its assets crate as one pair, reads the gpui
-revision from *their* lockfile, and updates ours. Commit `Cargo.toml` and
-`Cargo.lock` together, and never add a `rev` field to the `gpui` dependency —
-differing git specs make Cargo build two incompatible copies. `npm run
-check:upstream` verifies the manifest, the lockfile, and upstream agree.
+`gpui-pre`, `gpui-pre-platform`, `gpui-component`, `gpui-kit-assets`, and
+`gpui-base` are one compatible set: move them together, in one commit, with
+`Cargo.toml` and `Cargo.lock` alongside each other. The theme pack is not in
+the published crate, so `vendor:themes` fetches it from the tag matching the
+locked version — a palette change should show up in the diff.
 
-Prefer what gpui, gpui-component, and the standard library already provide over
-a new dependency.
+`gpui-ai` is published, so everything it depends on must come from a registry;
+a git or path dependency in the library crate makes it unpublishable. Prefer
+what gpui, gpui-component, and the standard library already provide over a new
+dependency.
 
 ## Releases
 
@@ -265,8 +270,21 @@ node script/release-notes.mjs <version> --release-body   # the full release body
 ```
 
 The `--release-body` form fills `.github/release-template.md`, including the
-`gpui-component` and `zed` revision pair read from the pinned graph, so each
-release states exactly which upstream it supports.
+`gpui-component` and `gpui-pre` versions read from `Cargo.lock`, so each release
+states exactly which upstream it supports.
+
+Then publish the library:
+
+```sh
+cargo publish -p gpui-ai --dry-run   # packages and compiles from registry sources alone
+cargo publish -p gpui-ai
+```
+
+A published version is permanent — it can be yanked but never replaced — so the
+dry run is not optional. `cargo publish` needs a crates.io token with the
+`publish-update` scope (`publish-new` for a crate's first release), stored once
+with `cargo login`. Only `gpui-ai` is published; the gallery crates are
+`publish = false` because they are demonstrations of it, not part of it.
 
 ## Reporting problems
 

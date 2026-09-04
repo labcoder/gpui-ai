@@ -11,16 +11,19 @@ Inspect both files:
 
 ```sh
 rg 'gpui-ai|gpui-component|gpui_platform|gpui =' Cargo.toml
-rg -n 'name = "(gpui-ai|gpui|gpui-component|gpui-component-assets)"|source = "git\+' Cargo.lock
+rg -n -A1 'name = "(gpui-ai|gpui-pre|gpui-pre-platform|gpui-component|gpui-kit-assets|gpui-base)"' Cargo.lock
 ```
 
-`Cargo.lock` records the commit Cargo actually selected. A version printed in
+`Cargo.lock` records the version Cargo actually selected. A version printed in
 a README or in this skill is not a substitute for it.
 
-When modifying an existing application, preserve its locked revision unless
-the user also asked for a dependency upgrade. Find the corresponding dependency
-source in Cargo's Git checkout or at that repository revision and inspect its
-public API there.
+GPUI is published under another name: GPUI Kit ships a snapshot of Zed's crate
+as `gpui-pre`, so a manifest declares `gpui = { package = "gpui-pre", ... }`
+and the lockfile names `gpui-pre`. `use gpui::` paths are unaffected.
+
+When modifying an existing application, preserve its locked versions unless
+the user also asked for a dependency upgrade. Read the public API from the
+registry source for that exact version under `~/.cargo/registry/src/`.
 
 ## Dependency identity
 
@@ -29,30 +32,30 @@ matrix. The shape is:
 
 ```toml
 [dependencies]
-gpui-ai = { git = "https://github.com/labcoder/gpui-ai", rev = "<chosen-gpui-ai-commit>" }
+gpui-ai = "<chosen-gpui-ai-version>"
 
-# Match the exact gpui-component revision selected by that gpui-ai commit.
-gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "<matching-component-commit>" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "<matching-component-commit>" }
+# The versions that gpui-ai release was built against, not the newest.
+gpui-component = "<matching-component-version>"
+gpui-component-assets = { package = "gpui-kit-assets", version = "<matching-component-version>" }
 
-# Leave GPUI without `rev`: gpui-component declares the same source this way.
-# Cargo.lock pins the Zed commit shared by the graph.
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+# GPUI, under the name GPUI Kit publishes it as.
+gpui = { package = "gpui-pre", version = "<matching-gpui-pre-version>" }
+gpui_platform = { package = "gpui-pre-platform", version = "<matching-gpui-pre-version>", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 ```
 
-Do not copy the placeholders. Read the selected gpui-ai manifest and lockfile.
-If the application does not use gpui-component APIs or its asset provider
-directly, it may not need both direct dependencies; add only what its own source
-imports.
+Do not copy the placeholders. A gpui-ai release names the versions it was built
+against in its GitHub release notes and in `CHANGELOG.md`; `cargo tree` on the
+application confirms what actually resolved. If the application does not use
+gpui-component APIs or its asset provider directly, it may not need both direct
+dependencies; add only what its own source imports.
 
-Keep `Cargo.lock`. It is the pin for GPUI's unrevisioned Git declaration.
+Keep `Cargo.lock`. It is the record of what the application actually builds.
 
-Symptoms of duplicate GPUI or gpui-component sources include trait bounds that
-should hold, mismatched `App`/`Window`/`Entity` types, or an element from one
-crate refusing an apparently identical type from another. Inspect
-`cargo tree -d` and the Git source URLs before rewriting working component
-code.
+Symptoms of two GPUI versions in one graph include trait bounds that should
+hold, mismatched `App`/`Window`/`Entity` types, or an element from one crate
+refusing an apparently identical type from another. GPUI is pre-1.0, so
+`0.3.x` and `0.4.x` are separate crates to Cargo and both can resolve at once.
+Inspect `cargo tree -d` before rewriting working component code.
 
 ## Application initialization
 

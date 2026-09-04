@@ -113,18 +113,21 @@ function installSnippet() {
   const pin = (id) => {
     const found = build.upstream.find((entry) => entry.id === id);
     if (!found) throw new Error(`build.json names no ${id} pin to install alongside`);
-    return found.repository;
+    return found.version;
   };
 
   // All four, because an application uses all four directly: gpui and
   // gpui-component are what it writes UI against, and gpui_platform opens the
   // window. Two lines would compile here and not in anyone else's project.
+  //
+  // GPUI is published under another name, so `package =` carries the rename
+  // and every `use gpui::` path in the application keeps working.
   return [
     "[dependencies]",
-    `gpui-ai = { git = "${build.repository}", tag = "v${build.version}" }`,
-    `gpui = { git = "${pin("gpui")}" }`,
-    `gpui-component = { git = "${pin("gpui-component")}" }`,
-    `gpui_platform = { git = "${pin("gpui")}", features = [${build.platformFeatures
+    `gpui-ai = "${build.version}"`,
+    `gpui = { package = "gpui-pre", version = "${pin("gpui")}" }`,
+    `gpui-component = "${pin("gpui-component")}"`,
+    `gpui_platform = { package = "gpui-pre-platform", version = "${pin("gpui")}", features = [${build.platformFeatures
       .map((feature) => `"${feature}"`)
       .join(", ")}] }`,
   ].join("\n");

@@ -6,33 +6,35 @@ traces, tool calls, approval gates, chat, and live task status — built on
 
 ## Install
 
-gpui-ai is not on crates.io. Publishing requires every dependency to carry a
-crates.io version, and the released `gpui` predates everything this library
-builds on. Take it from git, and declare `gpui` exactly the same way so Cargo
-resolves one shared copy:
+```sh
+cargo add gpui-ai@<!-- version -->
+```
+
+GPUI itself is published under another name — GPUI Kit ships a snapshot of
+Zed's crate as `gpui-pre` — so an application declares it with a rename, which
+keeps every `use gpui::` path working:
 
 ```toml
 [dependencies]
-gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v<!-- version -->" }
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui-ai = "<!-- version -->"
+gpui = { package = "gpui-pre", version = "<!-- gpui-pre-version -->" }
+gpui-component = "<!-- gpui-component-version -->"
+gpui_platform = { package = "gpui-pre-platform", version = "<!-- gpui-pre-version -->", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 ```
 
 Rust 1.89 or newer, edition 2024. On Linux, run `script/install-linux.sh` for
 system dependencies first.
 
-## Upstream revisions this release supports
+## Upstream versions this release supports
 
-| Crate | Revision |
+| Crate | Version |
 | --- | --- |
-| `gpui-component`, `gpui-component-assets`, `gpui-base` | `<!-- gpui-component-rev -->` |
-| `gpui` (zed-industries/zed) | `<!-- zed-rev -->` |
+| `gpui-component`, `gpui-kit-assets`, `gpui-base` | `<!-- gpui-component-version -->` |
+| `gpui-pre`, `gpui-pre-platform` | `<!-- gpui-pre-version -->` |
 
-Do not add a `rev` field to your own `gpui` dependency: gpui-component declares
-it without one, and differing git specs make Cargo build two incompatible copies
-of gpui. The revision above is the one this release's `Cargo.lock` selects, and
-it is the pair every gate ran against.
+These are the versions this release's `Cargo.lock` selects, and the set every
+gate ran against. They move together: a `gpui-pre` that does not match the one
+under your `gpui-component` gives you two incompatible copies of GPUI's types.
 
 ## What is in this release
 
@@ -45,8 +47,15 @@ Linux, and Windows and runs the full test suite on Linux before the tag is cut.
 
 ## Known limitations
 
-- gpui-ai is installed from Git rather than crates.io while its GPUI dependency
-  graph remains Git-based.
+- **On a touch device, tapping out of a text input and back in does not bring
+  the keyboard back.** A defect in GPUI's own web backend, not in this library:
+  `gpui_web` skips its virtual-keyboard sync when the same input was focused
+  before and after a tap, but the tap that left the input has already torn down
+  the hidden IME element without moving GPUI's focus — so the tap that should
+  revive it is the one that gets skipped. Reloading the demo restores typing,
+  and the draft text survives. Present in every GPUI web application on
+  `gpui-pre` 0.3.3; `site/test/release/mobile.test.mjs` pins the behaviour and
+  fails once upstream fixes it.
 - Live browser demos require WebGPU. Browsers without it receive the captured
   still frame rather than an interactive component.
 - `wasm-opt` is not applied to the gallery artifact because it currently makes
@@ -57,9 +66,8 @@ Linux, and Windows and runs the full test suite on Linux before the tag is cut.
 
 ## Documentation
 
-The crate stays unpublished while its dependency graph comes from git, so the
-API documentation is local: run `cargo doc --open` from a checkout. Architecture
-rules and the definition of done are in
+API documentation is on [docs.rs](https://docs.rs/gpui-ai/<!-- version -->).
+Architecture rules and the definition of done are in
 [AGENTS.md](https://github.com/labcoder/gpui-ai/blob/v<!-- version -->/AGENTS.md);
 contributor workflow is in
 [CONTRIBUTING.md](https://github.com/labcoder/gpui-ai/blob/v<!-- version -->/CONTRIBUTING.md).

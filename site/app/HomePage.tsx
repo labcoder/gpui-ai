@@ -62,9 +62,10 @@ export function HomePage() {
         <h2 id="install">Install</h2>
         <div className="install">
           <p className="lede">
-            gpui-ai installs from Git because its current GPUI dependencies are not available on
-            crates.io. <a href={href("/start/")}>Start</a> has the rest: the platform features, the
-            two calls at startup, and a complete application in eighty lines.
+            Everything is on crates.io, GPUI included &mdash; it is published as{" "}
+            <code>gpui-pre</code>, which is why that line carries a rename.{" "}
+            <a href={href("/start/")}>Start</a> has the rest: the platform features, the two calls
+            at startup, and a complete application in eighty lines.
           </p>
           <CodeFrame file="Cargo.toml" />
           <Code lines={install.lines} fallback={install.code} />
@@ -153,8 +154,10 @@ export function HomePage() {
             <div key={pin.id}>
               <dt>{pin.label}</dt>
               <dd>
-                <a href={`${pin.repository}/commit/${pin.commit}`}>
-                  <code>{pin.commit.slice(0, 12)}</code>
+                <a href={pin.repository}>
+                  <code>
+                    {pin.crate} {pin.version}
+                  </code>
                 </a>
               </dd>
             </div>

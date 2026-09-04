@@ -4,6 +4,8 @@ UI components for AI applications built with [GPUI](https://gpui.rs).
 
 gpui-ai covers streamed responses, tool calls, approvals, chat, prompt input, context usage, and tables. It builds on [gpui-component](https://github.com/longbridge/gpui-component) and uses its active theme. Your application owns model requests, retries, storage, and long-lived state.
 
+[![crates.io](https://img.shields.io/crates/v/gpui-ai.svg)](https://crates.io/crates/gpui-ai) [![docs.rs](https://img.shields.io/docsrs/gpui-ai)](https://docs.rs/gpui-ai)
+
 [Live components](https://labcoder.github.io/gpui-ai/components/) · [API docs](https://labcoder.github.io/gpui-ai/api/gpui_ai/) · [Themes](https://labcoder.github.io/gpui-ai/themes/) · [Changelog](CHANGELOG.md)
 
 ## How it fits
@@ -21,17 +23,26 @@ gpui-ai composes gpui-component controls and uses GPUI for custom components. Co
 
 ## Install
 
-Install gpui-ai from Git. Its current GPUI dependencies are not all available on crates.io.
+```sh
+cargo add gpui-ai
+```
+
+An application also declares GPUI itself, which is published under another name
+— GPUI Kit ships a snapshot of Zed's crate as `gpui-pre` — so the dependency
+carries a rename, which keeps every `use gpui::` path working:
 
 ```toml
 [dependencies]
-gpui-ai = { git = "https://github.com/labcoder/gpui-ai", tag = "v0.7.1" }
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui-ai = "0.8.0"
+gpui = { package = "gpui-pre", version = "0.3" }
+gpui-component = "0.6"
+gpui_platform = { package = "gpui-pre-platform", version = "0.3", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 ```
 
-Pin `gpui-ai` with a tag or revision. Leave `gpui` without a `rev` so Cargo uses the same source as gpui-component. Each release records the matching gpui-component and Zed revisions in [CHANGELOG.md](CHANGELOG.md).
+`gpui-ai`, `gpui-component`, and `gpui-pre` move together: a gpui-ai release
+names the versions it was built against in [CHANGELOG.md](CHANGELOG.md), and
+mixing a different `gpui-pre` under `gpui-component` gives you two incompatible
+copies of GPUI's types.
 
 ## Quick start
 

@@ -306,19 +306,26 @@ test("the home page's dependency lines are highlighted too", async () => {
   const block = /<pre class="code"><code>([\s\S]*?)<\/code><\/pre>/.exec(html)?.[1];
   assert.ok(block, "the home page has no code block");
   assert.match(block, /<span class="t-type">dependencies<\/span>/, "the table header is plain");
-  assert.match(block, /<span class="t-string">&quot;https/, "the repository URL is plain");
+  assert.match(block, /<span class="t-string">&quot;0/, "the versions are plain");
 
-  // Whatever the highlighter did to it, the text is still the two lines that
+  // Whatever the highlighter did to it, the text is still the lines that
   // install this release, from the manifests rather than from a component.
   // Every rendered line carries its own newline, the last one included.
   const text = block.replaceAll(/<[^>]+>/g, "").replace(/\n$/, "");
   assert.equal(text, asRendered(installSnippet.code));
   // Quotes arrive escaped, so these compare rendered text, not source.
   assert.ok(
-    text.includes(asRendered(`tag = "v${buildInfo.version}"`)),
-    `the page does not offer v${buildInfo.version}`,
+    text.includes(asRendered(`gpui-ai = "${buildInfo.version}"`)),
+    `the page does not offer ${buildInfo.version}`,
   );
-  assert.ok(text.includes(buildInfo.repository), "the page does not name this repository");
+  // The upstream versions are the reason this block exists: they are the set a
+  // reader has to match, and a stale one costs them a build they cannot explain.
+  for (const pin of buildInfo.upstream) {
+    assert.ok(
+      text.includes(asRendered(`"${pin.version}"`)),
+      `the page does not name the ${pin.crate} version it was built against`,
+    );
+  }
 });
 
 test("every component page links its own type under /api/", async () => {

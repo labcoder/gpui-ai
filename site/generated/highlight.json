@@ -17701,7 +17701,7 @@
   "extras": {
     "install": {
       "lang": "toml",
-      "code": "[dependencies]\ngpui-ai = { git = \"https://github.com/labcoder/gpui-ai\", tag = \"v0.7.1\" }\ngpui = { git = \"https://github.com/zed-industries/zed\" }\ngpui-component = { git = \"https://github.com/longbridge/gpui-component\" }\ngpui_platform = { git = \"https://github.com/zed-industries/zed\", features = [\"font-kit\", \"x11\", \"wayland\", \"runtime_shaders\"] }",
+      "code": "[dependencies]\ngpui-ai = \"0.8.0\"\ngpui = { package = \"gpui-pre\", version = \"0.3.3\" }\ngpui-component = \"0.6.0\"\ngpui_platform = { package = \"gpui-pre-platform\", version = \"0.3.3\", features = [\"font-kit\", \"x11\", \"wayland\", \"runtime_shaders\"] }",
       "lines": [
         [
           [
@@ -17717,17 +17717,26 @@
         ],
         [
           [
-            "gpui-ai = { git = "
+            "gpui-ai = "
           ],
           [
-            "\"https://github.com/labcoder/gpui-ai\"",
+            "\"0.8.0\"",
+            "string"
+          ]
+        ],
+        [
+          [
+            "gpui = { package = "
+          ],
+          [
+            "\"gpui-pre\"",
             "string"
           ],
           [
-            ", tag = "
+            ", version = "
           ],
           [
-            "\"v0.7.1\"",
+            "\"0.3.3\"",
             "string"
           ],
           [
@@ -17736,34 +17745,26 @@
         ],
         [
           [
-            "gpui = { git = "
+            "gpui-component = "
           ],
           [
-            "\"https://github.com/zed-industries/zed\"",
+            "\"0.6.0\"",
             "string"
-          ],
-          [
-            " }"
           ]
         ],
         [
           [
-            "gpui-component = { git = "
+            "gpui_platform = { package = "
           ],
           [
-            "\"https://github.com/longbridge/gpui-component\"",
+            "\"gpui-pre-platform\"",
             "string"
           ],
           [
-            " }"
-          ]
-        ],
-        [
-          [
-            "gpui_platform = { git = "
+            ", version = "
           ],
           [
-            "\"https://github.com/zed-industries/zed\"",
+            "\"0.3.3\"",
             "string"
           ],
           [

@@ -3,9 +3,10 @@
 //   npm run generate
 //
 // Writes site/generated/build.json: the release the site was built from, the
-// upstream commits it is pinned against, and where the source lives. A visitor
-// deciding whether to depend on this needs the pins, because the crate is a Git
-// dependency on two moving repositories.
+// upstream versions it is built against, and where the source lives. A visitor
+// deciding whether to depend on this needs the versions, because gpui-ai,
+// gpui-component, and GPUI itself are one compatible set and mixing them is
+// how you end up with two copies of GPUI's types.
 //
 // Deliberately free of timestamps and of anything else that changes without the
 // inputs changing: CI regenerates this file and fails on a diff.
@@ -24,10 +25,10 @@ function field(toml, key) {
   return match[1];
 }
 
-/** The commit Cargo.lock resolved a Git dependency to. */
-function lockedCommit(lock, repository) {
-  const match = new RegExp(`git\\+${repository}[^#"]*#([0-9a-f]{40})`).exec(lock);
-  if (!match) throw new Error(`Cargo.lock has no resolved commit for ${repository}`);
+/** The version Cargo.lock resolved a dependency to. */
+function lockedVersion(lock, crate) {
+  const match = new RegExp(`\\[\\[package\\]\\]\\nname = "${crate}"\\nversion = "([^"]+)"`).exec(lock);
+  if (!match) throw new Error(`Cargo.lock has no resolved version for ${crate}`);
   return match[1];
 }
 
@@ -65,15 +66,17 @@ const buildInfo = {
     {
       id: "gpui",
       label: "gpui",
-      repository: "https://github.com/zed-industries/zed",
-      commit: lockedCommit(lock, "https://github\\.com/zed-industries/zed"),
-      note: "Zed's UI framework. Pinned through Cargo.lock, not a version.",
+      crate: "gpui-pre",
+      repository: "https://crates.io/crates/gpui-pre",
+      version: lockedVersion(lock, "gpui-pre"),
+      note: "Zed's UI framework, published by GPUI Kit as a snapshot named gpui-pre.",
     },
     {
       id: "gpui-component",
       label: "gpui-component",
-      repository: "https://github.com/longbridge/gpui-component",
-      commit: lockedCommit(lock, "https://github\\.com/longbridge/gpui-component"),
+      crate: "gpui-component",
+      repository: "https://crates.io/crates/gpui-component",
+      version: lockedVersion(lock, "gpui-component"),
       note: "The upstream component library gpui-ai composes.",
     },
   ],
@@ -84,5 +87,5 @@ writeFileSync(join(OUTPUT, "build.json"), `${JSON.stringify(buildInfo, null, 2)}
 
 process.stdout.write(
   `site/generated/build.json: v${buildInfo.version}, ` +
-    `${buildInfo.upstream.map((pin) => `${pin.id} ${pin.commit.slice(0, 8)}`).join(", ")}\n`,
+    `${buildInfo.upstream.map((pin) => `${pin.crate} ${pin.version}`).join(", ")}\n`,
 );
